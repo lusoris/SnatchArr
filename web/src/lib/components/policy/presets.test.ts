@@ -12,7 +12,9 @@ const API_PRESETS: SnatchPolicyPreset[] = [
 		upgrade_per_cycle: 0,
 		cycle_interval_s: 900,
 		hourly_cap: 4,
-		selection: 'random'
+		selection: 'random',
+		sonarr_missing_mode: 'dynamic',
+		sonarr_upgrade_mode: 'episodes'
 	},
 	{
 		key: 'balanced',
@@ -20,7 +22,9 @@ const API_PRESETS: SnatchPolicyPreset[] = [
 		upgrade_per_cycle: 1,
 		cycle_interval_s: 900,
 		hourly_cap: 15,
-		selection: 'random'
+		selection: 'random',
+		sonarr_missing_mode: 'dynamic',
+		sonarr_upgrade_mode: 'episodes'
 	},
 	{
 		key: 'catch_up',
@@ -28,7 +32,9 @@ const API_PRESETS: SnatchPolicyPreset[] = [
 		upgrade_per_cycle: 2,
 		cycle_interval_s: 300,
 		hourly_cap: 60,
-		selection: 'sequential'
+		selection: 'sequential',
+		sonarr_missing_mode: 'dynamic',
+		sonarr_upgrade_mode: 'episodes'
 	},
 	{
 		key: 'upgrades',
@@ -36,7 +42,9 @@ const API_PRESETS: SnatchPolicyPreset[] = [
 		upgrade_per_cycle: 5,
 		cycle_interval_s: 600,
 		hourly_cap: 25,
-		selection: 'random'
+		selection: 'random',
+		sonarr_missing_mode: 'dynamic',
+		sonarr_upgrade_mode: 'episodes'
 	}
 ];
 
@@ -73,7 +81,9 @@ describe('toPresets', () => {
 				missing_per_cycle: 1,
 				upgrade_per_cycle: 1,
 				cycle_interval_s: 60,
-				hourly_cap: 1
+				hourly_cap: 1,
+				sonarr_missing_mode: 'dynamic',
+				sonarr_upgrade_mode: 'episodes'
 			}
 		];
 		expect(toPresets(extra)).toHaveLength(4);

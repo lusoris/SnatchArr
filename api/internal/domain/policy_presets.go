@@ -19,12 +19,14 @@ const (
 
 // PolicyPresetValues holds the partial policy fields a preset applies.
 type PolicyPresetValues struct {
-	MissingPerCycle int
-	UpgradePerCycle int
-	CycleInterval   time.Duration
-	HourlyCap       int
-	Selection       Selection
-	HasSelection    bool
+	MissingPerCycle   int
+	UpgradePerCycle   int
+	CycleInterval     time.Duration
+	HourlyCap         int
+	Selection         Selection
+	HasSelection      bool
+	SonarrMissingMode string
+	SonarrUpgradeMode string
 }
 
 // PolicyPreset is a shipped preset with its key and values.
@@ -41,21 +43,25 @@ func SnatchPolicyPresets() []PolicyPreset {
 			MissingPerCycle: 1, UpgradePerCycle: 0,
 			CycleInterval: 900 * time.Second, HourlyCap: 4,
 			Selection: SelectionRandom, HasSelection: true,
+			SonarrMissingMode: "dynamic", SonarrUpgradeMode: "episodes",
 		}},
 		{Key: PresetBalanced, Values: PolicyPresetValues{
 			MissingPerCycle: 2, UpgradePerCycle: 1,
 			CycleInterval: 900 * time.Second, HourlyCap: 15,
 			Selection: SelectionRandom, HasSelection: true,
+			SonarrMissingMode: "dynamic", SonarrUpgradeMode: "episodes",
 		}},
 		{Key: PresetCatchUp, Values: PolicyPresetValues{
 			MissingPerCycle: 10, UpgradePerCycle: 2,
 			CycleInterval: 300 * time.Second, HourlyCap: 60,
 			Selection: SelectionSequential, HasSelection: true,
+			SonarrMissingMode: "dynamic", SonarrUpgradeMode: "episodes",
 		}},
 		{Key: PresetUpgrades, Values: PolicyPresetValues{
 			MissingPerCycle: 1, UpgradePerCycle: 5,
 			CycleInterval: 600 * time.Second, HourlyCap: 25,
 			Selection: SelectionRandom, HasSelection: true,
+			SonarrMissingMode: "dynamic", SonarrUpgradeMode: "episodes",
 		}},
 	}
 }

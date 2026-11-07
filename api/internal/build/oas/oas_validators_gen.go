@@ -5294,6 +5294,28 @@ func (s *SnatchPolicyPreset) Validate() error {
 			Error: err,
 		})
 	}
+	if err := func() error {
+		if err := s.SonarrMissingMode.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "sonarr_missing_mode",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.SonarrUpgradeMode.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "sonarr_upgrade_mode",
+			Error: err,
+		})
+	}
 	if len(failures) > 0 {
 		return &validate.Error{Fields: failures}
 	}
@@ -5307,6 +5329,34 @@ func (s SnatchPolicyPresetSelection) Validate() error {
 	case "sequential":
 		return nil
 	case "recent":
+		return nil
+	default:
+		return errors.Errorf("invalid value: %v", s)
+	}
+}
+
+func (s SnatchPolicyPresetSonarrMissingMode) Validate() error {
+	switch s {
+	case "episodes":
+		return nil
+	case "season_packs":
+		return nil
+	case "shows":
+		return nil
+	case "dynamic":
+		return nil
+	default:
+		return errors.Errorf("invalid value: %v", s)
+	}
+}
+
+func (s SnatchPolicyPresetSonarrUpgradeMode) Validate() error {
+	switch s {
+	case "episodes":
+		return nil
+	case "season_packs":
+		return nil
+	case "dynamic":
 		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)

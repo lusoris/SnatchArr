@@ -57,6 +57,22 @@ func TestGetSnatchPolicyPresetsHTTP(t *testing.T) {
 	if balanced.CycleIntervalS != int(dp.CycleInterval.Seconds()) {
 		t.Errorf("balanced.CycleIntervalS = %d; want %d", balanced.CycleIntervalS, int(dp.CycleInterval.Seconds()))
 	}
+	if string(balanced.SonarrMissingMode) != dp.SonarrMissingMode {
+		t.Errorf("balanced.SonarrMissingMode = %q; want %q", balanced.SonarrMissingMode, dp.SonarrMissingMode)
+	}
+	if string(balanced.SonarrUpgradeMode) != dp.SonarrUpgradeMode {
+		t.Errorf("balanced.SonarrUpgradeMode = %q; want %q", balanced.SonarrUpgradeMode, dp.SonarrUpgradeMode)
+	}
+
+	// Every preset carries Sonarr modes per ADR-0020 matrix.
+	for i, p := range presets {
+		if string(p.SonarrMissingMode) != "dynamic" {
+			t.Errorf("presets[%d].SonarrMissingMode = %q; want 'dynamic'", i, p.SonarrMissingMode)
+		}
+		if string(p.SonarrUpgradeMode) != "episodes" {
+			t.Errorf("presets[%d].SonarrUpgradeMode = %q; want 'episodes'", i, p.SonarrUpgradeMode)
+		}
+	}
 
 	// Every preset sets selection per ADR-0020 matrix.
 	catchUp := presets[2]

@@ -20776,15 +20776,25 @@ func (s *SnatchPolicyPreset) encodeFields(e *jx.Encoder) {
 			s.Selection.Encode(e)
 		}
 	}
+	{
+		e.FieldStart("sonarr_missing_mode")
+		s.SonarrMissingMode.Encode(e)
+	}
+	{
+		e.FieldStart("sonarr_upgrade_mode")
+		s.SonarrUpgradeMode.Encode(e)
+	}
 }
 
-var jsonFieldsNameOfSnatchPolicyPreset = [6]string{
+var jsonFieldsNameOfSnatchPolicyPreset = [8]string{
 	0: "key",
 	1: "missing_per_cycle",
 	2: "upgrade_per_cycle",
 	3: "cycle_interval_s",
 	4: "hourly_cap",
 	5: "selection",
+	6: "sonarr_missing_mode",
+	7: "sonarr_upgrade_mode",
 }
 
 // Decode decodes SnatchPolicyPreset from json.
@@ -20866,6 +20876,26 @@ func (s *SnatchPolicyPreset) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"selection\"")
 			}
+		case "sonarr_missing_mode":
+			requiredBitSet[0] |= 1 << 6
+			if err := func() error {
+				if err := s.SonarrMissingMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"sonarr_missing_mode\"")
+			}
+		case "sonarr_upgrade_mode":
+			requiredBitSet[0] |= 1 << 7
+			if err := func() error {
+				if err := s.SonarrUpgradeMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"sonarr_upgrade_mode\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -20876,7 +20906,7 @@ func (s *SnatchPolicyPreset) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00011111,
+		0b11011111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -20960,6 +20990,92 @@ func (s SnatchPolicyPresetSelection) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *SnatchPolicyPresetSelection) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SnatchPolicyPresetSonarrMissingMode as json.
+func (s SnatchPolicyPresetSonarrMissingMode) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SnatchPolicyPresetSonarrMissingMode from json.
+func (s *SnatchPolicyPresetSonarrMissingMode) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicyPresetSonarrMissingMode to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SnatchPolicyPresetSonarrMissingMode(v) {
+	case SnatchPolicyPresetSonarrMissingModeEpisodes:
+		*s = SnatchPolicyPresetSonarrMissingModeEpisodes
+	case SnatchPolicyPresetSonarrMissingModeSeasonPacks:
+		*s = SnatchPolicyPresetSonarrMissingModeSeasonPacks
+	case SnatchPolicyPresetSonarrMissingModeShows:
+		*s = SnatchPolicyPresetSonarrMissingModeShows
+	case SnatchPolicyPresetSonarrMissingModeDynamic:
+		*s = SnatchPolicyPresetSonarrMissingModeDynamic
+	default:
+		*s = SnatchPolicyPresetSonarrMissingMode(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SnatchPolicyPresetSonarrMissingMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicyPresetSonarrMissingMode) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SnatchPolicyPresetSonarrUpgradeMode as json.
+func (s SnatchPolicyPresetSonarrUpgradeMode) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SnatchPolicyPresetSonarrUpgradeMode from json.
+func (s *SnatchPolicyPresetSonarrUpgradeMode) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicyPresetSonarrUpgradeMode to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SnatchPolicyPresetSonarrUpgradeMode(v) {
+	case SnatchPolicyPresetSonarrUpgradeModeEpisodes:
+		*s = SnatchPolicyPresetSonarrUpgradeModeEpisodes
+	case SnatchPolicyPresetSonarrUpgradeModeSeasonPacks:
+		*s = SnatchPolicyPresetSonarrUpgradeModeSeasonPacks
+	case SnatchPolicyPresetSonarrUpgradeModeDynamic:
+		*s = SnatchPolicyPresetSonarrUpgradeModeDynamic
+	default:
+		*s = SnatchPolicyPresetSonarrUpgradeMode(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SnatchPolicyPresetSonarrUpgradeMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicyPresetSonarrUpgradeMode) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

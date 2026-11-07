@@ -10975,12 +10975,14 @@ func (s *SnatchPolicyLidarrMissingMode) UnmarshalText(data []byte) error {
 // Ref: #/components/schemas/SnatchPolicyPreset
 type SnatchPolicyPreset struct {
 	// Unique preset identifier.
-	Key             string                         `json:"key"`
-	MissingPerCycle int                            `json:"missing_per_cycle"`
-	UpgradePerCycle int                            `json:"upgrade_per_cycle"`
-	CycleIntervalS  int                            `json:"cycle_interval_s"`
-	HourlyCap       int                            `json:"hourly_cap"`
-	Selection       OptSnatchPolicyPresetSelection `json:"selection"`
+	Key               string                              `json:"key"`
+	MissingPerCycle   int                                 `json:"missing_per_cycle"`
+	UpgradePerCycle   int                                 `json:"upgrade_per_cycle"`
+	CycleIntervalS    int                                 `json:"cycle_interval_s"`
+	HourlyCap         int                                 `json:"hourly_cap"`
+	Selection         OptSnatchPolicyPresetSelection      `json:"selection"`
+	SonarrMissingMode SnatchPolicyPresetSonarrMissingMode `json:"sonarr_missing_mode"`
+	SonarrUpgradeMode SnatchPolicyPresetSonarrUpgradeMode `json:"sonarr_upgrade_mode"`
 }
 
 // GetKey returns the value of Key.
@@ -11013,6 +11015,16 @@ func (s *SnatchPolicyPreset) GetSelection() OptSnatchPolicyPresetSelection {
 	return s.Selection
 }
 
+// GetSonarrMissingMode returns the value of SonarrMissingMode.
+func (s *SnatchPolicyPreset) GetSonarrMissingMode() SnatchPolicyPresetSonarrMissingMode {
+	return s.SonarrMissingMode
+}
+
+// GetSonarrUpgradeMode returns the value of SonarrUpgradeMode.
+func (s *SnatchPolicyPreset) GetSonarrUpgradeMode() SnatchPolicyPresetSonarrUpgradeMode {
+	return s.SonarrUpgradeMode
+}
+
 // SetKey sets the value of Key.
 func (s *SnatchPolicyPreset) SetKey(val string) {
 	s.Key = val
@@ -11041,6 +11053,16 @@ func (s *SnatchPolicyPreset) SetHourlyCap(val int) {
 // SetSelection sets the value of Selection.
 func (s *SnatchPolicyPreset) SetSelection(val OptSnatchPolicyPresetSelection) {
 	s.Selection = val
+}
+
+// SetSonarrMissingMode sets the value of SonarrMissingMode.
+func (s *SnatchPolicyPreset) SetSonarrMissingMode(val SnatchPolicyPresetSonarrMissingMode) {
+	s.SonarrMissingMode = val
+}
+
+// SetSonarrUpgradeMode sets the value of SonarrUpgradeMode.
+func (s *SnatchPolicyPreset) SetSonarrUpgradeMode(val SnatchPolicyPresetSonarrUpgradeMode) {
+	s.SonarrUpgradeMode = val
 }
 
 type SnatchPolicyPresetSelection string
@@ -11085,6 +11107,109 @@ func (s *SnatchPolicyPresetSelection) UnmarshalText(data []byte) error {
 		return nil
 	case SnatchPolicyPresetSelectionRecent:
 		*s = SnatchPolicyPresetSelectionRecent
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type SnatchPolicyPresetSonarrMissingMode string
+
+const (
+	SnatchPolicyPresetSonarrMissingModeEpisodes    SnatchPolicyPresetSonarrMissingMode = "episodes"
+	SnatchPolicyPresetSonarrMissingModeSeasonPacks SnatchPolicyPresetSonarrMissingMode = "season_packs"
+	SnatchPolicyPresetSonarrMissingModeShows       SnatchPolicyPresetSonarrMissingMode = "shows"
+	SnatchPolicyPresetSonarrMissingModeDynamic     SnatchPolicyPresetSonarrMissingMode = "dynamic"
+)
+
+// AllValues returns all SnatchPolicyPresetSonarrMissingMode values.
+func (SnatchPolicyPresetSonarrMissingMode) AllValues() []SnatchPolicyPresetSonarrMissingMode {
+	return []SnatchPolicyPresetSonarrMissingMode{
+		SnatchPolicyPresetSonarrMissingModeEpisodes,
+		SnatchPolicyPresetSonarrMissingModeSeasonPacks,
+		SnatchPolicyPresetSonarrMissingModeShows,
+		SnatchPolicyPresetSonarrMissingModeDynamic,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SnatchPolicyPresetSonarrMissingMode) MarshalText() ([]byte, error) {
+	switch s {
+	case SnatchPolicyPresetSonarrMissingModeEpisodes:
+		return []byte(s), nil
+	case SnatchPolicyPresetSonarrMissingModeSeasonPacks:
+		return []byte(s), nil
+	case SnatchPolicyPresetSonarrMissingModeShows:
+		return []byte(s), nil
+	case SnatchPolicyPresetSonarrMissingModeDynamic:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SnatchPolicyPresetSonarrMissingMode) UnmarshalText(data []byte) error {
+	switch SnatchPolicyPresetSonarrMissingMode(data) {
+	case SnatchPolicyPresetSonarrMissingModeEpisodes:
+		*s = SnatchPolicyPresetSonarrMissingModeEpisodes
+		return nil
+	case SnatchPolicyPresetSonarrMissingModeSeasonPacks:
+		*s = SnatchPolicyPresetSonarrMissingModeSeasonPacks
+		return nil
+	case SnatchPolicyPresetSonarrMissingModeShows:
+		*s = SnatchPolicyPresetSonarrMissingModeShows
+		return nil
+	case SnatchPolicyPresetSonarrMissingModeDynamic:
+		*s = SnatchPolicyPresetSonarrMissingModeDynamic
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type SnatchPolicyPresetSonarrUpgradeMode string
+
+const (
+	SnatchPolicyPresetSonarrUpgradeModeEpisodes    SnatchPolicyPresetSonarrUpgradeMode = "episodes"
+	SnatchPolicyPresetSonarrUpgradeModeSeasonPacks SnatchPolicyPresetSonarrUpgradeMode = "season_packs"
+	SnatchPolicyPresetSonarrUpgradeModeDynamic     SnatchPolicyPresetSonarrUpgradeMode = "dynamic"
+)
+
+// AllValues returns all SnatchPolicyPresetSonarrUpgradeMode values.
+func (SnatchPolicyPresetSonarrUpgradeMode) AllValues() []SnatchPolicyPresetSonarrUpgradeMode {
+	return []SnatchPolicyPresetSonarrUpgradeMode{
+		SnatchPolicyPresetSonarrUpgradeModeEpisodes,
+		SnatchPolicyPresetSonarrUpgradeModeSeasonPacks,
+		SnatchPolicyPresetSonarrUpgradeModeDynamic,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SnatchPolicyPresetSonarrUpgradeMode) MarshalText() ([]byte, error) {
+	switch s {
+	case SnatchPolicyPresetSonarrUpgradeModeEpisodes:
+		return []byte(s), nil
+	case SnatchPolicyPresetSonarrUpgradeModeSeasonPacks:
+		return []byte(s), nil
+	case SnatchPolicyPresetSonarrUpgradeModeDynamic:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SnatchPolicyPresetSonarrUpgradeMode) UnmarshalText(data []byte) error {
+	switch SnatchPolicyPresetSonarrUpgradeMode(data) {
+	case SnatchPolicyPresetSonarrUpgradeModeEpisodes:
+		*s = SnatchPolicyPresetSonarrUpgradeModeEpisodes
+		return nil
+	case SnatchPolicyPresetSonarrUpgradeModeSeasonPacks:
+		*s = SnatchPolicyPresetSonarrUpgradeModeSeasonPacks
+		return nil
+	case SnatchPolicyPresetSonarrUpgradeModeDynamic:
+		*s = SnatchPolicyPresetSonarrUpgradeModeDynamic
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
