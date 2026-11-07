@@ -33,7 +33,9 @@ export function toPresets(apiPresets: SnatchPolicyPreset[]): Preset[] {
 				missing_per_cycle: p.missing_per_cycle,
 				upgrade_per_cycle: p.upgrade_per_cycle,
 				cycle_interval_s: p.cycle_interval_s,
-				hourly_cap: p.hourly_cap
+				hourly_cap: p.hourly_cap,
+				sonarr_missing_mode: p.sonarr_missing_mode,
+				sonarr_upgrade_mode: p.sonarr_upgrade_mode
 			};
 			if (p.selection) {
 				values.selection = p.selection;

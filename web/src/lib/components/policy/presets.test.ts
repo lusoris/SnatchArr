@@ -62,6 +62,8 @@ describe('toPresets', () => {
 			expect(preset.values.hourly_cap).toBeGreaterThanOrEqual(1);
 			expect(preset.values.missing_per_cycle).toBeGreaterThanOrEqual(0);
 			expect(preset.values.upgrade_per_cycle).toBeGreaterThanOrEqual(0);
+			expect(preset.values.sonarr_missing_mode).toBe('dynamic');
+			expect(preset.values.sonarr_upgrade_mode).toBe('episodes');
 		}
 	});
 
