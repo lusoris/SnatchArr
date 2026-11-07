@@ -1,22 +1,22 @@
 ---
 version: 1
-pinned_version: v0.0.0+catalog.33773a292166
-digest: sha256:62899593b348bf10f58963b56df3b63409a2d21e7255a19b9d39daf472a7337c
+pinned_version: v0.0.0+catalog.089e72902868
+digest: sha256:64054c7fdef1f88f61bfd0ed59bfe86c5a792ee90d8d0ac0fbf19c2dae17e404
 profiles:
   - id: app-service
-    version: v0.0.0+catalog.33773a292166
+    version: v0.0.0+catalog.089e72902868
     digest:
-      sha256:b5182c545f4ce96743d65b86d3d81ddd929445077316f1da507e48db25559308
+      sha256:f9bf5a186f252fc3ed5bd75f4e2167538135e7f2577547b07d7632cde4e224e5
 facets:
   - id: security:high
-    version: v0.0.0+catalog.33773a292166
+    version: v0.0.0+catalog.089e72902868
     digest:
-      sha256:9bd59f0725d472b1516ba74556feada0e3868f4642bc08dd2d67a2cc26e87778
+      sha256:34de9dc4fe2b7da48c152c2e7457891ebc41ace8e671fd1db0f49e1fafcb567f
   - id: api:public-contract
-    version: v0.0.0+catalog.33773a292166
+    version: v0.0.0+catalog.089e72902868
     digest:
-      sha256:c921d361fcd84da16ee8cf6423d49a1c686c98ed95b62517c903ff2651258276
+      sha256:4de328ae5f1c4a993f45c258758d105395b92b2974abf52023fc685b61dafdd9
   - id: agent:sandboxed
-    version: v0.0.0+catalog.33773a292166
+    version: v0.0.0+catalog.089e72902868
     digest:
-      sha256:bc87486dea71e54d20549d6054dcf290d3d700e37b304cbdb6d6c1a2def895f2
+      sha256:0ef3ebf5423873d200e12ba405ca93b3064c57eedf9091852f2d69316dfb7c63
