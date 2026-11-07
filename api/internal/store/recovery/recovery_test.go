@@ -7,6 +7,7 @@ package recovery_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/lusoris/SnatchArr/api/internal/store"
@@ -141,8 +143,9 @@ func TestCorruptedDumpRefused(t *testing.T) {
 	}
 	_, err = dstConn.Conn().PgConn().CopyFrom(ctx, bytes.NewReader(corrupted), "COPY instances FROM STDIN WITH (FORMAT binary)")
 	dstConn.Release()
-	if err == nil {
-		t.Fatal("expected COPY FROM with corrupted data to fail, but it succeeded")
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "22P04" {
+		t.Fatalf("expected COPY format error (22P04) for corrupted header, got: %v", err)
 	}
 }
 
