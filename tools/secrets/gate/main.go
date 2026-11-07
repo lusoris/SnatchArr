@@ -62,14 +62,14 @@ func runGate(args []string, stdout, stderr io.Writer) int {
 	cfg := *configPath
 	if cfg == "" {
 		cfg = filepath.Join(*repoPath, defaultConfig)
-	}
-	if !filepath.IsAbs(cfg) {
-		abs, err := filepath.Abs(cfg)
-		if err != nil {
-			fmt.Fprintf(stderr, "secrets gate: resolve config path: %v\n", err)
-			return exitIncomplete
+		if !filepath.IsAbs(cfg) {
+			abs, err := filepath.Abs(cfg)
+			if err != nil {
+				fmt.Fprintf(stderr, "secrets gate: resolve config path: %v\n", err)
+				return exitIncomplete
+			}
+			cfg = abs
 		}
-		cfg = abs
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), scanTimeout)
