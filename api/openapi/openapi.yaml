@@ -3437,7 +3437,7 @@ components:
         sonarr_missing_mode:
           type: string
           enum: [episodes, season_packs, shows, dynamic]
-          default: episodes
+          default: dynamic
         sonarr_upgrade_mode:
           type: string
           enum: [episodes, season_packs, dynamic]
@@ -3525,7 +3525,7 @@ components:
 
     SnatchPolicyPreset:
       type: object
-      required: [key, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap]
+      required: [key, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, sonarr_missing_mode, sonarr_upgrade_mode]
       properties:
         key:
           type: string
@@ -3549,6 +3549,12 @@ components:
         selection:
           type: string
           enum: [random, sequential, recent]
+        sonarr_missing_mode:
+          type: string
+          enum: [episodes, season_packs, shows, dynamic]
+        sonarr_upgrade_mode:
+          type: string
+          enum: [episodes, season_packs, dynamic]
 
     SnatchKind:
       type: string

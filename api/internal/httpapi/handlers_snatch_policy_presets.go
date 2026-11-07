@@ -18,11 +18,13 @@ func (h *Handlers) GetSnatchPolicyPresets(_ context.Context) ([]oas.SnatchPolicy
 	out := make([]oas.SnatchPolicyPreset, 0, len(presets))
 	for _, p := range presets {
 		item := oas.SnatchPolicyPreset{
-			Key:             string(p.Key),
-			MissingPerCycle: p.Values.MissingPerCycle,
-			UpgradePerCycle: p.Values.UpgradePerCycle,
-			CycleIntervalS:  int(p.Values.CycleInterval / time.Second),
-			HourlyCap:       p.Values.HourlyCap,
+			Key:               string(p.Key),
+			MissingPerCycle:   p.Values.MissingPerCycle,
+			UpgradePerCycle:   p.Values.UpgradePerCycle,
+			CycleIntervalS:    int(p.Values.CycleInterval / time.Second),
+			HourlyCap:         p.Values.HourlyCap,
+			SonarrMissingMode: oas.SnatchPolicyPresetSonarrMissingMode(p.Values.SonarrMissingMode),
+			SonarrUpgradeMode: oas.SnatchPolicyPresetSonarrUpgradeMode(p.Values.SonarrUpgradeMode),
 		}
 		if p.Values.HasSelection {
 			item.Selection = oas.NewOptSnatchPolicyPresetSelection(

@@ -2142,7 +2142,7 @@ export interface components {
             /** @enum {string} */
             radarr_release_type: "physical" | "digital" | "cinema";
             /**
-             * @default episodes
+             * @default dynamic
              * @enum {string}
              */
             sonarr_missing_mode: "episodes" | "season_packs" | "shows" | "dynamic";
@@ -2191,6 +2191,10 @@ export interface components {
             hourly_cap: number;
             /** @enum {string} */
             selection?: "random" | "sequential" | "recent";
+            /** @enum {string} */
+            sonarr_missing_mode: "episodes" | "season_packs" | "shows" | "dynamic";
+            /** @enum {string} */
+            sonarr_upgrade_mode: "episodes" | "season_packs" | "dynamic";
         };
         /** @enum {string} */
         SnatchKind: "missing" | "upgrade";

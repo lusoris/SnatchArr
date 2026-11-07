@@ -1760,3 +1760,96 @@ func TestMigration000057SonarrDynamicMode(t *testing.T) {
 		t.Fatalf("Steps(1) back up to 57: %v", err)
 	}
 }
+
+// TestMigration000058SonarrMissingDefaultDynamic verifies migration 000058
+// changes the column default for sonarr_missing_mode from 'episodes' to
+// 'dynamic', leaves sonarr_upgrade_mode at 'episodes', and that stepping down
+// restores the original defaults. Existing rows are never mutated.
+func TestMigration000058SonarrMissingDefaultDynamic(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	now := time.Date(2026, 11, 7, 5, 0, 0, 0, time.UTC)
+
+	stepDownToVersion(t, m, 57)
+
+	instOld := uuid.New()
+	const insInst = `INSERT INTO instances (
+		id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at
+	) VALUES ($1, 'sonarr', 'sonarr-58-pre', 'http://127.0.0.1:8989', '\x0102', true, 'manual', $2, $2)`
+	if _, err := st.Pool().Exec(ctx, insInst, instOld, now); err != nil {
+		t.Fatalf("insert instance at v57: %v", err)
+	}
+	const insPolicy = `INSERT INTO snatch_policies (instance_id, updated_at) VALUES ($1, $2)`
+	if _, err := st.Pool().Exec(ctx, insPolicy, instOld, now); err != nil {
+		t.Fatalf("insert default policy at v57: %v", err)
+	}
+	const readModes = `SELECT sonarr_missing_mode, sonarr_upgrade_mode FROM snatch_policies WHERE instance_id = $1`
+	var missMode, upgMode string
+	if err := st.Pool().QueryRow(ctx, readModes, instOld).Scan(&missMode, &upgMode); err != nil {
+		t.Fatalf("read modes at v57: %v", err)
+	}
+	if missMode != "episodes" {
+		t.Fatalf("sonarr_missing_mode default at v57 = %q, want 'episodes'", missMode)
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 58: %v", err)
+	}
+
+	if err := st.Pool().QueryRow(ctx, readModes, instOld).Scan(&missMode, &upgMode); err != nil {
+		t.Fatalf("read old row at v58: %v", err)
+	}
+	if missMode != "episodes" || upgMode != "episodes" {
+		t.Fatalf("existing row mutated at v58: got (%q, %q), want ('episodes', 'episodes')", missMode, upgMode)
+	}
+
+	instNew := uuid.New()
+	const insInst2 = `INSERT INTO instances (
+		id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at
+	) VALUES ($1, 'sonarr', 'sonarr-58-post', 'http://127.0.0.1:8990', '\x0102', true, 'manual', $2, $2)`
+	if _, err := st.Pool().Exec(ctx, insInst2, instNew, now); err != nil {
+		t.Fatalf("insert new instance at v58: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, insPolicy, instNew, now); err != nil {
+		t.Fatalf("insert default policy at v58: %v", err)
+	}
+	if err := st.Pool().QueryRow(ctx, readModes, instNew).Scan(&missMode, &upgMode); err != nil {
+		t.Fatalf("read new row at v58: %v", err)
+	}
+	if missMode != "dynamic" {
+		t.Fatalf("sonarr_missing_mode default at v58 = %q, want 'dynamic'", missMode)
+	}
+	if upgMode != "episodes" {
+		t.Fatalf("sonarr_upgrade_mode default at v58 = %q, want 'episodes'", upgMode)
+	}
+
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 57: %v", err)
+	}
+	instDown := uuid.New()
+	const insInst3 = `INSERT INTO instances (
+		id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at
+	) VALUES ($1, 'sonarr', 'sonarr-58-down', 'http://127.0.0.1:8991', '\x0102', true, 'manual', $2, $2)`
+	if _, err := st.Pool().Exec(ctx, insInst3, instDown, now); err != nil {
+		t.Fatalf("insert instance after down to v57: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, insPolicy, instDown, now); err != nil {
+		t.Fatalf("insert default policy after down to v57: %v", err)
+	}
+	if err := st.Pool().QueryRow(ctx, readModes, instDown).Scan(&missMode, &upgMode); err != nil {
+		t.Fatalf("read row after down to v57: %v", err)
+	}
+	if missMode != "episodes" {
+		t.Fatalf("sonarr_missing_mode default after down = %q, want 'episodes'", missMode)
+	}
+
+	if err := st.Pool().QueryRow(ctx, readModes, instNew).Scan(&missMode, &upgMode); err != nil {
+		t.Fatalf("read v58 row after down: %v", err)
+	}
+	if missMode != "dynamic" {
+		t.Fatalf("v58 row mutated by down: sonarr_missing_mode = %q, want 'dynamic' (down must not UPDATE)", missMode)
+	}
+}

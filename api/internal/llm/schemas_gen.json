@@ -3445,7 +3445,7 @@
             "type": "boolean"
           },
           "sonarr_missing_mode": {
-            "default": "episodes",
+            "default": "dynamic",
             "enum": [
               "episodes",
               "season_packs",

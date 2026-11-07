@@ -26,8 +26,11 @@ func TestDefaultPolicyIsBalancedAndValid(t *testing.T) {
 	if !p.MonitoredOnly || !p.SkipFutureReleases || !p.SkipUnavailableMovies {
 		t.Fatal("monitored_only, skip_future_releases and skip_unavailable_movies must default to true")
 	}
-	if p.SonarrMissingMode != "episodes" || p.SonarrUpgradeMode != "episodes" {
-		t.Fatalf("sonarr modes drifted from ADR-0020 episodes default: %+v", p)
+	if p.SonarrMissingMode != "dynamic" {
+		t.Fatalf("sonarr_missing_mode default = %q, want 'dynamic' (ADR-0020)", p.SonarrMissingMode)
+	}
+	if p.SonarrUpgradeMode != "episodes" {
+		t.Fatalf("sonarr_upgrade_mode default = %q, want 'episodes' (ADR-0020)", p.SonarrUpgradeMode)
 	}
 	if err := p.Validate(); err != nil {
 		t.Fatalf("default policy must validate: %v", err)

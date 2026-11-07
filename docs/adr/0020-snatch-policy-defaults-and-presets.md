@@ -37,8 +37,8 @@ The default policy updates three numeric fields. All other fields (selection ord
 | `monitored_only` | `true` | `true` | Unchanged. Universal convention; ignores unmonitored media. |
 | `skip_future_releases` | `true` | `true` | Unchanged. Avoids futile indexer queries before official release. |
 | `radarr_release_type` | `physical` | `physical` | Unchanged. Conservative availability baseline. |
-| `sonarr_missing_mode` | `episodes` | `episodes` | Unchanged. Granular episode queries align with Huntarr lineage and Houndarr defaults. |
-| `sonarr_upgrade_mode` | `episodes` | `episodes` | Unchanged. Targets specific cutoff-unmet episodes cleanly. |
+| `sonarr_missing_mode` | `episodes` | **`dynamic`** | Sonarr bulk search groups wanted episodes by season and sends a season search when enough of that season is wanted, falling back to episode search otherwise. Matches the shape of Sonarr's own `EpisodeSearchService.SearchForBulkEpisodes`. |
+| `sonarr_upgrade_mode` | `episodes` | `episodes` | Unchanged. Upgrade searches target specific cutoff-unmet episodes; season-pack upgrades risk replacing files that already meet the cutoff in the same season. |
 | `lidarr_missing_mode` | `artist` | `artist` | Unchanged. An artist query dispatches a single search command per issue #180. |
 | `processed_ttl_h` | 168 (7 d) | 168 (7 d) | Unchanged. Standard 7-day cooldown prevents duplicate searching. |
 | `afterglow_max_h` | 720 (30 d) | 720 (30 d) | Unchanged. Caps exponential backoff at 30 days. |
@@ -75,7 +75,7 @@ The API serves four standardized presets via `GET /snatch-policy-presets`; the U
 | `monitored_only` | `true` | `true` | `true` | `true` |
 | `skip_future_releases` | `true` | `true` | `true` | `true` |
 | `radarr_release_type` | `physical` | `physical` | `physical` | `physical` |
-| `sonarr_missing_mode` | `episodes` | `episodes` | `episodes` | `episodes` |
+| `sonarr_missing_mode` | `dynamic` | **`dynamic`** | `dynamic` | `dynamic` |
 | `sonarr_upgrade_mode` | `episodes` | `episodes` | `episodes` | `episodes` |
 | `lidarr_missing_mode` | `artist` | `artist` | `artist` | `artist` |
 | `processed_ttl_h` | 168 | 168 | 168 | 168 |
@@ -114,8 +114,8 @@ User-facing configuration forms adhere to the principle: **plain label + unit + 
 | `monitored_only` | Monitored items only | boolean | Restricts all searches to media marked as monitored in the \*arr application. |
 | `skip_future_releases` | Skip future releases | boolean | Prevents searching for media whose announced release date is still in the future. |
 | `radarr_release_type` | Radarr release date type | enum | Selects which Radarr release date determines availability (`digital`, `physical`, or `cinema`). |
-| `sonarr_missing_mode` | Sonarr missing search mode | enum | Determines whether Sonarr searches for missing items as individual `episodes`, complete `season_packs`, or entire `shows`. |
-| `sonarr_upgrade_mode` | Sonarr upgrade search mode | enum | Determines whether Sonarr searches for cutoff-unmet upgrades as individual `episodes` or complete `season_packs`. |
+| `sonarr_missing_mode` | Sonarr missing search mode | enum | Determines whether Sonarr searches for missing items as individual `episodes`, complete `season_packs`, entire `shows`, or `dynamic` (season search when enough wanted episodes qualify, episode search otherwise). |
+| `sonarr_upgrade_mode` | Sonarr upgrade search mode | enum | Determines whether Sonarr searches for cutoff-unmet upgrades as individual `episodes`, complete `season_packs`, or `dynamic`. |
 | `lidarr_missing_mode` | Lidarr missing search mode | enum | Determines whether Lidarr queries indexers for missing music by individual `album` or by whole `artist`. |
 | `processed_ttl_h` | Search cooldown (afterglow) | hours | Number of hours a searched item rests before SnatchArr is allowed to search for it again. |
 | `afterglow_max_h` | Maximum cooldown | hours | Upper ceiling for the exponential cooldown that doubles each time a search yields no results. |
@@ -224,7 +224,7 @@ Because free tiers either lack API access entirely or offer only token trial hit
 ## Alternatives Rejected
 
 1. **Hourly cap of 1 search/h with 3600 s cycle interval:** Rejected. Recreates the exact reported problem of SnatchArr appearing idle. Free tiers largely offer no API access, making them an inappropriate baseline for product defaults. The `gentle` preset handles low-quota environments.
-2. **Defaulting Sonarr to `season_packs`:** Rejected. Full season pack queries pull large release sets and reduce granular file-level discretion. Keeping `episodes` preserves fine-grained control and aligns with Huntarr lineage and Houndarr defaults.
+2. **Defaulting Sonarr missing to `season_packs`:** Rejected. Full season pack queries pull large release sets and reduce granular file-level discretion. The `dynamic` mode (#558) is adopted instead: it sends a season search when enough of that season is wanted, otherwise an episode search, matching Sonarr's own bulk search shape (`EpisodeSearchService.SearchForBulkEpisodes`). Upgrade searches stay at `episodes` because season-pack upgrades risk replacing files that already meet the cutoff.
 3. **Defaulting Lidarr to `album`:** Rejected. An artist search in Lidarr dispatches a single command across monitored releases (1 query per issue #180), making whole-artist searches stamina-efficient.
 4. **Migrating existing database rows to new defaults:** Rejected. Mutating user-configured settings during database upgrades destroys intentional tuning. New defaults apply only to newly created instances.
 

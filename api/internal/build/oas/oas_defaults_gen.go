@@ -94,7 +94,7 @@ func (s *RequestsSettings) setDefaults() {
 // setDefaults set default value of fields.
 func (s *SnatchPolicy) setDefaults() {
 	{
-		val := SnatchPolicySonarrMissingMode("episodes")
+		val := SnatchPolicySonarrMissingMode("dynamic")
 		s.SonarrMissingMode = val
 	}
 	{

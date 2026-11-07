@@ -78,7 +78,7 @@ func DefaultPolicy(instanceID uuid.UUID) Policy {
 		MonitoredOnly:          true,
 		SkipFutureReleases:     true,
 		RadarrReleaseType:      "physical",
-		SonarrMissingMode:      "episodes",
+		SonarrMissingMode:      "dynamic",
 		SonarrUpgradeMode:      "episodes",
 		LidarrMissingMode:      "artist",
 		ProcessedTTL:           168 * time.Hour,

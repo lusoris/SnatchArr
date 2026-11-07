@@ -43,24 +43,32 @@ func TestSnatchPolicyPresetsBalancedMatchesDefault(t *testing.T) {
 	if balanced.Values.CycleInterval != dp.CycleInterval {
 		t.Errorf("CycleInterval = %v; want %v", balanced.Values.CycleInterval, dp.CycleInterval)
 	}
+	if balanced.Values.SonarrMissingMode != dp.SonarrMissingMode {
+		t.Errorf("SonarrMissingMode = %q; want %q", balanced.Values.SonarrMissingMode, dp.SonarrMissingMode)
+	}
+	if balanced.Values.SonarrUpgradeMode != dp.SonarrUpgradeMode {
+		t.Errorf("SonarrUpgradeMode = %q; want %q", balanced.Values.SonarrUpgradeMode, dp.SonarrUpgradeMode)
+	}
 }
 
 func TestSnatchPolicyPresetsExactValues(t *testing.T) {
 	t.Parallel()
 	presets := SnatchPolicyPresets()
 	cases := []struct {
-		key          PolicyPresetKey
-		missing      int
-		upgrade      int
-		interval     time.Duration
-		cap          int
-		selection    Selection
-		hasSelection bool
+		key               PolicyPresetKey
+		missing           int
+		upgrade           int
+		interval          time.Duration
+		cap               int
+		selection         Selection
+		hasSelection      bool
+		sonarrMissingMode string
+		sonarrUpgradeMode string
 	}{
-		{PresetGentle, 1, 0, 900 * time.Second, 4, SelectionRandom, true},
-		{PresetBalanced, 2, 1, 900 * time.Second, 15, SelectionRandom, true},
-		{PresetCatchUp, 10, 2, 300 * time.Second, 60, SelectionSequential, true},
-		{PresetUpgrades, 1, 5, 600 * time.Second, 25, SelectionRandom, true},
+		{PresetGentle, 1, 0, 900 * time.Second, 4, SelectionRandom, true, "dynamic", "episodes"},
+		{PresetBalanced, 2, 1, 900 * time.Second, 15, SelectionRandom, true, "dynamic", "episodes"},
+		{PresetCatchUp, 10, 2, 300 * time.Second, 60, SelectionSequential, true, "dynamic", "episodes"},
+		{PresetUpgrades, 1, 5, 600 * time.Second, 25, SelectionRandom, true, "dynamic", "episodes"},
 	}
 	if len(presets) != len(cases) {
 		t.Fatalf("len = %d; want %d", len(presets), len(cases))
@@ -87,6 +95,12 @@ func TestSnatchPolicyPresetsExactValues(t *testing.T) {
 		}
 		if tc.hasSelection && v.Selection != tc.selection {
 			t.Errorf("%s: Selection = %q; want %q", tc.key, v.Selection, tc.selection)
+		}
+		if v.SonarrMissingMode != tc.sonarrMissingMode {
+			t.Errorf("%s: SonarrMissingMode = %q; want %q", tc.key, v.SonarrMissingMode, tc.sonarrMissingMode)
+		}
+		if v.SonarrUpgradeMode != tc.sonarrUpgradeMode {
+			t.Errorf("%s: SonarrUpgradeMode = %q; want %q", tc.key, v.SonarrUpgradeMode, tc.sonarrUpgradeMode)
 		}
 	}
 }

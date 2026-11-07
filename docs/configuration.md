@@ -187,8 +187,8 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`). On `PUT
 | `monitored_only` | true | |
 | `skip_future_releases` | true | |
 | `radarr_release_type` | `physical` | `physical`, `digital`, `cinema` |
-| `sonarr_missing_mode` | `episodes` | `episodes`, `season_packs`, `shows` |
-| `sonarr_upgrade_mode` | `episodes` | `episodes`, `season_packs` |
+| `sonarr_missing_mode` | `dynamic` | `episodes`, `season_packs`, `shows`, `dynamic` |
+| `sonarr_upgrade_mode` | `episodes` | `episodes`, `season_packs`, `dynamic` |
 | `lidarr_missing_mode` | `artist` | `artist`, `album` |
 | `processed_ttl_h` (afterglow) | 168 | 1 to 8760 |
 | `max_queue_size` | -1 | -1 disables the *arr queue ceiling |
