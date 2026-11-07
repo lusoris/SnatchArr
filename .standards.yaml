@@ -85,3 +85,21 @@ exceptions:
 release:
   e2e:
     since: c861b394bc5bf520df75144d0c7a43925d44eaec
+  test_levels:
+    unit:
+      paths:
+        - "api/**/*_test.go"
+        - "worker/crates/snatch-core/src/**"
+    integration:
+      paths:
+        - "api/internal/**/*_integration_test.go"
+    e2e:
+      paths:
+        - "web/e2e/**"
+    load_soak:
+      paths:
+        - ".github/workflows/soak.yml"
+      job: soak
+    recovery_restore:
+      paths:
+        - "api/internal/store/recovery/**"

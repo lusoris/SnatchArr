@@ -1540,6 +1540,7 @@ def _empty_result(include_paths):
 
 
 def _observe_worktree(root, cfg, event, include_paths, result, *, require_branch=True):
+    """Observe a worktree and populate *result* with checkpoint state."""
     result["enabled"] = True
     result["review_status"] = (
         "not_observed" if cfg.get("require_checks", False) else "not_requested"
@@ -1720,6 +1721,7 @@ def _prepare_native_session(args):
 
 
 def main(argv=None):
+    """CLI entry point for checkpoint events."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--event", choices=("tool", "stop"), required=True)
     parser.add_argument("--root", type=Path, default=Path("."))

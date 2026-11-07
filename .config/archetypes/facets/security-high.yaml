@@ -1,8 +1,6 @@
----
 id: "security:high"
 name: "High-Security Provenance & Hardening"
-description: "SLSA Level 3 attestations, keyless Cosign signatures, SBOM
-  generation, and non-root execution"
+description: "SLSA Level 3 attestations, keyless Cosign signatures, SBOM generation, and non-root execution"
 
 supply_chain:
   slsa_level: 3
