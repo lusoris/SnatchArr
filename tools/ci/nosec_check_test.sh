@@ -14,9 +14,9 @@ failed=0
 # shellcheck source=tools/ci/test_lib.sh
 . "$HERE/test_lib.sh"
 
-# expect NAME WANT_STATUS SETUP: run SETUP inside a new repository, then run nosec_check.py with cwd there.
+# expect NAME WANT_STATUS SETUP [NEEDLE]: check status and optional diagnostic in a new repository.
 expect() {
-    local name=$1 want=$2 setup=$3 repo out status
+    local name=$1 want=$2 setup=$3 needle=${4-} repo out status
     repo="$work/$(printf '%s' "$name" | tr -c 'a-z0-9' '-')"
     new_repo "$repo"
     (cd "$repo" && "$setup")
@@ -24,8 +24,8 @@ expect() {
     out=$(cd "$repo" && python3 -I "$check" 2>&1)
     status=$?
     set -e
-    if [ "$status" -ne "$want" ]; then
-        echo "FAIL $name: status $status (want $want), output: $out"
+    if [ "$status" -ne "$want" ] || [[ "$out" != *"$needle"* ]]; then
+        echo "FAIL $name: status $status (want $want), expected diagnostic: $needle, output: $out"
         failed=1
     else
         echo "ok   $name"
@@ -34,7 +34,7 @@ expect() {
 
 # setup_clean: valid Python and Go files with reasoned nosec annotations.
 setup_clean() {
-    printf '%s\n' 'import subprocess  # nosec B404 -- runs only git' > main.py
+    printf '%s\n' 'import subprocess  # nosec B404  # runs only git' > main.py
     printf '%s\n' 'package main' '' 'func f() {} // #nosec G115 -- clamped' > main.go
     git add main.py main.go
     git commit -q -m "initial"
@@ -77,8 +77,43 @@ setup_go_multi_id() {
 
 # setup_py_comma_ids: Python file with comma-separated rule IDs and a reason.
 setup_py_comma_ids() {
-    printf '%s\n' 'res = run()  # nosec B404,B603 -- why' > main.py
+    printf '%s\n' 'res = run()  # nosec B404,B603  # why' > main.py
     git add main.py
+    git commit -q -m "initial"
+}
+
+# setup_py_dash_reason: Python directive with the unsafe dash reason separator.
+setup_py_dash_reason() {
+    printf '%s\n' 'res = run()  # nosec B603 -- why' > main.py
+    git add main.py
+    git commit -q -m "initial"
+}
+
+# setup_py_dash_names_id: Python dash reason names an additional suppression ID.
+setup_py_dash_names_id() {
+    printf '%s\n' 'y = eval(x)  # nosec B404 -- B307 safe' > main.py
+    git add main.py
+    git commit -q -m "initial"
+}
+
+# setup_py_second_hash_no_reason: Python directive has a separator but no reason.
+setup_py_second_hash_no_reason() {
+    printf '%s\n' 'res = run()  # nosec B603  #' > main.py
+    git add main.py
+    git commit -q -m "initial"
+}
+
+# setup_go_second_slash: Go directive with the unsafe second comment separator.
+setup_go_second_slash() {
+    printf '%s\n' 'package main' '' '// #nosec G304  // why' 'func f() {}' > main.go
+    git add main.go
+    git commit -q -m "initial"
+}
+
+# setup_go_dash: Go directive keeps its safe dash reason separator.
+setup_go_dash() {
+    printf '%s\n' 'package main' '' '// #nosec G304 -- why' 'func f() {}' > main.go
+    git add main.go
     git commit -q -m "initial"
 }
 
@@ -106,7 +141,16 @@ expect "py # nosec B603 no reason" 1 setup_py_no_reason
 expect "py # nosec -- why no id" 1 setup_py_no_id
 expect "go // #nosec G304 no reason" 1 setup_go_no_reason
 expect "go valid multi-id // #nosec G306 G703 -- why" 0 setup_go_multi_id
-expect "py comma ids # nosec B404,B603 -- why" 0 setup_py_comma_ids
+expect "py comma ids # nosec B404,B603  # why" 0 setup_py_comma_ids
+expect "py-dash-reason" 1 setup_py_dash_reason \
+    'main.py:1: nosec reason after -- widens the suppression in bandit; write # nosec Bxxx  # why'
+expect "py-dash-names-id" 1 setup_py_dash_names_id \
+    'main.py:1: nosec reason after -- widens the suppression in bandit; write # nosec Bxxx  # why'
+expect "py-second-hash-no-reason" 1 setup_py_second_hash_no_reason \
+    '(# nosec Bxxx  # why / // #nosec Gxxx -- why)'
+expect "go-second-slash" 1 setup_go_second_slash \
+    'main.go:3: second // after #nosec widens the suppression in gosec; write // #nosec Gxxx -- why'
+expect "go-dash" 0 setup_go_dash
 expect "string literal unrelated text nosecret" 0 setup_unrelated_nosecret
 
 if [ "$failed" -ne 0 ]; then

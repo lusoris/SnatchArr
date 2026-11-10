@@ -3,6 +3,11 @@
 # SPDX-License-Identifier: EUPL-1.2
 """Check that inline security suppressions declare rule ids and a justification.
 
+Python uses ``#`` + ``nosec Bxxx  # why`` because bandit 1.9.4 scans ids after
+``--``, widening the suppression.
+Go uses ``// #`` + ``nosec Gxxx -- why`` because gosec v2.30.0 cuts at ``--``
+but scans ids after a second ``//``, widening the suppression.
+
 Codacy Bandit and gosec inline suppressions must declare the specific rule ids they
 silence and provide a human-readable justification. Unreasoned suppressions hide real
 defects without review context. Exit 0 = valid annotations (or none), 1 = invalid directive,
@@ -13,7 +18,7 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess  # nosec B404 -- runs only git with a fixed argument list, never a shell
+import subprocess  # nosec B404  # runs only git with a fixed argument list, never a shell
 import sys
 from pathlib import Path
 
@@ -23,10 +28,12 @@ GIT_TIMEOUT_SECONDS = 60
 NO_SEC = "no" + "sec"
 
 PY_DIRECTIVE_RE = re.compile(rf"#\s*{NO_SEC}\b")
-PY_VALID_RE = re.compile(rf"#\s*{NO_SEC}(?:[ \t,]+B\d{{3}})+[ \t]+--[ \t]+\S")
+PY_VALID_RE = re.compile(rf"#\s*{NO_SEC}(?:[ \t,]+B\d{{3}})+[ \t]+#[ \t]+\S")
+PY_DASH_RE = re.compile(rf"#\s*{NO_SEC}(?:[ \t,]+B\d{{3}})+[ \t]+--")
 
 GO_DIRECTIVE_RE = re.compile(rf"//\s*#{NO_SEC}\b")
 GO_VALID_RE = re.compile(rf"//\s*#{NO_SEC}(?:[ \t,]+G\d{{3}})+[ \t]+--[ \t]+\S")
+GO_SECOND_SLASH_RE = re.compile(rf"//\s*#{NO_SEC}(?:[ \t,]+G\d{{3}})+[ \t]+//")
 
 GO_STRINGS_RE = re.compile(r"`[^`]*`|\"([^\"\\]|\\.)*\"|'([^'\\]|\\.)*'")
 
@@ -34,7 +41,7 @@ GO_STRINGS_RE = re.compile(r"`[^`]*`|\"([^\"\\]|\\.)*\"|'([^'\\]|\\.)*'")
 def git_tracked_files(root: Path) -> list[str]:
     """Return tracked Python and Go files in root using git ls-files."""
     try:
-        proc = subprocess.run(  # nosec B603 -- fixed git argv list, no shell; path patterns are fixed
+        proc = subprocess.run(  # nosec B603  # fixed git argv list, no shell; path patterns are fixed
             ["git", "ls-files", "-z", "--", "*.py", "*.go"],
             cwd=root,
             capture_output=True,
@@ -67,10 +74,15 @@ def check_python_file(path_str: str, content: str) -> tuple[int, list[str]]:
         if PY_DIRECTIVE_RE.search(line):
             if PY_VALID_RE.search(line):
                 annotated += 1
+            elif PY_DASH_RE.search(line):
+                findings.append(
+                    f"{path_str}:{line_no}: nosec reason after -- widens the "
+                    f"suppression in bandit; write # {NO_SEC} Bxxx  # why"
+                )
             else:
                 findings.append(
                     f"{path_str}:{line_no}: nosec needs rule ids and a reason "
-                    f"(# {NO_SEC} Bxxx -- why / // #{NO_SEC} Gxxx -- why)"
+                    f"(# {NO_SEC} Bxxx  # why / // #{NO_SEC} Gxxx -- why)"
                 )
     return annotated, findings
 
@@ -83,12 +95,17 @@ def check_go_file(path_str: str, content: str) -> tuple[int, list[str]]:
         # Strip string literals so quotes containing a Go suppression directive are not treated as comments.
         code = GO_STRINGS_RE.sub("", line)
         if GO_DIRECTIVE_RE.search(code):
-            if GO_VALID_RE.search(code):
+            if GO_SECOND_SLASH_RE.search(code):
+                findings.append(
+                    f"{path_str}:{line_no}: second // after #{NO_SEC} widens the "
+                    f"suppression in gosec; write // #{NO_SEC} Gxxx -- why"
+                )
+            elif GO_VALID_RE.search(code):
                 annotated += 1
             else:
                 findings.append(
                     f"{path_str}:{line_no}: nosec needs rule ids and a reason "
-                    f"(# {NO_SEC} Bxxx -- why / // #{NO_SEC} Gxxx -- why)"
+                    f"(# {NO_SEC} Bxxx  # why / // #{NO_SEC} Gxxx -- why)"
                 )
     return annotated, findings
 

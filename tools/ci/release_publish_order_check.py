@@ -389,7 +389,7 @@ def command_publish_reason(tokens: list[str]) -> str | None:
         if token not in ("gh", "curl", "wget"):
             continue
         args = command_arguments(tokens, index)
-        if token == "gh":  # nosec B105 -- command name, not a password
+        if token == "gh":  # nosec B105  # command name, not a password
             reason = gh_command_reason(args)
         else:
             reason = None
