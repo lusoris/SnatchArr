@@ -95,12 +95,13 @@ release:
         - api/**/*_test.go
       job: api-test
       run: go test -race
-    # Vitest unit tests of the SPA, run by the web job's reusable sveltesentio workflow
-    # (pnpm test in web/). A level of its own, since one level names one job.
+    # Vitest unit tests of the SPA: the web job calls sveltesentio's ci-sveltekit.yml, whose
+    # test job runs pnpm test in web/. A level of its own, since one level names one job.
     web_unit:
       paths:
         - web/src/**/*.test.ts
       job: web
+      run: pnpm test
     # Postgres store and handler tests through testcontainers, in the same go test run.
     integration:
       paths:
