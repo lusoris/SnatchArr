@@ -14,14 +14,32 @@ failed=0
 # shellcheck source=tools/ci/test_lib.sh
 . "$HERE/test_lib.sh"
 
+NOSEC_FIXTURE_TIMEOUT=${NOSEC_FIXTURE_TIMEOUT:-60}
+NOSEC_CHECK_TIMEOUT=${NOSEC_CHECK_TIMEOUT:-120}
+
+# git ARGS...: run the git binary under the fixture deadline (HISS-02).
+git() { timeout "$NOSEC_FIXTURE_TIMEOUT" git "$@"; }
+
 # expect NAME WANT_STATUS SETUP [NEEDLE]: check status and optional diagnostic in a new repository.
 expect() {
     local name=$1 want=$2 setup=$3 needle=${4-} repo out status
     repo="$work/$(printf '%s' "$name" | tr -c 'a-z0-9' '-')"
-    new_repo "$repo"
-    (cd "$repo" && "$setup")
     set +e
-    out=$(cd "$repo" && python3 -I "$check" 2>&1)
+    (
+        set -e
+        new_repo "$repo"
+        cd "$repo"
+        "$setup"
+    )
+    status=$?
+    set -e
+    if [ "$status" -ne 0 ]; then
+        echo "FAIL $name: setup $setup status $status"
+        failed=1
+        return
+    fi
+    set +e
+    out=$(cd "$repo" && timeout "$NOSEC_CHECK_TIMEOUT" python3 -I "$check" 2>&1)
     status=$?
     set -e
     if [ "$status" -ne "$want" ] || [[ "$out" != *"$needle"* ]]; then
@@ -212,6 +230,33 @@ setup_go_prose() {
     git add main.go
 }
 
+# fixture_deadline: a stalled fixture git must fail before the outer deadline.
+fixture_deadline() {
+    local stub="$work/stub" out status start=$SECONDS elapsed
+    mkdir -p "$stub"
+    printf '%s\n' '#!/usr/bin/env bash' 'sleep 30' > "$stub/git"
+    chmod +x "$stub/git"
+    set +e
+    out=$(PATH="$stub:$PATH" NOSEC_FIXTURE_TIMEOUT=1 \
+        timeout 15 bash "$0" --fixture-deadline 2>&1)
+    status=$?
+    set -e
+    elapsed=$((SECONDS - start))
+    if [ "$status" -ne 1 ] || [ "$elapsed" -ge 10 ] || \
+        [[ "$out" != *'FAIL fixture-deadline: setup setup_clean status 124'* ]]; then
+        echo "FAIL fixture-deadline: status $status (want 1), elapsed ${elapsed}s (want <10), output: $out"
+        failed=1
+    else
+        echo "ok   fixture-deadline"
+    fi
+}
+
+if [ "${1-}" = "--fixture-deadline" ]; then
+    expect "fixture-deadline" 0 setup_clean
+    exit "$failed"
+fi
+
+fixture_deadline
 expect "own source committed scans clean" 0 setup_self
 expect "clean repo (valid py + valid go)" 0 setup_clean
 expect "py # nosec bare" 1 setup_py_bare
