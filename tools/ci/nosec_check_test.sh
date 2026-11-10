@@ -6,7 +6,7 @@
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-check=$HERE/nosec_check.py
+check=${NOSEC_CHECK:-$HERE/nosec_check.py}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 failed=0
@@ -134,6 +134,84 @@ setup_self() {
     git commit -q -m "initial"
 }
 
+# setup_py_string_marker: string marker must not validate the real directive.
+setup_py_string_marker() {
+    printf '%s\n' 'marker = "# nosec B404  # example"; y = eval(x)  # nosec B404 -- B307 safe' > main.py
+    git add main.py
+}
+
+# setup_py_double_directive: invalid first directive followed by a valid one.
+setup_py_double_directive() {
+    printf '%s\n' 'y = eval(x)  # nosec B404 -- B307 # nosec B404  # why' > main.py
+    git add main.py
+}
+
+# setup_py_second_valid_directive: two individually valid directives in one comment.
+setup_py_second_valid_directive() {
+    printf '%s\n' 'y = eval(x)  # nosec B307  # why # nosec B404  # why' > main.py
+    git add main.py
+}
+
+# setup_py_string_only: string contents are not directives.
+setup_py_string_only() {
+    printf '%s\n' 's = "# nosec B307"' > main.py
+    git add main.py
+}
+
+# setup_py_multiline_string: a directive-looking line inside a string is ignored.
+setup_py_multiline_string() {
+    printf '%s\n' 's = """' '# nosec' '"""' > main.py
+    git add main.py
+}
+
+# setup_py_tokenize_error: tokenization failure must fail closed.
+setup_py_tokenize_error() {
+    printf '%s\n' 's = """unterminated' > main.py
+    git add main.py
+}
+
+# setup_go_unscoped_first: valid second directive must not hide the unscoped first.
+setup_go_unscoped_first() {
+    printf '%s\n' 'package main' '// #nosec -- why // #nosec G104 -- why' > main.go
+    git add main.go
+}
+
+# setup_go_block_bare: block comments can suppress all gosec rules.
+setup_go_block_bare() {
+    printf '%s\n' 'package main' '/* #nosec */' > main.go
+    git add main.go
+}
+
+# setup_go_block_scoped: scoped block directives still require line-comment form.
+setup_go_block_scoped() {
+    printf '%s\n' 'package main' '/* #nosec G104 -- why */' > main.go
+    git add main.go
+}
+
+# setup_go_raw_string: a raw string may contain comment syntax across lines.
+setup_go_raw_string() {
+    printf '%s\n' 'package main' 'const s = `first' '// #nosec`' > main.go
+    git add main.go
+}
+
+# setup_go_string: quoted comment syntax is not a directive.
+setup_go_string() {
+    printf '%s\n' 'package main' 'func f() { s := "// #nosec"; _ = s }' > main.go
+    git add main.go
+}
+
+# setup_go_second_directive: one comment must contain only one directive.
+setup_go_second_directive() {
+    printf '%s\n' 'package main' '// #nosec G104 -- why #nosec' > main.go
+    git add main.go
+}
+
+# setup_go_prose: gosec ignores a tag inside explanatory comment text.
+setup_go_prose() {
+    printf '%s\n' 'package main' '// Example: "// #nosec <rule> -- <reason>"' > main.go
+    git add main.go
+}
+
 expect "own source committed scans clean" 0 setup_self
 expect "clean repo (valid py + valid go)" 0 setup_clean
 expect "py # nosec bare" 1 setup_py_bare
@@ -152,6 +230,19 @@ expect "go-second-slash" 1 setup_go_second_slash \
     'main.go:3: second // after #nosec widens the suppression in gosec; write // #nosec Gxxx -- why'
 expect "go-dash" 0 setup_go_dash
 expect "string literal unrelated text nosecret" 0 setup_unrelated_nosecret
+expect "py-string-marker" 1 setup_py_string_marker 'main.py:1: nosec reason after -- widens the suppression in bandit'
+expect "py-double-directive" 1 setup_py_double_directive 'main.py:1: one nosec directive per comment; write # nosec Bxxx  # why'
+expect "py-second-valid-directive" 1 setup_py_second_valid_directive 'main.py:1: one nosec directive per comment; write # nosec Bxxx  # why'
+expect "py-nosec-in-string-only" 0 setup_py_string_only 'nosec_check: ok (0 annotated lines)'
+expect "py-multiline-string" 0 setup_py_multiline_string 'nosec_check: ok (0 annotated lines)'
+expect "py-tokenize-error" 1 setup_py_tokenize_error 'main.py:1: cannot tokenize:'
+expect "go-unscoped-first" 1 setup_go_unscoped_first 'main.go:2: one nosec directive per comment'
+expect "go-block-bare" 1 setup_go_block_bare 'main.go:2: #nosec in a block comment; write // #nosec Gxxx -- why'
+expect "go-block-scoped" 1 setup_go_block_scoped 'main.go:2: #nosec in a block comment; write // #nosec Gxxx -- why'
+expect "go-nosec-in-raw-string" 0 setup_go_raw_string 'nosec_check: ok (0 annotated lines)'
+expect "go-nosec-in-string" 0 setup_go_string 'nosec_check: ok (0 annotated lines)'
+expect "go-second-directive" 1 setup_go_second_directive 'main.go:2: one nosec directive per comment'
+expect "go-prose-marker" 0 setup_go_prose 'nosec_check: ok (0 annotated lines)'
 
 if [ "$failed" -ne 0 ]; then
     exit 1
