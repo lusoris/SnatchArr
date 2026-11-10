@@ -30,7 +30,7 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0022](0022-instance-priority.md) | 2026-10-21 | Per-instance priority for searches and downloads | Proposed |
 | [0023](0023-sso-viewer-role.md) | 2026-10-21 | Roles from single sign-on groups | Accepted |
 | [0024](0024-watch-aware-modes.md) | 2026-10-23 | Watch-aware modes: remove when seen, and the season gate | Proposed |
-| [0025](0025-module-switches.md) | 2026-10-24 | Architecture and mechanism of optional module switches | Proposed |
+| [0025](0025-module-switches.md) | 2026-10-24 | Architecture and mechanism of optional module switches | Accepted |
 | [0026](0026-accounts-and-roles.md) | 2026-10-24 | Accounts, roles and Jellyfin sign-in | Proposed |
 | [0027](0027-adult-module.md) | 2026-10-24 | Adult module: stash-box sources, Whisparr requests and image sets | Proposed |
 | [0028](0028-jellyfin-plugin.md) | 2026-10-24 | Jellyfin companion plugin and its contract | Accepted; extended by 0035 |
