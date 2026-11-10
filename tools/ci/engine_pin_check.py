@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess  # nosec B404 -- runs only git with a fixed argument list, never a shell
+import subprocess  # nosec B404  # runs only git with a fixed argument list, never a shell
 import sys
 from pathlib import Path
 
@@ -39,7 +39,7 @@ PRAETOR_REFERENCE = re.compile(r"cordanaLLM/praetor/[^@\s\"'`]+@([0-9A-Za-z][0-9
 
 def tracked_files(root: Path) -> list[str]:
     """Return the repository's tracked paths (index included), at most MAX_FILES of them."""
-    result = subprocess.run(  # nosec B603 -- fixed git argv, no shell
+    result = subprocess.run(  # nosec B603  # fixed git argv, no shell
         ["git", "ls-files", "-z"],
         cwd=root,
         capture_output=True,

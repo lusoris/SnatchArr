@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import re
 import shlex
-import subprocess  # nosec B404 -- runs only git with fixed arguments, never a shell
+import subprocess  # nosec B404  # runs only git with fixed arguments, never a shell
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -32,7 +32,7 @@ SHORT_VALUE_OPTIONS = frozenset("ACDEFHKPQTUXYbcdehmortuwxyz")
 def git_tracked_files(root: Path) -> list[str]:
     """Return tracked shell paths; fail closed if git cannot list them."""
     try:
-        proc = subprocess.run(  # nosec B603 -- fixed git argv, no shell; fixed path pattern
+        proc = subprocess.run(  # nosec B603  # fixed git argv, no shell; fixed path pattern
             ["git", "ls-files", "-z", "--", "*.sh"],
             cwd=root,
             capture_output=True,
