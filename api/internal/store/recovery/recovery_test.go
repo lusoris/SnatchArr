@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -49,6 +50,11 @@ func TestDumpRestoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure default policy: %v", err)
 	}
+	defaultPolicy := policy
+	policy = seedRecoveryPolicy(t, ctx, src, defaultPolicy)
+	if policy.MissingPerCycle == defaultPolicy.MissingPerCycle {
+		t.Fatal("seeded policy missing_per_cycle must differ from its default")
+	}
 
 	tables := []string{"instances", "snatch_policies"}
 	dumps := dumpTables(t, ctx, src.Pool(), tables)
@@ -71,15 +77,56 @@ func TestDumpRestoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read back policy: %v", err)
 	}
-	if restored.MissingPerCycle != policy.MissingPerCycle {
-		t.Errorf("policy missing_per_cycle: got %d, want %d", restored.MissingPerCycle, policy.MissingPerCycle)
+	if !reflect.DeepEqual(restored, policy) {
+		t.Errorf("restored policy mismatch: got %+v, want %+v", restored, policy)
 	}
-	if restored.HourlyCap != policy.HourlyCap {
-		t.Errorf("policy hourly_cap: got %d, want %d", restored.HourlyCap, policy.HourlyCap)
+}
+
+func seedRecoveryPolicy(t *testing.T, ctx context.Context, src *store.Store, defaults sqlcgen.SnatchPolicy) sqlcgen.SnatchPolicy {
+	t.Helper()
+	updatedAt := defaults.UpdatedAt.Add(-time.Hour)
+	if err := src.Q().UpsertPolicy(ctx, sqlcgen.UpsertPolicyParams{
+		InstanceID:             defaults.InstanceID,
+		MissingPerCycle:        7,
+		UpgradePerCycle:        3,
+		CycleIntervalS:         1200,
+		HourlyCap:              42,
+		Selection:              "recent",
+		MonitoredOnly:          false,
+		SkipFutureReleases:     false,
+		RadarrReleaseType:      "digital",
+		SonarrMissingMode:      "shows",
+		SonarrUpgradeMode:      "season_packs",
+		LidarrMissingMode:      "album",
+		ProcessedTtlH:          72,
+		MaxQueueSize:           25,
+		AwaitCommand:           true,
+		PageSize:               50,
+		UpdatedAt:              updatedAt,
+		RecentGrabWindowH:      6,
+		AfterglowMaxH:          48,
+		IncludeTags:            []int32{11, 12},
+		ExcludeTags:            []int32{21},
+		IncludeQualityProfiles: []int32{31},
+		ExcludeQualityProfiles: []int32{41, 42},
+		ReleaseDelayH:          12,
+		DryRun:                 true,
+		SkipUnavailableMovies:  false,
+	}); err != nil {
+		t.Fatalf("seed recovery policy: %v", err)
 	}
-	if restored.SonarrMissingMode != policy.SonarrMissingMode {
-		t.Errorf("policy sonarr_missing_mode: got %q, want %q", restored.SonarrMissingMode, policy.SonarrMissingMode)
+	for _, kind := range []string{"missing", "upgrade"} {
+		if err := src.Q().SavePolicyCursor(ctx, sqlcgen.SavePolicyCursorParams{
+			InstanceID: defaults.InstanceID, Kind: kind, Cursor: kind + "-cursor", UpdatedAt: updatedAt,
+		}); err != nil {
+			t.Fatalf("seed recovery policy %s cursor: %v", kind, err)
+		}
 	}
+	policy, err := src.Q().GetPolicy(ctx, defaults.InstanceID)
+	if err != nil {
+		t.Fatalf("read seeded recovery policy: %v", err)
+	}
+	return policy
 }
 
 func TestDumpRestoreEmptyTables(t *testing.T) {
@@ -217,26 +264,26 @@ func createFreshDB(t *testing.T, srcPool *pgxpool.Pool) *pgxpool.Pool {
 	if err != nil {
 		t.Fatalf("connect admin: %v", err)
 	}
+	defer func() {
+		if closeErr := adminConn.Close(ctx); closeErr != nil {
+			t.Errorf("close recovery admin: %v", closeErr)
+		}
+	}()
 
 	dbName := "recovery_" + uuid.New().String()[:8]
 	_, err = adminConn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{dbName}.Sanitize())
 	if err != nil {
 		t.Fatalf("create recovery db: %v", err)
 	}
-	if closeErr := adminConn.Close(ctx); closeErr != nil {
-		t.Logf("close admin: %v", closeErr)
+	t.Cleanup(func() { dropRecoveryDB(t, adminDSN, dbName) })
+	// Database defaults reach the migrator's new sessions; bound SQL, not connection setup or total runtime.
+	// https://www.postgresql.org/docs/18/sql-alterdatabase.html
+	if _, statementErr := adminConn.Exec(ctx, "ALTER DATABASE "+pgx.Identifier{dbName}.Sanitize()+" SET statement_timeout = '10s'"); statementErr != nil {
+		t.Fatalf("set recovery db %s statement timeout: %v", dbName, statementErr)
 	}
-	t.Cleanup(func() {
-		dropCtx, dropCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer dropCancel()
-		dc, dcErr := pgx.Connect(dropCtx, adminDSN)
-		if dcErr != nil {
-			t.Logf("cleanup: connect admin: %v", dcErr)
-			return
-		}
-		_, _ = dc.Exec(dropCtx, "DROP DATABASE IF EXISTS "+pgx.Identifier{dbName}.Sanitize()+" WITH (FORCE)")
-		_ = dc.Close(dropCtx)
-	})
+	if _, lockErr := adminConn.Exec(ctx, "ALTER DATABASE "+pgx.Identifier{dbName}.Sanitize()+" SET lock_timeout = '5s'"); lockErr != nil {
+		t.Fatalf("set recovery db %s lock timeout: %v", dbName, lockErr)
+	}
 
 	dstDSN := (&url.URL{
 		Scheme:   "postgres",
@@ -252,6 +299,23 @@ func createFreshDB(t *testing.T, srcPool *pgxpool.Pool) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 	return pool
+}
+
+func dropRecoveryDB(t *testing.T, adminDSN, dbName string) {
+	t.Helper()
+	dropCtx, dropCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dropCancel()
+	dc, err := pgx.Connect(dropCtx, adminDSN)
+	if err != nil {
+		t.Errorf("cleanup recovery db %s: connect admin: %v", dbName, err)
+		return
+	}
+	if _, err := dc.Exec(dropCtx, "DROP DATABASE IF EXISTS "+pgx.Identifier{dbName}.Sanitize()+" WITH (FORCE)"); err != nil {
+		t.Errorf("cleanup recovery db %s: drop: %v", dbName, err)
+	}
+	if err := dc.Close(dropCtx); err != nil {
+		t.Errorf("cleanup recovery db %s: close admin: %v", dbName, err)
+	}
 }
 
 func applyMigrations(t *testing.T, pool *pgxpool.Pool) {
