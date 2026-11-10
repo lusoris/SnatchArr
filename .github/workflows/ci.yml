@@ -70,6 +70,9 @@ jobs:
         run: python3 -I tools/ci/codacy_config.py --self-test && python3 -I tools/ci/codacy_config.py
       - name: The release publish order check refuses its planted cases
         run: python3 -I tools/ci/release_publish_order_check.py --self-test && python3 -I tools/ci/release_publish_order_check.py
+      # The devcontainer installs the engine at a literal ref; it must be the PRAETOR_REF pin below.
+      - name: Every literal Praetor ref equals the engine pin, after its planted cases
+        run: bash tools/ci/engine_pin_check_test.sh && python3 -I tools/ci/engine_pin_check.py
       - name: The release dogfood gate and pass recorder refuse their planted cases
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases
