@@ -17,9 +17,11 @@ files (unit's api/**/*_test.go holds integration's *_integration_test.go) passes
 alone. Before the audit, this check lists each level's tracked files through git :(glob)
 pathspecs and refuses a level whose every file another, narrower level also matches. It reads
 only globs whose syntax git and the engine's path.Match segments read alike (literal characters,
-"*" inside a segment, "**" as a whole segment) and refuses any other. A level with a directory
-glob (ending "/", "/*" or "/**"), which the engine further filters by test file convention, is
-not compared, and the check says so.
+"*" inside a segment, "**" as a whole segment) and refuses any other. A directory glob (ending
+"/", "/*" or "/**") is read as its whole tracked tree, including for "/*", and refused if it
+shares any file with another level. The engine filters directory globs by test file convention,
+so their own files cannot be compared here. A directory-glob level with no overlap is left out
+of that comparison, and the check says so; overlapping levels must use file globs.
 
 The engine is always the pinned engine through .config/lefthook/engine.sh, the one resolver
 git hooks use: it installs the PRAETOR_REF pin once into the engine cache and never falls back
@@ -99,17 +101,67 @@ def tracked_matches(root: Path, globs: list[str]) -> set[str]:
     return {name for name in result.stdout.decode("utf-8", "replace").split("\0") if name}
 
 
-def level_files(root: Path, levels: dict[str, list[str]]) -> dict[str, set[str]]:
-    """Return the tracked files of each compared level; print the levels left out and why."""
+def comparison_glob(glob: str) -> str:
+    """Expand a directory glob to its whole tree for conservative overlap checks."""
+    return f"{glob.rsplit('/', 1)[0]}/**" if is_directory_glob(glob) else glob
+
+
+def directory_overlap(
+    name: str, glob: str, mine: set[str], files: dict[str, set[str]]
+) -> int:
+    """Refuse a directory glob sharing tracked files with any other level."""
+    status = 0
+    for other, theirs in files.items():
+        if other == name:
+            continue
+        shared = len(mine & theirs)
+        if shared:
+            print(
+                f"refused: level {name} has directory glob {glob} and shares {shared} files with {other}: "
+                "the engine filters it by test file convention, so its own files cannot be compared here; write a file glob"
+            )
+            status = 3
+    return status
+
+
+def judge_directory_globs(
+    root: Path, levels: dict[str, list[str]], files: dict[str, set[str]]
+) -> int:
+    """Judge each directory tree's overlaps; note directory levels with no shared files."""
+    status = 0
+    for name, globs in levels.items():
+        directories = [g for g in globs if is_directory_glob(g)]
+        if not directories:
+            continue
+        overlap = 0
+        for glob in directories:
+            mine = tracked_matches(root, [comparison_glob(glob)])
+            overlap = max(overlap, directory_overlap(name, glob, mine, files))
+        if not overlap:
+            print(
+                f"note: level {name} not compared for own files: directory glob, no other level's files in it"
+            )
+        status = max(status, overlap)
+    return status
+
+
+def level_files(
+    root: Path, levels: dict[str, list[str]]
+) -> tuple[dict[str, set[str]], int]:
+    """Return file-glob levels' tracked files and the directory-glob overlap verdict."""
     files: dict[str, set[str]] = {}
     for name, globs in levels.items():
-        for glob in globs:
+        comparisons = [comparison_glob(g) for g in globs]
+        for glob in comparisons:
             check_glob(name, glob)
-        if any(is_directory_glob(g) for g in globs):
-            print(f"note: level {name} not compared for own files: directory glob, filtered by the engine")
-            continue
-        files[name] = tracked_matches(root, globs)
-    return files
+        files[name] = tracked_matches(root, comparisons)
+    status = judge_directory_globs(root, levels, files)
+    compared = {
+        name: files[name]
+        for name, globs in levels.items()
+        if not any(is_directory_glob(g) for g in globs)
+    }
+    return compared, status
 
 
 def judge_own_files(files: dict[str, set[str]]) -> int:
@@ -168,7 +220,8 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path("."), help="repository root (default .)")
     args = parser.parse_args()
     try:
-        own = judge_own_files(level_files(args.root, read_levels(args.root)))
+        files, directories = level_files(args.root, read_levels(args.root))
+        own = max(directories, judge_own_files(files))
     except (InputError, OSError, subprocess.SubprocessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

@@ -111,8 +111,17 @@ run_check own-equal 3 "refused: level integration has no file of its own: each o
     "$(repo equal "${LEVELS%_integration_test.go}_test.go" api/a_test.go)" "$pass"
 run_check own-disjoint 0 "ok: release test levels pass" \
     "$(repo disjoint "${LEVELS/api\/\*\*\/\*_integration_test.go/it/*_test.go}" api/a_test.go it/b_test.go)" "$pass"
-run_check own-dirglob 0 "note: level integration not compared for own files: directory glob" \
-    "$(repo dirglob "${LEVELS/\*\*\/\*_integration_test.go/**}" api/b_integration_test.go)" "$pass"
+directory_levels="${LEVELS/\*\*\/\*_integration_test.go/**}"
+run_check own-dirglob 3 "refused: level integration has directory glob api/** and shares 1 files with unit" \
+    "$(repo dirglob "$directory_levels" api/b_integration_test.go)" "$pass"
+run_check own-dirglob-apart 0 "note: level integration not compared for own files: directory glob, no other level's files in it" \
+    "$(repo dirglob-apart "${LEVELS/api\/\*\*\/\*_integration_test.go/it/**}" api/a_test.go it/b_integration_test.go)" "$pass"
+run_check own-dirglob-slash 3 "refused: level integration has directory glob api/ and shares 1 files with unit" \
+    "$(repo dirglob-slash "${LEVELS/\*\*\/\*_integration_test.go/}" api/b_integration_test.go)" "$pass"
+run_check own-dirglob-star 3 "refused: level integration has directory glob api/* and shares 1 files with unit" \
+    "$(repo dirglob-star "${LEVELS/\*\*\/\*_integration_test.go/*}" api/nested/b_integration_test.go)" "$pass"
+run_check own-dirglob-both 3 "refused: level unit has directory glob api/** and shares 1 files with integration" \
+    "$(repo dirglob-both "${directory_levels/\*\*\/\*_test.go/**}" api/b_integration_test.go)" "$pass"
 run_check own-syntax 1 "paths entry 'api/{a,b}_test.go': only literal characters" \
     "$(repo syntax "${LEVELS/\*\*\/\*_integration_test.go/\{a,b\}_test.go}" api/a_test.go)" "$pass"
 run_check own-no-manifest 1 "error: cannot read .standards.yaml" "$(repo nomanifest '' api/a_test.go)" "$pass"
