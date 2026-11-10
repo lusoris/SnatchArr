@@ -15,8 +15,9 @@ go install github.com/evilmartians/lefthook/v2@v2.2.2
 make sqlc-install
 # ogen at the go.mod version: inside the module, go install without @version resolves it there.
 go install github.com/ogen-go/ogen/cmd/ogen
-# The engine pin of CI (PRAETOR_REF in .github/workflows/ci.yml); move both together.
-go install github.com/cordanaLLM/praetor/cmd/standardsctl@21bf5366356b29878cd1bbdd43168bc9fa421707
+# The engine pin of CI (PRAETOR_REF in .github/workflows/ci.yml); move both together:
+# tools/ci/engine_pin_check.py (make workflows-verify, CI job workflows) refuses a difference.
+go install github.com/cordanaLLM/praetor/cmd/standardsctl@4e6c6d9cbf9cc8e634f2c9e4751706496278cd52
 ln -sf "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
 
 # Rust toolchain: the release, components and targets pinned in rust-toolchain.toml
