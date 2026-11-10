@@ -28,7 +28,7 @@ A survey of the SnatchArr codebase and upstream dependencies establishes the fou
    - All API endpoints emit RFC 9457 Problem Details payloads (`application/problem+json`) via the error handler in `api/internal/httpapi/problem.go:45`.
    - `domain.ErrUnauthorized` resolves to HTTP 401, `domain.ErrForbidden` to HTTP 403 and `domain.ErrNotFound` to HTTP 404 (`api/internal/httpapi/problem.go:30,32,34`).
 3. **Module switch gating**:
-   - ADR-0025 ([0025-module-switches.md](0025-module-switches.md), proposed) makes optional subsystems such as the adult module and the request portal switchable, off by default.
+   - ADR-0025 ([0025-module-switches.md](0025-module-switches.md), accepted) makes optional subsystems such as the adult module and the request portal switchable, off by default.
    - When a module is switched off, its routes return HTTP 404 Problem Details (ADR-0025 open question `snatcharr-adr25-disabled-status`, answered a).
 4. **User roles and access control**:
    - ADR-0023 ([0023-sso-viewer-role.md](0023-sso-viewer-role.md)) maps Authentik groups to the `admin` and `viewer` roles.
