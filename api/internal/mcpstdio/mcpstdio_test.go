@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -520,6 +521,9 @@ func TestRun_Boundary(t *testing.T) {
 
 const timeoutInput = `{"jsonrpc":"2.0","id":"timeout-id","method":"slow"}` + "\n"
 
+// errHeldTimeout distinguishes cancellation after server arrival from the run backstop.
+var errHeldTimeout = fmt.Errorf("server held the request: %w", context.DeadlineExceeded)
+
 // assertRequestTimeout checks a deadline error keeps the request id. startDelay
 // simulates slow scheduling before the run; dialDelay delays transport forwarding.
 func assertRequestTimeout(t *testing.T, startDelay, dialDelay time.Duration) {
@@ -567,13 +571,15 @@ func assertRequestTimeout(t *testing.T, startDelay, dialDelay time.Duration) {
 	if !strings.Contains(stdout.String(), `code":-32000`) {
 		t.Errorf("stdout %q does not contain code -32000", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), context.DeadlineExceeded.Error()) {
-		t.Errorf("stdout %q does not contain deadline exceeded", stdout.String())
+	if !strings.Contains(stdout.String(), errHeldTimeout.Error()) {
+		t.Errorf("stdout %q does not contain %q", stdout.String(), errHeldTimeout.Error())
 	}
 }
 
+// testRoundTripper adapts a function to an HTTP transport.
 type testRoundTripper func(*http.Request) (*http.Response, error)
 
+// RoundTrip delegates a request to the adapted function.
 func (f testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
@@ -592,7 +598,7 @@ func timeoutAfterReached(base http.RoundTripper, reached <-chan struct{}) http.R
 			defer close(done)
 			select {
 			case <-reached:
-				cancel(context.DeadlineExceeded)
+				cancel(errHeldTimeout)
 			case <-ctx.Done():
 			}
 		}()
@@ -600,6 +606,7 @@ func timeoutAfterReached(base http.RoundTripper, reached <-chan struct{}) http.R
 	})
 }
 
+// delayedTransport waits before forwarding a request, respecting cancellation.
 func delayedTransport(base http.RoundTripper, delay time.Duration) http.RoundTripper {
 	return testRoundTripper(func(req *http.Request) (*http.Response, error) {
 		timer := time.NewTimer(delay)

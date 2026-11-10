@@ -116,38 +116,47 @@ rules:
       a client Timeout counts dial and scheduling, so a sub-second one flakes
       under load; start the deadline once the handler holds the request, or
       use >= 1s.
+    options:
+      symbolic_propagation: true
     pattern-either:
       - patterns:
           - pattern-either:
               - pattern: 'http.Client{..., Timeout: $N * time.Millisecond, ...}'
               - pattern: 'http.Client{..., Timeout: time.Millisecond * $N, ...}'
               - pattern: '($C : *http.Client).Timeout = $N * time.Millisecond'
+              - pattern: '($C : http.Client).Timeout = $N * time.Millisecond'
               - pattern: '($C : *http.Client).Timeout = time.Millisecond * $N'
+              - pattern: '($C : http.Client).Timeout = time.Millisecond * $N'
           - metavariable-comparison:
               metavariable: $N
-              comparison: int($N) < 1000
+              comparison: int($N) > 0 and int($N) < 1000
       - patterns:
           - pattern-either:
               - pattern: 'http.Client{..., Timeout: $N * time.Microsecond, ...}'
               - pattern: 'http.Client{..., Timeout: time.Microsecond * $N, ...}'
               - pattern: '($C : *http.Client).Timeout = $N * time.Microsecond'
+              - pattern: '($C : http.Client).Timeout = $N * time.Microsecond'
               - pattern: '($C : *http.Client).Timeout = time.Microsecond * $N'
+              - pattern: '($C : http.Client).Timeout = time.Microsecond * $N'
           - metavariable-comparison:
               metavariable: $N
-              comparison: int($N) < 1000000
+              comparison: int($N) > 0 and int($N) < 1000000
       - patterns:
           - pattern-either:
               - pattern: 'http.Client{..., Timeout: $N * time.Nanosecond, ...}'
               - pattern: 'http.Client{..., Timeout: time.Nanosecond * $N, ...}'
               - pattern: '($C : *http.Client).Timeout = $N * time.Nanosecond'
+              - pattern: '($C : http.Client).Timeout = $N * time.Nanosecond'
               - pattern: '($C : *http.Client).Timeout = time.Nanosecond * $N'
+              - pattern: '($C : http.Client).Timeout = time.Nanosecond * $N'
           - metavariable-comparison:
               metavariable: $N
-              comparison: int($N) < 1000000000
+              comparison: int($N) > 0 and int($N) < 1000000000
       - patterns:
           - pattern-either:
               - pattern: 'http.Client{..., Timeout: time.Second / $D, ...}'
               - pattern: '($C : *http.Client).Timeout = time.Second / $D'
+              - pattern: '($C : http.Client).Timeout = time.Second / $D'
           - metavariable-comparison:
               metavariable: $D
               comparison: int($D) > 1
@@ -155,8 +164,11 @@ rules:
       - pattern: 'http.Client{..., Timeout: time.Microsecond, ...}'
       - pattern: 'http.Client{..., Timeout: time.Nanosecond, ...}'
       - pattern: '($C : *http.Client).Timeout = time.Millisecond'
+      - pattern: '($C : http.Client).Timeout = time.Millisecond'
       - pattern: '($C : *http.Client).Timeout = time.Microsecond'
+      - pattern: '($C : http.Client).Timeout = time.Microsecond'
       - pattern: '($C : *http.Client).Timeout = time.Nanosecond'
+      - pattern: '($C : http.Client).Timeout = time.Nanosecond'
 
   # ── HISS-10 · no io/ioutil ─────────────────────────────────────────────────
   # Deprecated since Go 1.16; its functions moved to io and os.
