@@ -158,6 +158,24 @@ expected_if() {
   esac
 }
 
+# bot_skip_bound COMMITS_EXPRESSION: a bot pull request skips the commit policy only from a
+# branch in this repository and from a listed bot login. A skip by account type would let a
+# fork or any other bot account through (#1069).
+bot_skip_bound() {
+  case "$1" in
+    *user.type*)
+      echo "status: COMMITS_EXPECTED skips pull requests by account type; name the bot logins" >&2
+      return 1
+      ;;
+    *"github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('"*"'), github.event.pull_request.user.login)"*)
+      return 0
+      ;;
+  esac
+  echo "status: COMMITS_EXPECTED does not bind the bot skip to this repository and the bot logins" >&2
+  return 1
+}
+
+# mirror WORKFLOW: refuses a CI workflow that does not match the rule table.
 mirror() {
   file="$1"
   jobs="$(workflow_jobs "$file")"
@@ -167,6 +185,8 @@ mirror() {
   status=0
   if [ -z "$commits_expr" ]; then
     echo "status: no COMMITS_EXPECTED expression" >&2
+    status=1
+  elif ! bot_skip_bound "$commits_expr"; then
     status=1
   fi
   if [ -z "$release_expr" ]; then
