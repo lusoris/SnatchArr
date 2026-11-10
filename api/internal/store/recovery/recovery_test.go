@@ -28,6 +28,10 @@ import (
 
 func TestMain(m *testing.M) { os.Exit(storetest.Main(m)) }
 
+func recoveryTime() time.Time {
+	return time.Date(2026, time.October, 14, 10, 0, 0, 0, time.UTC)
+}
+
 func TestDumpRestoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -35,7 +39,7 @@ func TestDumpRestoreRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
-	now := time.Now().Truncate(time.Microsecond).UTC()
+	now := recoveryTime()
 	instanceID := storetest.Instance(t, src, now)
 
 	policy, err := src.Q().EnsureDefaultPolicy(ctx, sqlcgen.EnsureDefaultPolicyParams{
@@ -115,7 +119,7 @@ func TestCorruptedDumpRefused(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
-	now := time.Now().Truncate(time.Microsecond).UTC()
+	now := recoveryTime()
 	storetest.Instance(t, src, now)
 
 	var buf bytes.Buffer
