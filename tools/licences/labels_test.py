@@ -274,5 +274,41 @@ class RustSourceInLicenceText(unittest.TestCase):
         generate.check_rust_text(prose, USED_BY)
 
 
+class RunCmd(unittest.TestCase):
+    """run_cmd: every tool run has a deadline and fails as LicenceError status 2."""
+
+    def test_positive_stdout_returned(self):
+        """A command that exits 0 returns its standard output."""
+        out = generate.run_cmd([sys.executable, "-c", "print('ok')"], timeout=30)
+        self.assertEqual(out, "ok\n")
+
+    def test_negative_exit_status_refused(self):
+        """A non-zero exit becomes LicenceError status 2 naming the exit code."""
+        with self.assertRaises(generate.LicenceError) as ctx:
+            generate.run_cmd([sys.executable, "-c", "import sys; sys.exit(3)"], timeout=30)
+        self.assertEqual(ctx.exception.status, 2)
+        self.assertIn("exit 3", str(ctx.exception))
+
+    def test_negative_missing_tool_refused(self):
+        """A command that cannot start becomes LicenceError status 2."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = str(Path(tmpdir) / "no-such-tool")
+            with self.assertRaises(generate.LicenceError) as ctx:
+                generate.run_cmd([missing], timeout=30)
+        self.assertEqual(ctx.exception.status, 2)
+
+    def test_boundary_deadline_passed_refused(self):
+        """A command still running at its deadline is stopped and refused."""
+        with self.assertRaises(generate.LicenceError) as ctx:
+            generate.run_cmd([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.2)
+        self.assertEqual(ctx.exception.status, 2)
+        self.assertIn("timed out", str(ctx.exception))
+
+    def test_boundary_default_deadline_bounded(self):
+        """The default deadline is a positive bound, so no call waits forever."""
+        self.assertGreater(generate.CMD_TIMEOUT_SECONDS, 0)
+        self.assertEqual(generate.run_cmd.__defaults__[-1], generate.CMD_TIMEOUT_SECONDS)
+
+
 if __name__ == "__main__":
     unittest.main()
