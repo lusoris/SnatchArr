@@ -86,6 +86,8 @@ expect_stub() {
 
 base=$(repo base "$LEVELS" api/a_test.go api/b_integration_test.go)
 expect_stub pass 0 "ok: release test levels pass: 6 required" 0 '[INFO] other gate' "$PASS_LINE"
+# A passing test levels line cannot override a nonzero audit exit.
+expect_stub pass-nonzero 3 "refused: release test levels pass, but the audit exited 1" 1 "$PASS_LINE"
 check_case pass-args 0 0 "audit --offline" "$(cat "$work/args-pass")"
 echo "ok   pass-args"
 expect_stub warn 3 "refused: release test levels WARN: 1 unbaselined test level gap(s): web_unit" 0 "$WARN_LINE"
@@ -130,6 +132,11 @@ fi
 git -C "$tree" add -A
 git -C "$tree" commit -q -m 'test: tracked tree'
 
+# The check refuses a [PASS] from an audit that exits nonzero, and a fresh copy has no git hooks
+# installed, which the audit fails outside CI. Real-engine cases on the copy therefore run as the
+# CI governance job does (CI=true: the engine skips only its local hook installation check); the
+# checkout's own hooks stay audited by make governance-verify.
+
 # expect_tree NAME WANT NEEDLE [SED]: audit a copy of the tree, edited by SED inside the
 # web_unit (or load_soak, for a pattern) binding of .standards.yaml, and judge it.
 expect_tree() {
@@ -143,7 +150,7 @@ expect_tree() {
             exit 1
         fi
     fi
-    run_check "$name" "$want" "$needle" "$copy"
+    CI=true run_check "$name" "$want" "$needle" "$copy"
 }
 
 level='/^    web_unit:$/,/^    [a-z_]*:$/'
@@ -164,7 +171,7 @@ git -C "$copy" ls-files -z -- ':(glob)api/**/*_test.go' ':(exclude,glob)api/**/*
     xargs -0 git -C "$copy" rm -q --
 git -C "$copy" commit -q -m 'test: unit tests removed'
 status=0
-out=$(python3 -I "$check" --root "$copy" 2>&1) || status=$?
+out=$(CI=true python3 -I "$check" --root "$copy" 2>&1) || status=$?
 check_case tree-unit-only-integration 3 "$status" "refused: level unit has no file of its own" "$out"
 check_case tree-unit-only-integration-engine 3 "$status" "ok: release test levels pass" "$out"
 echo "ok   tree-unit-only-integration"

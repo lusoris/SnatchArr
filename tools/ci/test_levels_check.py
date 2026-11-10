@@ -7,9 +7,10 @@ exist (and hold its pattern), its job runs in a workflow, and that job runs its 
 a release context the audit reports a broken binding as [WARN] and exits 0, and in a release
 context this repository's audit stops at the end-to-end evidence gate before it reaches the
 test levels. This check runs "<engine> audit --offline" and refuses every "Release test levels"
-line other than [PASS], so a binding that no longer matches its paths, job or command fails
-make governance-verify and the CI governance job on the pull request that breaks it. Offline,
-the audit reads no workflow run health from the forge; the online audit still reports that.
+line other than [PASS], and a [PASS] from an audit that exits nonzero, so a binding that no
+longer matches its paths, job or command fails make governance-verify and the CI governance job
+on the pull request that breaks it. Offline, the audit reads no workflow run health from the
+forge; the online audit still reports that.
 
 The engine checks each level on its own, so a level whose paths also take in a narrower level's
 files (unit's api/**/*_test.go holds integration's *_integration_test.go) passes on those files
@@ -141,7 +142,7 @@ def run_audit(root: Path) -> tuple[int, list[str]]:
 
 
 def judge(status: int, lines: list[str]) -> int:
-    """Print the verdict on the audit's test levels line; return the exit status."""
+    """Print the test levels verdict; PASS counts only when the audit exits 0; return the exit status."""
     found = [m for m in (LEVELS_LINE.match(line) for line in lines) if m]
     if len(found) != 1:
         print(f"refused: want one 'Release test levels' line in the audit output, found {len(found)} (audit exit {status})")
@@ -151,6 +152,11 @@ def judge(status: int, lines: list[str]) -> int:
     verdict, detail = found[0].group(1), found[0].group(2)
     if verdict != "PASS":
         print(f"refused: release test levels {verdict}: {detail}")
+        return 3
+    if status != 0:
+        print(f"refused: release test levels pass, but the audit exited {status}: {detail}")
+        for line in lines[-5:]:
+            print(f"  {line}")
         return 3
     print(f"ok: release test levels pass: {detail}")
     return 0
