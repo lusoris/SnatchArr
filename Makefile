@@ -599,9 +599,12 @@ logos-check: ## Verify logos manifest, hashes, and planted mutations
 	python3 tools/logos/fetch.py --check
 	bash tools/logos/fetch_test.sh
 
-governance-verify: ## compile-context --verify, audit, state audit, flavor audit (go-service)
+governance-verify: ## compile-context --verify, audit, release test levels as a hard gate (planted cases first), state audit, flavor audit (go-service)
 	$(PRAETORCTL) compile-context --verify
 	$(PRAETORCTL) audit
+	# Outside a release the audit only warns on a broken release.test_levels binding; this refuses it.
+	bash tools/ci/test_levels_check_test.sh '$(PRAETORCTL)'
+	python3 -I tools/ci/test_levels_check.py --engine '$(PRAETORCTL)'
 	$(PRAETORCTL) state audit .
 	$(PRAETORCTL) flavor audit --flavor=go-service .
 
