@@ -150,6 +150,7 @@ mirror_refuses "commits condition differs from the expectation" \
 # Planted bot-skip cases (#1069): the edit lands on the commits job and on COMMITS_EXPECTED
 # alike, so the two still match and only the binding check can refuse it. SWAP replaces the
 # text in SWAP_FROM with SWAP_TO once per line.
+# shellcheck disable=SC2016 # an awk program: $0 is awk's record, not shell expansion
 SWAP='{ i = index($0, ENVIRON["SWAP_FROM"])
         if (i) $0 = substr($0, 1, i - 1) ENVIRON["SWAP_TO"] substr($0, i + length(ENVIRON["SWAP_FROM"]))
         print }'
