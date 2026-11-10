@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: EUPL-1.2
 """Refuse a Praetor engine reference that differs from the engine pin of CI.
 
-The pin is the PRAETOR_REF (or PRAETOR_COMMIT) declared in a tracked workflow under
-.github/workflows, the value .config/lefthook/engine.sh and the Standards job install the
-engine from. Every other tracked file that names a Praetor package or workflow with a literal
+The pin is a full 40-character lowercase hex commit declared as PRAETOR_REF or PRAETOR_COMMIT
+in a tracked workflow under .github/workflows, the value .config/lefthook/engine.sh and the
+Standards job install the engine from. A short id, branch or tag is refused: engine.sh ignores
+a PRAETOR_COMMIT that is not a full lowercase hex commit, and a tag is no immutable pin.
+Every other tracked file that names a Praetor package or workflow with a literal
 ref ("cordanaLLM/praetor/<path>@<ref>", such as the devcontainer's go install line) must use
 that same ref, so moving the pin in one place and not the other fails here instead of leaving
 a devcontainer on an older engine than CI. A literal ref starts with a letter or digit and
@@ -28,6 +30,7 @@ MAX_LINES = 20000
 GIT_TIMEOUT = 60
 WORKFLOW_DIR = ".github/workflows/"
 PIN_DECLARATION = re.compile(r"^\s*(PRAETOR_REF|PRAETOR_COMMIT)\s*[:=]\s*(\S+)")
+FULL_COMMIT = re.compile(r"[0-9a-f]{40}")
 # A literal ref is an allow-list of git ref characters starting with a letter or digit, so a
 # variable ("${PRAETOR_REF}", also escaped), a comment placeholder ("<ref>") and this pattern's
 # own source never match.
@@ -76,8 +79,10 @@ def declared_pins(root: Path, paths: list[str]) -> list[tuple[str, int, str]]:
             continue
         for number, line in enumerate(read_lines(root / rel), 1):
             match = PIN_DECLARATION.match(line)
-            if match and clean_value(match.group(2)):
-                pins.append((rel, number, clean_value(match.group(2))))
+            if match:
+                value = clean_value(match.group(2))
+                if value:
+                    pins.append((rel, number, value))
     return pins
 
 
@@ -91,7 +96,11 @@ def literal_references(root: Path, paths: list[str]) -> list[tuple[str, int, str
 
 
 def check(root: Path) -> int:
-    """Print every reference that differs from the CI pin; return the exit status."""
+    """Refuse a pin that is not one full commit, print every reference that differs from it; return the exit status.
+
+    Every declaration holds the one value once the single-value test passes, so checking that
+    value checks each PRAETOR_REF and PRAETOR_COMMIT declaration.
+    """
     paths = tracked_files(root)
     pins = declared_pins(root, paths)
     values = sorted({value for _, _, value in pins})
@@ -101,6 +110,12 @@ def check(root: Path) -> int:
         return 3
     pin = values[0]
     source = f"{pins[0][0]}:{pins[0][1]}"
+    if not FULL_COMMIT.fullmatch(pin):
+        print(
+            f"refused: engine pin {pin} ({source}) is not a full 40-character lowercase commit id;"
+            " the hooks install only a commit they can read back"
+        )
+        return 3
     refused = 0
     for rel, number, ref in literal_references(root, paths):
         if ref != pin:

@@ -30,6 +30,15 @@ workflow() {
     git add .github/workflows/ci.yml
 }
 
+# workflow_commit VALUE: track .github/workflows/ci.yml declaring only PRAETOR_COMMIT.
+workflow_commit() {
+    mkdir -p .github/workflows
+    printf '%s\n' 'name: CI' 'jobs:' '  standards:' '    steps:' '      - env:' > .github/workflows/ci.yml
+    printf '          PRAETOR_COMMIT: %s\n' "$1" >> .github/workflows/ci.yml
+    printf '%s\n' "        run: go install \"$INSTALL@\${PRAETOR_COMMIT}\"" >> .github/workflows/ci.yml
+    git add .github/workflows/ci.yml
+}
+
 # devcontainer LINE: track .devcontainer/post-create.sh with LINE on physical line 2.
 devcontainer() {
     mkdir -p .devcontainer
@@ -69,8 +78,23 @@ setup_escaped() { workflow "$PIN"; devcontainer 'plant "go install \"$INSTALL@\$
 # setup_source: the check's own pattern, tracked in the repository it reads, is no ref.
 setup_source() { workflow "$PIN"; cp "$check" engine_pin_check.py; git add engine_pin_check.py; }
 
-# setup_tag: a release tag pin and the same tag elsewhere match.
+# setup_tag: a release tag is refused even when every literal ref matches.
 setup_tag() { workflow v1.2.3; devcontainer "go install $INSTALL@v1.2.3"; }
+
+# setup_short_pin: a short pin is refused even when every literal ref matches.
+setup_short_pin() { workflow "${PIN:0:12}"; devcontainer "go install $INSTALL@${PIN:0:12}"; }
+
+# setup_branch_pin: a branch pin is refused even when every literal ref matches.
+setup_branch_pin() { workflow main; devcontainer "go install $INSTALL@main"; }
+
+# setup_upper_pin: an uppercase commit id is refused as a pin.
+setup_upper_pin() { workflow "${PIN^^}"; }
+
+# setup_commit_short: a short PRAETOR_COMMIT is refused rather than silently dropped.
+setup_commit_short() { workflow_commit "${PIN:0:12}"; }
+
+# setup_commit_full: a full PRAETOR_COMMIT and matching literal ref are accepted.
+setup_commit_full() { workflow_commit "$PIN"; devcontainer "go install $INSTALL@$PIN"; }
 
 # setup_placeholder: a comment placeholder such as <ref> is no literal ref.
 setup_placeholder() { workflow "$PIN"; devcontainer '# uses: cordanaLLM/praetor/.github/workflows/<workflow>@<ref>'; }
@@ -107,7 +131,12 @@ expect branch 3 "refused .devcontainer/post-create.sh:2: Praetor ref main differ
 expect variable 0 "ok: every literal Praetor ref" setup_variable
 expect escaped 0 "ok: every literal Praetor ref" setup_escaped
 expect source 0 "ok: every literal Praetor ref" setup_source
-expect tag 0 "ok: every literal Praetor ref equals the engine pin v1.2.3" setup_tag
+expect tag 3 "refused: engine pin v1.2.3 (.github/workflows/ci.yml:6) is not a full 40-character lowercase commit id" setup_tag
+expect short-pin 3 "is not a full 40-character lowercase commit id" setup_short_pin
+expect branch-pin 3 "is not a full 40-character lowercase commit id" setup_branch_pin
+expect upper-pin 3 "is not a full 40-character lowercase commit id" setup_upper_pin
+expect commit-short 3 "is not a full 40-character lowercase commit id" setup_commit_short
+expect commit-full 0 "ok: every literal Praetor ref equals the engine pin $PIN" setup_commit_full
 expect placeholder 0 "ok: every literal Praetor ref" setup_placeholder
 expect quoted 0 "ok: every literal Praetor ref equals the engine pin $PIN" setup_quoted
 expect case 3 "refused .devcontainer/post-create.sh:2: Praetor ref $OLD differs" setup_case
