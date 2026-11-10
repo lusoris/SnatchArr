@@ -85,3 +85,39 @@ exceptions:
 release:
   e2e:
     since: c861b394bc5bf520df75144d0c7a43925d44eaec
+  # Where the app-service release test levels live here; the engine's default globs miss them.
+  # Each binding names the file, the CI job that runs it and the command that job must run.
+  test_levels:
+    # A declared map must name every profile level, so unit and integration are bound too.
+    unit:
+      paths:
+        - api/**/*_test.go
+        - web/src/**/*.test.ts
+      job: api-test
+      run: go test -race
+    # Postgres store and handler tests through testcontainers, in the same go test run.
+    integration:
+      paths:
+        - api/**/*_integration_test.go
+      job: api-test
+      run: go test -race
+    # Playwright + axe suite against the API, fakearr and fakeworker (make web-e2e-api).
+    e2e:
+      paths:
+        - web/e2e/**
+      job: web-e2e-api
+      run: make web-e2e-api
+    # Image smoke held for SOAK_SECONDS with gRPC connection rotation (make e2e-soak, C14-01),
+    # nightly via soak.yml calling image-smoke.yml with target e2e-soak.
+    load_soak:
+      paths:
+        - tools/e2e/smoke.sh
+      pattern: soak_round
+      job: smoke
+      run: make "$MAKE_TARGET"
+    # CNPG base backup, database lost, restore with data read-back (C14-04), in the deploy job.
+    recovery_restore:
+      paths:
+        - tools/e2e/cnpg_backup_restore.sh
+      job: deploy
+      run: make e2e-cnpg-backup-restore
