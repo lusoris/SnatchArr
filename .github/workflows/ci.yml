@@ -960,8 +960,8 @@ jobs:
       # job or command no longer match; this refuses it on the pull request that breaks it.
       - name: Release test levels pass, after their planted cases
         run: |
-          bash tools/ci/test_levels_check_test.sh praetorctl
-          python3 -I tools/ci/test_levels_check.py --engine praetorctl
+          bash tools/ci/test_levels_check_test.sh
+          python3 -I tools/ci/test_levels_check.py
       - name: Flavor audit
         # .workingdir/ ledgers are gitignored by praetor itself; the flavor requires them.
         run: |

@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: EUPL-1.2
 #
 # Planted cases for test_levels_check.py.
-#   bash tools/ci/test_levels_check_test.sh [ENGINE]
+#   bash tools/ci/test_levels_check_test.sh
 # Stub engines first, on small repositories: each stub prints a planted audit output and the
-# check must judge it, and each repository plants a level layout for the own-files rule. With
-# ENGINE (an engine executable, as make passes $(PRAETORCTL)), the real engine then audits a copy
+# check must judge it, and each repository plants a level layout for the own-files rule. The
+# pinned engine through .config/lefthook/engine.sh then audits a copy
 # of the tracked tree with one binding broken per case (job, command, path, pattern, unit tests
 # left with integration tests only), and the check must refuse each one and pass the unbroken
-# copy. Without ENGINE the real-engine cases are not run, and the script says so.
+# copy. Real-engine cases always run with the copied tree's workflow pin and resolver.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -62,20 +62,26 @@ stub() {
     printf '%s\n' "$path"
 }
 
-# run_check NAME WANT NEEDLE ROOT ENGINE: run the check in ROOT with ENGINE and judge it.
+# run_check NAME WANT NEEDLE ROOT [STUB]: install STUB into ROOT if supplied,
+# then run the check in that fixture and judge it.
 run_check() {
     local out status=0
-    out=$(python3 -I "$check" --engine "$5" --root "$4" 2>&1) || status=$?
+    if [ -n "${5:-}" ]; then
+        mkdir -p "$4/.config/lefthook"
+        cp "$5" "$4/.config/lefthook/engine.sh"
+    fi
+    out=$(python3 -I "$check" --root "$4" 2>&1) || status=$?
     check_case "$1" "$2" "$status" "$3" "$out"
     echo "ok   $1"
 }
 
 # expect_stub NAME WANT NEEDLE STATUS LINE...: run the check with a stub engine on the base
-# repository (unit keeps one file apart from integration) and judge it.
+# repository's copy (unit keeps one file apart from integration) and judge it.
 expect_stub() {
-    local name=$1 want=$2 needle=$3
+    local name=$1 want=$2 needle=$3 fixture="$work/fixture-$1"
     shift 3
-    run_check "$name" "$want" "$needle" "$base" "$(stub "$name" "$@")"
+    cp -a "$base" "$fixture"
+    run_check "$name" "$want" "$needle" "$fixture" "$(stub "$name" "$@")"
 }
 
 base=$(repo base "$LEVELS" api/a_test.go api/b_integration_test.go)
@@ -89,7 +95,7 @@ expect_stub missing 3 "found 0 (audit exit 0)" 0 '[PASS] HISS audit' 'Audit Summ
 expect_stub stopped 3 "found 0 (audit exit 1)" 1 '[FAIL] Release end-to-end evidence: 11 commits'
 expect_stub twice 3 "found 2" 0 "$PASS_LINE" "$PASS_LINE"
 expect_stub indented 3 "found 0" 0 "  $PASS_LINE"
-run_check no-engine 1 "error: cannot run $work/no-such-engine audit --offline" "$base" "$work/no-such-engine"
+run_check no-engine 1 "error: cannot run the engine:" "$base"
 
 # The own-files rule, each case with an engine stub whose audit passes.
 pass=$(stub own 0 "$PASS_LINE")
@@ -110,12 +116,6 @@ run_check own-syntax 1 "paths entry 'api/{a,b}_test.go': only literal characters
 run_check own-no-manifest 1 "error: cannot read .standards.yaml" "$(repo nomanifest '' api/a_test.go)" "$pass"
 run_check own-not-a-repository 1 "error: git ls-files in $work/plain failed" \
     "$(mkdir -p "$work/plain" && printf '%s\n' "$LEVELS" > "$work/plain/.standards.yaml" && printf '%s' "$work/plain")" "$pass"
-
-engine=${1:-}
-if [ -z "$engine" ]; then
-    echo "real-engine cases not run: no ENGINE argument"
-    exit 0
-fi
 
 # A copy of the tracked tree in a fresh repository with one commit and the checkout's origin URL
 # (the audit's forge gates read it; --offline fetches nothing), so the audit reads the same
@@ -143,7 +143,7 @@ expect_tree() {
             exit 1
         fi
     fi
-    run_check "$name" "$want" "$needle" "$copy" "$engine"
+    run_check "$name" "$want" "$needle" "$copy"
 }
 
 level='/^    web_unit:$/,/^    [a-z_]*:$/'
@@ -164,7 +164,7 @@ git -C "$copy" ls-files -z -- ':(glob)api/**/*_test.go' ':(exclude,glob)api/**/*
     xargs -0 git -C "$copy" rm -q --
 git -C "$copy" commit -q -m 'test: unit tests removed'
 status=0
-out=$(python3 -I "$check" --engine "$engine" --root "$copy" 2>&1) || status=$?
+out=$(python3 -I "$check" --root "$copy" 2>&1) || status=$?
 check_case tree-unit-only-integration 3 "$status" "refused: level unit has no file of its own" "$out"
 check_case tree-unit-only-integration-engine 3 "$status" "ok: release test levels pass" "$out"
 echo "ok   tree-unit-only-integration"

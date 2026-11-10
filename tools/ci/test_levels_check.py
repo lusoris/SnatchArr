@@ -20,9 +20,9 @@ only globs whose syntax git and the engine's path.Match segments read alike (lit
 glob (ending "/", "/*" or "/**"), which the engine further filters by test file convention, is
 not compared, and the check says so.
 
-The engine is --engine (one executable, such as $(PRAETORCTL) of make), else the pinned engine
-through .config/lefthook/engine.sh. Exit 0 = pass, 1 = input error or the engine could not run,
-3 = refused.
+The engine is always the pinned engine through .config/lefthook/engine.sh, the one resolver
+git hooks use: it installs the PRAETOR_REF pin once into the engine cache and never falls back
+to PATH. Exit 0 = pass, 1 = input error or the engine could not run, 3 = refused.
 """
 
 from __future__ import annotations
@@ -40,7 +40,6 @@ GIT_TIMEOUT = 60
 MAX_LINES = 20000
 MAX_LEVELS = 32
 MAX_GLOBS = 64
-DEFAULT_ENGINE = ("sh", ".config/lefthook/engine.sh")
 LEVELS_LINE = re.compile(r"^\[([A-Z]+)\] Release test levels: (.*)$")
 GLOB_SEGMENT = re.compile(r"^(\*\*|[0-9A-Za-z._*-]+)$")
 MANIFEST = ".standards.yaml"
@@ -128,10 +127,10 @@ def judge_own_files(files: dict[str, set[str]]) -> int:
     return status
 
 
-def run_audit(engine: list[str], root: Path) -> tuple[int, list[str]]:
+def run_audit(root: Path) -> tuple[int, list[str]]:
     """Run the engine's offline audit in ROOT; return its exit status and output lines."""
-    result = subprocess.run(  # nosec B603 -- argv list from --engine or a fixed default, no shell
-        [*engine, "audit", "--offline"],
+    result = subprocess.run(  # nosec B603 -- fixed argument list, pinned resolver, no shell string
+        ["sh", ".config/lefthook/engine.sh", "audit", "--offline"],
         cwd=root,
         capture_output=True,
         check=False,
@@ -160,7 +159,6 @@ def judge(status: int, lines: list[str]) -> int:
 def main() -> int:
     """Parse the arguments, compare the levels' own files, run the audit and judge both."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--engine", help="engine executable (default: sh .config/lefthook/engine.sh)")
     parser.add_argument("--root", type=Path, default=Path("."), help="repository root (default .)")
     args = parser.parse_args()
     try:
@@ -168,11 +166,13 @@ def main() -> int:
     except (InputError, OSError, subprocess.SubprocessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    engine = [args.engine] if args.engine else list(DEFAULT_ENGINE)
+    if not (args.root / ".config/lefthook/engine.sh").is_file():
+        print(f"error: cannot run the engine: {args.root}/.config/lefthook/engine.sh is missing", file=sys.stderr)
+        return 1
     try:
-        status, lines = run_audit(engine, args.root)
+        status, lines = run_audit(args.root)
     except (OSError, subprocess.SubprocessError) as error:
-        print(f"error: cannot run {' '.join(engine)} audit --offline: {error}", file=sys.stderr)
+        print(f"error: cannot run sh .config/lefthook/engine.sh audit --offline: {error}", file=sys.stderr)
         return 1
     return max(own, judge(status, lines))
 
