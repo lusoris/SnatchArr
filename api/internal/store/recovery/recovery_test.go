@@ -27,12 +27,17 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
+// TestMain starts the shared Postgres test container for this package.
 func TestMain(m *testing.M) { os.Exit(storetest.Main(m)) }
 
+// recoveryTime is the fixed clock every recovery case seeds rows with.
 func recoveryTime() time.Time {
 	return time.Date(2026, time.October, 14, 10, 0, 0, 0, time.UTC)
 }
 
+// TestDumpRestoreRoundTrip dumps a seeded instance and its non-default
+// policy, restores both into a freshly migrated database and reads them back
+// unchanged.
 func TestDumpRestoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -82,6 +87,8 @@ func TestDumpRestoreRoundTrip(t *testing.T) {
 	}
 }
 
+// seedRecoveryPolicy overwrites the default policy with a value in every
+// column, saves both cursors, and returns the row as the store reads it.
 func seedRecoveryPolicy(t *testing.T, ctx context.Context, src *store.Store, defaults sqlcgen.SnatchPolicy) sqlcgen.SnatchPolicy {
 	t.Helper()
 	updatedAt := defaults.UpdatedAt.Add(-time.Hour)
@@ -129,6 +136,8 @@ func seedRecoveryPolicy(t *testing.T, ctx context.Context, src *store.Store, def
 	return policy
 }
 
+// TestDumpRestoreEmptyTables round-trips empty tables: each dump still
+// carries the binary COPY header and the restore adds zero rows.
 func TestDumpRestoreEmptyTables(t *testing.T) {
 	t.Parallel()
 
@@ -159,6 +168,8 @@ func TestDumpRestoreEmptyTables(t *testing.T) {
 	}
 }
 
+// TestCorruptedDumpRefused flips bytes in a binary dump and expects Postgres
+// to refuse the restore with SQLSTATE 22P04 (bad COPY file format).
 func TestCorruptedDumpRefused(t *testing.T) {
 	t.Parallel()
 
@@ -245,6 +256,8 @@ func restoreTables(t *testing.T, ctx context.Context, pool *pgxpool.Pool, dumps 
 	}
 }
 
+// createFreshDB creates an empty database on the source server with
+// statement and lock timeouts, drops it on cleanup and returns a pool on it.
 func createFreshDB(t *testing.T, srcPool *pgxpool.Pool) *pgxpool.Pool {
 	t.Helper()
 
@@ -301,6 +314,8 @@ func createFreshDB(t *testing.T, srcPool *pgxpool.Pool) *pgxpool.Pool {
 	return pool
 }
 
+// dropRecoveryDB force-drops a recovery database from the admin database,
+// reporting rather than failing on cleanup errors.
 func dropRecoveryDB(t *testing.T, adminDSN, dbName string) {
 	t.Helper()
 	dropCtx, dropCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -318,6 +333,7 @@ func dropRecoveryDB(t *testing.T, adminDSN, dbName string) {
 	}
 }
 
+// applyMigrations runs every store migration up on pool.
 func applyMigrations(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	st := store.New(pool)
