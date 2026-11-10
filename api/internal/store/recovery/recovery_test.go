@@ -47,38 +47,12 @@ func TestDumpRestoreRoundTrip(t *testing.T) {
 	}
 
 	tables := []string{"instances", "snatch_policies"}
-	dumps := make(map[string][]byte, len(tables))
-	for _, tbl := range tables {
-		var buf bytes.Buffer
-		conn, connErr := src.Pool().Acquire(ctx)
-		if connErr != nil {
-			t.Fatalf("acquire conn for dump: %v", connErr)
-		}
-		_, copyErr := conn.Conn().PgConn().CopyTo(ctx, &buf, fmt.Sprintf("COPY %s TO STDOUT WITH (FORMAT binary)", pgx.Identifier{tbl}.Sanitize()))
-		conn.Release()
-		if copyErr != nil {
-			t.Fatalf("COPY %s TO STDOUT: %v", tbl, copyErr)
-		}
-		if buf.Len() == 0 {
-			t.Fatalf("COPY %s produced zero bytes", tbl)
-		}
-		dumps[tbl] = buf.Bytes()
-	}
+	dumps := dumpTables(t, ctx, src.Pool(), tables)
 
 	dstPool := createFreshDB(t, src.Pool())
 	applyMigrations(t, dstPool)
 
-	for _, tbl := range tables {
-		conn, connErr := dstPool.Acquire(ctx)
-		if connErr != nil {
-			t.Fatalf("acquire conn for restore: %v", connErr)
-		}
-		_, copyErr := conn.Conn().PgConn().CopyFrom(ctx, bytes.NewReader(dumps[tbl]), fmt.Sprintf("COPY %s FROM STDIN WITH (FORMAT binary)", pgx.Identifier{tbl}.Sanitize()))
-		conn.Release()
-		if copyErr != nil {
-			t.Fatalf("COPY %s FROM STDIN: %v", tbl, copyErr)
-		}
-	}
+	restoreTables(t, ctx, dstPool, dumps, tables)
 
 	dstStore := store.New(dstPool)
 	inst, err := dstStore.Q().GetInstance(ctx, instanceID)
@@ -101,6 +75,36 @@ func TestDumpRestoreRoundTrip(t *testing.T) {
 	}
 	if restored.SonarrMissingMode != policy.SonarrMissingMode {
 		t.Errorf("policy sonarr_missing_mode: got %q, want %q", restored.SonarrMissingMode, policy.SonarrMissingMode)
+	}
+}
+
+func TestDumpRestoreEmptyTables(t *testing.T) {
+	t.Parallel()
+
+	src := storetest.New(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	tables := []string{"instances", "snatch_policies"}
+	dumps := dumpTables(t, ctx, src.Pool(), tables)
+	for _, tbl := range tables {
+		if !bytes.HasPrefix(dumps[tbl], []byte("PGCOPY\n\xff\r\n\x00")) {
+			t.Fatalf("COPY %s missing binary header", tbl)
+		}
+	}
+
+	dstPool := createFreshDB(t, src.Pool())
+	applyMigrations(t, dstPool)
+	restoreTables(t, ctx, dstPool, dumps, tables)
+
+	for _, tbl := range tables {
+		var count int64
+		if err := dstPool.QueryRow(ctx, "SELECT count(*) FROM "+pgx.Identifier{tbl}.Sanitize()).Scan(&count); err != nil {
+			t.Fatalf("count restored %s: %v", tbl, err)
+		}
+		if count != 0 {
+			t.Errorf("restored %s row count: got %d, want 0", tbl, count)
+		}
 	}
 }
 
@@ -146,6 +150,47 @@ func TestCorruptedDumpRefused(t *testing.T) {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "22P04" {
 		t.Fatalf("expected COPY format error (22P04) for corrupted header, got: %v", err)
+	}
+}
+
+// dumpTables copies each table to a non-empty binary dump.
+func dumpTables(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tables []string) map[string][]byte {
+	t.Helper()
+
+	dumps := make(map[string][]byte, len(tables))
+	for _, tbl := range tables {
+		var buf bytes.Buffer
+		conn, connErr := pool.Acquire(ctx)
+		if connErr != nil {
+			t.Fatalf("acquire conn for dump: %v", connErr)
+		}
+		_, copyErr := conn.Conn().PgConn().CopyTo(ctx, &buf, fmt.Sprintf("COPY %s TO STDOUT WITH (FORMAT binary)", pgx.Identifier{tbl}.Sanitize()))
+		conn.Release()
+		if copyErr != nil {
+			t.Fatalf("COPY %s TO STDOUT: %v", tbl, copyErr)
+		}
+		if buf.Len() == 0 {
+			t.Fatalf("COPY %s produced zero bytes", tbl)
+		}
+		dumps[tbl] = buf.Bytes()
+	}
+	return dumps
+}
+
+// restoreTables restores binary dumps in the supplied table order.
+func restoreTables(t *testing.T, ctx context.Context, pool *pgxpool.Pool, dumps map[string][]byte, tables []string) {
+	t.Helper()
+
+	for _, tbl := range tables {
+		conn, connErr := pool.Acquire(ctx)
+		if connErr != nil {
+			t.Fatalf("acquire conn for restore: %v", connErr)
+		}
+		_, copyErr := conn.Conn().PgConn().CopyFrom(ctx, bytes.NewReader(dumps[tbl]), fmt.Sprintf("COPY %s FROM STDIN WITH (FORMAT binary)", pgx.Identifier{tbl}.Sanitize()))
+		conn.Release()
+		if copyErr != nil {
+			t.Fatalf("COPY %s FROM STDIN: %v", tbl, copyErr)
+		}
 	}
 }
 
