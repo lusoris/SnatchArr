@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0047: List sync across instances
 
-- **Status**: Proposed; OQ-0047-1 to OQ-0047-5 remain open; implementation follows in L0–L7
+- **Status**: Accepted (open questions OQ-0047-1 to OQ-0047-5 answered by the operator on 2026-11-10; implementation follows in L0–L7)
 - **Date**: 2026-11-10
 - **Deciders**: lusoris
 - **Related**: [ADR-0003](0003-configarr-as-instance-source.md), [ADR-0006](0006-download-client-backpressure.md), [ADR-0008](0008-readarr-frozen-legacy-target.md), [ADR-0012](0012-queue-management-replaces-cleanuparr-link.md), [ADR-0022](0022-instance-priority.md), [ADR-0024](0024-watch-aware-modes.md), [ADR-0036](0036-community-requests-and-voting.md), [ADR-0046](0046-download-client-priority-writes.md)
@@ -110,7 +110,7 @@ No project covers S2 across all four apps or S3 at all. Buildarr's Radarr plugin
 
 ### D1. Cross-instance list controller
 
-SnatchArr controls list definitions and exclusions across every instance of one application, called an **app group**. There is one group for each of Sonarr, Radarr, Lidarr and Readarr; Whisparr is outside this record. The applications' native import lists fetch list content. SnatchArr fans out configuration and admits list-added items into its wanted planner; it does not become a list fetcher. Source coverage beyond native kinds remains OQ-0047-1.
+SnatchArr controls list definitions and exclusions across every instance of one application, called an **app group**. There is one group for each of Sonarr, Radarr, Lidarr and Readarr; Whisparr is outside this record. The applications' native import lists fetch list content. SnatchArr fans out configuration and admits list-added items into its wanted planner; it does not become a list fetcher. Sources without a native kind follow the OQ-0047-1 answer: documented MDBList and Listrr Custom List link-outs now, and a SnatchArr-served Custom List feed for one source only after a measured adopter gap.
 
 ### D2. Search-on-add off; searches use hourly caps
 
@@ -124,11 +124,11 @@ One definition, keyed by name, applies to every group member. Resolve quality pr
 
 ### D4. One writer alongside Configarr
 
-On a `source=configarr` instance whose Configarr file declares import lists, SnatchArr never writes list definitions. Configarr remains their sole writer, preserving ADR-0003's ownership boundary. Configarr does not manage exclusions, so SnatchArr may sync exclusions on those instances. This proposed ownership policy awaits OQ-0047-2; L3 supplies the guard test.
+On a `source=configarr` instance whose Configarr file declares import lists, SnatchArr never writes list definitions. Configarr remains their sole writer, preserving ADR-0003's ownership boundary. Configarr does not manage exclusions, so SnatchArr may sync exclusions on those instances. OQ-0047-2 chose this ownership policy; L3 supplies the guard test.
 
 ### D5. Exclusion union with observed-removal tombstones
 
-An exclusion's identity is its app-specific foreign ID: Sonarr `tvdbId`, Radarr `tmdbId`, Lidarr `foreignId`, Readarr `foreignId` (tagged OpenAPI contracts). An exclusion observed on one member is added to the others. A removal propagates only after SnatchArr has observed that exclusion on that member and subsequently observed it gone; an initially absent exclusion is not a removal. Persist that observation history and tombstones so a simple union does not resurrect a removal. This proposed policy awaits OQ-0047-3.
+An exclusion's identity is its app-specific foreign ID: Sonarr `tvdbId`, Radarr `tmdbId`, Lidarr `foreignId`, Readarr `foreignId` (tagged OpenAPI contracts). An exclusion observed on one member is added to the others. A removal propagates only after SnatchArr has observed that exclusion on that member and subsequently observed it gone; an initially absent exclusion is not a removal. Persist that observation history and tombstones so a simple union does not resurrect a removal. OQ-0047-3 chose this policy.
 
 Use Radarr's bulk exclusion POST; the other apps receive single POSTs with a scalar per-tick bound. L2 must test union and tombstones for ties, empty groups, one member, and seen versus unseen removals, and prove the fake log contains only exclusion POST/DELETE calls.
 
@@ -136,19 +136,19 @@ Use Radarr's bulk exclusion POST; the other apps receive single POSTs with a sca
 
 None of the four pinned applications accepts blocklist insertion. Never replay blocklist records or write an application's database. Read each member's blocklist into deny records keyed exactly by `(app, indexer, protocol, sourceTitle)`; use no fuzzy matching. The tagged `BlocklistResource` contracts expose no release GUID or info hash with which to make a stronger identity.
 
-Add `blocklisted_elsewhere` to the ADR-0012 queue rules in `api/internal/queue/rules.go`. When a queue item on another member matches the exact key, removal goes through that member's `*arr` queue API with `blocklist=true`; the application creates its own blocklist entry through that allowed path. ADR-0012's observe-first, strikes and bounded-removal rules still apply, including `removeFromClient=true` and `skipRedownload=true`. There is no download-client call under ADR-0006 or ADR-0046. The cost is one started grab per member before propagation can block that release there. This proposed approach awaits OQ-0047-4; L5 checks exact matching and the queue call.
+Add `blocklisted_elsewhere` to the ADR-0012 queue rules in `api/internal/queue/rules.go`. When a queue item on another member matches the exact key, removal goes through that member's `*arr` queue API with `blocklist=true`; the application creates its own blocklist entry through that allowed path. ADR-0012's observe-first, strikes and bounded-removal rules still apply, including `removeFromClient=true` and `skipRedownload=true`. There is no download-client call under ADR-0006 or ADR-0046. The cost is one started grab per member before propagation can block that release there. OQ-0047-4 chose this approach without an upstream request for a blocklist insertion route; L5 checks exact matching and the queue call.
 
 ### D7. Two-way behaviour, with explicit limits
 
 Collection state uses the native Trakt Connect notification on Sonarr and Radarr: add on import and remove on delete. Fan out that notification configuration like list definitions, resolving each target rather than copying local IDs. The pinned `src/NzbDrone.Core/Notifications/Trakt/Trakt.cs` sources are linked in References; L6 verifies the fan-out.
 
-For sources with a write API in goenvoy, support removing an imported title from its Trakt or TMDb source watchlist: Trakt `RemoveFromWatchlist` (`metadata/tracking/trakt/trakt.go:729`) and TMDb `AddToWatchlist` with `watchlist=false` (`metadata/video/tmdb/tmdb.go:1058`) at goenvoy `c8341574c82f`. A Plex watchlist needs a plex.tv watchlist client in goenvoy first; `mediaserver/plex` covers the local server only. This is per-list opt-in, off by default and observe first, pending OQ-0047-5. L6 must prove that other lists and observe mode produce no removal.
+For sources with a write API in goenvoy, support removing an imported title from its Trakt or TMDb source watchlist: Trakt `RemoveFromWatchlist` (`metadata/tracking/trakt/trakt.go:729`) and TMDb `AddToWatchlist` with `watchlist=false` (`metadata/video/tmdb/tmdb.go:1058`) at goenvoy `c8341574c82f`. A Plex watchlist needs a plex.tv watchlist client in goenvoy first; `mediaserver/plex` covers the local server only. This is per-list opt-in, off by default and observe first, as OQ-0047-5 chose. L6 must prove that other lists and observe mode produce no removal.
 
 Watched/read state write-back remains outside this record. ADR-0024 reads watch state and writes none back; scrobbling stays with media-server plugins, such as the MDBList Jellyfin and Emby plugins in the survey table. Lidarr and Readarr have no write-back target in this record; that is an explicit coverage gap, not an implied fallback.
 
 ### D8. Reuse existing fetchers and ownership
 
-Seerr requests keep their existing sync and ADR-0036 ownership. Pulsarr remains a link-out for multi-instance Plex watchlist routing. MDBList and Listrr content enters through each application's native Custom List kind where available: fan out the list URL, without calling an MDBList API. Readarr has no Custom List kind (tagged OpenAPI contract); OQ-0047-1 retains that limit.
+Seerr requests keep their existing sync and ADR-0036 ownership. Pulsarr remains a link-out for multi-instance Plex watchlist routing. MDBList and Listrr content enters through each application's native Custom List kind where available: fan out the list URL, without calling an MDBList API. Readarr has no Custom List kind (tagged OpenAPI contract); the OQ-0047-1 answer keeps that limit.
 
 Borrow Configarr's schema-driven reconciliation and opt-in `delete_unmanaged` design. No code is copied from GPL/AGPL projects; SnatchArr's code is EUPL-1.2 (`LICENSES/EUPL-1.2.txt`). The project survey in References informs design and link-outs, not code reuse.
 
@@ -160,9 +160,21 @@ Register the reconciler in the fx group `leader_loops` through `gate.Provide[*T]
 
 Definitions, exclusions, the blocklist queue rule and source write-back all default to observe per app group. Native notification fan-out follows the same boundary. Show planned writes through the API and UI; act requires explicit opt-in per group, and upgrades keep observe. Per-list source write-back additionally requires D7's opt-in. L1–L6 must verify zero writes in observe, including the upgrade path.
 
-## Open questions
+## Answered questions
 
-The decisions above describe the proposed design; these questions remain unanswered. Recommendations do not authorize implementation of an unresolved choice.
+The operator answered all five questions on 2026-11-10. Answers are paraphrased; each one matches the recommendation in the question list that follows.
+
+| ID | Ledger ID | Answer letter | Answer |
+| :--- | :--- | :--- | :--- |
+| `OQ-0047-1` | `snatcharr-oq-0047-1-unlisted-sources` | c | Document the MDBList and Listrr Custom List link-out now, with no code; SnatchArr serves its own Custom List feed for a source only after a measured adopter gap. |
+| `OQ-0047-2` | `snatcharr-oq-0047-2-configarr-lists` | a | Configarr owns import-list definitions on instances whose Configarr file declares them; SnatchArr syncs only exclusions there, one writer per field. |
+| `OQ-0047-3` | `snatcharr-oq-0047-3-exclusion-merge` | a | Union with tombstones: an exclusion added on any member spreads to all; a removal spreads only after SnatchArr saw the exclusion exist and then vanish. |
+| `OQ-0047-4` | `snatcharr-oq-0047-4-blocklist-sync` | a | Queue rule `blocklisted_elsewhere` with an exact `(app, indexer, protocol, sourceTitle)` match, removal through the queue API, observe first; no `*arr` database writes, no download-client calls and no upstream request. |
+| `OQ-0047-5` | `snatcharr-oq-0047-5-source-writeback` | a | Native Trakt Connect plus per-list opt-in removal from Trakt and TMDb watchlists after import, off by default and observe first; a Plex watchlist waits for a goenvoy client. |
+
+### Questions as asked
+
+The table keeps each question with its options, risks and recommendation as asked.
 
 | ID | Question | Options with risk | Recommended |
 | :--- | :--- | :--- | :--- |
@@ -174,7 +186,7 @@ The decisions above describe the proposed design; these questions remain unanswe
 
 ## Implementation slices
 
-This record adds no implementation. Execute these slices in order, resolving their open questions before the dependent behaviour ships. Each slice ships with an end-to-end test through the served API and UI; a client-only test is insufficient evidence for a served feature.
+This record adds no implementation. Execute these slices in order; every open question is answered. Each slice that ships code ships with an end-to-end test through the served API and UI; a client-only test is insufficient evidence for a served feature.
 
 | Slice | Deliverable | Verification before next |
 | :--- | :--- | :--- |
@@ -185,7 +197,7 @@ This record adds no implementation. Execute these slices in order, resolving the
 | L4 | D2 search-on-add guard. | Property test over all four apps: every written definition disables search-on-add. An unmanaged list with it on produces the observe finding. |
 | L5 | D6 `blocklisted_elsewhere` queue rule, after OQ-0047-4. | Exact-key matches only; a planted near-miss title is not matched. Fake log shows queue API removal with `blocklist=true`; observe writes nothing. |
 | L6 | D7 Trakt Connect fan-out and opted-in source watchlist removal, after OQ-0047-5. | Notification configuration resolves per target. Watchlist removal occurs only for opted-in lists after import; observe writes nothing. |
-| L7 | Sources without a native kind, after OQ-0047-1. | Verify the chosen source through the served API/UI against its pinned contract; retain the Readarr Custom List limitation rather than substituting an unsupported kind. |
+| L7 | Sources without a native kind, per OQ-0047-1: document the MDBList and Listrr Custom List link-out per app; no code. A SnatchArr-served feed for one source needs a measured adopter gap and its own record. | `make docs-verify` passes with the page; the page names the Custom List kind per app from the pinned contracts and states Readarr's missing Custom List kind rather than substituting an unsupported kind. |
 
 ## Class defence
 
