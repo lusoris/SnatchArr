@@ -11,6 +11,11 @@
 #      branch; with the bot's pull request open it opens none; the open lookup matches only the
 #      bot's own head repository and base; a dry run sends no write; a failed write fails the run
 #      and drops the temporary branch; a rerun resets a temporary branch an earlier attempt left.
+#   3. Sign-off (#1036): the commit message the bot sends ends with the Signed-off-by trailer of
+#      the App's bot account and passes the commit-msg policy; planted unsigned bot commits fail:
+#      a script without the trailer is refused before any write, and one that also skips the
+#      policy check sends a message this test refuses. An author other than the signed-off
+#      account, an unknown account id and a bad APP_SLUG fail the run.
 #
 #   tools/ci/roadmap_test.sh
 #
@@ -26,14 +31,22 @@ failed=0
 mkdir -p "$WORK/bin"
 cat >"$WORK/bin/gh" <<'EOF'
 #!/bin/sh
-echo "$*" >>"$STUB_LOG"
+# One log line per call, so a multi-line commit message stays on the line of its call.
+printf '%s\n' "$*" | tr '\n' ' ' >>"$STUB_LOG"
+echo >>"$STUB_LOG"
 [ -z "${STUB_DOWN:-}" ] || exit 1
+for arg in "$@"; do
+  case "$arg" in message=*) printf '%s\n' "${arg#message=}" >"$STUB_MSG" ;; esac
+done
 case "$*" in
   "api repos/o/r/pulls?"*) printf '%s\n' "${STUB_OPEN:-}" ;;
+  "api users/snatcharr-test[bot] --jq .id") [ -n "${STUB_NO_ID:-}" ] || echo 7 ;;
   "api repos/o/r/git/ref/heads/"*) [ -n "${STUB_BRANCH:-}" ] || exit 1; echo abc ;;
   "api -X POST repos/o/r/git/refs -f ref=refs/heads/bot/roadmap-refresh-tmp-"*)
     [ -z "${STUB_TMP_LEFT:-}" ] || exit 1 ;;
-  "api -X PUT"*) [ -z "${STUB_FAIL_PUT:-}" ] || exit 1; echo newsha ;;
+  "api -X PUT"*)
+    [ -z "${STUB_FAIL_PUT:-}" ] || exit 1
+    echo "newsha ${STUB_AUTHOR:-7+snatcharr-test[bot]@users.noreply.github.com}" ;;
 esac
 exit 0
 EOF
@@ -66,15 +79,26 @@ git -C "$repo" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=
   commit -q -m "docs: seed"
 base="$(git -C "$repo" rev-parse HEAD)"
 
-# refresh <name> <expect rc> [VAR=value ...]: runs the script, log in $WORK/<name>.log.
-refresh() {
-  name="$1"; want="$2"; shift 2
+# refresh_with <script> <name> <expect rc> [VAR=value ...]: runs a refresh script, log in
+# $WORK/<name>.log, the commit message it sent in $WORK/<name>.msg.
+refresh_with() {
+  script="$1"; name="$2"; want="$3"; shift 3
   : >"$WORK/$name.log"
+  rm -f "$WORK/$name.msg"
   rc=0
-  (cd "$repo" && env STUB_LOG="$WORK/$name.log" PATH="$WORK/bin:$PATH" REPO=o/r \
-    BASE_SHA="$base" BASE_BRANCH=trunk RUN_ID=7 "$@" sh "$HERE/roadmap_refresh_pr.sh" \
-    >"$WORK/$name.out" 2>&1) || rc=$?
+  (cd "$repo" && env STUB_LOG="$WORK/$name.log" STUB_MSG="$WORK/$name.msg" PATH="$WORK/bin:$PATH" \
+    REPO=o/r BASE_SHA="$base" BASE_BRANCH=trunk RUN_ID=7 APP_SLUG=snatcharr-test "$@" \
+    sh "$script" >"$WORK/$name.out" 2>&1) || rc=$?
   [ "$rc" -eq "$want" ]
+}
+# refresh <name> <expect rc> [VAR=value ...]: runs the repository's refresh script.
+refresh() { refresh_with "$HERE/roadmap_refresh_pr.sh" "$@"; }
+signoff='Signed-off-by: snatcharr-test[bot] <7+snatcharr-test[bot]@users.noreply.github.com>'
+# signed_off <case>: the message sent in that case passes the commit-msg policy and its last line
+# is the sign-off of the stub App's bot account.
+signed_off() {
+  [ -f "$WORK/$1.msg" ] && sh "$ROOT/.config/hooks/commit-msg.sh" "$WORK/$1.msg" >/dev/null 2>&1 \
+    && [ "$(sed -e '/^[[:space:]]*$/d' "$WORK/$1.msg" | tail -n 1)" = "$signoff" ]
 }
 # called <case> <pattern>: the stub gh logged a matching call in that case.
 called() { grep -q -- "$2" "$WORK/$1.log"; }
@@ -106,8 +130,8 @@ if refresh fresh 0 \
   && called fresh "-X PUT repos/o/r/contents/docs/roadmap.md .* -f branch=bot/roadmap-refresh-tmp-7" \
   && called fresh "-X POST repos/o/r/git/refs -f ref=refs/heads/bot/roadmap-refresh -f sha=newsha" \
   && called fresh "-X DELETE $tmp_ref" \
-  && called fresh "^pr create --repo o/r --base trunk"; then
-  pass "planted stale count: commit on a temporary branch, bot branch created at it, pull request opened"
+  && called fresh "^pr create --repo o/r --base trunk" && signed_off fresh; then
+  pass "planted stale count: signed-off commit on a temporary branch, bot branch created at it, pull request opened"
 else
   fail "planted stale count, no bot branch"; cat "$WORK/fresh.out"
 fi
@@ -142,10 +166,55 @@ else
   fail "failed file write"; cat "$WORK/putfail.out"
 fi
 
-if refresh badrepo 2 REPO=bad && refresh nobase 2 BASE_BRANCH=; then
-  pass "bad REPO and empty BASE_BRANCH refused"
+if refresh badrepo 2 REPO=bad && refresh nobase 2 BASE_BRANCH= && refresh noslug 2 APP_SLUG= \
+  && refresh badslug 2 'APP_SLUG=Bad Slug'; then
+  pass "bad REPO, empty BASE_BRANCH, empty or malformed APP_SLUG refused"
 else
   fail "bad input"
+fi
+
+# Planted unsigned bot commits: copies of the script in a scratch tree that carries the policy.
+mutants="$WORK/mutants"
+mkdir -p "$mutants/tools/ci" "$mutants/.config/hooks"
+cp "$ROOT/.config/hooks/commit-msg.sh" "$mutants/.config/hooks/"
+# mutant <name> <sed program>: writes the mutated script; fails when the program changed nothing.
+mutant() {
+  sed -e "$2" "$HERE/roadmap_refresh_pr.sh" >"$mutants/tools/ci/$1.sh"
+  ! cmp -s "$HERE/roadmap_refresh_pr.sh" "$mutants/tools/ci/$1.sh"
+}
+# shellcheck disable=SC2016 # sed programs: the $title and $root text must stay literal
+drop_trailer='s|^message=.*Signed-off-by.*$|message="$title"|'
+# shellcheck disable=SC2016 # same: literal sed program text
+skip_policy='s|^sh "$root/.config/hooks/commit-msg.sh" "$msgfile"|true|'
+
+if mutant unsigned "$drop_trailer" \
+  && refresh_with "$mutants/tools/ci/unsigned.sh" unsigned 1 && [ "$(writes unsigned)" -eq 0 ] \
+  && grep -q "fails the commit-msg policy" "$WORK/unsigned.out"; then
+  pass "planted bot commit without Signed-off-by: refused by the commit-msg policy before any write"
+else
+  fail "planted bot commit without Signed-off-by"; cat "$WORK/unsigned.out"
+fi
+
+if mutant unchecked "$drop_trailer;$skip_policy" \
+  && refresh_with "$mutants/tools/ci/unchecked.sh" unchecked 0 && [ -f "$WORK/unchecked.msg" ] \
+  && ! signed_off unchecked; then
+  pass "planted bot commit without Signed-off-by or policy check: the message it sends is refused here"
+else
+  fail "planted bot commit without Signed-off-by or policy check went unnoticed"; cat "$WORK/unchecked.out"
+fi
+
+if refresh foreign 1 STUB_AUTHOR=someone@example.invalid && called foreign "-X DELETE $tmp_ref" \
+  && ! called foreign "$bot_ref" && ! called foreign "^pr create" \
+  && grep -q "is not the sign-off" "$WORK/foreign.out"; then
+  pass "commit author other than the signed-off account: run fails, temporary branch dropped, bot branch left"
+else
+  fail "commit author other than the signed-off account"; cat "$WORK/foreign.out"
+fi
+
+if refresh noid 1 STUB_NO_ID=1 && [ "$(writes noid)" -eq 0 ]; then
+  pass "no account id for the App's bot: run fails before any write"
+else
+  fail "no account id for the App's bot"; cat "$WORK/noid.out"
 fi
 
 exit "$failed"

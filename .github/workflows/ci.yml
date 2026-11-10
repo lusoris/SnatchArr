@@ -20,8 +20,11 @@ concurrency:
 jobs:
   commits:
     # Bots (release-please, Renovate) run no commit-msg hook and cannot certify a DCO; the
-    # squash commit a maintainer merges carries the sign-off for them.
-    if: github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot'
+    # squash commit a maintainer merges carries the sign-off for them. A bot/ branch is written
+    # by this repository's own workflows (tools/ci/roadmap_refresh_pr.sh), which sign off every
+    # commit, so its pull request is checked like a person's (#1036). The status job's
+    # COMMITS_EXPECTED repeats this condition word for word (tools/ci/status.sh mirror).
+    if: github.event_name == 'pull_request' && (github.event.pull_request.user.type != 'Bot' || startsWith(github.head_ref, 'bot/'))
     uses: ./.github/workflows/commit-policy.yml
 
   # Runs on every change, with no filter: a change that touches no component skips the jobs
@@ -1084,7 +1087,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           # The condition of the commits job, word for word.
-          COMMITS_EXPECTED: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot' }}
+          COMMITS_EXPECTED: ${{ github.event_name == 'pull_request' && (github.event.pull_request.user.type != 'Bot' || startsWith(github.head_ref, 'bot/')) }}
           # The release-please branch condition, word for word.
           RELEASE_EXPECTED: ${{ startsWith(github.head_ref, 'release-please--') }}
         run: sh tools/ci/status.sh
