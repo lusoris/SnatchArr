@@ -14,6 +14,9 @@ import tempfile
 from pathlib import Path
 
 OWN_CRATES = {"snatch-worker", "snatch-core", "snatch-proto", "arr-client"}
+# Upper bound for one dependency tool run (cargo about, go-licenses, pnpm): with a cold
+# cache it fetches every crate and module licence over the network.
+CMD_TIMEOUT_SECONDS = 900
 
 
 class LicenceError(Exception):
@@ -24,16 +27,20 @@ class LicenceError(Exception):
         self.status = status
 
 
-def run_cmd(cmd, cwd=None, env=None):
-    """Run a command, checking exit status; exit 2 on failure with stderr tail."""
-    res = subprocess.run(
-        cmd,
-        cwd=cwd,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def run_cmd(cmd, cwd=None, env=None, timeout=CMD_TIMEOUT_SECONDS):
+    """Run a command within timeout seconds, checking exit status; exit 2 on failure with stderr tail."""
+    try:
+        res = subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as err:
+        raise LicenceError(f"Error running {' '.join(cmd)}: {err}", 2) from err
     if res.returncode != 0:
         tail = "\n".join(res.stderr.strip().splitlines()[-20:])
         raise LicenceError(f"Error running {' '.join(cmd)} (exit {res.returncode}):\n{tail}", 2)

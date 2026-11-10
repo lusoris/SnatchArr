@@ -70,6 +70,9 @@ jobs:
         run: python3 -I tools/ci/codacy_config.py --self-test && python3 -I tools/ci/codacy_config.py
       - name: The release publish order check refuses its planted cases
         run: python3 -I tools/ci/release_publish_order_check.py --self-test && python3 -I tools/ci/release_publish_order_check.py
+      # The devcontainer installs the engine at a literal ref; it must be the PRAETOR_REF pin below.
+      - name: Every literal Praetor ref equals the engine pin, after its planted cases
+        run: bash tools/ci/engine_pin_check_test.sh && python3 -I tools/ci/engine_pin_check.py
       - name: The release dogfood gate and pass recorder refuse their planted cases
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases
@@ -240,8 +243,15 @@ jobs:
               - '.config/**'
               - '.gemini/**'
               - '.codex/**'
-              - '.github/workflows/ci.yml'
+              # Every workflow, and every file a release.test_levels binding names: a job or
+              # file that stops matching its binding fails here (tools/ci/test_levels_check.py).
+              - '.github/workflows/**'
               - 'web/**'
+              - 'api/**/*_test.go'
+              - 'tools/e2e/smoke.sh'
+              - 'tools/e2e/cnpg_backup_restore.sh'
+              - 'tools/ci/test_levels_check*'
+              - 'tools/ci/test_lib.sh'
               - 'tools/ci/clones_check.py'
               - 'tools/ci/clones_check_test.sh'
               - 'tools/ci/clone-free.txt'
@@ -925,7 +935,7 @@ jobs:
       # (.config/lefthook/engine.sh) and run the same engine CI installs. One value only.
       - name: Install praetorctl
         env:
-          PRAETOR_REF: 6cbe90eaef475f2a1ee2a5be9ad30723e8fa247c
+          PRAETOR_REF: 4e6c6d9cbf9cc8e634f2c9e4751706496278cd52
         run: |
           go install "github.com/cordanaLLM/praetor/cmd/standardsctl@${PRAETOR_REF}"
           ln -s "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
@@ -946,6 +956,12 @@ jobs:
         run: praetorctl compile-context --verify
       - name: HISS audit
         run: praetorctl audit
+      # Outside a release the audit only warns on a release.test_levels binding whose paths,
+      # job or command no longer match; this refuses it on the pull request that breaks it.
+      - name: Release test levels pass, after their planted cases
+        run: |
+          bash tools/ci/test_levels_check_test.sh
+          python3 -I tools/ci/test_levels_check.py
       - name: Flavor audit
         # .workingdir/ ledgers are gitignored by praetor itself; the flavor requires them.
         run: |

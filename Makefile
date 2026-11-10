@@ -599,9 +599,12 @@ logos-check: ## Verify logos manifest, hashes, and planted mutations
 	python3 tools/logos/fetch.py --check
 	bash tools/logos/fetch_test.sh
 
-governance-verify: ## compile-context --verify, audit, state audit, flavor audit (go-service)
+governance-verify: ## compile-context --verify, audit, release test levels as a hard gate (planted cases first), state audit, flavor audit (go-service)
 	$(PRAETORCTL) compile-context --verify
 	$(PRAETORCTL) audit
+	# Outside a release the audit only warns on a broken release.test_levels binding; this refuses it.
+	bash tools/ci/test_levels_check_test.sh
+	python3 -I tools/ci/test_levels_check.py
 	$(PRAETORCTL) state audit .
 	$(PRAETORCTL) flavor audit --flavor=go-service .
 
@@ -637,7 +640,7 @@ roadmap-check: ## docs/roadmap.md milestone table shape (offline) and the schedu
 	python3 -I tools/ci/roadmap_render.py --check-shape
 	sh tools/ci/roadmap_test.sh
 
-workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons and the release pull request body, against their cases
+workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons, the devcontainer engine pin and the release pull request body, against their cases
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/squash_merge_test.sh
@@ -653,6 +656,8 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/nosec_check.py
 	bash tools/ci/download_retry_check_test.sh
 	python3 -I tools/ci/download_retry_check.py
+	bash tools/ci/engine_pin_check_test.sh
+	python3 -I tools/ci/engine_pin_check.py
 	bash tools/ci/release_body_check_test.sh
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test
