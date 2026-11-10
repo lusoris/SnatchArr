@@ -89,12 +89,18 @@ release:
   # Each binding names the file, the CI job that runs it and the command that job must run.
   test_levels:
     # A declared map must name every profile level, so unit and integration are bound too.
+    # Go unit tests; the web package's own unit tests are bound under web_unit below.
     unit:
       paths:
         - api/**/*_test.go
-        - web/src/**/*.test.ts
       job: api-test
       run: go test -race
+    # Vitest unit tests of the SPA, run by the web job's reusable sveltesentio workflow
+    # (pnpm test in web/). A level of its own, since one level names one job.
+    web_unit:
+      paths:
+        - web/src/**/*.test.ts
+      job: web
     # Postgres store and handler tests through testcontainers, in the same go test run.
     integration:
       paths:
