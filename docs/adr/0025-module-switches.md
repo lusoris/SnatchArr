@@ -6,8 +6,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0025: Architecture and mechanism of optional module switches
 
-- Status: proposed
-- **Implementation:** pending ([#570](https://github.com/lusoris/SnatchArr/issues/570))
+- Status: Accepted (open questions 1 to 3 answered on 2026-10-24 under ledger ids `snatcharr-adr25-module-config-storage`, `snatcharr-adr25-disabled-status` and `snatcharr-adr25-data-on-disable`; accepted on 2026-11-10 under ledger id `snatcharr-adr0025-accept`)
+- **Implementation:** switch mechanism done (slices 1 to 5 in [#604](https://github.com/lusoris/SnatchArr/pull/604), [#605](https://github.com/lusoris/SnatchArr/pull/605), [#606](https://github.com/lusoris/SnatchArr/pull/606), [#619](https://github.com/lusoris/SnatchArr/pull/619), [#623](https://github.com/lusoris/SnatchArr/pull/623) and [#628](https://github.com/lusoris/SnatchArr/pull/628); [#563](https://github.com/lusoris/SnatchArr/issues/563) closed); the modules built on it are tracked in [#570](https://github.com/lusoris/SnatchArr/issues/570)
 - Date: 2026-10-24
 - Related: [ADR-0018](0018-product-front-door.md), [ADR-0021](0021-llm-access-module.md), [ADR-0024](0024-watch-aware-modes.md)
 
