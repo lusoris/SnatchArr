@@ -33,7 +33,7 @@ A survey of the repository shows the current baseline for adult media and integr
    - `api/internal/arrclient/queue.go:147-151,261-307` implements queue queries for Whisparr v2 (episodes) and v3 (movies).
    - In the Rust worker, `worker/crates/arr-client/src/lib.rs:40-43,376-415,807-810` parses Whisparr v2 scenes and Whisparr v3 movies (`WhisparrMovieLike`).
 2. **Module switches**:
-   - [ADR-0025](0025-module-switches.md) defines the unified switch framework: declarative module descriptors in `api/internal/modules`, persistence in the `modules` table (`docs/adr/0025-module-switches.md:95-100`), OpenAPI operation tagging via `x-module` (`docs/adr/0025-module-switches.md:121-135`), RFC 9457 HTTP 404 Problem JSON refusal when disabled, and quiescent periodic leader loops (`AGENTS.md:129`). ADR-0025 is proposed; this module depends on its slices.
+   - [ADR-0025](0025-module-switches.md) defines the unified switch framework: declarative module descriptors in `api/internal/modules`, persistence in the `modules` table (`docs/adr/0025-module-switches.md:95-100`), OpenAPI operation tagging via `x-module` (`docs/adr/0025-module-switches.md:121-135`), RFC 9457 HTTP 404 Problem JSON refusal when disabled, and quiescent periodic leader loops (`AGENTS.md:129`). ADR-0025 is accepted and its switch slices have shipped; this module builds on them.
 3. **Secret encryption at rest**:
    - Stored credentials across instances and integrations are sealed via `crypto.Encryptor` (AES-GCM) in `api/internal/app/crypto.go:26-39`, `api/internal/instances/service.go:50`, and `api/internal/seerr/service.go:69`. Plaintext credentials never appear in API read responses or logs.
 4. **Access control and roles**:
