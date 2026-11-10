@@ -147,6 +147,25 @@ mirror_refuses "status no longer runs always" 'status: must run with "if: always
 mirror_refuses "commits condition differs from the expectation" \
   "job commits: the workflow does not carry the condition of its rule (commits)" \
   '/^    if: github.event_name == / { print "    if: github.event_name == \047pull_request\047"; next } { print }'
+# Planted bot-skip cases (#1069): the edit lands on the commits job and on COMMITS_EXPECTED
+# alike, so the two still match and only the binding check can refuse it. SWAP replaces the
+# text in SWAP_FROM with SWAP_TO once per line.
+SWAP='{ i = index($0, ENVIRON["SWAP_FROM"])
+        if (i) $0 = substr($0, 1, i - 1) ENVIRON["SWAP_TO"] substr($0, i + length(ENVIRON["SWAP_FROM"]))
+        print }'
+SKIP="!(github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('[\"renovate[bot]\",\"snatcharr-release[bot]\"]'), github.event.pull_request.user.login) && !startsWith(github.head_ref, 'bot/'))"
+export SWAP_FROM SWAP_TO
+SWAP_FROM="$SKIP"
+SWAP_TO="(github.event.pull_request.user.type != 'Bot' || startsWith(github.head_ref, 'bot/'))"
+mirror_refuses "bots skipped by account type" \
+  "status: COMMITS_EXPECTED skips pull requests by account type" "$SWAP"
+SWAP_FROM="github.event.pull_request.head.repo.full_name == github.repository && "
+SWAP_TO=""
+mirror_refuses "bot skip not bound to this repository" \
+  "status: COMMITS_EXPECTED does not bind the bot skip to this repository and the bot logins" "$SWAP"
+SWAP_FROM="contains(fromJSON('[\"renovate[bot]\",\"snatcharr-release[bot]\"]'), github.event.pull_request.user.login) && "
+mirror_refuses "bot skip not bound to the bot logins" \
+  "status: COMMITS_EXPECTED does not bind the bot skip to this repository and the bot logins" "$SWAP"
 # Planted draft cases (#147): the changes job stops a draft for every component job it feeds.
 mirror_refuses "draft step dropped from the changes job" \
   'job changes: the first step is not "Stop on a draft pull request"' \
