@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess  # nosec B404 -- runs the engine and git with fixed argument lists, never a shell
+import subprocess  # nosec B404  # runs the engine and git with fixed argument lists, never a shell
 import sys
 from pathlib import Path
 
@@ -90,7 +90,7 @@ def check_glob(level: str, glob: str) -> None:
 
 def tracked_matches(root: Path, globs: list[str]) -> set[str]:
     """Return the tracked files under ROOT that any of GLOBS matches, through git :(glob) pathspecs."""
-    result = subprocess.run(  # nosec B603 -- fixed git argument list, globs passed as pathspecs, no shell
+    result = subprocess.run(  # nosec B603  # fixed git argument list, globs passed as pathspecs, no shell
         ["git", "-C", str(root), "ls-files", "-z", "--", *(f":(glob){g}" for g in globs)],
         capture_output=True,
         check=False,
@@ -182,7 +182,7 @@ def judge_own_files(files: dict[str, set[str]]) -> int:
 
 def run_audit(root: Path) -> tuple[int, list[str]]:
     """Run the engine's offline audit in ROOT; return its exit status and output lines."""
-    result = subprocess.run(  # nosec B603 -- fixed argument list, pinned resolver, no shell string
+    result = subprocess.run(  # nosec B603  # fixed argument list, pinned resolver, no shell string
         ["sh", ".config/lefthook/engine.sh", "audit", "--offline"],
         cwd=root,
         capture_output=True,

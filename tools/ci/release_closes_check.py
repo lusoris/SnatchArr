@@ -15,7 +15,7 @@ import io
 import json
 import os
 import re
-import subprocess  # nosec B404 -- runs only gh api with a fixed argument list, never a shell
+import subprocess  # nosec B404  # runs only gh api with a fixed argument list, never a shell
 import sys
 import tempfile
 from pathlib import Path
@@ -45,7 +45,7 @@ def history_commit(reference: str, repo_dir: Path) -> str:
     """Name the newest commit whose message carries the closing claim."""
     pattern = r"closes[[:space:]]+\[?" + reference.replace(".", r"\.") + "([^0-9]|$)"
     try:
-        result = subprocess.run(  # nosec B603 -- fixed git argv list, no shell; pattern built from a regex-matched issue reference
+        result = subprocess.run(  # nosec B603  # fixed git argv list, no shell; pattern built from a regex-matched issue reference
             [
                 "git",
                 "-C",
@@ -157,7 +157,7 @@ def issue_state(repository: str, number: int, api_dir: Path | None) -> str:
         state = payload.get("state")
     else:
         try:
-            result = subprocess.run(  # nosec B603 -- fixed gh argv list, no shell; endpoint built from regex-matched owner, repo and issue number
+            result = subprocess.run(  # nosec B603  # fixed gh argv list, no shell; endpoint built from regex-matched owner, repo and issue number
                 ["gh", "api", endpoint, "--jq", ".state"],
                 capture_output=True,
                 text=True,
@@ -420,7 +420,7 @@ SELF_TEST_COMMITS = (
 def run_git_step(argv: list[str]) -> str:
     """Run one self-test git step and return its stripped standard output."""
     try:
-        result = subprocess.run(  # nosec B603 -- fixed git argv list in a throwaway self-test repository
+        result = subprocess.run(  # nosec B603  # fixed git argv list in a throwaway self-test repository
             argv,
             capture_output=True,
             text=True,

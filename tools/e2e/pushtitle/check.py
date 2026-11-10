@@ -38,7 +38,7 @@ def open_http(
     scheme = urllib.parse.urlsplit(raw_url).scheme.lower()
     if scheme not in ("http", "https"):
         raise CheckError(f"refusing non-http URL scheme {scheme!r}: {raw_url}")
-    return urllib.request.urlopen(req, timeout=timeout)  # nosec B310 -- the scheme check above allows only http and https
+    return urllib.request.urlopen(req, timeout=timeout)  # nosec B310  # the scheme check above allows only http and https
 
 
 def call(
