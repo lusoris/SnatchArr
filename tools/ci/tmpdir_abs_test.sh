@@ -5,19 +5,23 @@
 # Replay tools/ci/tmpdir_abs.sh and the TMPDIR block at the top of the Makefile in a throwaway
 # tree: a relative TMPDIR with spaces, a quote, a comma or a `$` must stay one path, and copies
 # of the block that split or expand the value must refuse it or resolve a different directory.
-# Every case runs with CDPATH pointing at a directory that holds the same names.
+# Every case runs with CDPATH pointing at a directory that holds the same names. It also checks
+# that no shell file under tools/, .config/ or .devcontainer/ and no Makefile line changes into a
+# TMPDIR value with cd, and replays the TMPDIR line of this test and of govulncheck_pinned_test.sh
+# with TMPDIR=-, which a bare cd reads as OLDPWD.
 #
 #   tools/ci/tmpdir_abs_test.sh
 #
 # Exit status: 0 every case behaved as recorded, 1 otherwise. Needs GNU make 4.2 or later
-# (.SHELLSTATUS), sed, cmp and env -u.
+# (.SHELLSTATUS), sed, cmp, env -u, and grep -r with --include.
 # Platforms: POSIX sh, runs in CI on the ubuntu workflows job and on Linux maintainer hosts; macOS and Windows skipped: the repository's CI and landing run on Linux only.
 set -eu
 
 HERE="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 ROOT="$(CDPATH='' cd -- "$HERE/../.." && pwd)"
-# The cases change directory, so an inherited relative TMPDIR is resolved here first.
-case "${TMPDIR:-}" in '' | /*) ;; *) TMPDIR="$(CDPATH='' cd -- "$TMPDIR" && pwd)"; export TMPDIR ;; esac
+# The cases change directory, so an inherited relative TMPDIR is resolved here first, by
+# tools/ci/tmpdir_abs.sh, the one resolver: a bare `cd -- -` would read OLDPWD instead.
+case "${TMPDIR:-}" in '' | /*) ;; *) TMPDIR="$(sh "$HERE/tmpdir_abs.sh" "$TMPDIR")"; export TMPDIR ;; esac
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' 0
 # pwd -P form, the form tmpdir_abs.sh prints.
@@ -117,4 +121,81 @@ for mutant in Makefile.unquoted Makefile.expanded; do
 done
 make_case mutant-unquoted 2 '' 'with exit 2' Makefile.unquoted env 'TMPDIR=t space' make
 make_case mutant-expanded 0 "[$R/t]" '' Makefile.expanded env "TMPDIR=$dollar_name" make
+
+# cd_tmpdir_lines PATH...: prints FILE:LINE:text of every line, in the shell files, *.mk files and
+# Makefiles at or below PATH, that changes into a TMPDIR value with cd (options such as -- or -P
+# between cd and the value included). No match is clean; a grep error fails the test.
+cd_tmpdir_lines() {
+  scan_rc=0
+  grep -rHnE --include='*.sh' --include='*.mk' --include=Makefile \
+    'cd([[:space:]]+-[[:alpha:]-]*)*[[:space:]]+"?\$\{?TMPDIR' "$@" || scan_rc=$?
+  if [ "$scan_rc" -gt 1 ]; then
+    printf 'FAIL cd_tmpdir_lines: grep exit %s\n' "$scan_rc" >&2
+    exit 1
+  fi
+}
+
+# One resolver: a relative TMPDIR goes through tools/ci/tmpdir_abs.sh, never through a cd of its own.
+lines="$(cd_tmpdir_lines "$ROOT/tools" "$ROOT/.config" "$ROOT/.devcontainer" "$ROOT/Makefile")"
+if [ -n "$lines" ]; then
+  printf 'FAIL one-resolver: resolve a relative TMPDIR with tools/ci/tmpdir_abs.sh\n%s\n' "$lines" >&2
+  exit 1
+fi
+printf 'ok   one-resolver\n'
+
+# Planted: the line both test scripts carried before, and a cd -P form. The escaped quotes keep
+# this file's own source out of the scan; printf writes the lines verbatim.
+old_line="$(printf '%s\n' "case \"\${TMPDIR:-}\" in '' | /*) ;; *) TMPDIR=\"\$(CDPATH='' cd -- \"\$TMPDIR\" && pwd)\"; export TMPDIR ;; esac")"
+opt_line="$(printf '%s\n' "cd -P \"\${TMPDIR}\" || exit 1")"
+mkdir "$R/plant"
+printf '%s\n%s\n' "$old_line" "$opt_line" >"$R/plant/planted.sh"
+lines="$(cd_tmpdir_lines "$R/plant")"
+if [ "$lines" != "$R/plant/planted.sh:1:$old_line$nl$R/plant/planted.sh:2:$opt_line" ]; then
+  printf 'FAIL planted-cd-tmpdir: scan reported\n%s\n' "$lines" >&2
+  exit 1
+fi
+printf 'ok   planted-cd-tmpdir\n'
+
+# preamble_run LINE: runs LINE and then mktemp -d in a child sh started in the throwaway tree with
+# TMPDIR=- and OLDPWD at another directory; HERE is the tree's tools/ci, as in the test scripts.
+# Sets rc; stdout and stderr land in $WORK/out and $WORK/err.
+preamble_run() {
+  rc=0
+  # shellcheck disable=SC2016 # child-shell program: HERE=$1 reads the child's first argument
+  (cd "$R" && OLDPWD="$R/t" TMPDIR=- sh -c 'set -eu; HERE=$1; '"$1"'; mktemp -d' sh "$R/tools/ci") \
+    >"$WORK/out" 2>"$WORK/err" || rc=$?
+}
+
+# Boundary: the TMPDIR line of this test and of govulncheck_pinned_test.sh, taken from the files as
+# written, must read "-" as the directory "-", where the temporary directory then lands.
+for script in tmpdir_abs_test.sh govulncheck_pinned_test.sh; do
+  # shellcheck disable=SC2016 # sed address: the ${TMPDIR:-} text of the line, not shell
+  line="$(sed -n '/^case "\${TMPDIR:-}" in /p' "$HERE/$script")"
+  case $line in
+    '' | *"$nl"*)
+      printf 'FAIL dash-preamble %s: want one TMPDIR line, got\n%s\n' "$script" "$line" >&2
+      exit 1
+      ;;
+  esac
+  preamble_run "$line"
+  created="$(cat "$WORK/out")"
+  case "$rc:$created" in
+    "0:$R/-/"*) ;;
+    *)
+      printf 'FAIL dash-preamble %s: exit %s, directory [%s]\n%s\n' "$script" "$rc" "$created" \
+        "$(cat "$WORK/err")" >&2
+      exit 1
+      ;;
+  esac
+  rmdir "$created"
+  printf 'ok   dash-preamble %s\n' "$script"
+done
+
+# Mutation: the old line reads "-" as OLDPWD and captures the path twice, so mktemp fails.
+preamble_run "$old_line"
+if [ "$rc" -eq 0 ]; then
+  printf 'FAIL mutant-old-preamble: the old line accepted TMPDIR=-, directory [%s]\n' "$(cat "$WORK/out")" >&2
+  exit 1
+fi
+printf 'ok   mutant-old-preamble\n'
 echo "tmpdir_abs: all cases passed"

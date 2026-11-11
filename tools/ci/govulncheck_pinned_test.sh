@@ -16,8 +16,9 @@ set -eu
 HERE="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck source=tools/ci/test_lib.sh
 . "$HERE/test_lib.sh"
-# run_in changes into the module, so an inherited relative TMPDIR is resolved here first.
-case "${TMPDIR:-}" in '' | /*) ;; *) TMPDIR="$(CDPATH='' cd -- "$TMPDIR" && pwd)"; export TMPDIR ;; esac
+# run_in changes into the module, so an inherited relative TMPDIR is resolved here first, by
+# tools/ci/tmpdir_abs.sh, the one resolver: a bare `cd -- -` would read OLDPWD instead.
+case "${TMPDIR:-}" in '' | /*) ;; *) TMPDIR="$(sh "$HERE/tmpdir_abs.sh" "$TMPDIR")"; export TMPDIR ;; esac
 WORK="$(mktemp -d)"
 guard_pid=
 scanner_pid=
