@@ -93,6 +93,8 @@ BATCH_HEADER = re.compile(rb"(?P<oid>[0-9a-f]{40}|[0-9a-f]{64}) blob (?P<size>[0
 PinMap = dict[tuple[str, str, bool], dict[str, list[str]]]
 # (repository path, first MAX_BYTES + 1 bytes of its content, or None when it holds no file)
 Content = tuple[str, bytes | None]
+# (repository path, line number, image name as written, tag, digest, record file)
+Pin = tuple[str, int, str, str, str, bool]
 
 
 def run_git(root: Path, args: list[str], stdin: IO[bytes] | None = None, stdout: IO[bytes] | None = None) -> bytes:
@@ -298,22 +300,39 @@ def canonical_name(name: str) -> str:
     return name if "/" in name else f"library/{name}"
 
 
-def collect_pins(contents: Iterable[Content]) -> PinMap:
-    """Map each `(canonical name, tag, record file)` in CONTENTS to its digest locations."""
-    found: PinMap = defaultdict(lambda: defaultdict(list))
+def iter_pins(contents: Iterable[Content]) -> Iterator[Pin]:
+    """Yield `(rel, lineno, name, tag, digest, record file)` for each literal image pin in CONTENTS."""
     for rel, raw in contents:
         lines = text_lines(raw, rel)
         record = any(RECORD_MARKER.match(line) for line in lines)
         for lineno, line in enumerate(lines, 1):
             for match in IMAGE_PIN.finditer(line):
-                key = (canonical_name(match.group("name")), match.group("tag"), record)
-                found[key][match.group("digest")].append(f"{rel}:{lineno}")
+                yield (
+                    rel,
+                    lineno,
+                    match.group("name"),
+                    match.group("tag"),
+                    match.group("digest"),
+                    record,
+                )
+
+
+def collect_pins(contents: Iterable[Content]) -> PinMap:
+    """Map each `(canonical name, tag, record file)` in CONTENTS to its digest locations."""
+    found: PinMap = defaultdict(lambda: defaultdict(list))
+    for rel, lineno, name, tag, digest, record in iter_pins(contents):
+        found[(canonical_name(name), tag, record)][digest].append(f"{rel}:{lineno}")
     return found
+
+
+def read_contents(root: Path, *, index: bool = False) -> Iterator[Content]:
+    """Yield ROOT's tracked files from its git index (when INDEX is set) or working tree."""
+    return index_contents(root) if index else worktree_contents(root)
 
 
 def load_pins(root: Path, *, index: bool = False) -> PinMap:
     """Collect image pins from ROOT's git index (when INDEX is set) or working tree."""
-    return collect_pins(index_contents(root) if index else worktree_contents(root))
+    return collect_pins(read_contents(root, index=index))
 
 
 def check(root: Path, *, index: bool = False) -> int:
@@ -340,16 +359,21 @@ def check(root: Path, *, index: bool = False) -> int:
     return 0
 
 
-def main() -> int:
-    """Parse CLI arguments and run the container image digest check."""
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+def parse_cli(description: str) -> argparse.Namespace:
+    """Parse the `--root` and `--index` options that every image check built on read_contents takes."""
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--root", type=Path, default=Path("."), help="repository root (default .)")
     parser.add_argument(
         "--index",
         action="store_true",
         help="scan git index content instead of working-tree files",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Parse CLI arguments and run the container image digest check."""
+    args = parse_cli(__doc__.splitlines()[0])
     try:
         return check(args.root, index=args.index)
     except (OSError, ValueError, subprocess.SubprocessError) as error:

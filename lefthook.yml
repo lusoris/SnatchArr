@@ -61,6 +61,8 @@ pre-commit:
       run: sh .config/lefthook/engine.sh audit --offline
     image-pins:
       run: sh .config/lefthook/python.sh --keep-index -I tools/ci/image_pin_check.py --index
+    image-release-age:
+      run: sh .config/lefthook/python.sh --keep-index -I tools/ci/image_release_age_check.py --index
 
 # Repository-owned, not rendered by praetor: the policy CI applies to every commit of a pull
 # request (job `commits`), run here before the commit exists.

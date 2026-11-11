@@ -73,11 +73,12 @@ jobs:
       # The devcontainer installs the engine at a literal ref; it must be the PRAETOR_REF pin below.
       - name: Every literal Praetor ref equals the engine pin, after its planted cases
         run: bash tools/ci/engine_pin_check_test.sh && python3 -I tools/ci/engine_pin_check.py
-      # CI services, scripts and testcontainers pin one image tag in several files; all name one digest.
-      # Both readers run: the working tree as checked out, and the index, where a
-      # working-tree-encoding file reads as its staged UTF-8 blob.
-      - name: Every image tag pinned in several places uses one digest, after its planted cases
-        run: bash tools/ci/image_pin_check_test.sh && python3 -I tools/ci/image_pin_check.py && python3 -I tools/ci/image_pin_check.py --index
+      # CI services, scripts and testcontainers pin one image tag in several files; all name one digest,
+      # and every undated image pin carries Renovate release-age coverage. Both readers of each check
+      # run: the working tree as checked out, and the index, where a working-tree-encoding file
+      # reads as its staged UTF-8 blob.
+      - name: Image digest pins use one digest per tag and carry Renovate release-age coverage, after their planted cases
+        run: bash tools/ci/image_pin_check_test.sh && python3 -I tools/ci/image_pin_check.py && python3 -I tools/ci/image_pin_check.py --index && bash tools/ci/image_release_age_check_test.sh && python3 -I tools/ci/image_release_age_check.py && python3 -I tools/ci/image_release_age_check.py --index
       - name: The release dogfood gate and pass recorder refuse their planted cases
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases

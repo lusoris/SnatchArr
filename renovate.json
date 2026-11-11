@@ -482,16 +482,6 @@
       "groupName": "playwright"
     },
     {
-      "description": "The Docker datasource dates tags only on Docker Hub, so under minimumReleaseAge the Playwright image never counts as stable and the group above shipped @playwright/test alone (#411). The image needs no age gate of its own: tools/e2e/web_visual.sh refuses an image whose version differs from @playwright/test in the lockfile, and that npm package keeps the 3-day gate, so the image cannot land before its npm twin has aged",
-      "matchDatasources": [
-        "docker"
-      ],
-      "matchDepNames": [
-        "mcr.microsoft.com/playwright"
-      ],
-      "minimumReleaseAgeBehaviour": "timestamp-optional"
-    },
-    {
       "description": "praetor-managed engine: updates arrive in one coordinated adoption pull request",
       "matchPackageNames": [
         "github.com/cordanaLLM/praetor",
@@ -501,16 +491,6 @@
         "cordanaLLM/praetor/**"
       ],
       "enabled": false
-    },
-    {
-      "description": "The Docker datasource dates tags only on Docker Hub, so the mirror.gcr.io Postgres pins never aged past minimumReleaseAge and every branch dropped them while the storetest pin moved alone (#1068). mirror.gcr.io serves the Docker Hub library images under their Docker Hub digests, so these pins look up Docker Hub and age with the storetest pin; the files keep the mirror name",
-      "matchDatasources": [
-        "docker"
-      ],
-      "matchDepNames": [
-        "mirror.gcr.io/library/postgres"
-      ],
-      "overridePackageName": "postgres"
     },
     {
       "description": "The Postgres pins of the tests and CI move in one pull request: tools/ci/image_pin_check.py refuses one image tag pinned to two digests. It sets no automerge: a group branch automerges only when every update in it does, and the rule for custom manager pins keeps the storetest and end-to-end pins merged by hand",
@@ -526,6 +506,65 @@
         "mirror.gcr.io/library/postgres"
       ],
       "groupName": "postgres test images"
+    },
+    {
+      "description": [
+        "Media, *arr and own consumer apps take releases without the 3-day wait; infrastructure keeps its waits (fleet-rule-media-apps-no-release-wait-20261027). ffmpeg is a fixture tool rather than a media app and stays gated",
+        "Covers the ghcr.io/hotio and lscr.io/linuxserver pins, which Renovate 44.234.0 cannot date outside index.docker.io, alongside the Docker Hub deluge, qbittorrent and rtorrent-rutorrent pins"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "/^(?:ghcr\\.io/hotio/(?:prowlarr|seerr|whisparr)|lscr\\.io/linuxserver/(?:lidarr|nzbget|radarr|readarr|sabnzbd|sonarr|transmission)|(?:docker\\.io/)?linuxserver/(?:deluge|qbittorrent)|crazymax/rtorrent-rutorrent)$/"
+      ],
+      "minimumReleaseAge": null
+    },
+    {
+      "description": [
+        "Renovate 44.234.0 dates Docker releases only on index.docker.io, so mirror.gcr.io pins never aged past the 3-day minimumReleaseAge (#1068)",
+        "mirror.gcr.io serves Docker Hub images under identical manifest digests (skopeo 1.25.1, 2026-11-11: aquasec/trivy:0.75.0, kindest/node:v1.37.0, moby/buildkit:v0.33.1, rhysd/actionlint:1.7.12, rustfs/rustfs:1.0.1 and tonistiigi/binfmt:qemu-v10.2.3 match Docker Hub; library/postgres:18-alpine is the same repository after the tag moved on Docker Hub)",
+        "Looking up the stripped Docker Hub twin keeps the 3-day release wait while tracked files keep the mirror.gcr.io host"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "/^mirror\\.gcr\\.io\\//"
+      ],
+      "overridePackageName": "{{{replace '^mirror\\.gcr\\.io/' '' depName}}}"
+    },
+    {
+      "description": [
+        "ffmpeg is a test fixture tool rather than a consumer media app, so it keeps the 3-day minimumReleaseAge wait",
+        "lscr.io/linuxserver/ffmpeg:9.0.2-cli-ls86 carries the same manifest digest as docker.io/linuxserver/ffmpeg at the same tag (skopeo 1.25.1, 2026-11-11), so looking up linuxserver/ffmpeg dates it on Docker Hub"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "lscr.io/linuxserver/ffmpeg"
+      ],
+      "overridePackageName": "linuxserver/ffmpeg"
+    },
+    {
+      "description": [
+        "Exact-scoped images with no release timestamp source in Renovate 44.234.0 (its Docker datasource dates tags only on index.docker.io and reads OCI labels url, source and revision only, never image.created)",
+        "gcr.io/distroless/static-debian13: reproducible build with config Created 1970-01-01 and no index org.opencontainers.image.created annotation",
+        "ghcr.io/cloudnative-pg/postgresql: carries the org.opencontainers.image.created annotation on 18.6-system-trixie, which Renovate 44.234.0 does not read",
+        "mcr.microsoft.com/devcontainers/base: published on mcr.microsoft.com rather than index.docker.io, so the Docker datasource assigns no release timestamp",
+        "mcr.microsoft.com/playwright: undated on mcr.microsoft.com (#411); tools/e2e/web_visual.sh locks its version to @playwright/test in the lockfile, whose npm package keeps the 3-day wait"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "gcr.io/distroless/static-debian13",
+        "ghcr.io/cloudnative-pg/postgresql",
+        "mcr.microsoft.com/devcontainers/base",
+        "mcr.microsoft.com/playwright"
+      ],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
     }
   ],
   "platformCommit": "enabled",
