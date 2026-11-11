@@ -120,3 +120,118 @@ status=0
 out=$(GIT_CEILING_DIRECTORIES=$work python3 -I "$check" --root "$work/not-a-repo" 2>&1) || status=$?
 check_case not-a-repo 1 "$status" "error: git ls-files failed" "$out"
 echo "ok   not-a-repo"
+
+# assert_mode NAME MODE WANT_RC NEEDLE...: run the check on fixture NAME over the working tree
+# (MODE worktree) or the git index (MODE index), bounded by timeout 20.
+assert_mode() {
+    local name=$1 mode=$2 want=$3 out status=0 needle
+    shift 3
+    local -a args=(--root "$work/$name")
+    if [ "$mode" = index ]; then
+        args+=(--index)
+    fi
+    out=$(timeout 20 python3 -I "$check" "${args[@]}" 2>&1) || status=$?
+    for needle in "$@"; do
+        check_case "$name/$mode" "$want" "$status" "$needle" "$out"
+    done
+}
+
+# fixture NAME SETUP: a fresh repository NAME under $work, prepared by SETUP inside it.
+fixture() {
+    new_repo "$work/$1"
+    (cd "$work/$1" && "$2")
+}
+
+# Index snapshot drifts (a.yml staged on $B, b.yml staged on $A); the working tree has both on $B.
+setup_index_drift() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track b.yml "image: postgres:18-alpine@sha256:$A"
+    git commit -q -m base
+    track a.yml "image: postgres:18-alpine@sha256:$B"
+    printf '%s\n' "image: postgres:18-alpine@sha256:$B" > b.yml
+}
+
+# Index snapshot stays aligned on $A; b.yml holds unstaged drift on $B.
+setup_index_aligned() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track b.yml "image: postgres:18-alpine@sha256:$A"
+    git commit -q -m base
+    printf '%s\n' "image: postgres:18-alpine@sha256:$B" > b.yml
+}
+
+# OCI path components with repeated separators (`__`, `--`), each pinned to two digests.
+setup_repeated_separators() {
+    track a.yml "image: ghcr.io/o/foo__bar:1@sha256:$A"
+    track b.yml "image: ghcr.io/o/foo__bar:1@sha256:$B"
+    track c.yml "image: ghcr.io/o/foo--bar:1@sha256:$A"
+    track d.yml "image: ghcr.io/o/foo--bar:1@sha256:$B"
+}
+
+# A tracked symlink to an endless device is skipped, never read.
+setup_symlink_dev_zero() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    ln -s /dev/zero z.yml
+    git add z.yml
+}
+
+# A tracked symlink to a file outside the repository is not followed: its conflicting pin is no
+# repository pin.
+setup_symlink_outside() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    printf '%s\n' "image: postgres:18-alpine@sha256:$B" > "$work/outside.yml"
+    ln -s "$work/outside.yml" z.yml
+    git add z.yml
+}
+
+# Tracked text one byte past MAX_BYTES (4 MiB), no NUL byte: the check fails closed.
+setup_oversized_text() {
+    python3 -I -c 'from pathlib import Path; Path("big.txt").write_bytes(b"a\n" * 2097152 + b"a")'
+    git add big.txt
+}
+
+# The `":a" * n + "/"` line that made the old host lookahead quadratic, plus one pin.
+setup_linear_time() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    python3 -I -c 'from pathlib import Path; Path("long.txt").write_text(":a" * 500000 + "/\n", encoding="utf-8")'
+    git add long.txt
+}
+
+fixture index-drift setup_index_drift
+assert_mode index-drift index 3 \
+    "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
+    "  sha256:${A:0:12} b.yml:1" \
+    "  sha256:${B:0:12} a.yml:1"
+assert_mode index-drift worktree 0 "image_pin_check: ok"
+echo "ok   index-drift"
+
+fixture index-aligned setup_index_aligned
+assert_mode index-aligned index 0 "image_pin_check: ok"
+assert_mode index-aligned worktree 3 \
+    "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
+    "  sha256:${A:0:12} a.yml:1" \
+    "  sha256:${B:0:12} b.yml:1"
+echo "ok   index-aligned"
+
+fixture repeated-separators setup_repeated_separators
+assert_mode repeated-separators worktree 3 \
+    "image_pin_check: ghcr.io/o/foo__bar:1 is pinned to 2 digests" \
+    "image_pin_check: ghcr.io/o/foo--bar:1 is pinned to 2 digests"
+echo "ok   repeated-separators"
+
+fixture symlink-dev-zero setup_symlink_dev_zero
+assert_mode symlink-dev-zero worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
+assert_mode symlink-dev-zero index 0 "image_pin_check: ok (1 image tags across 1 pins)"
+echo "ok   symlink-dev-zero"
+
+fixture symlink-outside setup_symlink_outside
+assert_mode symlink-outside worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
+assert_mode symlink-outside index 0 "image_pin_check: ok (1 image tags across 1 pins)"
+echo "ok   symlink-outside"
+
+fixture oversized-text setup_oversized_text
+assert_mode oversized-text worktree 1 "error: big.txt: more than 4194304 bytes of text"
+echo "ok   oversized-text"
+
+fixture linear-time setup_linear_time
+assert_mode linear-time worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
+echo "ok   linear-time"
