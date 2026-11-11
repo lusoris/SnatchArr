@@ -311,8 +311,8 @@ setup_index_unmerged() {
     printf '100644 %s 2\tu.yml\n100644 %s 3\tu.yml\n' "$ours" "$theirs" | git update-index --index-info
 }
 
-# A 5 MiB binary file sorts first: the index scan keeps its first MAX_BYTES + 1 bytes, steps over
-# the rest and still reads the records after it (a.yml on $A, b.yml on $B).
+# A 5 MiB binary file sorts first: the index scan reads only its first MAX_BYTES + 1 bytes and
+# still reads every other blob (a.yml on $A, b.yml on $B).
 setup_oversized_binary() {
     python3 -I -c 'from pathlib import Path; Path("0big.bin").write_bytes(b"\0" + b"a" * (5 << 20))'
     git add 0big.bin
@@ -325,6 +325,57 @@ setup_crlf_lines() {
     printf 'services:\r\n  image: postgres:18-alpine@sha256:%s\r\n' "$A" > a.yml
     git add a.yml
     track b.yml "image: postgres:18-alpine@sha256:$B"
+}
+
+# A 3 MiB binary (streamed whole) and a 5 MiB binary (read up to MAX_BYTES + 1 bytes) next to
+# drift: run under a 1 MiB file-size limit, the index scan must store no blob in a file.
+setup_fsize_limit() {
+    python3 -I -c 'from pathlib import Path
+Path("0mid.bin").write_bytes(b"\0" + b"m" * (3 << 20))
+Path("0big.bin").write_bytes(b"\0" + b"b" * (5 << 20))'
+    git add 0mid.bin 0big.bin
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track b.yml "image: postgres:18-alpine@sha256:$B"
+}
+
+# A 5 MiB binary blob, written as a loose object whose compressed stream breaks after its first
+# 4.25 MiB: the index scan reads only MAX_BYTES + 1 bytes of it, so git never reaches the break.
+# The file is absent from the working tree (a.yml on $A, b.yml on $B).
+setup_tail_unread() {
+    local blob
+    blob=$(python3 -I -c 'import hashlib, sys, zlib
+from pathlib import Path
+body = b"\0" + b"t" * ((5 << 20) - 1)
+head = b"blob %d\0" % len(body)
+oid = hashlib.new(sys.argv[2], head + body).hexdigest()
+stream = zlib.compressobj()
+data = stream.compress(head + body[: (4 << 20) + (256 << 10)]) + stream.flush(zlib.Z_FULL_FLUSH) + b"\xff" * 64
+path = Path(sys.argv[1], "objects", oid[:2], oid[2:])
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_bytes(data)
+print(oid)' "$(git rev-parse --git-dir)" "$(git rev-parse --show-object-format)")
+    git update-index --add --cacheinfo "100644,$blob,0big.bin"
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track b.yml "image: postgres:18-alpine@sha256:$B"
+}
+
+# Text of exactly MAX_BYTES bytes holding one pin: within the bound, so both modes read it whole.
+setup_max_bytes_text() {
+    python3 -I -c 'import sys
+from pathlib import Path
+pin = "image: postgres:18-alpine@sha256:" + sys.argv[1] + "\n"
+rest = (4 << 20) - len(pin)
+Path("max.txt").write_text(pin + "a\n" * (rest // 2) + "a" * (rest % 2), encoding="ascii")' "$A"
+    git add max.txt
+}
+
+# m.yml is staged on a blob id whose object was never written: the index scan fails closed.
+setup_index_missing_blob() {
+    local blob
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    blob=$(printf '%s\n' "image: postgres:18-alpine@sha256:$B" | git hash-object --stdin)
+    git update-index --add --cacheinfo "100644,$blob,m.yml"
+    printf '%s\n' "$blob" > "$work/missing-blob.oid"
 }
 
 fixture index-drift setup_index_drift
@@ -424,6 +475,51 @@ for mode in index worktree; do
         "  sha256:${B:0:12} b.yml:1"
 done
 echo "ok   crlf-lines"
+
+fixture fsize-limit setup_fsize_limit
+(
+    ulimit -f 1024
+    assert_mode fsize-limit index 3 \
+        "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
+        "  sha256:${A:0:12} a.yml:1" \
+        "  sha256:${B:0:12} b.yml:1"
+)
+echo "ok   fsize-limit"
+
+fixture tail-unread setup_tail_unread
+for mode in index worktree; do
+    assert_mode tail-unread "$mode" 3 \
+        "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
+        "  sha256:${A:0:12} a.yml:1" \
+        "  sha256:${B:0:12} b.yml:1"
+done
+echo "ok   tail-unread"
+
+fixture max-bytes-text setup_max_bytes_text
+for mode in index worktree; do
+    assert_mode max-bytes-text "$mode" 0 "image_pin_check: ok (1 image tags across 1 pins)"
+done
+echo "ok   max-bytes-text"
+
+fixture index-missing-blob setup_index_missing_blob
+assert_mode index-missing-blob index 1 \
+    "error: git cat-file --batch-check: no blob record for $(cat "$work/missing-blob.oid")"
+assert_mode index-missing-blob worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
+echo "ok   index-missing-blob"
+
+# CI (.github/workflows/ci.yml) and `make workflows-verify` (Makefile) run both readers: the
+# working tree as checked out, and the index, where a working-tree-encoding file reads as its
+# staged blob (case index-encoding).
+repo_root=$(cd "$HERE/../.." && pwd)
+for wired in .github/workflows/ci.yml Makefile; do
+    for reader in '' ' --index'; do
+        if ! grep -q -E "python3 -I tools/ci/image_pin_check\\.py${reader}( &&|\$)" "$repo_root/$wired"; then
+            echo "FAIL wiring: $wired runs no 'python3 -I tools/ci/image_pin_check.py$reader'" >&2
+            exit 1
+        fi
+    done
+done
+echo "ok   wiring"
 
 # assert_bounded WANT NEEDLE SECONDS CMD...: `run_bounded SECONDS CMD...` must exit WANT with
 # NEEDLE in its captured output. run_bounded (test_lib.sh) passes the exit status through, maps

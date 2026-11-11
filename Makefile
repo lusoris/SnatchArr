@@ -696,6 +696,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/engine_pin_check.py
 	bash tools/ci/image_pin_check_test.sh
 	python3 -I tools/ci/image_pin_check.py
+	python3 -I tools/ci/image_pin_check.py --index
 	bash tools/ci/release_body_check_test.sh
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test

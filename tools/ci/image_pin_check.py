@@ -32,9 +32,14 @@ Renovate digest update of the live copies is never refused for leaving a record 
 Reading:
 - working tree: each tracked path is read as a regular file on disk. A path below a link,
   junction or other reparse point counts as missing, as git sees it (deleted), so a file
-  outside the tracked tree never enters the scan;
+  outside the tracked tree never enters the scan. Bytes are read as they are on disk, so a
+  `working-tree-encoding` file is not decoded; CI and `make workflows-verify` therefore run
+  both modes;
 - index: each stage-0 entry of mode 100644 or 100755 is read as its raw staged blob
-  (`git ls-files -s`, `git cat-file --batch`). Nothing is checked out, so no line-ending
+  (`git ls-files -s`). `git cat-file --batch-check` gives each blob's size first; blobs of at
+  most MAX_BYTES stream through one `git cat-file --batch` pipe, and a larger blob is read only
+  up to MAX_BYTES + 1 bytes before its git is stopped, so no blob is written to temporary
+  storage and the rest of a large blob is never read. Nothing is checked out, so no line-ending
   conversion, `working-tree-encoding` or smudge filter changes or fails the snapshot; links,
   submodules and unmerged stages hold no file content and are left out.
 
@@ -50,10 +55,12 @@ import stat
 import subprocess  # nosec B404  # runs only git with a fixed argument list, never a shell
 import sys
 import tempfile
+import threading
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import IO
+from typing import IO, cast
 
 MAX_FILES = 20000
 MAX_BYTES = 4 << 20
@@ -78,7 +85,8 @@ RECORD_MARKER = re.compile(r"\s*(?:#|//|<!--)\s*image-pin-check: record\b")
 
 # Index modes that hold file content: regular and executable files (no link 120000, no submodule 160000).
 REGULAR_MODES = frozenset({"100644", "100755"})
-# `git cat-file --batch` record header of a blob: SHA-1 or SHA-256 object id, type, size.
+# `git cat-file --batch` record header and `--batch-check` line of a blob: SHA-1 or SHA-256
+# object id, type, size.
 BATCH_HEADER = re.compile(rb"(?P<oid>[0-9a-f]{40}|[0-9a-f]{64}) blob (?P<size>[0-9]{1,20})\n")
 
 # (canonical name, tag, record file) -> {digest: [file:line, ...]}
@@ -133,37 +141,94 @@ def staged_blobs(root: Path) -> list[tuple[str, str]]:
     return blobs
 
 
-def batch_blob(out: IO[bytes], oid: str) -> bytes:
-    """Read the next `git cat-file --batch` record from OUT, which must be blob OID.
+@contextmanager
+def request_file(oids: list[str]) -> Iterator[IO[bytes]]:
+    """Yield a rewound temporary file listing OIDS one per line, as `git cat-file` batch input."""
+    with tempfile.TemporaryFile() as request:
+        request.write("".join(f"{oid}\n" for oid in oids).encode("ascii"))
+        request.seek(0)
+        yield request
 
-    Keep at most MAX_BYTES + 1 bytes of its content, as read_regular() does, and step over the
-    rest and the closing LF.
+
+def record_size(header: bytes, oid: str, mode: str) -> int:
+    """Return the size in HEADER, a `git cat-file MODE` record header that must name blob OID."""
+    match = BATCH_HEADER.fullmatch(header)
+    if match is None or match.group("oid").decode("ascii") != oid:
+        raise ValueError(f"git cat-file {mode}: no blob record for {oid}")
+    return int(match.group("size"))
+
+
+def blob_sizes(root: Path, oids: list[str]) -> list[int]:
+    """Return the size of each blob in OIDS, in order, from one `git cat-file --batch-check` call."""
+    with request_file(oids) as request:
+        lines = run_git(root, ["cat-file", "--batch-check"], stdin=request).splitlines(keepends=True)
+    if len(lines) != len(oids):
+        raise ValueError(f"git cat-file --batch-check: {len(lines)} records for {len(oids)} blobs")
+    return [record_size(line, oid, "--batch-check") for line, oid in zip(lines, oids, strict=True)]
+
+
+@contextmanager
+def git_stream(root: Path, args: list[str], stdin: IO[bytes] | None = None) -> Iterator[IO[bytes]]:
+    """Run git ARGS in ROOT and yield its stdout pipe; git is killed on exit or after GIT_TIMEOUT.
+
+    The reader takes only what it needs from the pipe, so no output is stored in full; a failing
+    git or the deadline shows up to the reader as a record cut short.
     """
-    header = BATCH_HEADER.fullmatch(out.readline(160))
-    if header is None or header.group("oid").decode("ascii") != oid:
-        raise ValueError(f"git cat-file --batch: no blob record for {oid}")
-    size = int(header.group("size"))
-    data = out.read(min(size, MAX_BYTES + 1))
-    out.seek(size - len(data), os.SEEK_CUR)
-    if out.read(1) != b"\n":
-        raise ValueError(f"git cat-file --batch: record of {oid} is cut short")
+    with subprocess.Popen(  # nosec B603  # fixed git argv, no shell
+        ["git", *args],
+        cwd=root,
+        stdin=subprocess.DEVNULL if stdin is None else stdin,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    ) as proc:
+        deadline = threading.Timer(GIT_TIMEOUT, proc.kill)
+        deadline.start()
+        try:
+            yield cast("IO[bytes]", proc.stdout)  # stdout=PIPE always opens it
+        finally:
+            deadline.cancel()
+            proc.kill()
+
+
+def batch_blob(out: IO[bytes], oid: str) -> bytes:
+    """Read the next `git cat-file --batch` record from OUT: blob OID of at most MAX_BYTES bytes."""
+    size = record_size(out.readline(160), oid, "--batch")
+    if size > MAX_BYTES:
+        raise ValueError(f"git cat-file --batch: blob {oid} holds {size} bytes, over {MAX_BYTES}")
+    data = out.read(size)
+    if len(data) != size or out.read(1) != b"\n":
+        raise ValueError(f"git cat-file --batch: record of {oid} is cut short (git failed or passed {GIT_TIMEOUT} s)")
+    return data
+
+
+def blob_prefix(root: Path, oid: str) -> bytes:
+    """Read the first MAX_BYTES + 1 bytes of blob OID, which holds more, then stop its git.
+
+    The rest of the blob is never read, so its size costs neither time nor storage.
+    """
+    with git_stream(root, ["cat-file", "blob", oid]) as out:
+        data = out.read(MAX_BYTES + 1)
+    if len(data) != MAX_BYTES + 1:
+        raise ValueError(f"git cat-file blob {oid}: cut short at {len(data)} bytes (git failed or passed {GIT_TIMEOUT} s)")
     return data
 
 
 def index_contents(root: Path) -> Iterator[Content]:
     """Yield each staged regular file of ROOT's git index with the start of its raw blob.
 
-    `git cat-file --batch` writes the blobs to a temporary file, so the call is bounded by
-    GIT_TIMEOUT and no pipe can fill; no checkout, filter or conversion takes part.
+    Blobs of at most MAX_BYTES stream through one `git cat-file --batch` pipe, larger ones follow
+    through blob_prefix(); no checkout, filter or conversion takes part. GIT_TIMEOUT bounds the
+    whole stream, the scan of its blobs included.
     """
     blobs = staged_blobs(root)
-    with tempfile.TemporaryFile() as request, tempfile.TemporaryFile() as out:
-        request.write("".join(f"{oid}\n" for _, oid in blobs).encode("ascii"))
-        request.seek(0)
-        run_git(root, ["cat-file", "--batch"], stdin=request, stdout=out)
-        out.seek(0)
-        for path, oid in blobs:
+    sizes = blob_sizes(root, [oid for _, oid in blobs])
+    small = [blob for blob, size in zip(blobs, sizes, strict=True) if size <= MAX_BYTES]
+    large = [blob for blob, size in zip(blobs, sizes, strict=True) if size > MAX_BYTES]
+    with request_file([oid for _, oid in small]) as request, git_stream(root, ["cat-file", "--batch"], request) as out:
+        for path, oid in small:
             yield path, batch_blob(out, oid)
+    for path, oid in large:
+        yield path, blob_prefix(root, oid)
 
 
 def plain_parents(root: Path, rel: str) -> bool:
