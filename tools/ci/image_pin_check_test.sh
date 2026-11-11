@@ -258,6 +258,75 @@ Path("long.txt").write_text(":a" * 500000 + "/\n" + "a-" * 500000 + "\n" + "${a:
     git add long.txt
 }
 
+# A tracked directory replaced by a link to an untracked directory: git sees a/x.yml as deleted,
+# so the working-tree scan must not read the conflicting pin behind the link; the index keeps
+# both staged copies.
+setup_symlink_parent() {
+    track a/x.yml "image: postgres:18-alpine@sha256:$A"
+    track b/x.yml "image: postgres:18-alpine@sha256:$A"
+    mkdir outside
+    printf '%s\n' "image: postgres:18-alpine@sha256:$B" > outside/x.yml
+    rm -r a
+    ln -s outside a
+}
+
+# A tracked link whose target text is itself a pin: a link holds no file content in either mode.
+setup_symlink_target_pin() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    ln -s "postgres:18-alpine@sha256:$B" z.yml
+    git add z.yml
+}
+
+# b.txt is staged on $B under a working-tree-encoding attribute: the index scan reads the UTF-8
+# blob as staged, where a checkout would re-encode it to UTF-16 and hide the pin.
+setup_index_encoding() {
+    local blob
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track .gitattributes '*.txt working-tree-encoding=UTF-16LE'
+    blob=$(printf '%s\n' "image: postgres:18-alpine@sha256:$B" | git hash-object -w --stdin)
+    git update-index --add --cacheinfo "100644,$blob,b.txt"
+}
+
+# A required smudge filter that fails: a checkout of b.yml fails, the staged blob reads as is.
+setup_index_smudge_required() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track b.yml "image: postgres:18-alpine@sha256:$A"
+    track .gitattributes 'b.yml filter=broken'
+    git config filter.broken.smudge false
+    git config filter.broken.required true
+}
+
+# A submodule entry (mode 160000) names a commit, not a blob: the index scan leaves it out.
+setup_index_gitlink() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    git update-index --add --cacheinfo "160000,$(printf '%040d' 0 | tr 0 c),sub"
+}
+
+# Unmerged stages 2 and 3 of u.yml on $A and $B (a merge conflict): no stage-0 file, left out.
+setup_index_unmerged() {
+    local ours theirs
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    ours=$(printf '%s\n' "image: postgres:18-alpine@sha256:$A" | git hash-object -w --stdin)
+    theirs=$(printf '%s\n' "image: postgres:18-alpine@sha256:$B" | git hash-object -w --stdin)
+    printf '100644 %s 2\tu.yml\n100644 %s 3\tu.yml\n' "$ours" "$theirs" | git update-index --index-info
+}
+
+# A 5 MiB binary file sorts first: the index scan keeps its first MAX_BYTES + 1 bytes, steps over
+# the rest and still reads the records after it (a.yml on $A, b.yml on $B).
+setup_oversized_binary() {
+    python3 -I -c 'from pathlib import Path; Path("0big.bin").write_bytes(b"\0" + b"a" * (5 << 20))'
+    git add 0big.bin
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track b.yml "image: postgres:18-alpine@sha256:$B"
+}
+
+# CRLF line ends, staged as written: the pin on line 2 of a.yml keeps its line number.
+setup_crlf_lines() {
+    printf 'services:\r\n  image: postgres:18-alpine@sha256:%s\r\n' "$A" > a.yml
+    git add a.yml
+    track b.yml "image: postgres:18-alpine@sha256:$B"
+}
+
 fixture index-drift setup_index_drift
 assert_mode index-drift index 3 \
     "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
@@ -299,11 +368,62 @@ echo "ok   symlink-outside"
 
 fixture oversized-text setup_oversized_text
 assert_mode oversized-text worktree 1 "error: big.txt: more than 4194304 bytes of text"
+assert_mode oversized-text index 1 "error: big.txt: more than 4194304 bytes of text"
 echo "ok   oversized-text"
 
 fixture linear-time setup_linear_time
 assert_mode linear-time worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
 echo "ok   linear-time"
+
+fixture symlink-parent setup_symlink_parent
+assert_mode symlink-parent worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
+assert_mode symlink-parent index 0 "image_pin_check: ok (1 image tags across 2 pins)"
+echo "ok   symlink-parent"
+
+fixture symlink-target-pin setup_symlink_target_pin
+assert_mode symlink-target-pin worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
+assert_mode symlink-target-pin index 0 "image_pin_check: ok (1 image tags across 1 pins)"
+echo "ok   symlink-target-pin"
+
+fixture index-encoding setup_index_encoding
+assert_mode index-encoding index 3 \
+    "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
+    "  sha256:${A:0:12} a.yml:1" \
+    "  sha256:${B:0:12} b.txt:1"
+assert_mode index-encoding worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
+echo "ok   index-encoding"
+
+fixture index-smudge-required setup_index_smudge_required
+assert_mode index-smudge-required index 0 "image_pin_check: ok (1 image tags across 2 pins)"
+assert_mode index-smudge-required worktree 0 "image_pin_check: ok (1 image tags across 2 pins)"
+echo "ok   index-smudge-required"
+
+fixture index-gitlink setup_index_gitlink
+assert_mode index-gitlink index 0 "image_pin_check: ok (1 image tags across 1 pins)"
+assert_mode index-gitlink worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
+echo "ok   index-gitlink"
+
+fixture index-unmerged setup_index_unmerged
+assert_mode index-unmerged index 0 "image_pin_check: ok (1 image tags across 1 pins)"
+assert_mode index-unmerged worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
+echo "ok   index-unmerged"
+
+fixture oversized-binary setup_oversized_binary
+for mode in index worktree; do
+    assert_mode oversized-binary "$mode" 3 \
+        "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
+        "  sha256:${A:0:12} a.yml:1" \
+        "  sha256:${B:0:12} b.yml:1"
+done
+echo "ok   oversized-binary"
+
+fixture crlf-lines setup_crlf_lines
+for mode in index worktree; do
+    assert_mode crlf-lines "$mode" 3 \
+        "  sha256:${A:0:12} a.yml:2" \
+        "  sha256:${B:0:12} b.yml:1"
+done
+echo "ok   crlf-lines"
 
 # assert_bounded WANT NEEDLE SECONDS CMD...: `run_bounded SECONDS CMD...` must exit WANT with
 # NEEDLE in its captured output. run_bounded (test_lib.sh) passes the exit status through, maps

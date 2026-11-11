@@ -29,6 +29,15 @@ Record files: a file holding a comment line `image-pin-check: record` (after `#`
 verified test matrix. Its pins are compared only with pins in other record files, so a
 Renovate digest update of the live copies is never refused for leaving a record behind.
 
+Reading:
+- working tree: each tracked path is read as a regular file on disk. A path below a link,
+  junction or other reparse point counts as missing, as git sees it (deleted), so a file
+  outside the tracked tree never enters the scan;
+- index: each stage-0 entry of mode 100644 or 100755 is read as its raw staged blob
+  (`git ls-files -s`, `git cat-file --batch`). Nothing is checked out, so no line-ending
+  conversion, `working-tree-encoding` or smudge filter changes or fails the snapshot; links,
+  submodules and unmerged stages hold no file content and are left out.
+
 Exit 0 = ok, 1 = input error, 3 = refused.
 """
 
@@ -42,7 +51,9 @@ import subprocess  # nosec B404  # runs only git with a fixed argument list, nev
 import sys
 import tempfile
 from collections import defaultdict
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import IO
 
 MAX_FILES = 20000
 MAX_BYTES = 4 << 20
@@ -65,44 +76,113 @@ IMAGE_PIN = re.compile(
 )
 RECORD_MARKER = re.compile(r"\s*(?:#|//|<!--)\s*image-pin-check: record\b")
 
+# Index modes that hold file content: regular and executable files (no link 120000, no submodule 160000).
+REGULAR_MODES = frozenset({"100644", "100755"})
+# `git cat-file --batch` record header of a blob: SHA-1 or SHA-256 object id, type, size.
+BATCH_HEADER = re.compile(rb"(?P<oid>[0-9a-f]{40}|[0-9a-f]{64}) blob (?P<size>[0-9]{1,20})\n")
+
 # (canonical name, tag, record file) -> {digest: [file:line, ...]}
 PinMap = dict[tuple[str, str, bool], dict[str, list[str]]]
+# (repository path, first MAX_BYTES + 1 bytes of its content, or None when it holds no file)
+Content = tuple[str, bytes | None]
 
 
-def list_tracked_paths(root: Path) -> list[str]:
-    """List tracked repository paths under ROOT via git ls-files, bounded by MAX_FILES."""
+def run_git(root: Path, args: list[str], stdin: IO[bytes] | None = None, stdout: IO[bytes] | None = None) -> bytes:
+    """Run git ARGS in ROOT under GIT_TIMEOUT and return its stdout (b"" when STDOUT takes it).
+
+    A failing git raises ValueError with its stderr, so main() reports it and exits 1.
+    """
     proc = subprocess.run(  # nosec B603  # fixed git argv, no shell
-        ["git", "ls-files", "-z"],
+        ["git", *args],
         cwd=root,
-        capture_output=True,
+        stdin=stdin,
+        stdout=subprocess.PIPE if stdout is None else stdout,
+        stderr=subprocess.PIPE,
         check=False,
         timeout=GIT_TIMEOUT,
     )
     if proc.returncode != 0:
         detail = proc.stderr.decode("utf-8", errors="replace").strip()
-        raise ValueError(f"git ls-files failed in {root}: {detail}")
-    entries = [item for item in proc.stdout.decode("utf-8", "surrogateescape").split("\0") if item]
+        raise ValueError(f"git {args[0]} failed in {root}: {detail}")
+    return proc.stdout or b""
+
+
+def git_entries(root: Path, args: list[str]) -> list[str]:
+    """Split the NUL-separated output of git ARGS in ROOT into entries, bounded by MAX_FILES."""
+    out = run_git(root, args).decode("utf-8", "surrogateescape")
+    entries = [item for item in out.split("\0") if item]
     if len(entries) > MAX_FILES:
         raise ValueError(f"{len(entries)} tracked files exceed the bound of {MAX_FILES}")
     return entries
 
 
-def checkout_index(root: Path, dest: Path) -> None:
-    """Materialize every git index entry of ROOT into DEST via git checkout-index.
+def staged_blobs(root: Path) -> list[tuple[str, str]]:
+    """List `(path, blob id)` of each stage-0 entry of mode 100644 or 100755 in ROOT's git index.
 
-    `-a` alone leaves out entries with the skip-worktree bit (sparse checkout), so
-    `--ignore-skip-worktree-bits` keeps them in the snapshot.
+    `git ls-files -s` lists entries with the skip-worktree bit (sparse checkout) as well.
     """
-    proc = subprocess.run(  # nosec B603  # fixed git argv, no shell
-        ["git", "checkout-index", "-a", "--ignore-skip-worktree-bits", f"--prefix={dest}/"],
-        cwd=root,
-        capture_output=True,
-        check=False,
-        timeout=GIT_TIMEOUT,
-    )
-    if proc.returncode != 0:
-        detail = proc.stderr.decode("utf-8", errors="replace").strip()
-        raise ValueError(f"git checkout-index failed in {root}: {detail}")
+    blobs = []
+    for entry in git_entries(root, ["ls-files", "-s", "-z"]):
+        meta, _, path = entry.partition("\t")
+        fields = meta.split(" ")
+        if len(fields) != 3 or not path:
+            raise ValueError(f"git ls-files -s: unexpected entry {entry!r}")
+        mode, oid, stage = fields
+        if stage == "0" and mode in REGULAR_MODES:
+            blobs.append((path, oid))
+    return blobs
+
+
+def batch_blob(out: IO[bytes], oid: str) -> bytes:
+    """Read the next `git cat-file --batch` record from OUT, which must be blob OID.
+
+    Keep at most MAX_BYTES + 1 bytes of its content, as read_regular() does, and step over the
+    rest and the closing LF.
+    """
+    header = BATCH_HEADER.fullmatch(out.readline(160))
+    if header is None or header.group("oid").decode("ascii") != oid:
+        raise ValueError(f"git cat-file --batch: no blob record for {oid}")
+    size = int(header.group("size"))
+    data = out.read(min(size, MAX_BYTES + 1))
+    out.seek(size - len(data), os.SEEK_CUR)
+    if out.read(1) != b"\n":
+        raise ValueError(f"git cat-file --batch: record of {oid} is cut short")
+    return data
+
+
+def index_contents(root: Path) -> Iterator[Content]:
+    """Yield each staged regular file of ROOT's git index with the start of its raw blob.
+
+    `git cat-file --batch` writes the blobs to a temporary file, so the call is bounded by
+    GIT_TIMEOUT and no pipe can fill; no checkout, filter or conversion takes part.
+    """
+    blobs = staged_blobs(root)
+    with tempfile.TemporaryFile() as request, tempfile.TemporaryFile() as out:
+        request.write("".join(f"{oid}\n" for _, oid in blobs).encode("ascii"))
+        request.seek(0)
+        run_git(root, ["cat-file", "--batch"], stdin=request, stdout=out)
+        out.seek(0)
+        for path, oid in blobs:
+            yield path, batch_blob(out, oid)
+
+
+def plain_parents(root: Path, rel: str) -> bool:
+    """Tell whether each directory between ROOT and REL is a plain directory.
+
+    A link, junction or other reparse point is refused, as git refuses a path beyond a
+    symbolic link; ROOT itself is taken as given.
+    """
+    parent = root
+    for part in rel.split("/")[:-1]:
+        parent = parent / part
+        try:
+            info = os.lstat(parent)
+        except (FileNotFoundError, NotADirectoryError):
+            return False
+        reparse = getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        if reparse or not stat.S_ISDIR(info.st_mode):
+            return False
+    return True
 
 
 def read_regular(path: Path) -> bytes | None:
@@ -125,9 +205,17 @@ def read_regular(path: Path) -> bytes | None:
         return handle.read(MAX_BYTES + 1)
 
 
-def file_lines(path: Path, rel: str) -> list[str]:
-    """Read UTF-8 text lines from regular file PATH; skip missing, non-regular or binary files."""
-    raw = read_regular(path)
+def worktree_contents(root: Path) -> Iterator[Content]:
+    """Yield each tracked path of ROOT with the start of its working-tree file.
+
+    The content is None for a path that is missing, no regular file, or below a link.
+    """
+    for rel in git_entries(root, ["ls-files", "-z"]):
+        yield rel, read_regular(root / rel) if plain_parents(root, rel) else None
+
+
+def text_lines(raw: bytes | None, rel: str) -> list[str]:
+    """Decode RAW, the first MAX_BYTES + 1 bytes of REL, into lines; [] when absent or binary."""
     if raw is None or b"\0" in raw:
         return []
     if len(raw) > MAX_BYTES:
@@ -145,11 +233,11 @@ def canonical_name(name: str) -> str:
     return name if "/" in name else f"library/{name}"
 
 
-def collect_pins(root: Path, paths: list[str]) -> PinMap:
-    """Map each `(canonical name, tag, record file)` in PATHS under ROOT to its digest locations."""
+def collect_pins(contents: Iterable[Content]) -> PinMap:
+    """Map each `(canonical name, tag, record file)` in CONTENTS to its digest locations."""
     found: PinMap = defaultdict(lambda: defaultdict(list))
-    for rel in paths:
-        lines = file_lines(root / rel, rel)
+    for rel, raw in contents:
+        lines = text_lines(raw, rel)
         record = any(RECORD_MARKER.match(line) for line in lines)
         for lineno, line in enumerate(lines, 1):
             for match in IMAGE_PIN.finditer(line):
@@ -160,13 +248,7 @@ def collect_pins(root: Path, paths: list[str]) -> PinMap:
 
 def load_pins(root: Path, *, index: bool = False) -> PinMap:
     """Collect image pins from ROOT's git index (when INDEX is set) or working tree."""
-    paths = list_tracked_paths(root)
-    if not index:
-        return collect_pins(root, paths)
-    with tempfile.TemporaryDirectory() as tmp:
-        dest = Path(tmp).resolve()
-        checkout_index(root, dest)
-        return collect_pins(dest, paths)
+    return collect_pins(index_contents(root) if index else worktree_contents(root))
 
 
 def check(root: Path, *, index: bool = False) -> int:
