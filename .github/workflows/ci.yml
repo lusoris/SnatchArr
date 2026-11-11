@@ -73,6 +73,9 @@ jobs:
       # The devcontainer installs the engine at a literal ref; it must be the PRAETOR_REF pin below.
       - name: Every literal Praetor ref equals the engine pin, after its planted cases
         run: bash tools/ci/engine_pin_check_test.sh && python3 -I tools/ci/engine_pin_check.py
+      # CI services, scripts and testcontainers pin one image tag in several files; all name one digest.
+      - name: Every image tag pinned in several places uses one digest, after its planted cases
+        run: bash tools/ci/image_pin_check_test.sh && python3 -I tools/ci/image_pin_check.py
       - name: The release dogfood gate and pass recorder refuse their planted cases
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases
@@ -498,7 +501,7 @@ jobs:
     services:
       # The Postgres the integration tests pin, through the Docker Hub mirror.
       postgres: &postgres
-        image: mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        image: mirror.gcr.io/library/postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
         env:
           POSTGRES_PASSWORD: smoke
         options: >-
