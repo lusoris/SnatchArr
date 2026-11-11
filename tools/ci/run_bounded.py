@@ -10,9 +10,11 @@ Exit status: that of CMD; 124 when SECONDS pass before CMD ends; 128+N when sign
 
 On POSIX, CMD runs in a session of its own. At the deadline that whole process group gets
 SIGKILL, so no descendant keeps a captured stdout open past SECONDS, and INT, TERM or HUP sent
-to this process reach the group as well. A descendant that starts a session of its own leaves
-the group, and descendants still running after CMD exits are left alone. On Windows only CMD
-itself is killed. tools/ci/test_lib.sh wraps this script as run_bounded.
+to this process reach the group as well. The handlers are in place before CMD starts: a signal
+that arrives while CMD starts is held and sent once CMD runs, and when CMD cannot start the
+held signal is dropped with it (exit 126 or 127). A descendant that starts a session of its own
+leaves the group, and descendants still running after CMD exits are left alone. On Windows only
+CMD itself is killed. tools/ci/test_lib.sh wraps this script as run_bounded.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import os
 import signal
 import subprocess  # nosec B404  # runs the caller's argument list, never a shell
 import sys
+from types import FrameType
 
 GROUP = hasattr(os, "killpg")
 FORWARDED = ("SIGINT", "SIGTERM", "SIGHUP")
@@ -72,6 +75,38 @@ def start(cmd: list[str]) -> subprocess.Popen[bytes] | int:
         return 126
 
 
+class Forwarder:
+    """Signal handler that sends INT, TERM or HUP on to the process group of the command.
+
+    It is installed before the command starts. A signal that arrives before the command's handle
+    exists is held, and attach() sends it on once the handle is recorded.
+    """
+
+    def __init__(self) -> None:
+        """Start with no command and no held signal."""
+        self.proc: subprocess.Popen[bytes] | None = None
+        self.held: list[int] = []
+
+    def __call__(self, signum: int, _frame: FrameType | None) -> None:
+        """Send signum to the command's process group, or hold it until attach()."""
+        if self.proc is None:
+            self.held.append(signum)
+        else:
+            stop(self.proc, signum)
+
+    def install(self) -> None:
+        """Make this the handler of each forwarded signal the platform defines."""
+        for name in FORWARDED:
+            if hasattr(signal, name):
+                signal.signal(getattr(signal, name), self)
+
+    def attach(self, proc: subprocess.Popen[bytes]) -> None:
+        """Record the started command, then send it each signal held while it started."""
+        self.proc = proc
+        while self.held:
+            stop(proc, self.held.pop(0))
+
+
 def main(argv: list[str]) -> int:
     """Run the command in argv under its deadline and return the exit status to report."""
     call = parse(argv)
@@ -79,12 +114,12 @@ def main(argv: list[str]) -> int:
         print("usage: run_bounded.py SECONDS CMD [ARG...] (SECONDS above 0)", file=sys.stderr)
         return 125
     seconds, cmd = call
+    forward = Forwarder()
+    forward.install()
     proc = start(cmd)
     if isinstance(proc, int):
         return proc
-    for name in FORWARDED:
-        if hasattr(signal, name):
-            signal.signal(getattr(signal, name), lambda signum, _frame: stop(proc, signum))
+    forward.attach(proc)
     try:
         return status(proc.wait(timeout=seconds))
     except subprocess.TimeoutExpired:

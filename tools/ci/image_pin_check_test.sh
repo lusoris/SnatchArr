@@ -331,14 +331,18 @@ printf 'echo no\n' > "$work/not-executable"
 assert_bounded 126 'not-executable: Permission denied' 5 "$work/not-executable"
 assert_bounded 127 'no-such-command: No such file or directory' 5 "$work/no-such-command"
 
-# assert_group_ended NAME BOUND WANT SCRIPT: runs `sh -c SCRIPT _ PIDFILE` under run_bounded
-# BOUND with stdout captured. SCRIPT starts a `sleep 15` descendant that holds that stdout and
-# writes its pid to PIDFILE. Wants exit WANT within 5 seconds and the descendant gone, which
-# holds only when run_bounded ends the whole process group.
+# assert_group_ended NAME BOUND WANT SCRIPT [RUNNER...]: runs `RUNNER BOUND sh -c SCRIPT _
+# PIDFILE` with stdout captured; RUNNER defaults to run_bounded. SCRIPT starts a `sleep 15`
+# descendant that holds that stdout and writes its pid to PIDFILE. Wants exit WANT within 5
+# seconds and the descendant gone, which holds only when run_bounded ends the whole group.
 assert_group_ended() {
     local name=$1 bound=$2 want=$3 script=$4 pidfile="$work/$1.pid" status=0 start elapsed out pid
+    shift 4
+    if [ "$#" -eq 0 ]; then
+        set -- run_bounded
+    fi
     start=$(date +%s)
-    out=$(run_bounded "$bound" sh -c "$script" _ "$pidfile") || status=$?
+    out=$("$@" "$bound" sh -c "$script" _ "$pidfile") || status=$?
     elapsed=$(($(date +%s) - start))
     check_case "run-bounded/$name" "$want" "$status" "" "$out"
     if [ "$elapsed" -gt 5 ]; then
@@ -360,4 +364,37 @@ assert_group_ended() {
 }
 assert_group_ended timeout-descendant 1 124 'sleep 15 & echo $! > "$1"; wait'
 assert_group_ended term-forwarded 10 143 'sleep 15 & echo $! > "$1"; kill -TERM $PPID; wait'
+# Boundary: a TERM that lands while run_bounded starts CMD, after the child exists but before
+# Popen returns its handle, must still end the group. The harness wraps subprocess.Popen: it
+# waits for the descendant's pid, then sends TERM to its own process before returning.
+cat > "$work/term-at-start.py" <<'EOF'
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+import run_bounded  # noqa: E402
+
+pidfile = Path(sys.argv[-1])
+real_popen = subprocess.Popen
+
+
+def popen(*args, **kwargs):
+    proc = real_popen(*args, **kwargs)
+    for _ in range(50):
+        if pidfile.is_file() and pidfile.read_text().strip():
+            break
+        time.sleep(0.1)
+    os.kill(os.getpid(), signal.SIGTERM)
+    return proc
+
+
+run_bounded.subprocess.Popen = popen
+sys.exit(run_bounded.main(sys.argv[2:]))
+EOF
+assert_group_ended term-at-start 10 143 'sleep 15 & echo $! > "$1"; wait' \
+    python3 -I "$work/term-at-start.py" "$HERE"
 echo "ok   run-bounded"
