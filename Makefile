@@ -20,12 +20,24 @@ SHELL := /bin/sh
 # resolves the value as one single-quoted word: it prints nothing for an absolute value, which
 # stays as it is, and fails when a relative value names no directory, which stops make before
 # any recipe runs. $(value) passes a `$` in the name on as it is; make would expand it.
+# A TMPDIR set on the make command line also reaches every sub-make through MAKEFLAGS, so a
+# `$(MAKE) -C api` would read the relative value from api/. The absolute value is appended to
+# MAKEOVERRIDES, which MAKEFLAGS references (GNU make manual, "Options/Recursion"), so the sub-make
+# reads it last. It is written the way make writes MAKEFLAGS: `\` as `\\`, a space or a tab after
+# a `\`, and `$` doubled twice, so the value the sub-make exports to its recipes keeps the `$`.
 ifneq ($(value TMPDIR),)
 TMPDIR_ABS := $(shell sh tools/ci/tmpdir_abs.sh '$(subst ','\'',$(value TMPDIR))')
 ifneq ($(.SHELLSTATUS),0)
 $(error tools/ci/tmpdir_abs.sh refused TMPDIR '$(value TMPDIR)' with exit $(.SHELLSTATUS))
 endif
 ifneq ($(TMPDIR_ABS),)
+ifeq ($(origin TMPDIR),command line)
+TMPDIR_NONE :=
+TMPDIR_SPACE := $(TMPDIR_NONE) $(TMPDIR_NONE)
+TMPDIR_TAB := $(shell printf '\t')
+TMPDIR_MAKEFLAG := $(subst $$,$$$$$$$$,$(subst $(TMPDIR_TAB),\$(TMPDIR_TAB),$(subst $(TMPDIR_SPACE),\$(TMPDIR_SPACE),$(subst \,\\,$(TMPDIR_ABS)))))
+MAKEOVERRIDES += TMPDIR=$(TMPDIR_MAKEFLAG)
+endif
 override TMPDIR := $(TMPDIR_ABS)
 export TMPDIR
 endif
