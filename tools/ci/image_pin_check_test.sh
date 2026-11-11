@@ -159,6 +159,15 @@ setup_index_aligned() {
     printf '%s\n' "image: postgres:18-alpine@sha256:$B" > b.yml
 }
 
+# Sparse checkout: b.yml is staged on $B with the skip-worktree bit and absent from the working
+# tree; the index snapshot must still hold it.
+setup_index_skip_worktree() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track b.yml "image: postgres:18-alpine@sha256:$B"
+    git update-index --skip-worktree b.yml
+    rm b.yml
+}
+
 # OCI path components with repeated separators (`__`, `--`), each pinned to two digests.
 setup_repeated_separators() {
     track a.yml "image: ghcr.io/o/foo__bar:1@sha256:$A"
@@ -211,6 +220,13 @@ assert_mode index-aligned worktree 3 \
     "  sha256:${A:0:12} a.yml:1" \
     "  sha256:${B:0:12} b.yml:1"
 echo "ok   index-aligned"
+
+fixture index-skip-worktree setup_index_skip_worktree
+assert_mode index-skip-worktree index 3 \
+    "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
+    "  sha256:${B:0:12} b.yml:1"
+assert_mode index-skip-worktree worktree 0 "image_pin_check: ok"
+echo "ok   index-skip-worktree"
 
 fixture repeated-separators setup_repeated_separators
 assert_mode repeated-separators worktree 3 \

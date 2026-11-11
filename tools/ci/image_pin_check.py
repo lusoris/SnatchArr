@@ -78,9 +78,13 @@ def list_tracked_paths(root: Path) -> list[str]:
 
 
 def checkout_index(root: Path, dest: Path) -> None:
-    """Materialize the git index of ROOT into DEST via git checkout-index."""
+    """Materialize every git index entry of ROOT into DEST via git checkout-index.
+
+    `-a` alone leaves out entries with the skip-worktree bit (sparse checkout), so
+    `--ignore-skip-worktree-bits` keeps them in the snapshot.
+    """
     proc = subprocess.run(  # nosec B603  # fixed git argv, no shell
-        ["git", "checkout-index", "-a", f"--prefix={dest}/"],
+        ["git", "checkout-index", "-a", "--ignore-skip-worktree-bits", f"--prefix={dest}/"],
         cwd=root,
         capture_output=True,
         check=False,
