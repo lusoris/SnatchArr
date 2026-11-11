@@ -8,6 +8,7 @@
 #   tools/ci/govulncheck_pinned.sh SCANNER [PATTERN...]
 #
 # Exit status: scanner status when pinned, 1 version mismatch, 2 usage or missing directive.
+# 129/130/143 = interrupted (HUP/INT/TERM), scanner stopped.
 # Cases: govulncheck_pinned_test.sh.
 # Platforms: POSIX sh, runs in CI on the ubuntu workflows job and on Linux maintainer hosts; macOS and Windows skipped: the repository's CI and landing run on Linux only.
 set -eu
@@ -30,10 +31,29 @@ if [ "$#" -eq 0 ]; then
   set -- ./...
 fi
 rc=0
-output="$(GOTOOLCHAIN="go$directive" "$SCANNER" -show version "$@" 2>&1)" || rc=$?
-printf '%s\n' "$output"
+# This script never changes directory, so a relative TMPDIR path stays valid.
+log="$(mktemp)"
+trap 'rm -f "$log"' 0
+pid=
+# stop_scan STATUS: stop and reap a running scan, then exit with STATUS.
+# shellcheck disable=SC2329 # invoked by the HUP, INT and TERM traps below
+stop_scan() {
+  # A scan that already exited cannot be signalled; a signalled one exits non-zero.
+  if [ -n "$pid" ] && kill "$pid" 2>/dev/null && ! wait "$pid" 2>/dev/null; then
+    : # expected: it ended on our signal
+  fi
+  exit "$1"
+}
+trap 'stop_scan 129' HUP
+trap 'stop_scan 130' INT
+trap 'stop_scan 143' TERM
+# Run in background so a signal to this shell alone stops and reaps the scan.
+GOTOOLCHAIN="go$directive" "$SCANNER" -show version "$@" >"$log" 2>&1 &
+pid=$!
+wait "$pid" || rc=$?
+cat "$log"
 # Keep the prefix so even a second empty Go header cannot disappear in command substitution.
-go_headers="$(printf '%s\n' "$output" | sed -n '/^Go: /p')"
+go_headers="$(sed -n '/^Go: /p' "$log")"
 go_seen="$(printf '%s\n' "$go_headers" | sed -n 's/^Go: //p')"
 if [ "$go_headers" != "Go: go$directive" ]; then
   printf "govulncheck_pinned: govulncheck read Go '%s', want 'go%s': a distro or GOEXPERIMENT build hides standard library vulnerabilities\n" "$go_seen" "$directive" >&2

@@ -141,7 +141,7 @@ GO_INSTALL_DIR = $(or $(shell go env GOBIN),$(firstword $(subst :, ,$(shell go e
 api-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over api/ on the go.mod Go release, version printed first
 	sh tools/ci/govulncheck_pinned_test.sh
 	cd api
-	sh ../tools/ci/govulncheck_pinned.sh "$(GO_INSTALL_DIR)/govulncheck"
+	exec sh ../tools/ci/govulncheck_pinned.sh "$(GO_INSTALL_DIR)/govulncheck"
 
 sqlc-install: ## Install sqlc at the tools/go/go.mod pin, the version go generate runs
 	cd tools/go
