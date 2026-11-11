@@ -8,12 +8,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -369,8 +369,9 @@ func TestRun_KeyNeverPrinted(t *testing.T) {
 
 // TestRun_Boundary covers the edges of the stdio bridge: a line of exactly
 // 1 MiB is forwarded, one byte more is refused with -32600, empty lines are
-// skipped, and a request that outlives the HTTP client timeout returns a
-// -32000 error carrying the request id, also when the run starts late.
+// skipped, and a request the server holds until the injected timeout returns
+// a -32000 error carrying the request id, also when the run starts late or
+// the dial is slow.
 func TestRun_Boundary(t *testing.T) {
 	t.Parallel()
 
@@ -501,31 +502,38 @@ func TestRun_Boundary(t *testing.T) {
 		}
 	})
 
-	// The request, not the whole run, carries the 50ms deadline: a run-wide
-	// deadline that short can expire before stdin is read on a loaded host.
+	// Trigger the timeout only after the handler holds the request; neither
+	// scheduling the run nor dialing the server should consume its deadline.
 	t.Run("server timeout returns error with id", func(t *testing.T) {
 		t.Parallel()
-		assertRequestTimeout(t, 0)
+		assertRequestTimeout(t, 0, 0)
 	})
 
 	t.Run("server timeout survives slow start", func(t *testing.T) {
 		t.Parallel()
-		assertRequestTimeout(t, 200*time.Millisecond)
+		assertRequestTimeout(t, 200*time.Millisecond, 0)
+	})
+
+	t.Run("server timeout survives slow dial", func(t *testing.T) {
+		t.Parallel()
+		assertRequestTimeout(t, 0, 200*time.Millisecond)
 	})
 }
 
 const timeoutInput = `{"jsonrpc":"2.0","id":"timeout-id","method":"slow"}` + "\n"
 
-// assertRequestTimeout runs one request against a server that never answers
-// in time and checks the JSON-RPC error keeps the request id. startDelay
-// passes between creating the run context and starting the run, standing in
-// for a host too loaded to schedule the run promptly.
-func assertRequestTimeout(t *testing.T, startDelay time.Duration) {
+// errHeldTimeout distinguishes cancellation after server arrival from the run backstop.
+var errHeldTimeout = fmt.Errorf("server held the request: %w", context.DeadlineExceeded)
+
+// assertRequestTimeout checks a deadline error keeps the request id. startDelay
+// simulates slow scheduling before the run; dialDelay delays transport forwarding.
+func assertRequestTimeout(t *testing.T, startDelay, dialDelay time.Duration) {
 	t.Helper()
 	release := make(chan struct{})
-	var reached atomic.Bool
+	reached := make(chan struct{})
+	var reachOnce sync.Once
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reached.Store(true)
+		reachOnce.Do(func() { close(reached) })
 		select {
 		case <-r.Context().Done():
 		case <-release:
@@ -546,13 +554,16 @@ func assertRequestTimeout(t *testing.T, startDelay time.Duration) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	client := &http.Client{Transport: srv.Client().Transport, Timeout: 50 * time.Millisecond}
+	transport := delayedTransport(srv.Client().Transport, dialDelay)
+	client := &http.Client{Transport: timeoutAfterReached(transport, reached)}
 
 	time.Sleep(startDelay)
 	var stdout, stderr bytes.Buffer
 	_ = RunWithClient(ctx, client, []string{"stdio"}, getenv, strings.NewReader(timeoutInput), &stdout, &stderr)
 
-	if !reached.Load() {
+	select {
+	case <-reached:
+	default:
 		t.Error("request never reached the test server, so the error is not a timeout")
 	}
 	if !strings.Contains(stdout.String(), `"timeout-id"`) {
@@ -561,6 +572,59 @@ func assertRequestTimeout(t *testing.T, startDelay time.Duration) {
 	if !strings.Contains(stdout.String(), `code":-32000`) {
 		t.Errorf("stdout %q does not contain code -32000", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), errHeldTimeout.Error()) {
+		t.Errorf("stdout %q does not contain %q", stdout.String(), errHeldTimeout.Error())
+	}
+}
+
+// testRoundTripper adapts a function to an HTTP transport.
+type testRoundTripper func(*http.Request) (*http.Response, error)
+
+// RoundTrip delegates a request to the adapted function.
+func (f testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+// timeoutAfterReached injects a deadline error once the server holds the request.
+// The parent deadline bounds a missing handler; joining also covers early errors.
+func timeoutAfterReached(base http.RoundTripper, reached <-chan struct{}) http.RoundTripper {
+	return testRoundTripper(func(req *http.Request) (*http.Response, error) {
+		ctx, cancel := context.WithCancelCause(req.Context())
+		done := make(chan struct{})
+		defer func() {
+			cancel(nil)
+			<-done
+		}()
+		go func() {
+			defer close(done)
+			select {
+			case <-reached:
+				cancel(errHeldTimeout)
+			case <-ctx.Done():
+			}
+		}()
+		return base.RoundTrip(req.WithContext(ctx))
+	})
+}
+
+// delayedTransport waits before forwarding a request, respecting cancellation.
+func delayedTransport(base http.RoundTripper, delay time.Duration) http.RoundTripper {
+	return testRoundTripper(func(req *http.Request) (*http.Response, error) {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-req.Context().Done():
+			if req.Body == nil {
+				return nil, context.Cause(req.Context())
+			}
+			if err := req.Body.Close(); err != nil {
+				return nil, err
+			}
+			return nil, context.Cause(req.Context())
+		case <-timer.C:
+			return base.RoundTrip(req)
+		}
+	})
 }
 
 func TestRun_OKResponseInvalidJSON(t *testing.T) {
