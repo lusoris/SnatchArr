@@ -157,9 +157,10 @@ rules:
               - pattern: 'http.Client{..., Timeout: time.Second / $D, ...}'
               - pattern: '($C : *http.Client).Timeout = time.Second / $D'
               - pattern: '($C : http.Client).Timeout = time.Second / $D'
+          # A divisor above 1e9 truncates to zero, which disables the timeout.
           - metavariable-comparison:
               metavariable: $D
-              comparison: int($D) > 1
+              comparison: int($D) > 1 and int($D) <= 1000000000
       - pattern: 'http.Client{..., Timeout: time.Millisecond, ...}'
       - pattern: 'http.Client{..., Timeout: time.Microsecond, ...}'
       - pattern: 'http.Client{..., Timeout: time.Nanosecond, ...}'

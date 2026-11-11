@@ -369,8 +369,9 @@ func TestRun_KeyNeverPrinted(t *testing.T) {
 
 // TestRun_Boundary covers the edges of the stdio bridge: a line of exactly
 // 1 MiB is forwarded, one byte more is refused with -32600, empty lines are
-// skipped, and a request that outlives the HTTP client timeout returns a
-// -32000 error carrying the request id, also when the run starts late.
+// skipped, and a request the server holds until the injected timeout returns
+// a -32000 error carrying the request id, also when the run starts late or
+// the dial is slow.
 func TestRun_Boundary(t *testing.T) {
 	t.Parallel()
 

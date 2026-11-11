@@ -378,6 +378,9 @@ func TestProcessRuns_BoundaryDeadline(t *testing.T) {
 	}
 }
 
+// TestEligibleFlagReachesCompleteRun checks that -eligible reaches the
+// CompleteRun request: a positive count and the zero boundary are sent,
+// and an absent flag leaves the field unset.
 func TestEligibleFlagReachesCompleteRun(t *testing.T) {
 	t.Parallel()
 	// Typed values, not new(uint32(7)): Semgrep's Go parser reports

@@ -259,3 +259,29 @@ func testDisabledNanosecondTimeouts(client *http.Client) {
 	// ok: test-subsecond-client-timeout
 	value.Timeout = time.Nanosecond * -1
 }
+
+// testDivisorTimeouts covers the divisor range: time.Second / 1e9 is 1 ns, a
+// larger divisor truncates to zero, and a negative one is non-positive; both
+// disable the timeout.
+func testDivisorTimeouts(client *http.Client) {
+	var value http.Client
+	// ruleid: test-subsecond-client-timeout
+	_ = http.Client{Timeout: time.Second / 1000000000}
+	// ruleid: test-subsecond-client-timeout
+	client.Timeout = time.Second / 1000000000
+	// ruleid: test-subsecond-client-timeout
+	value.Timeout = time.Second / 1000000000
+
+	// ok: test-subsecond-client-timeout
+	_ = http.Client{Timeout: time.Second / 1000000001}
+	// ok: test-subsecond-client-timeout
+	client.Timeout = time.Second / 1000000001
+	// ok: test-subsecond-client-timeout
+	value.Timeout = time.Second / 1000000001
+	// ok: test-subsecond-client-timeout
+	_ = http.Client{Timeout: time.Second / -2}
+	// ok: test-subsecond-client-timeout
+	client.Timeout = time.Second / -2
+	// ok: test-subsecond-client-timeout
+	value.Timeout = time.Second / -2
+}
