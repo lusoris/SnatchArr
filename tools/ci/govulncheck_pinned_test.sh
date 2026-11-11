@@ -14,6 +14,8 @@ set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/ci/test_lib.sh
 . "$HERE/test_lib.sh"
+# run_in changes into the module, so an inherited relative TMPDIR is resolved here first.
+case "${TMPDIR:-}" in '' | /*) ;; *) TMPDIR="$(cd "$TMPDIR" && pwd)"; export TMPDIR ;; esac
 WORK="$(mktemp -d)"
 guard_pid=
 scanner_pid=

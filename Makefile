@@ -136,9 +136,11 @@ govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
 # tools/ci/govulncheck_pinned.sh fails it unless that same scan reports exactly this release: a
 # distro build such as go1.27.3-X:nodwarf5 reports none of the standard-library advisories
 # go1.27.3 reports, so a local scan on it passed while CI failed. A toolchain that cannot be
-# fetched fails the target.
+# fetched fails the target. A relative TMPDIR is resolved at the repository root first, since
+# `cd api` would point it elsewhere; a TMPDIR that does not exist fails the target.
 GO_INSTALL_DIR = $(or $(shell go env GOBIN),$(firstword $(subst :, ,$(shell go env GOPATH)))/bin)
 api-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over api/ on the go.mod Go release, version printed first
+	case "$${TMPDIR:-}" in '' | /*) ;; *) TMPDIR="$$(cd "$$TMPDIR" && pwd)"; export TMPDIR ;; esac
 	sh tools/ci/govulncheck_pinned_test.sh
 	cd api
 	exec sh ../tools/ci/govulncheck_pinned.sh "$(GO_INSTALL_DIR)/govulncheck"
