@@ -34,17 +34,16 @@ check_case() {
   esac
 }
 
-# run_bounded SECONDS CMD...: runs CMD and kills it after SECONDS through
-# Python's subprocess timeout, so callers need no GNU timeout (absent on
-# stock macOS). Returns the exit status of CMD, 124 on timeout (as GNU
-# timeout does) and 128+N when signal N ends CMD.
+# run_bounded SECONDS CMD...: runs CMD through tools/ci/run_bounded.py, so
+# callers need no GNU timeout (absent on stock macOS). Returns the exit
+# status of CMD, 124 when SECONDS pass first (as GNU timeout does), 128+N
+# when signal N ends CMD, 125 on a usage error, 126 when CMD cannot be run
+# and 127 when it is not found. At the deadline the whole process group of
+# CMD is killed, so no descendant keeps a captured stdout open; the script's
+# docstring states the limits. Reads HERE (tools/ci), which every caller sets
+# before sourcing this lib; set -u fails a caller that does not.
 run_bounded() {
-  python3 -I -c 'import subprocess, sys
-try:
-    rc = subprocess.run(sys.argv[2:], timeout=float(sys.argv[1]), check=False).returncode
-except subprocess.TimeoutExpired:
-    rc = 124
-sys.exit(128 - rc if rc < 0 else rc)' "$@"
+  python3 -I "$HERE/run_bounded.py" "$@"
 }
 
 # new_repo DIR: initialize a throwaway git repository at DIR.

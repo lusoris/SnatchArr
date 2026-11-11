@@ -305,16 +305,59 @@ fixture linear-time setup_linear_time
 assert_mode linear-time worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
 echo "ok   linear-time"
 
-# run_bounded (test_lib.sh) passes the exit status through, maps a fatal signal N to 128+N and
-# ends an overrunning command with 124, so the linear-time bound holds without GNU timeout.
+# assert_bounded WANT NEEDLE SECONDS CMD...: `run_bounded SECONDS CMD...` must exit WANT with
+# NEEDLE in its captured output. run_bounded (test_lib.sh) passes the exit status through, maps
+# a fatal signal N to 128+N, ends an overrunning command with 124 and answers a bad call with
+# 125, 126 or 127, so the linear-time bound holds without GNU timeout.
 assert_bounded() {
-    local want=$1 status=0
-    shift
-    run_bounded "$@" || status=$?
-    check_case "run-bounded/$want" "$want" "$status" "" ""
+    local want=$1 needle=$2 status=0 out
+    shift 2
+    out=$(run_bounded "$@" 2>&1) || status=$?
+    check_case "run-bounded/$want $*" "$want" "$status" "$needle" "$out"
 }
-assert_bounded 0 5 true
-assert_bounded 3 5 sh -c 'exit 3'
-assert_bounded 143 5 sh -c 'kill -TERM $$'
-assert_bounded 124 1 sleep 10
+assert_bounded 0 '' 5 true
+assert_bounded 3 '' 5 sh -c 'exit 3'
+assert_bounded 143 '' 5 sh -c 'kill -TERM $$'
+assert_bounded 124 '' 1 sleep 10
+# Boundary: the smallest positive bound is a valid call; 0 and below are usage errors.
+assert_bounded 124 '' 0.001 sleep 5
+assert_bounded 125 'usage: run_bounded.py' 0 true
+assert_bounded 125 'usage: run_bounded.py' -1 true
+assert_bounded 125 'usage: run_bounded.py' nan true
+assert_bounded 125 'usage: run_bounded.py' inf true
+assert_bounded 125 'usage: run_bounded.py' x true
+assert_bounded 125 'usage: run_bounded.py' 5
+printf 'echo no\n' > "$work/not-executable"
+assert_bounded 126 'not-executable: Permission denied' 5 "$work/not-executable"
+assert_bounded 127 'no-such-command: No such file or directory' 5 "$work/no-such-command"
+
+# assert_group_ended NAME BOUND WANT SCRIPT: runs `sh -c SCRIPT _ PIDFILE` under run_bounded
+# BOUND with stdout captured. SCRIPT starts a `sleep 15` descendant that holds that stdout and
+# writes its pid to PIDFILE. Wants exit WANT within 5 seconds and the descendant gone, which
+# holds only when run_bounded ends the whole process group.
+assert_group_ended() {
+    local name=$1 bound=$2 want=$3 script=$4 pidfile="$work/$1.pid" status=0 start elapsed out pid
+    start=$(date +%s)
+    out=$(run_bounded "$bound" sh -c "$script" _ "$pidfile") || status=$?
+    elapsed=$(($(date +%s) - start))
+    check_case "run-bounded/$name" "$want" "$status" "" "$out"
+    if [ "$elapsed" -gt 5 ]; then
+        printf 'FAIL run-bounded/%s: returned after %ss, bound %ss\n' "$name" "$elapsed" "$bound" >&2
+        exit 1
+    fi
+    if [ ! -s "$pidfile" ]; then
+        printf 'FAIL run-bounded/%s: no descendant pid in %s\n' "$name" "$pidfile" >&2
+        exit 1
+    fi
+    pid=$(cat "$pidfile")
+    # A killed descendant stays a zombie until its new parent reaps it: allow up to 2 seconds.
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+        kill -0 "$pid" 2>/dev/null || return 0
+        sleep 0.1
+    done
+    printf 'FAIL run-bounded/%s: descendant %s still running\n' "$name" "$pid" >&2
+    exit 1
+}
+assert_group_ended timeout-descendant 1 124 'sleep 15 & echo $! > "$1"; wait'
+assert_group_ended term-forwarded 10 143 'sleep 15 & echo $! > "$1"; kill -TERM $PPID; wait'
 echo "ok   run-bounded"
