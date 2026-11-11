@@ -132,24 +132,16 @@ govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
 # api-verify, ci.yml and security.yml scan through this target, so all three run the same pinned
 # scanner and print its version (#161). It calls the binary govulncheck-install wrote, never the
 # PATH lookup: a developer's older govulncheck earlier on the PATH does not take its place.
-# The scan runs on the official Go release the go.mod directive names: a distro build such as
-# go1.27.3-X:nodwarf5 reports no standard-library advisories that go1.27.3 reports, so a local
-# scan on it passes while CI fails. A toolchain that cannot be fetched fails the target.
+# The scan runs on the official Go release the go.mod directive names, and
+# tools/ci/govulncheck_pinned.sh fails it unless that same scan reports exactly this release: a
+# distro build such as go1.27.3-X:nodwarf5 reports none of the standard-library advisories
+# go1.27.3 reports, so a local scan on it passed while CI failed. A toolchain that cannot be
+# fetched fails the target.
 GO_INSTALL_DIR = $(or $(shell go env GOBIN),$(firstword $(subst :, ,$(shell go env GOPATH)))/bin)
 api-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over api/ on the go.mod Go release, version printed first
-	go_version=$$(go list -m -f '{{.GoVersion}}')
-	version_log=$$(mktemp)
-	trap 'rm -f "$$version_log"' EXIT
-	trap 'exit 1' HUP INT TERM
+	sh tools/ci/govulncheck_pinned_test.sh
 	cd api
-	GOTOOLCHAIN="go$$go_version" "$(GO_INSTALL_DIR)/govulncheck" -version >"$$version_log"
-	cat "$$version_log"
-	go_seen=$$(sed -n 's/^Go: //p' "$$version_log")
-	if [ "$$go_seen" != "go$$go_version" ]; then
-	  printf "api-vuln: govulncheck reads Go '%s', want 'go%s': a distro or GOEXPERIMENT build hides standard library vulnerabilities\n" "$$go_seen" "$$go_version" >&2
-	  exit 1
-	fi
-	GOTOOLCHAIN="go$$go_version" "$(GO_INSTALL_DIR)/govulncheck" ./...
+	sh ../tools/ci/govulncheck_pinned.sh "$(GO_INSTALL_DIR)/govulncheck"
 
 sqlc-install: ## Install sqlc at the tools/go/go.mod pin, the version go generate runs
 	cd tools/go
