@@ -84,9 +84,10 @@ make_goal_case() {
   check_output "$name" "$want_rc" "$rc" "$want_out" "$needle"
 }
 
-# make_case / submake_case NAME WANT_RC WANT_OUT NEEDLE MAKEFILE CMD...: make_goal_case with the
-# show goal, or with the subshow goal.
+# make_case NAME WANT_RC WANT_OUT NEEDLE MAKEFILE CMD...: make_goal_case with the show goal.
 make_case() { make_goal_case show "$@"; }
+
+# submake_case NAME WANT_RC WANT_OUT NEEDLE MAKEFILE CMD...: make_goal_case with the subshow goal.
 submake_case() { make_goal_case subshow "$@"; }
 
 # Positive: one relative directory, printed as one absolute path.
