@@ -18,6 +18,7 @@ trap 'rm -rf "$work"' EXIT
 
 A=$(printf '%064d' 0 | tr 0 a)
 B=$(printf '%064d' 0 | tr 0 b)
+B_UPPER=$(printf '%s' "$B" | tr abcdef ABCDEF)
 
 # track PATH LINE...: write LINE... to PATH and stage it in the current test repository.
 track() {
@@ -94,7 +95,7 @@ setup_port_registry() {
 # setup_hex_boundary: 65-char hex and uppercase hex are not valid 64-lowercase-hex digests.
 setup_hex_boundary() {
     track a.yml "image: postgres:18-alpine@sha256:$A"
-    track b.yml "bad1: postgres:18-alpine@sha256:${B}f" "bad2: postgres:18-alpine@sha256:${B^^}"
+    track b.yml "bad1: postgres:18-alpine@sha256:${B}f" "bad2: postgres:18-alpine@sha256:$B_UPPER"
 }
 
 run_case aligned 0 setup_aligned "image_pin_check: ok"
@@ -122,7 +123,7 @@ check_case not-a-repo 1 "$status" "error: git ls-files failed" "$out"
 echo "ok   not-a-repo"
 
 # assert_mode NAME MODE WANT_RC NEEDLE...: run the check on fixture NAME over the working tree
-# (MODE worktree) or the git index (MODE index), bounded by timeout 20.
+# (MODE worktree) or the git index (MODE index), bounded to 20 seconds by run_bounded.
 assert_mode() {
     local name=$1 mode=$2 want=$3 out status=0 needle
     shift 3
@@ -130,7 +131,7 @@ assert_mode() {
     if [ "$mode" = index ]; then
         args+=(--index)
     fi
-    out=$(timeout 20 python3 -I "$check" "${args[@]}" 2>&1) || status=$?
+    out=$(run_bounded 20 python3 -I "$check" "${args[@]}" 2>&1) || status=$?
     for needle in "$@"; do
         check_case "$name/$mode" "$want" "$status" "$needle" "$out"
     done
@@ -251,3 +252,17 @@ echo "ok   oversized-text"
 fixture linear-time setup_linear_time
 assert_mode linear-time worktree 0 "image_pin_check: ok (1 image tags across 1 pins)"
 echo "ok   linear-time"
+
+# run_bounded (test_lib.sh) passes the exit status through, maps a fatal signal N to 128+N and
+# ends an overrunning command with 124, so the linear-time bound holds without GNU timeout.
+assert_bounded() {
+    local want=$1 status=0
+    shift
+    run_bounded "$@" || status=$?
+    check_case "run-bounded/$want" "$want" "$status" "" ""
+}
+assert_bounded 0 5 true
+assert_bounded 3 5 sh -c 'exit 3'
+assert_bounded 143 5 sh -c 'kill -TERM $$'
+assert_bounded 124 1 sleep 10
+echo "ok   run-bounded"
