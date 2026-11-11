@@ -11,11 +11,13 @@
 # Platforms: POSIX sh, runs in CI on the ubuntu workflows job and on Linux maintainer hosts; macOS and Windows skipped: the repository's CI and landing run on Linux only.
 set -eu
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+# CDPATH is cleared for each cd below: a CDPATH match makes cd print the directory, and the
+# command substitution would capture that line in front of the path pwd prints.
+HERE="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck source=tools/ci/test_lib.sh
 . "$HERE/test_lib.sh"
 # run_in changes into the module, so an inherited relative TMPDIR is resolved here first.
-case "${TMPDIR:-}" in '' | /*) ;; *) TMPDIR="$(cd "$TMPDIR" && pwd)"; export TMPDIR ;; esac
+case "${TMPDIR:-}" in '' | /*) ;; *) TMPDIR="$(CDPATH='' cd -- "$TMPDIR" && pwd)"; export TMPDIR ;; esac
 WORK="$(mktemp -d)"
 guard_pid=
 scanner_pid=

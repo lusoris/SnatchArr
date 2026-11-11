@@ -14,6 +14,18 @@ SHELL := /bin/sh
 .ONESHELL:
 .DEFAULT_GOAL := help
 
+# Recipes change directory (cd api, cd tools/go) while go, the C compiler under cgo and mktemp
+# write under TMPDIR, so a relative TMPDIR is made absolute here once, for every recipe and its
+# prerequisites. A TMPDIR that is not one existing path stops make before any recipe runs.
+ifneq ($(filter-out /%,$(TMPDIR)),)
+TMPDIR_ABS := $(realpath $(TMPDIR))
+ifneq ($(words $(TMPDIR_ABS)),1)
+$(error TMPDIR '$(TMPDIR)' is not one existing path)
+endif
+override TMPDIR := $(TMPDIR_ABS)
+export TMPDIR
+endif
+
 PRAETORCTL ?= praetorctl
 # golusoris' shared Makefile is consumed from the module cache (docs/ci-downstream.md); the
 # variables are recursively expanded so they resolve only when an api-* target runs.
@@ -136,11 +148,10 @@ govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
 # tools/ci/govulncheck_pinned.sh fails it unless that same scan reports exactly this release: a
 # distro build such as go1.27.3-X:nodwarf5 reports none of the standard-library advisories
 # go1.27.3 reports, so a local scan on it passed while CI failed. A toolchain that cannot be
-# fetched fails the target. A relative TMPDIR is resolved at the repository root first, since
-# `cd api` would point it elsewhere; a TMPDIR that does not exist fails the target.
+# fetched fails the target. The TMPDIR block at the top of this file has already made a relative
+# TMPDIR absolute, so the install's `cd`, the cases and `cd api` all write to the same directory.
 GO_INSTALL_DIR = $(or $(shell go env GOBIN),$(firstword $(subst :, ,$(shell go env GOPATH)))/bin)
 api-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over api/ on the go.mod Go release, version printed first
-	case "$${TMPDIR:-}" in '' | /*) ;; *) TMPDIR="$$(cd "$$TMPDIR" && pwd)"; export TMPDIR ;; esac
 	sh tools/ci/govulncheck_pinned_test.sh
 	cd api
 	exec sh ../tools/ci/govulncheck_pinned.sh "$(GO_INSTALL_DIR)/govulncheck"
