@@ -7,7 +7,8 @@ files (default) or git index snapshot (`--index`) that resolves to the same `(ca
 tag)` key must carry the same digest.
 
 Grammar (allow-list):
-- not preceded by `[A-Za-z0-9._/-]`;
+- not preceded by `[A-Za-z0-9._/-]`, or directly after a shell default operator `${NAME:-` or
+  `${NAME-` (`NAME` = `[A-Za-z_][A-Za-z0-9_]*`), as in `image: ${IMG:-postgres:18@sha256:...}`;
 - `name`: optional first component in host form (`[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?/`),
   followed by one or more `/`-separated path components
   `[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*` (OCI `distribution-spec` `spec.md` line 151 at commit
@@ -22,6 +23,11 @@ Canonical form:
   manifest digests);
 - prepend `library/` when the remaining name holds no `/`;
 - keep every other registry host intact (`ghcr.io/o/postgres` stays `ghcr.io/o/postgres`).
+
+Record files: a file holding a comment line `image-pin-check: record` (after `#`, `//` or
+`<!--`) records measured pins that no updater moves, such as an ADR verification table or a
+verified test matrix. Its pins are compared only with pins in other record files, so a
+Renovate digest update of the live copies is never refused for leaving a record behind.
 
 Exit 0 = ok, 1 = input error, 3 = refused.
 """
@@ -52,11 +58,15 @@ DOCKER_HUB_HOSTS = frozenset({
 HOST_PREFIX = r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?/"
 PATH_COMPONENT = r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
 IMAGE_PIN = re.compile(
-    r"(?<![A-Za-z0-9._/-])"
+    r"(?:\$\{[A-Za-z_][A-Za-z0-9_]*:?-|(?<![A-Za-z0-9._/-]))"
     rf"(?P<name>(?:{HOST_PREFIX})?{PATH_COMPONENT}(?:/{PATH_COMPONENT})*)"
     r":(?P<tag>[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})"
     r"@sha256:(?P<digest>[0-9a-f]{64})(?![0-9A-Fa-f])"
 )
+RECORD_MARKER = re.compile(r"\s*(?:#|//|<!--)\s*image-pin-check: record\b")
+
+# (canonical name, tag, record file) -> {digest: [file:line, ...]}
+PinMap = dict[tuple[str, str, bool], dict[str, list[str]]]
 
 
 def list_tracked_paths(root: Path) -> list[str]:
@@ -135,18 +145,20 @@ def canonical_name(name: str) -> str:
     return name if "/" in name else f"library/{name}"
 
 
-def collect_pins(root: Path, paths: list[str]) -> dict[tuple[str, str], dict[str, list[str]]]:
-    """Map each `(canonical name, tag)` in PATHS under ROOT to `{digest: [file:line, ...]}`."""
-    found: dict[tuple[str, str], dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+def collect_pins(root: Path, paths: list[str]) -> PinMap:
+    """Map each `(canonical name, tag, record file)` in PATHS under ROOT to its digest locations."""
+    found: PinMap = defaultdict(lambda: defaultdict(list))
     for rel in paths:
-        for lineno, line in enumerate(file_lines(root / rel, rel), 1):
+        lines = file_lines(root / rel, rel)
+        record = any(RECORD_MARKER.match(line) for line in lines)
+        for lineno, line in enumerate(lines, 1):
             for match in IMAGE_PIN.finditer(line):
-                key = (canonical_name(match.group("name")), match.group("tag"))
+                key = (canonical_name(match.group("name")), match.group("tag"), record)
                 found[key][match.group("digest")].append(f"{rel}:{lineno}")
     return found
 
 
-def load_pins(root: Path, *, index: bool = False) -> dict[tuple[str, str], dict[str, list[str]]]:
+def load_pins(root: Path, *, index: bool = False) -> PinMap:
     """Collect image pins from ROOT's git index (when INDEX is set) or working tree."""
     paths = list_tracked_paths(root)
     if not index:
@@ -162,19 +174,22 @@ def check(root: Path, *, index: bool = False) -> int:
     pins_by_key = load_pins(root, index=index)
     refused = 0
     total_refs = 0
-    for (canonical, tag), digests in sorted(pins_by_key.items()):
+    for (canonical, tag, record), digests in sorted(pins_by_key.items()):
         total_refs += sum(len(locs) for locs in digests.values())
         if len(digests) <= 1:
             continue
         refused += 1
-        print(f"image_pin_check: {canonical}:{tag} is pinned to {len(digests)} digests")
+        scope = " in record files" if record else ""
+        print(f"image_pin_check: {canonical}:{tag} is pinned to {len(digests)} digests{scope}")
         for digest, locs in sorted(digests.items()):
             where = ", ".join(dict.fromkeys(locs))
             print(f"  sha256:{digest[:12]} {where}")
     if refused:
         print("move every pin of one image tag in one change; Renovate groups them (renovate.json)")
+        print("a file of measured pins that no updater moves takes an `image-pin-check: record` comment line")
         return 3
-    print(f"image_pin_check: ok ({len(pins_by_key)} image tags across {total_refs} pins)")
+    tags = len({key[:2] for key in pins_by_key})
+    print(f"image_pin_check: ok ({tags} image tags across {total_refs} pins)")
     return 0
 
 

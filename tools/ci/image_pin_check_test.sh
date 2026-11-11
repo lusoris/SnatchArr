@@ -98,6 +98,41 @@ setup_hex_boundary() {
     track b.yml "bad1: postgres:18-alpine@sha256:${B}f" "bad2: postgres:18-alpine@sha256:$B_UPPER"
 }
 
+# setup_shell_default: a pin written as a shell or compose default value (`${IMG:-...}`,
+# `${IMG-...}`, `${IMG:=...}`) is a literal pin and drifts against the plain pin.
+setup_shell_default() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track compose.yaml "services:" "  db:" "    image: \${IMG:-postgres:18-alpine@sha256:$B}"
+    track run.sh "x=\${IMG-postgres:18-alpine@sha256:$B}" "y=\${IMG:=postgres:18-alpine@sha256:$B}"
+}
+
+# setup_dash_boundary: a pin never starts inside a name after `-` (`My-postgres` is no pin,
+# `a-postgres` is its own repository), so neither drifts against `postgres`.
+setup_dash_boundary() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track b.sh "x=My-postgres:18-alpine@sha256:$B" "y=a-postgres:18-alpine@sha256:$B"
+}
+
+# setup_records_separate: a record file (HTML comment marker) keeps its measured pin while the
+# live pin moves on; records are compared only with records.
+setup_records_separate() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track docs/adr.md "<!-- image-pin-check: record -->" "| v1 | \`postgres:18-alpine@sha256:$B\` |"
+}
+
+# setup_records_drift: two record files (`#` and `//` markers) that disagree are refused.
+setup_records_drift() {
+    track r1.sh "#!/bin/sh" "# image-pin-check: record (verified pairs)" "img=postgres:18-alpine@sha256:$A"
+    track r2.go "// image-pin-check: record" "const Image = \"postgres:18-alpine@sha256:$B\""
+}
+
+# setup_marker_mid_line: the marker counts only as a whole comment line, never inside a string
+# or after code on the same line.
+setup_marker_mid_line() {
+    track a.yml "image: postgres:18-alpine@sha256:$A"
+    track b.sh 'echo "# image-pin-check: record"' "img=postgres:18-alpine@sha256:$B  # image-pin-check: record"
+}
+
 run_case aligned 0 setup_aligned "image_pin_check: ok"
 run_case drift 3 setup_drift \
     "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
@@ -114,6 +149,20 @@ run_case variable-digest 0 setup_variable_digest "image_pin_check: ok"
 run_case untracked 0 setup_untracked "image_pin_check: ok"
 run_case port-registry 0 setup_port_registry "image_pin_check: ok"
 run_case hex-boundary 0 setup_hex_boundary "image_pin_check: ok"
+run_case shell-default 3 setup_shell_default \
+    "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
+    "  sha256:${A:0:12} a.yml:1" \
+    "  sha256:${B:0:12} compose.yaml:3, run.sh:1, run.sh:2"
+run_case dash-boundary 0 setup_dash_boundary "image_pin_check: ok (2 image tags across 2 pins)"
+run_case records-separate 0 setup_records_separate "image_pin_check: ok (1 image tags across 2 pins)"
+run_case records-drift 3 setup_records_drift \
+    "image_pin_check: library/postgres:18-alpine is pinned to 2 digests in record files" \
+    "  sha256:${A:0:12} r1.sh:3" \
+    "  sha256:${B:0:12} r2.go:2" \
+    "a file of measured pins that no updater moves takes an \`image-pin-check: record\` comment line"
+run_case marker-mid-line 3 setup_marker_mid_line \
+    "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
+    "  sha256:${B:0:12} b.sh:2"
 
 # Not a repository: git ls-files fails, and the check fails closed with status 1.
 mkdir -p "$work/not-a-repo"
@@ -199,10 +248,13 @@ setup_oversized_text() {
     git add big.txt
 }
 
-# The `":a" * n + "/"` line that made the old host lookahead quadratic, plus one pin.
+# The `":a" * n + "/"` line that made the old host lookahead quadratic, a `"a-" * n` line that
+# a match starting after `-` would make quadratic, and a `"${a:-" * n` line of shell defaults,
+# plus one pin.
 setup_linear_time() {
     track a.yml "image: postgres:18-alpine@sha256:$A"
-    python3 -I -c 'from pathlib import Path; Path("long.txt").write_text(":a" * 500000 + "/\n", encoding="utf-8")'
+    python3 -I -c 'from pathlib import Path
+Path("long.txt").write_text(":a" * 500000 + "/\n" + "a-" * 500000 + "\n" + "${a:-" * 200000 + "\n", encoding="utf-8")'
     git add long.txt
 }
 

@@ -2,6 +2,10 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
+# image-pin-check: record (the Sonarr and qBittorrent pairs verified for ADR-0019 open
+# point 1; no updater moves them, so tools/ci/image_pin_check.py compares them only with
+# the other record files)
+#
 # Proves Sonarr v3 and v4 push-title import guarantee (ADR-0019 open point 1)
 # on real Sonarr and qBittorrent, never on a live stack. Pushing a release
 # candidate rewritten to the canonical series title ensures grab history
