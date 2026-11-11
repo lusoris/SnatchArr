@@ -16,14 +16,19 @@ SHELL := /bin/sh
 
 # Recipes change directory (cd api, cd tools/go) while go, the C compiler under cgo and mktemp
 # write under TMPDIR, so a relative TMPDIR is made absolute here once, for every recipe and its
-# prerequisites. A TMPDIR that is not one existing path stops make before any recipe runs.
-ifneq ($(filter-out /%,$(TMPDIR)),)
-TMPDIR_ABS := $(realpath $(TMPDIR))
-ifneq ($(words $(TMPDIR_ABS)),1)
-$(error TMPDIR '$(TMPDIR)' is not one existing path)
+# prerequisites. make's word functions would split a path with spaces, so tools/ci/tmpdir_abs.sh
+# resolves the value as one single-quoted word: it prints nothing for an absolute value, which
+# stays as it is, and fails when a relative value names no directory, which stops make before
+# any recipe runs. $(value) passes a `$` in the name on as it is; make would expand it.
+ifneq ($(value TMPDIR),)
+TMPDIR_ABS := $(shell sh tools/ci/tmpdir_abs.sh '$(subst ','\'',$(value TMPDIR))')
+ifneq ($(.SHELLSTATUS),0)
+$(error tools/ci/tmpdir_abs.sh refused TMPDIR '$(value TMPDIR)' with exit $(.SHELLSTATUS))
 endif
+ifneq ($(TMPDIR_ABS),)
 override TMPDIR := $(TMPDIR_ABS)
 export TMPDIR
+endif
 endif
 
 PRAETORCTL ?= praetorctl
@@ -152,6 +157,7 @@ govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
 # TMPDIR absolute, so the install's `cd`, the cases and `cd api` all write to the same directory.
 GO_INSTALL_DIR = $(or $(shell go env GOBIN),$(firstword $(subst :, ,$(shell go env GOPATH)))/bin)
 api-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over api/ on the go.mod Go release, version printed first
+	sh tools/ci/tmpdir_abs_test.sh
 	sh tools/ci/govulncheck_pinned_test.sh
 	cd api
 	exec sh ../tools/ci/govulncheck_pinned.sh "$(GO_INSTALL_DIR)/govulncheck"
