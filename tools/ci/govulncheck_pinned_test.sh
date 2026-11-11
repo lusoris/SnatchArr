@@ -83,6 +83,7 @@ run_in() {
 run() {
   run_in '' "$@"
 }
+# check_empty DIR: fail the run when DIR still holds an entry after the guard ended.
 check_empty() {
   entries="$(ls -A "$1")"
   if [ -n "$entries" ]; then
