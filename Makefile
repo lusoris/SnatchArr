@@ -14,6 +14,35 @@ SHELL := /bin/sh
 .ONESHELL:
 .DEFAULT_GOAL := help
 
+# Recipes change directory (cd api, cd tools/go) while go, the C compiler under cgo and mktemp
+# write under TMPDIR, so a relative TMPDIR is made absolute here once, for every recipe and its
+# prerequisites. make's word functions would split a path with spaces, so tools/ci/tmpdir_abs.sh
+# resolves the value as one single-quoted word: it prints nothing for an absolute value, which
+# stays as it is, and fails when a relative value names no directory, which stops make before
+# any recipe runs. $(value) passes a `$` in the name on as it is; make would expand it.
+# A TMPDIR set on the make command line also reaches every sub-make through MAKEFLAGS, so a
+# `$(MAKE) -C api` would read the relative value from api/. The absolute value is appended to
+# MAKEOVERRIDES, which MAKEFLAGS references (GNU make manual, "Options/Recursion"), so the sub-make
+# reads it last. It is written the way make writes MAKEFLAGS: `\` as `\\`, a space or a tab after
+# a `\`, and `$` doubled twice, so the value the sub-make exports to its recipes keeps the `$`.
+ifneq ($(value TMPDIR),)
+TMPDIR_ABS := $(shell sh tools/ci/tmpdir_abs.sh '$(subst ','\'',$(value TMPDIR))')
+ifneq ($(.SHELLSTATUS),0)
+$(error tools/ci/tmpdir_abs.sh refused TMPDIR '$(value TMPDIR)' with exit $(.SHELLSTATUS))
+endif
+ifneq ($(TMPDIR_ABS),)
+ifeq ($(origin TMPDIR),command line)
+TMPDIR_NONE :=
+TMPDIR_SPACE := $(TMPDIR_NONE) $(TMPDIR_NONE)
+TMPDIR_TAB := $(shell printf '\t')
+TMPDIR_MAKEFLAG := $(subst $$,$$$$$$$$,$(subst $(TMPDIR_TAB),\$(TMPDIR_TAB),$(subst $(TMPDIR_SPACE),\$(TMPDIR_SPACE),$(subst \,\\,$(TMPDIR_ABS)))))
+MAKEOVERRIDES += TMPDIR=$(TMPDIR_MAKEFLAG)
+endif
+override TMPDIR := $(TMPDIR_ABS)
+export TMPDIR
+endif
+endif
+
 PRAETORCTL ?= praetorctl
 # golusoris' shared Makefile is consumed from the module cache (docs/ci-downstream.md); the
 # variables are recursively expanded so they resolve only when an api-* target runs.
@@ -132,11 +161,18 @@ govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
 # api-verify, ci.yml and security.yml scan through this target, so all three run the same pinned
 # scanner and print its version (#161). It calls the binary govulncheck-install wrote, never the
 # PATH lookup: a developer's older govulncheck earlier on the PATH does not take its place.
+# The scan runs on the official Go release the go.mod directive names, and
+# tools/ci/govulncheck_pinned.sh fails it unless that same scan reports exactly this release: a
+# distro build such as go1.27.3-X:nodwarf5 reports none of the standard-library advisories
+# go1.27.3 reports, so a local scan on it passed while CI failed. A toolchain that cannot be
+# fetched fails the target. The TMPDIR block at the top of this file has already made a relative
+# TMPDIR absolute, so the install's `cd`, the cases and `cd api` all write to the same directory.
 GO_INSTALL_DIR = $(or $(shell go env GOBIN),$(firstword $(subst :, ,$(shell go env GOPATH)))/bin)
-api-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over api/, version printed first
+api-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over api/ on the go.mod Go release, version printed first
+	sh tools/ci/tmpdir_abs_test.sh
+	sh tools/ci/govulncheck_pinned_test.sh
 	cd api
-	"$(GO_INSTALL_DIR)/govulncheck" -version
-	"$(GO_INSTALL_DIR)/govulncheck" ./...
+	exec sh ../tools/ci/govulncheck_pinned.sh "$(GO_INSTALL_DIR)/govulncheck"
 
 sqlc-install: ## Install sqlc at the tools/go/go.mod pin, the version go generate runs
 	cd tools/go

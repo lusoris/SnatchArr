@@ -186,6 +186,8 @@ jobs:
               - 'tools/**/*.go'
               - 'tools/go/**'
               - 'tools/ci/lint_exceptions*.sh'
+              - 'tools/ci/govulncheck_pinned*.sh'
+              - 'tools/ci/tmpdir_abs*.sh'
               - 'Makefile'
               - 'Dockerfile'
               - '.github/workflows/ci.yml'
