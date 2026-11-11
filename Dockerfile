@@ -18,7 +18,7 @@ COPY api/openapi/openapi.yaml /src/api/openapi/openapi.yaml
 RUN pnpm gen:api && pnpm build
 
 # ── go build ──────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM golang:1.27-bookworm@sha256:dc0963f32053e4bc451d24d87e3892d42d01021b61f093e98eb95c0352bb84b0 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -39,7 +39,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -tags
          echo "snatcharr-api is dynamically linked" >&2; exit 1; fi
 
 # ── idmatchparity build ───────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM golang:1.27-bookworm@sha256:dc0963f32053e4bc451d24d87e3892d42d01021b61f093e98eb95c0352bb84b0 AS idmatchparity-build
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS idmatchparity-build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

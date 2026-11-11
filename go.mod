@@ -1,6 +1,6 @@
 module github.com/lusoris/SnatchArr
 
-go 1.27.3
+go 1.27.4
 
 // pnpm installs packages that ship stray .go files (flatted/golang); keep ./... off them.
 ignore ./web/node_modules
