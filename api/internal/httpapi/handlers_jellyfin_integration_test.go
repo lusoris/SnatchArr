@@ -951,6 +951,7 @@ func TestJellyfin_TokenSession_HandlerIntegration(t *testing.T) {
 			wantSubstr string
 			member     jellyfin.Member
 			byTokenErr error
+			wantSignIn int32
 		}{
 			{
 				name:       "negative invalid or expired token yields 401 without session cookie",
@@ -1000,6 +1001,20 @@ func TestJellyfin_TokenSession_HandlerIntegration(t *testing.T) {
 				wantStatus: http.StatusBadRequest,
 			},
 			{
+				name:       "negative username without password yields 400 without sign in",
+				enabled:    true,
+				body:       `{"username":"alice"}`,
+				wantStatus: http.StatusBadRequest,
+				wantSubstr: "credentials need both username and password",
+			},
+			{
+				name:       "boundary empty password is passed to sign in",
+				enabled:    true,
+				body:       `{"username":"alice","password":""}`,
+				wantStatus: http.StatusUnauthorized,
+				wantSignIn: 1,
+			},
+			{
 				name:       "boundary empty string access_token rejected by ogen minLength",
 				enabled:    true,
 				body:       `{"access_token":""}`,
@@ -1025,7 +1040,12 @@ func TestJellyfin_TokenSession_HandlerIntegration(t *testing.T) {
 				t.Parallel()
 				cfg := defaultCfg
 				cfg.Enabled = tc.enabled
+				var signInHits atomic.Int32
 				fakeAuth := &fakeJellyfinAuthenticator{
+					signInFunc: func(_ context.Context, _, _ string) (jellyfin.Member, error) {
+						signInHits.Add(1)
+						return jellyfin.Member{}, domain.ErrUnauthorized
+					},
 					byTokenFunc: func(_ context.Context, _ string) (jellyfin.Member, error) {
 						if tc.byTokenErr != nil {
 							return jellyfin.Member{}, tc.byTokenErr
@@ -1048,6 +1068,9 @@ func TestJellyfin_TokenSession_HandlerIntegration(t *testing.T) {
 				}
 				if hasSessionCookie(rec.Result().Cookies()) {
 					t.Fatal("unexpected snatcharr_session cookie on failed login")
+				}
+				if got := signInHits.Load(); got != tc.wantSignIn {
+					t.Fatalf("SignIn hits = %d, want %d", got, tc.wantSignIn)
 				}
 				if tc.wantSubstr != "" && !strings.Contains(rec.Body.String(), tc.wantSubstr) {
 					t.Fatalf("body = %q, want substring %q", rec.Body.String(), tc.wantSubstr)

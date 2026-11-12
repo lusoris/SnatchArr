@@ -192,7 +192,8 @@ func (c *Client) newTokenClient(token string) (*jellyfin.Client, error) {
 }
 
 func (c *Client) checkTokenRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) >= maxTokenRedirects {
+	// via includes the original request.
+	if len(via) > maxTokenRedirects {
 		return errRedirectRefused
 	}
 	if req.URL == nil || !strings.EqualFold(req.URL.Scheme, c.baseScheme) || !strings.EqualFold(req.URL.Host, c.baseHost) {

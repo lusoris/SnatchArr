@@ -47,6 +47,9 @@ func (h *Handlers) authenticateJellyfinSession(ctx context.Context, req *oas.Jel
 	if !hasToken && !hasUser {
 		return jellyfin.Member{}, fmt.Errorf("%w: provide either an access token or credentials", domain.ErrBadRequest)
 	}
+	if !hasToken && !hasPassword {
+		return jellyfin.Member{}, fmt.Errorf("%w: credentials need both username and password", domain.ErrBadRequest)
+	}
 	ip := remoteIP(ctx)
 	if hasToken {
 		return h.auth.LoginJellyfinToken(ctx, h.jellyfin, req.AccessToken.Value, ip)

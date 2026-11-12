@@ -515,38 +515,7 @@ func TestProvideAuthenticator_Disabled(t *testing.T) {
 
 func TestProvideAuthenticator_TokenTransportPolicy(t *testing.T) {
 	t.Parallel()
-
-	cases := []struct {
-		name           string
-		profile        config.Profile
-		rawURL         string
-		wantAllowPlain bool
-		wantWarn       bool
-	}{
-		{
-			name:           "negative prod plain http logs warning and refuses plain token",
-			profile:        config.ProfileProd,
-			rawURL:         "http://jellyfin.local:8096",
-			wantAllowPlain: false,
-			wantWarn:       true,
-		},
-		{
-			name:           "positive prod https logs no warning",
-			profile:        config.ProfileProd,
-			rawURL:         "https://jellyfin.example.com",
-			wantAllowPlain: false,
-			wantWarn:       false,
-		},
-		{
-			name:           "positive dev plain http allows plain token without warning",
-			profile:        config.ProfileDev,
-			rawURL:         "http://jellyfin.local:8096",
-			wantAllowPlain: true,
-			wantWarn:       false,
-		},
-	}
-
-	for _, tc := range cases {
+	for _, tc := range tokenTransportCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var buf bytes.Buffer
@@ -578,121 +547,64 @@ func TestProvideAuthenticator_TokenTransportPolicy(t *testing.T) {
 	}
 }
 
+type tokenTransportCase struct {
+	name           string
+	profile        config.Profile
+	rawURL         string
+	wantAllowPlain bool
+	wantWarn       bool
+}
+
+func tokenTransportCases() []tokenTransportCase {
+	return []tokenTransportCase{
+		{"negative prod plain http logs warning and refuses plain token", config.ProfileProd, "http://jellyfin.local:8096", false, true},
+		{"positive prod https logs no warning", config.ProfileProd, "https://jellyfin.example.com", false, false},
+		{"positive dev plain http allows plain token without warning", config.ProfileDev, "http://jellyfin.local:8096", true, false},
+	}
+}
+
+type clientByTokenCase struct {
+	name                                                           string
+	useTLS, allowPlainHTTP, memberAdmin, memberDisabled, nilPolicy bool
+	token                                                          string
+	upstreamStatus                                                 int
+	wantErr                                                        error
+	wantHits                                                       int32
+	wantAdmin, wantDisabled                                        bool
+}
+
+func clientByTokenCases() []clientByTokenCase {
+	const token = "secret-user-token-xyz987"
+	return append(clientByTokenSuccessCases(token), clientByTokenFailureCases(token)...)
+}
+
+func clientByTokenSuccessCases(token string) []clientByTokenCase {
+	return []clientByTokenCase{
+		{"positive https valid token returns member with policy", true, false, true, false, false, token, http.StatusOK, nil, 1, true, false},
+		{"positive disabled user returned with Disabled true", true, false, false, true, false, token, http.StatusOK, nil, 1, false, true},
+		{"positive dev profile allows plain http base url", false, true, false, false, false, token, http.StatusOK, nil, 1, false, false},
+	}
+}
+
+func clientByTokenFailureCases(token string) []clientByTokenCase {
+	return []clientByTokenCase{
+		{"negative prod plain http base url refused before network call", false, false, false, false, false, token, http.StatusOK, domain.ErrForbidden, 0, false, false},
+		{"boundary empty token refused before network call", true, false, false, false, false, "", http.StatusOK, domain.ErrBadRequest, 0, false, false},
+		{"boundary whitespace token refused before network call", true, false, false, false, false, "   \t\n ", http.StatusOK, domain.ErrBadRequest, 0, false, false},
+		{"negative upstream 401 maps to ErrUnauthorized without leaking token", true, false, false, false, false, token, http.StatusUnauthorized, domain.ErrUnauthorized, 1, false, false},
+		{"negative upstream 403 maps to ErrUnauthorized", true, false, false, false, false, token, http.StatusForbidden, domain.ErrUnauthorized, 1, false, false},
+		{"negative upstream 404 maps to ErrUnauthorized", true, false, false, false, false, token, http.StatusNotFound, domain.ErrUnauthorized, 1, false, false},
+		{"negative nil policy maps to ErrUnauthorized", true, false, false, false, true, token, http.StatusOK, domain.ErrUnauthorized, 1, false, false},
+	}
+}
+
 func TestClient_ByToken(t *testing.T) {
 	t.Parallel()
-
 	const (
 		serviceKey = "service-admin-api-key"
 		userToken  = "secret-user-token-xyz987"
 	)
-
-	cases := []struct {
-		name           string
-		useTLS         bool
-		allowPlainHTTP bool
-		token          string
-		upstreamStatus int
-		memberAdmin    bool
-		memberDisabled bool
-		nilPolicy      bool
-		wantErr        error
-		wantHits       int32
-		wantAdmin      bool
-		wantDisabled   bool
-	}{
-		{
-			name:           "positive https valid token returns member with policy",
-			useTLS:         true,
-			token:          userToken,
-			upstreamStatus: http.StatusOK,
-			memberAdmin:    true,
-			memberDisabled: false,
-			wantHits:       1,
-			wantAdmin:      true,
-			wantDisabled:   false,
-		},
-		{
-			name:           "positive disabled user returned with Disabled true",
-			useTLS:         true,
-			token:          userToken,
-			upstreamStatus: http.StatusOK,
-			memberAdmin:    false,
-			memberDisabled: true,
-			wantHits:       1,
-			wantAdmin:      false,
-			wantDisabled:   true,
-		},
-		{
-			name:           "positive dev profile allows plain http base url",
-			useTLS:         false,
-			allowPlainHTTP: true,
-			token:          userToken,
-			upstreamStatus: http.StatusOK,
-			memberAdmin:    false,
-			memberDisabled: false,
-			wantHits:       1,
-		},
-		{
-			name:           "negative prod plain http base url refused before network call",
-			useTLS:         false,
-			allowPlainHTTP: false,
-			token:          userToken,
-			upstreamStatus: http.StatusOK,
-			wantErr:        domain.ErrForbidden,
-			wantHits:       0,
-		},
-		{
-			name:           "boundary empty token refused before network call",
-			useTLS:         true,
-			token:          "",
-			upstreamStatus: http.StatusOK,
-			wantErr:        domain.ErrBadRequest,
-			wantHits:       0,
-		},
-		{
-			name:           "boundary whitespace token refused before network call",
-			useTLS:         true,
-			token:          "   \t\n ",
-			upstreamStatus: http.StatusOK,
-			wantErr:        domain.ErrBadRequest,
-			wantHits:       0,
-		},
-		{
-			name:           "negative upstream 401 maps to ErrUnauthorized without leaking token",
-			useTLS:         true,
-			token:          userToken,
-			upstreamStatus: http.StatusUnauthorized,
-			wantErr:        domain.ErrUnauthorized,
-			wantHits:       1,
-		},
-		{
-			name:           "negative upstream 403 maps to ErrUnauthorized",
-			useTLS:         true,
-			token:          userToken,
-			upstreamStatus: http.StatusForbidden,
-			wantErr:        domain.ErrUnauthorized,
-			wantHits:       1,
-		},
-		{
-			name:           "negative upstream 404 maps to ErrUnauthorized",
-			useTLS:         true,
-			token:          userToken,
-			upstreamStatus: http.StatusNotFound,
-			wantErr:        domain.ErrUnauthorized,
-			wantHits:       1,
-		},
-		{
-			name:           "negative nil policy maps to ErrUnauthorized",
-			useTLS:         true,
-			token:          userToken,
-			upstreamStatus: http.StatusOK,
-			nilPolicy:      true,
-			wantErr:        domain.ErrUnauthorized,
-			wantHits:       1,
-		},
-	}
-
-	for _, tc := range cases {
+	for _, tc := range clientByTokenCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -806,138 +718,121 @@ func TestClient_ByToken_Redirects(t *testing.T) {
 	t.Parallel()
 
 	const userToken = "redirect-check-token-999"
+	testTokenRedirectDowngrade(t, userToken)
+	testTokenRedirectForeignHost(t, userToken)
 
+	for _, tc := range tokenRedirectHopCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			testTokenRedirectHop(t, userToken, tc)
+		})
+	}
+}
+
+type tokenRedirectHopCase struct {
+	name     string
+	hops     int
+	wantErr  error
+	wantName string
+}
+
+func tokenRedirectHopCases() []tokenRedirectHopCase {
+	return []tokenRedirectHopCase{
+		{"positive 1 same-host same-scheme redirect followed", 1, nil, "Hopper"},
+		{"boundary 5 same-host redirects followed", 5, nil, "Hopper"},
+		{"boundary 6 same-host redirects refused", 6, domain.ErrUnreachable, ""},
+	}
+}
+
+func testTokenRedirectDowngrade(t *testing.T, token string) {
+	t.Helper()
 	t.Run("negative https to plain http downgrade refused before contacting target", func(t *testing.T) {
 		t.Parallel()
-		var plainHits atomic.Int32
-		var plainAuth atomic.Value
-		plainTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			plainHits.Add(1)
-			plainAuth.Store(r.Header.Get("Authorization"))
+		var hits atomic.Int32
+		plainTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits.Add(1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		t.Cleanup(plainTarget.Close)
-
-		tlsBase := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, plainTarget.URL+"/Users/Me", http.StatusTemporaryRedirect)
+		tlsBase := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Location", plainTarget.URL+"/Users/Me")
+			w.WriteHeader(http.StatusTemporaryRedirect)
 		}))
 		t.Cleanup(tlsBase.Close)
-
 		cl, err := jellyfin.NewClient(tlsBase.URL, "svc-key", 2*time.Second, "TestUA", tlsBase.Client())
 		if err != nil {
 			t.Fatalf("NewClient() error = %v", err)
 		}
-
-		_, err = cl.ByToken(t.Context(), userToken)
-		if !errors.Is(err, domain.ErrUnreachable) {
+		if _, err = cl.ByToken(t.Context(), token); !errors.Is(err, domain.ErrUnreachable) {
 			t.Fatalf("ByToken() on scheme downgrade = %v, want ErrUnreachable", err)
 		}
-		if got := plainHits.Load(); got != 0 {
-			t.Fatalf("plain http redirect target hits = %d, want 0 (auth=%v)", got, plainAuth.Load())
+		if got := hits.Load(); got != 0 {
+			t.Fatalf("plain http redirect target hits = %d, want 0", got)
 		}
 	})
+}
 
+func testTokenRedirectForeignHost(t *testing.T, token string) {
+	t.Helper()
 	t.Run("negative foreign host redirect refused and target never sees Authorization", func(t *testing.T) {
 		t.Parallel()
-		var foreignHits atomic.Int32
-		var foreignAuth atomic.Value
-		foreignSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			foreignHits.Add(1)
-			foreignAuth.Store(r.Header.Get("Authorization"))
+		var hits atomic.Int32
+		foreignSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits.Add(1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		t.Cleanup(foreignSrv.Close)
-
-		baseSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, foreignSrv.URL+"/Users/Me", http.StatusTemporaryRedirect)
+		baseSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Location", foreignSrv.URL+"/Users/Me")
+			w.WriteHeader(http.StatusTemporaryRedirect)
 		}))
 		t.Cleanup(baseSrv.Close)
-
 		cl, err := jellyfin.NewClient(baseSrv.URL, "svc-key", 2*time.Second, "TestUA", baseSrv.Client())
 		if err != nil {
 			t.Fatalf("NewClient() error = %v", err)
 		}
 		cl.SetAllowPlainHTTPToken(true)
-
-		_, err = cl.ByToken(t.Context(), userToken)
-		if !errors.Is(err, domain.ErrUnreachable) {
+		if _, err = cl.ByToken(t.Context(), token); !errors.Is(err, domain.ErrUnreachable) {
 			t.Fatalf("ByToken() on foreign host redirect = %v, want ErrUnreachable", err)
 		}
-		if got := foreignHits.Load(); got != 0 {
+		if got := hits.Load(); got != 0 {
 			t.Fatalf("foreign redirect target hits = %d, want 0", got)
 		}
-		if gotAuth, _ := foreignAuth.Load().(string); gotAuth != "" {
-			t.Fatalf("foreign target saw Authorization header: %q", gotAuth)
-		}
 	})
+}
 
-	hopCases := []struct {
-		name     string
-		hops     int
-		wantErr  error
-		wantName string
-	}{
-		{
-			name:     "positive 1 same-host same-scheme redirect followed",
-			hops:     1,
-			wantName: "Hopper",
-		},
-		{
-			name:     "boundary 4 same-host redirects followed",
-			hops:     4,
-			wantName: "Hopper",
-		},
-		{
-			name:    "boundary 5 same-host redirects refused",
-			hops:    5,
-			wantErr: domain.ErrUnreachable,
-		},
+func testTokenRedirectHop(t *testing.T, token string, tc tokenRedirectHopCase) {
+	t.Helper()
+	var finalAuth string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("hop")
+		step, err := strconv.Atoi(q)
+		if err != nil && q != "" {
+			http.Error(w, "bad hop", http.StatusBadRequest)
+			return
+		}
+		if step < tc.hops {
+			w.Header().Set("Location", "/Users/Me?hop="+strconv.Itoa(step+1))
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			return
+		}
+		finalAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "jf-hop-id", "Name": "Hopper", "Policy": map[string]any{"IsAdministrator": false, "IsDisabled": false}})
+	}))
+	t.Cleanup(srv.Close)
+	cl, err := jellyfin.NewClient(srv.URL, "svc-key", 2*time.Second, "TestUA", srv.Client())
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
 	}
-
-	for _, tc := range hopCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			var finalAuth string
-			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				step, _ := strconv.Atoi(r.URL.Query().Get("hop"))
-				if step < tc.hops {
-					http.Redirect(w, r, "/Users/Me?hop="+strconv.Itoa(step+1), http.StatusTemporaryRedirect)
-					return
-				}
-				finalAuth = r.Header.Get("Authorization")
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"Id":   "jf-hop-id",
-					"Name": "Hopper",
-					"Policy": map[string]any{
-						"IsAdministrator": false,
-						"IsDisabled":      false,
-					},
-				})
-			}))
-			t.Cleanup(srv.Close)
-
-			cl, err := jellyfin.NewClient(srv.URL, "svc-key", 2*time.Second, "TestUA", srv.Client())
-			if err != nil {
-				t.Fatalf("NewClient() error = %v", err)
-			}
-
-			m, err := cl.ByToken(t.Context(), userToken)
-			if tc.wantErr != nil {
-				if !errors.Is(err, tc.wantErr) {
-					t.Fatalf("ByToken() with %d hops = %v, want %v", tc.hops, err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ByToken() with %d hops unexpected error = %v", tc.hops, err)
-			}
-			if m.Name != tc.wantName {
-				t.Fatalf("Member.Name = %q, want %q", m.Name, tc.wantName)
-			}
-			if !strings.Contains(finalAuth, `Token="`+userToken+`"`) {
-				t.Fatalf("final hop Authorization = %q, want user token", finalAuth)
-			}
-		})
+	m, err := cl.ByToken(t.Context(), token)
+	if tc.wantErr != nil {
+		if !errors.Is(err, tc.wantErr) {
+			t.Fatalf("ByToken() with %d hops = %v, want %v", tc.hops, err, tc.wantErr)
+		}
+		return
+	}
+	if err != nil || m.Name != tc.wantName || !strings.Contains(finalAuth, `Token="`+token+`"`) {
+		t.Fatalf("ByToken() = (%+v, %v), want %q with token authorization", m, err, tc.wantName)
 	}
 }
