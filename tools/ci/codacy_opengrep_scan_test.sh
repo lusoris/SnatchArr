@@ -5,7 +5,8 @@
 # Replays the Opengrep scanner fixtures and kills its mutants offline: listing
 # hash and ID-set drift, a dropped comparison, lost multiplicity, collapsed
 # literal whitespace, an ignored tool error, an unbounded download, a canary
-# error that ends the scan, ignored live listing drift, a deleted or expired
+# error that ends the scan, a wrapper that drops --taint-intrafile, a canary
+# that stops wanting the intrafile finding, ignored live listing drift, a deleted or expired
 # baseline entry, and a baseline that grows, raises a count, extends an expiry
 # or rewrites a kept entry against an earlier commit. Then holds the Makefile,
 # lefthook and CI to the scanner runs.
@@ -142,6 +143,10 @@ mutate "$WORK/cursor" "if not cursor:" "if not cursor or not page:"
 expect 1 "mutant ending the listing on an empty page" "FAIL empty page with a cursor is followed" python3 -I "$WORK/cursor/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
 mutate "$WORK/redirect" "build_opener(RefuseRedirect)" "build_opener()"
 expect 1 "mutant following redirects with the token" "FAIL token opener refuses a redirect" python3 -I "$WORK/redirect/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
+mutate "$WORK/intrafile" 'exec {binary} scan --taint-intrafile "$@"' 'exec {binary} scan "$@"'
+expect 1 "mutant wrapper without --taint-intrafile" "FAIL wrapper adds --taint-intrafile" python3 -I "$WORK/intrafile/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
+mutate "$WORK/want" "(TAINT_RULE, INTRAFILE_FILE), (AUDIT_RULE" "(AUDIT_RULE"
+expect 1 "mutant canary no longer wanting the intrafile taint finding" "FAIL planted finding: exactly one new canary finding" python3 -I "$WORK/want/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
 
 make_root "$WORK/deleted"
 edit_json "$WORK/deleted/$BASELINE" drop-first

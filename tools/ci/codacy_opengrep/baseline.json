@@ -24,6 +24,17 @@
       "reason": "_spawn_bounded starts the hook argv its callers build from fixed tool names, with start_new_session and a deadline; no shell."
     },
     {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+      "filePath": ".config/lefthook/scripts/common.py",
+      "contentSha256": "0cb722a3b77e474bc0c75feb9976f0872b762529f5c55ced015983a20a2f3bf2",
+      "count": "1",
+      "category": "A",
+      "entered": "2026-11-12",
+      "expires": "2026-11-30",
+      "issue": "1102",
+      "reason": "Same Popen call as the run() audit entry: under --taint-intrafile the inherited environment reaches the argv; #1102 allow-lists the executable and environment before this entry expires."
+    },
+    {
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
       "filePath": "tools/ci/clones_check.py",
       "contentSha256": "b2d3d9b3aceb4f809f18ef838f762066c16136c3acca41fe39e0817708c431cf",
@@ -48,7 +59,7 @@
     {
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
       "filePath": "tools/ci/codacy_opengrep_scan.py",
-      "contentSha256": "336b39187fa32fde311195b3dfedecdc4a48d2bfbffe617b8b36cb38f2b6edc0",
+      "contentSha256": "757423069d2efc853091fe86de78c1d972fb981dcc3232f4f8d4597b210cd7d1",
       "count": "1",
       "category": "D",
       "entered": "2026-11-12",
@@ -66,6 +77,17 @@
       "expires": "2026-11-30",
       "issue": "1099",
       "reason": "docker arguments include environment-derived values that are not validated; #1099 validates them before this entry expires."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+      "filePath": "tools/ci/dependency_snapshot.py",
+      "contentSha256": "29d33a7faf7d2ca89f440c1c668420e5232a21a6324a2a0f0016fbaf2b43054a",
+      "count": "1",
+      "category": "A",
+      "entered": "2026-11-12",
+      "expires": "2026-11-30",
+      "issue": "1099",
+      "reason": "Same docker run as the audit entry: environment-derived values reach the argv unvalidated; #1099 validates them before this entry expires."
     },
     {
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
@@ -154,6 +176,17 @@
       "expires": "2026-11-30",
       "issue": "1100",
       "reason": "--docker and --root reach the argv unchecked; #1100 refuses unchecked values before this entry expires."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+      "filePath": "tools/ci/semgrep_scan.py",
+      "contentSha256": "8a46119d5d3b204ce2724c3b160d2ac558b50b00ec60669144fa3fef6892155f",
+      "count": "1",
+      "category": "A",
+      "entered": "2026-11-12",
+      "expires": "2026-11-30",
+      "issue": "1100",
+      "reason": "Same call as the audit entry: --docker and --root reach the argv unchecked; #1100 refuses unchecked values before this entry expires."
     },
     {
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",

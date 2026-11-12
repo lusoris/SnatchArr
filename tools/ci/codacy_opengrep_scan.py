@@ -19,10 +19,21 @@ the normalised source text of the finding, so a line shift keeps its key: whites
 string literals collapse to one space, whitespace inside a literal stays as written. Its count is
 how many findings share that key; one more is a new finding.
 
-The canary renames the parameter of judge_in_child in tools/ci/image_release_age_check.py from
-`job` to `request`, the defect commit 58af3cb4 planted, and requires exactly one new finding of
-the Django subprocess-injection rule. It runs before the tree scan and fails when the rules stop
-reporting that defect.
+Codacy cloud runs Opengrep with --taint-intrafile, so taint follows values across functions of one
+file; the CLI's Opengrep plugin does not pass that flag. The scan therefore puts a wrapper script in
+front of the verified binary that adds the flag to every `scan` call.
+
+The canary scans two planted defects and requires exactly one new finding for each (rule, file)
+pair in CANARY_WANT, and nothing else. First, it renames the parameter of judge_in_child in
+tools/ci/image_release_age_check.py from `job` to `request`, the defect commit 58af3cb4 planted
+(Django subprocess-injection rule). Second, testdata/intrafile-canary.py.txt, written as
+tools/ci/intrafile_canary.py, hands an environment value to a subprocess argument through a
+helper's return value: the tainted-env-args rule reports it only under --taint-intrafile, so the
+canary fails when the wrapper stops adding the flag. It runs before the tree scan and fails when
+the rules stop reporting either defect.
+
+The tree scan copies every tracked Python file into a scratch repository and scans that copy
+whole, so no file name reaches a command line.
 
 The live listing check pages Codacy's listRepositoryToolPatterns (enabled patterns of the Opengrep
 tool, in the config's languages) for the GitHub origin repository and fails on any added or removed
@@ -42,6 +53,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess  # nosec B404  # fixed argument lists built in this file, never a shell
 import sys
@@ -67,6 +79,20 @@ CLI_PACKAGE = "@codacy/analysis-cli"
 CANARY_FILE = "tools/ci/image_release_age_check.py"
 CANARY_FUNCTION = "judge_in_child"
 CANARY_RULE = "Semgrep_python.django.security.injection.command.subprocess-injection.subprocess-injection"
+INTRAFILE_SOURCE = "tools/ci/codacy_opengrep/testdata/intrafile-canary.py.txt"
+INTRAFILE_FILE = "tools/ci/intrafile_canary.py"  # where the scan copy holds INTRAFILE_SOURCE
+TAINT_RULE = "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args"
+AUDIT_RULE = "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit"
+# (rule, file): each planted defect must be exactly one new finding, and nothing else may be new.
+CANARY_WANT = ((CANARY_RULE, CANARY_FILE), (TAINT_RULE, INTRAFILE_FILE), (AUDIT_RULE, INTRAFILE_FILE))
+# Codacy cloud runs Opengrep with --taint-intrafile; the CLI plugin does not pass it, so this wrapper does (issue 1098).
+WRAPPER = """#!/bin/sh
+if [ "$1" = scan ]; then
+  shift
+  exec {binary} scan --taint-intrafile "$@"
+fi
+exec {binary} "$@"
+"""
 DOWNLOAD_PREFIX = "https://github.com/opengrep/opengrep/releases/download/v"
 BASELINE_VERSION = 2
 BASELINE_KEYS = frozenset({"patternId", "filePath", "contentSha256", "count", "category", "entered", "expires", "issue", "reason"})
@@ -121,10 +147,13 @@ def load_json(path: Path) -> object:
         raise ScanError(f"cannot read {path}: {err}") from err
 
 
-def run_capture(argv: list[str], cwd: Path, timeout: float, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    """Run one argument list (never a shell) under a deadline and capture its text output."""
+def run_capture(argv: list[str], cwd: Path, timeout: float, env: dict[str, str] | None = None, *, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+    """Run one argument list (never a shell) under a deadline and capture its text output.
+
+    STDIN carries data, such as an object name for git cat-file, so that data never becomes an argument.
+    """
     try:
-        return subprocess.run(argv, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, check=False)  # nosec B603  # argument lists built in this file, no shell
+        return subprocess.run(argv, cwd=cwd, env=env, input=stdin, capture_output=True, text=True, timeout=timeout, check=False)  # nosec B603  # argument lists built in this file, no shell
     except (OSError, subprocess.TimeoutExpired) as err:
         raise ScanError(f"{Path(argv[0]).name} did not complete: {err}") from err
 
@@ -134,12 +163,12 @@ def git_env(environ: dict[str, str]) -> dict[str, str]:
     return {key: value for key, value in environ.items() if not key.startswith("GIT_")}
 
 
-def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    """Run git, resolved on PATH, on the repository at ROOT."""
+def git(root: Path, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+    """Run git, resolved on PATH, on the repository at ROOT; STDIN feeds batch input."""
     exe = shutil.which("git")
     if exe is None:
         raise ScanError("git not found on PATH")
-    return run_capture([exe, *args], root, GIT_TIMEOUT_SECONDS, git_env(dict(os.environ)))
+    return run_capture([exe, *args], root, GIT_TIMEOUT_SECONDS, git_env(dict(os.environ)), stdin=stdin)
 
 
 def config_tool(root: Path) -> dict[str, object]:
@@ -293,33 +322,42 @@ def ref_problem(ref: str) -> str | None:
     return None
 
 
+def batch_header(output: str) -> tuple[list[str], str]:
+    """Split git cat-file batch OUTPUT into its header fields and the object body without the closing newline."""
+    header, _newline, body = output.partition("\n")
+    return header.split(" "), body.removesuffix("\n")
+
+
 def resolve_commit(root: Path, ref: str) -> str:
-    """Return the commit id REF names; only that id reaches later git commands."""
+    """Return the commit id REF names.
+
+    REF reaches git as cat-file batch input on stdin, never as an argument; one line, since REF_RE has no newline.
+    """
     problem = ref_problem(ref)
     if problem is not None:
         raise ScanError(problem)
-    found = git(root, "rev-parse", "--verify", "--quiet", "--end-of-options", f"{ref}^{{commit}}")
-    commit = found.stdout.strip()
-    if found.returncode != 0 or COMMIT_RE.fullmatch(commit) is None:
+    found = git(root, "cat-file", "--batch-check", stdin=f"{ref}^{{commit}}\n")
+    fields, _body = batch_header(found.stdout)
+    if found.returncode != 0 or len(fields) != 3 or fields[1] != "commit" or COMMIT_RE.fullmatch(fields[0]) is None:
         raise ScanError(f"--base-ref {ref}: not a commit")
-    return commit
+    return fields[0]
 
 
 def shrink_problems(root: Path, ref: str, today: date) -> list[str]:
     """Compare the baseline with its version at REF; a REF without one is the first baseline."""
     commit = resolve_commit(root, ref)
     current = load_baseline(root, today)
-    listed = git(root, "ls-tree", "--name-only", commit, "--", BASELINE)
-    if listed.returncode != 0:
-        raise ScanError(f"git ls-tree {ref} failed: {listed.stderr.strip()}")
-    if not listed.stdout.strip():
+    shown = git(root, "cat-file", "--batch", stdin=f"{commit}:{BASELINE}\n")
+    if shown.returncode != 0:
+        raise ScanError(f"git cat-file {ref}:{BASELINE} failed: {shown.stderr.strip()}")
+    fields, body = batch_header(shown.stdout)
+    if fields[1:] == ["missing"]:
         print(f"codacy-opengrep: {BASELINE} absent at {ref}; first baseline, {len(current)} entries")
         return []
-    shown = git(root, "show", f"{commit}:{BASELINE}")
-    if shown.returncode != 0:
-        raise ScanError(f"git show {ref}:{BASELINE} failed: {shown.stderr.strip()}")
+    if len(fields) != 3 or fields[1] != "blob":
+        raise ScanError(f"{BASELINE} at {ref}: not a file ({' '.join(fields[1:])})")
     try:
-        base = parse_baseline(json.loads(shown.stdout), None, None)
+        base = parse_baseline(json.loads(body), None, None)
     except (json.JSONDecodeError, ScanError) as err:
         raise ScanError(f"{BASELINE} at {ref}: {err}") from err
     problems = compare_baselines(base, current)
@@ -411,11 +449,13 @@ def report_problems(report: object, files: list[str], baseline: Counter[str], ve
 
 
 def canary_problems(report: object, baseline: Counter[str], version: str) -> list[str]:
-    """Return [] when REPORT shows the planted defect as exactly one new CANARY_RULE finding."""
-    problems = report_problems(report, [CANARY_FILE], baseline, version, enforce_stale=False)
-    if len(problems) == 1 and problems[0].startswith(f"new finding: {CANARY_RULE} | {CANARY_FILE} | "):
+    """Return [] when REPORT shows each CANARY_WANT defect as exactly one new finding, and nothing else."""
+    problems = report_problems(report, [CANARY_FILE, INTRAFILE_FILE], baseline, version, enforce_stale=False)
+    found = [any(item.startswith(f"new finding: {rule} | {file} | ") for item in problems) for rule, file in CANARY_WANT]
+    if len(problems) == len(CANARY_WANT) and all(found):
         return []
-    return [f"canary: want exactly one new {CANARY_RULE} finding in {CANARY_FILE}, got {problems}"]
+    wanted = [f"{rule.rsplit('.', 1)[-1]} in {file}" for rule, file in CANARY_WANT]
+    return [f"canary: want exactly one new finding each for {wanted}, got {problems}"]
 
 
 def canary_source(root: Path) -> str:
@@ -444,13 +484,16 @@ def fixture_files(report: object) -> list[str]:
 
 
 def tracked_files(root: Path) -> list[str]:
-    """List bounded tracked Python targets, excluding the recorded fixtures."""
+    """List bounded tracked Python targets, excluding the recorded fixtures; refuse a name that is no plain relative path."""
     result = git(root, "ls-files", "-z", "--", "*.py")
     if result.returncode != 0:
         raise ScanError(f"git ls-files failed: {result.stderr.strip()}")
     names = [name for name in result.stdout.split("\0") if name and not name.startswith(FIXTURES + "/")]
     if not names or len(names) > MAX_FILES:
         raise ScanError(f"{len(names)} Python files to scan, expected 1 to {MAX_FILES}")
+    odd = [name for name in names if PATH_RE.fullmatch(name) is None or ".." in name.split("/")]
+    if odd:
+        raise ScanError(f"tracked Python files with names the scan copy refuses: {odd[:5]}")
     return sorted(names)
 
 
@@ -527,13 +570,23 @@ def download_binary(destination: Path, versions: dict[str, str]) -> None:
     destination.chmod(0o755)
 
 
+def write_wrapper(directory: Path, binary: Path) -> Path:
+    """Write DIRECTORY/opengrep, the WRAPPER the CLI runs in place of BINARY, and return its path."""
+    wrapper = directory / "opengrep"
+    wrapper.write_text(WRAPPER.format(binary=shlex.quote(str(binary))), encoding="utf-8")
+    wrapper.chmod(0o755)
+    return wrapper
+
+
 @contextmanager
 def codacy_home(versions: dict[str, str]) -> Iterator[Path]:
-    """Yield a temporary CODACY_GLOBAL_DIR holding the verified Opengrep binary."""
+    """Yield a temporary CODACY_GLOBAL_DIR whose Opengrep is WRAPPER around the verified binary."""
     with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-") as temporary:
         home = Path(temporary) / "global"
-        (home / "tools/Semgrep").mkdir(parents=True)
-        download_binary(home / "tools/Semgrep/opengrep", versions)
+        tools = home / "tools/Semgrep"
+        tools.mkdir(parents=True)
+        download_binary(tools / "opengrep-release", versions)
+        write_wrapper(tools, tools / "opengrep-release")
         yield home
 
 
@@ -573,12 +626,15 @@ def cli_env(environ: Mapping[str, str], home: Path) -> dict[str, str]:
     return {**{key: value for key, value in environ.items() if not key.startswith("CODACY_")}, "CODACY_GLOBAL_DIR": str(home)}
 
 
-def live_report(root: Path, cwd: Path, home: Path, files: list[str]) -> dict[str, object]:
-    """Run the pinned CLI in CWD over FILES with the verified Opengrep under HOME; return its report."""
+def live_report(root: Path, cwd: Path, home: Path) -> dict[str, object]:
+    """Run the pinned CLI over every file of the scan copy CWD with the verified Opengrep under HOME; return its report.
+
+    No file name reaches the command line: the CLI lists the copy with git ls-files.
+    """
     cli = cli_path(root)
     with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-report-") as temporary:
         report = Path(temporary) / "report.json"
-        command = [str(cli), "analyze", ".", "--tool", "Semgrep", "--config-file", str(root / CONFIG), "--output-format", "json", "--output", str(report), "--files", *files, "--fail-if-missing", "--parallel-tools", "1", "--tool-timeout", str(TOOL_TIMEOUT_MS), "--no-log", "--no-update-notifier"]
+        command = [str(cli), "analyze", ".", "--tool", "Semgrep", "--config-file", str(root / CONFIG), "--output-format", "json", "--output", str(report), "--fail-if-missing", "--parallel-tools", "1", "--tool-timeout", str(TOOL_TIMEOUT_MS), "--no-log", "--no-update-notifier"]
         try:
             result = run_capture(command, cwd, CLI_TIMEOUT_SECONDS, cli_env(os.environ, home))
         finally:
@@ -594,18 +650,33 @@ def live_report(root: Path, cwd: Path, home: Path, files: list[str]) -> dict[str
     return data
 
 
-def canary_report(root: Path, home: Path) -> dict[str, object]:
-    """Scan the planted canary source at its real path in a scratch repository (the CLI needs one)."""
-    with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-canary-") as temporary:
+def copy_report(root: Path, home: Path, sources: dict[str, str]) -> dict[str, object]:
+    """Write SOURCES (path to text) into a scratch repository, add them all, and scan it; the CLI needs a repository."""
+    with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-copy-") as temporary:
         scratch = Path(temporary)
-        target = scratch / CANARY_FILE
-        target.parent.mkdir(parents=True)
-        target.write_text(canary_source(root), encoding="utf-8")
-        for args in (("init", "-q"), ("add", "--", CANARY_FILE)):
+        for name, source in sources.items():
+            target = scratch / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(source, encoding="utf-8")
+        for args in (("init", "-q"), ("add", "--all", "--force")):  # --force: a global excludes file must not drop a target
             result = git(scratch, *args)
             if result.returncode != 0:
-                raise ScanError(f"canary: git {args[0]} failed: {result.stderr.strip()}")
-        return live_report(root, scratch, home, [CANARY_FILE])
+                raise ScanError(f"scan copy: git {args[0]} failed: {result.stderr.strip()}")
+        return live_report(root, scratch, home)
+
+
+def read_sources(root: Path, names: list[str]) -> dict[str, str]:
+    """Return the text of each NAME under ROOT, keyed by NAME."""
+    try:
+        return {name: (root / name).read_text(encoding="utf-8") for name in names}
+    except (OSError, UnicodeDecodeError) as err:
+        raise ScanError(f"cannot read a scan target: {err}") from err
+
+
+def canary_report(root: Path, home: Path) -> dict[str, object]:
+    """Scan the two planted canary sources at their paths in a scan copy."""
+    planted = canary_source(root)
+    return copy_report(root, home, {CANARY_FILE: planted, INTRAFILE_FILE: read_sources(root, [INTRAFILE_SOURCE])[INTRAFILE_SOURCE]})
 
 
 def save_report(directory: Path | None, name: str, report: dict[str, object]) -> None:
@@ -633,11 +704,11 @@ def scan(root: Path, today: date, report_out: Path | None) -> list[str]:
     targets = tracked_files(root)
     with codacy_home(versions) as home:
         problems = canary_check(root, home, baseline, version, report_out)
-        report = live_report(root, root, home, targets)
+        report = copy_report(root, home, read_sources(root, targets))
         save_report(report_out, "tree-report.json", report)
     problems += report_problems(report, targets, baseline, version)
     if not problems:
-        print(f"codacy-opengrep: canary: the 58af3cb4 defect is one new {CANARY_RULE.rsplit('.', 1)[-1]} finding; {len(targets)} files, 0 new, 0 stale")
+        print(f"codacy-opengrep: canary: the 58af3cb4 defect and the intrafile taint each one new finding; {len(targets)} files, 0 new, 0 stale")
     return problems
 
 
@@ -848,6 +919,8 @@ def report_cases(root: Path, baseline: Counter[str], version: str) -> list[tuple
     return [
         ("planted finding: exactly one new canary finding", not canary_problems(planted, baseline, version)),
         ("planted finding gone: canary refused", bool(canary_problems(without_rule(planted, CANARY_RULE), baseline, version))),
+        ("intrafile finding gone (a scan without --taint-intrafile): canary refused", bool(canary_problems(without_rule(planted, TAINT_RULE), baseline, version))),
+        ("wrapper adds --taint-intrafile to scan and passes other calls through", wrapper_cases()),
         ("planted finding with an empty baseline: canary refused", bool(canary_problems(planted, Counter(), version))),
         ("main baseline: 0 new, 0 stale", not report_problems(main, files, baseline, version)),
         ("second occurrence of a baselined finding is new", refused_with(report_problems(with_repeat(main), files, baseline, version), "new finding: ")),
@@ -872,6 +945,20 @@ def fingerprint_cases() -> list[tuple[str, bool]]:
         ("an escaped quote keeps the literal open", not same_key('run("a\\"  b")', 'run("a\\" b")')),
         ("oversized source text refused", raises(lambda: same_key("x" * (MAX_CONTENT_CHARS + 1), "x"))),
     ]
+
+
+def wrapper_cases() -> bool:
+    """Run WRAPPER around a stub that prints its arguments; a scan call gains the flag, --version does not."""
+    with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-wrapper-") as temporary:
+        directory = Path(temporary) / "dir with space"
+        directory.mkdir()
+        stub = directory / "opengrep-release"
+        stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n', encoding="utf-8")
+        stub.chmod(0o755)
+        wrapper = write_wrapper(directory, stub)
+        scanned = run_capture([str(wrapper), "scan", "--json", "a b"], directory, GIT_TIMEOUT_SECONDS)
+        version = run_capture([str(wrapper), "--version"], directory, GIT_TIMEOUT_SECONDS)
+    return scanned.stdout.splitlines() == ["scan", "--taint-intrafile", "--json", "a b"] and version.stdout.splitlines() == ["--version"]
 
 
 def guard_cases(scratch: Path) -> list[tuple[str, bool]]:
@@ -1088,6 +1175,7 @@ def live_cases(configured: list[str]) -> list[tuple[str, bool]]:
     """Return (name, held) for the live listing: paging, drift both ways, refusals and token handling."""
     thirds = [configured[0::3], configured[1::3], configured[2::3]]
     token = "a" * 20
+    blank, spaced = "", "bad token"  # plain names: Bandit B105 reads a literal under a *TOKEN key as a password
     return [
         ("live listing over three pages matches the config", listed(fake_codacy(thirds)) == configured and not listing_problems(configured, configured, "gh/o/r")),
         ("live listing missing a configured ID refused", refused_with(listing_problems(listed(fake_codacy([configured[:-1]])), configured, "gh/o/r"), "live listing drift")),
@@ -1097,14 +1185,14 @@ def live_cases(configured: list[str]) -> list[tuple[str, bool]]:
         ("cursor past the page cap refused", raises(lambda: listed(fake_codacy([configured], loop=True)))),
         ("empty page with a cursor is followed", listed(fake_codacy([[], configured])) == configured),
         ("repeated page refused", raises(lambda: listed(fake_codacy([configured[:2], configured[1:3]])))),
-        ("no token, or an empty one, skips the live listing", codacy_auth({}) is None and codacy_auth({"CODACY_PROJECT_TOKEN": "", "CODACY_API_TOKEN": ""}) is None),
+        ("no token, or an empty one, skips the live listing", codacy_auth({}) is None and codacy_auth({"CODACY_PROJECT_TOKEN": blank, "CODACY_API_TOKEN": blank}) is None),
         ("repository token preferred over the account token", codacy_auth({"CODACY_PROJECT_TOKEN": token, "CODACY_API_TOKEN": "b" * 20}) == ("project-token", token)),
         ("account token used alone", codacy_auth({"CODACY_API_TOKEN": token}) == ("api-token", token)),
         ("token with a newline refused", raises(lambda: codacy_auth({"CODACY_API_TOKEN": token + "\nX-Injected: 1"}))),
         ("GitHub https and ssh origins accepted", all(parse_origin(url) == ("lusoris", "SnatchArr") for url in ("https://github.com/lusoris/SnatchArr.git", "git@github.com:lusoris/SnatchArr.git", "ssh://git@github.com/lusoris/SnatchArr"))),
         ("other origin hosts and dot segments refused", parse_origin("https://gitlab.com/lusoris/SnatchArr.git") is None and parse_origin("https://github.com/../x") is None),
         ("CLI environment drops every CODACY_* variable", cli_env({"CODACY_PROJECT_TOKEN": token, "CODACY_API_BASE_URL": "x", "PATH": "/bin"}, Path("/h")) == {"PATH": "/bin", "CODACY_GLOBAL_DIR": "/h"}),
-        ("live listing error returned with its prefix", refused_with(live_drift(Path("/nonexistent"), {"CODACY_API_TOKEN": "bad token"}, codacy_open), "live listing: CODACY_API_TOKEN is malformed")),
+        ("live listing error returned with its prefix", refused_with(live_drift(Path("/nonexistent"), {"CODACY_API_TOKEN": spaced}, codacy_open), "live listing: CODACY_API_TOKEN is malformed")),
     ]
 
 

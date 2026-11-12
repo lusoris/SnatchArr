@@ -1,6 +1,6 @@
 {
   "capability": {
-    "checkedAt": "2026-11-12T13:29:47.637Z",
+    "checkedAt": "2026-11-12T17:00:43.501Z",
     "ready": [
       {
         "configSource": "codacy",
@@ -66,6 +66,18 @@
     },
     {
       "category": "Security",
+      "column": 13,
+      "endColumn": 17,
+      "filePath": ".config/lefthook/scripts/common.py",
+      "line": 329,
+      "lineContent": "            args,",
+      "message": "Detected subprocess function 'Popen' with user controlled data.",
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
       "column": 16,
       "endColumn": 10,
       "endLine": 114,
@@ -103,10 +115,10 @@
     {
       "category": "Security",
       "column": 16,
-      "endColumn": 116,
+      "endColumn": 129,
       "filePath": "tools/ci/codacy_opengrep_scan.py",
-      "line": 88,
-      "lineContent": "        return subprocess.run(argv, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, check=False)  # nosec B603  # argument lists built in this file, no shell",
+      "line": 156,
+      "lineContent": "        return subprocess.run(argv, cwd=cwd, env=env, input=stdin, capture_output=True, text=True, timeout=timeout, check=False)  # nosec B603  # argument lists built in this file, no shell",
       "message": "Detected subprocess function 'run' without a static string.",
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
       "severity": "Error",
@@ -131,6 +143,18 @@
         "        )"
       ],
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 13,
+      "endColumn": 20,
+      "filePath": "tools/ci/dependency_snapshot.py",
+      "line": 120,
+      "lineContent": "            command,",
+      "message": "Detected subprocess function 'run' with user controlled data.",
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
       "severity": "Error",
       "toolId": "Semgrep"
     },
@@ -276,6 +300,18 @@
         "                              timeout=TIMEOUT_SECONDS, check=False)"
       ],
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 31,
+      "endColumn": 38,
+      "filePath": "tools/ci/semgrep_scan.py",
+      "line": 42,
+      "lineContent": "        return subprocess.run(command, cwd=root, capture_output=True, text=True,",
+      "message": "Detected subprocess function 'run' with user controlled data.",
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
       "severity": "Error",
       "toolId": "Semgrep"
     },
@@ -464,18 +500,18 @@
     }
   ],
   "metadata": {
-    "completedAt": "2026-11-12T13:29:56.253Z",
-    "durationMs": 9662,
+    "completedAt": "2026-11-12T17:00:51.495Z",
+    "durationMs": 8764,
     "executionMode": "strict",
     "phaseTimings": {
-      "availabilityMs": 1030,
-      "fileDiscoveryMs": 21,
-      "fileRoutingMs": 1,
+      "availabilityMs": 754,
+      "fileDiscoveryMs": 5,
+      "fileRoutingMs": 3,
       "installMs": 0,
-      "toolExecutionMs": 8591,
+      "toolExecutionMs": 7984,
       "toolUpdateMs": 0
     },
-    "startedAt": "2026-11-12T13:29:46.591Z"
+    "startedAt": "2026-11-12T17:00:42.731Z"
   },
   "patternSummary": {
     "groups": [
@@ -496,8 +532,8 @@
           },
           {
             "category": "Security",
-            "fileCount": 1,
-            "issueCount": 1,
+            "fileCount": 4,
+            "issueCount": 4,
             "noisy": false,
             "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
             "severity": "Error",
@@ -508,7 +544,7 @@
         ],
         "severity": "Error",
         "severityLabel": "CRITICAL",
-        "totalIssues": 19,
+        "totalIssues": 22,
         "totalPatterns": 2
       },
       {
@@ -535,15 +571,15 @@
     ],
     "noisyPatternCount": 0,
     "noisyThreshold": 500,
-    "totalIssues": 22,
+    "totalIssues": 25,
     "totalPatterns": 3
   },
   "toolResults": [
     {
-      "durationMs": 8590,
+      "durationMs": 7984,
       "errorCount": 0,
       "filesAnalyzed": 42,
-      "issueCount": 22,
+      "issueCount": 25,
       "status": "success",
       "toolId": "Semgrep"
     }
