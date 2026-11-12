@@ -1196,7 +1196,7 @@ func (s *Server) decodeImportConfigarrRequest(r *http.Request) (
 }
 
 func (s *Server) decodeJellyfinLoginRequest(r *http.Request) (
-	req *JellyfinLoginRequest,
+	req *JellyfinSessionRequest,
 	rawBody []byte,
 	close func() error,
 	rerr error,
@@ -1243,7 +1243,7 @@ func (s *Server) decodeJellyfinLoginRequest(r *http.Request) (
 		rawBody = append(rawBody, buf...)
 		d := jx.DecodeBytes(buf)
 
-		var request JellyfinLoginRequest
+		var request JellyfinSessionRequest
 		if err := func() error {
 			if err := request.Decode(d); err != nil {
 				return err

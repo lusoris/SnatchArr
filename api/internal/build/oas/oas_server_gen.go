@@ -422,10 +422,10 @@ type Handler interface {
 	ImportSeerrInstances(ctx context.Context, params ImportSeerrInstancesParams) (*SeerrImportResult, error)
 	// JellyfinLogin implements jellyfinLogin operation.
 	//
-	// Start a session with Jellyfin credentials.
+	// Start a session with Jellyfin credentials or a Jellyfin access token.
 	//
 	// POST /auth/jellyfin
-	JellyfinLogin(ctx context.Context, req *JellyfinLoginRequest) (JellyfinLoginRes, error)
+	JellyfinLogin(ctx context.Context, req *JellyfinSessionRequest) (JellyfinLoginRes, error)
 	// JellyfinQuickConnectAuthenticate implements jellyfinQuickConnectAuthenticate operation.
 	//
 	// Authenticate an authorized Jellyfin Quick Connect session.

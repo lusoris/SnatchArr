@@ -4434,7 +4434,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 							switch method {
 							case "POST":
 								r.name = JellyfinLoginOperation
-								r.summary = "Start a session with Jellyfin credentials"
+								r.summary = "Start a session with Jellyfin credentials or a Jellyfin access token"
 								r.operationID = "jellyfinLogin"
 								r.operationGroup = ""
 								r.pathPattern = "/auth/jellyfin"

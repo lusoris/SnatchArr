@@ -630,10 +630,10 @@ func (UnimplementedHandler) ImportSeerrInstances(ctx context.Context, params Imp
 
 // JellyfinLogin implements jellyfinLogin operation.
 //
-// Start a session with Jellyfin credentials.
+// Start a session with Jellyfin credentials or a Jellyfin access token.
 //
 // POST /auth/jellyfin
-func (UnimplementedHandler) JellyfinLogin(ctx context.Context, req *JellyfinLoginRequest) (r JellyfinLoginRes, _ error) {
+func (UnimplementedHandler) JellyfinLogin(ctx context.Context, req *JellyfinSessionRequest) (r JellyfinLoginRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

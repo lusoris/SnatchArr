@@ -1607,8 +1607,14 @@
   },
   "jellyfinLogin": {
     "$defs": {
-      "JellyfinLoginRequest": {
+      "JellyfinSessionRequest": {
         "properties": {
+          "access_token": {
+            "description": "Jellyfin access token of the signed-in user; never logged.",
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
           "password": {
             "maxLength": 1024,
             "type": "string"
@@ -1619,10 +1625,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "username",
-          "password"
-        ],
         "type": "object"
       }
     },
@@ -1630,7 +1632,7 @@
     "additionalProperties": false,
     "properties": {
       "body": {
-        "$ref": "#/$defs/JellyfinLoginRequest"
+        "$ref": "#/$defs/JellyfinSessionRequest"
       }
     },
     "required": [
