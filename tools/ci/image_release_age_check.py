@@ -266,17 +266,17 @@ def decode_verdict(verdict: object) -> JudgeResult:
     )
 
 
-def judge_in_child(request: JudgeRequest) -> JudgeResult:
+def judge_in_child(job: JudgeRequest) -> JudgeResult:
     """Run pure `renovate_rules.judge_full` in an isolated child bounded by REGEX_DEADLINE."""
     encoded_files = {
-        path: base64.b64encode(raw).decode("ascii") for path, raw in sorted(request.files.items())
+        path: base64.b64encode(raw).decode("ascii") for path, raw in sorted(job.files.items())
     }
     payload = json.dumps({
-        "config": request.config,
-        "names": request.names,
-        "records": request.records,
-        "record_names": request.record_names,
-        "searched": request.searched,
+        "config": job.config,
+        "names": job.names,
+        "records": job.records,
+        "record_names": job.record_names,
+        "searched": job.searched,
         "files": encoded_files,
     }).encode("utf-8")
     try:
