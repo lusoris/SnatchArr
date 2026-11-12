@@ -1,0 +1,225 @@
+{
+  "version": 2,
+  "findings": [
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": ".config/lefthook/scripts/common.py",
+      "contentSha256": "e3dd00f14a981030b9bb7d8452501d3010aa2acf6510fc3b88ccfd768f0d79fa",
+      "category": "A",
+      "entered": "2026-11-12",
+      "expires": "2026-11-30",
+      "issue": "1102",
+      "reason": "run() passes the inherited environment and a PATH-resolved executable unchecked; #1102 allow-lists both before this entry expires."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": ".config/lefthook/scripts/common.py",
+      "contentSha256": "ffc6e8cdd930bef655cb6b13553746b975512415c7f72bd5152abe3c2284d7d9",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "_spawn_bounded starts the hook argv its callers build from fixed tool names, with start_new_session and a deadline; no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/clones_check.py",
+      "contentSha256": "b2d3d9b3aceb4f809f18ef838f762066c16136c3acca41fe39e0817708c431cf",
+      "category": "A",
+      "entered": "2026-11-12",
+      "expires": "2026-11-30",
+      "issue": "1101",
+      "reason": "praetorctl is resolved through an environment-derived path; #1101 resolves it by fixed name before this entry expires."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+      "filePath": "tools/ci/clones_check.py",
+      "contentSha256": "527f93560da7db896060eff9931b448091492507534388e34ecbb8a9c7fde68d",
+      "category": "A",
+      "entered": "2026-11-12",
+      "expires": "2026-11-30",
+      "issue": "1101",
+      "reason": "Same call as line 106: the argv carries an environment-derived executable path; #1101 resolves praetorctl by fixed name."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/codacy_opengrep_scan.py",
+      "contentSha256": "336b39187fa32fde311195b3dfedecdc4a48d2bfbffe617b8b36cb38f2b6edc0",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "run_capture is this scanner's one subprocess helper: argv lists built in this file (git from PATH, the pinned CLI), a deadline, no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/dependency_snapshot.py",
+      "contentSha256": "e74f36029448ca6aa54e0a84cf962d82541583af3bbc17fe66777fb74a363977",
+      "category": "A",
+      "entered": "2026-11-12",
+      "expires": "2026-11-30",
+      "issue": "1099",
+      "reason": "docker arguments include environment-derived values that are not validated; #1099 validates them before this entry expires."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/image_release_age_check.py",
+      "contentSha256": "7311b6115dca4aea9340babc2f6a38d25aff859edc26dd8c826740c12848e35c",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Re-invokes this script's own --judge mode via sys.executable -I with a fixed argv and a timeout; no shell, no outside input."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/nosec_check.py",
+      "contentSha256": "364adc34c9b05b95e9269d19c7a7a4fd8353cdf1cdcd57df60a0aee5de929902",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Fixed git ls-files argv with fixed path patterns and a timeout; no shell, no outside input."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/priority_presets_mutation_test.py",
+      "contentSha256": "aa57574101b49ad71c7cf09236ce6d41aff0f4cedc52577fc2af8f15f52017ce",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Runs a fixed per-case argv from this test's own mutation table with a 180 s timeout; no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/release_closes_check.py",
+      "contentSha256": "a2e82bf2f7d25a56812af5ebd80acec75286ea3a28dbf30becc3bb8af784e8d0",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Self-test runs fixed git argv lists in a throwaway temporary repository with a timeout; no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/release_e2e_check.py",
+      "contentSha256": "085457a0ec235bc9a8eb9e7983ebf8775815674876d25b00ac504da364d505d8",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Self-test re-invokes this script via sys.executable -I against a temporary fixture repository; fixed argv, no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/run_bounded.py",
+      "contentSha256": "53bb86594e56f6c7e9209511ef50cd494c892468815cfb607e9b2f480fc593ce",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "run_bounded exists to run its caller's argument list under a deadline and process group; the argv is its documented input."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/secret_scan.py",
+      "contentSha256": "ae66c72915d2da42178c590eddff698f531228c5420e2a2ab5272a7f0b8eec09",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Runs the pinned gitleaks binary with a fixed argv built in the script, a scrubbed environment and a timeout; no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/semgrep_scan.py",
+      "contentSha256": "0c05ca152c5dba6193320fd3a96ee80fae3116bfe0cb27951b468c275adc87ee",
+      "category": "A",
+      "entered": "2026-11-12",
+      "expires": "2026-11-30",
+      "issue": "1100",
+      "reason": "--docker and --root reach the argv unchecked; #1100 refuses unchecked values before this entry expires."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/trivy_scan.py",
+      "contentSha256": "49938af7a35c673c38ddbf3cd0f361c1c282b7d912957ea1acd49c8afed9aa2f",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Runs the digest-pinned trivy image with a fixed argv built in the script and a timeout; no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/web_strings_scan.py",
+      "contentSha256": "69dde27fbf84dbc215aa1f50279966fa7d22a35946536653eafe54e8fcfe26f9",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Runs the repository's own node string checker with a fixed argv and a timeout; no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+      "filePath": "tools/e2e/forceimport/mktorrent.py",
+      "contentSha256": "2ce2550512d63ff82995e408e83f25a843fcdbaec9b2c357fd8c1a0b8f9970e4",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "BitTorrent v1 (BEP 3) defines the info hash as SHA-1 of the bencoded info dict; e2e fixture only, no security use."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+      "filePath": "tools/e2e/forceimport/mktorrent.py",
+      "contentSha256": "78af016e17cbe5b2f329a8bf6a3da4c2f4401345c3f0748ac8d9bfe2e85ba4c2",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "BitTorrent v1 (BEP 3) defines the last piece hash as SHA-1; this e2e fixture builder must emit it, no security use."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+      "filePath": "tools/e2e/forceimport/mktorrent.py",
+      "contentSha256": "c131ffc961e2e3c10b47e891941f5ac14bc00cb2870da603aeb07a8c21f230c2",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "BitTorrent v1 (BEP 3) defines the piece hash as SHA-1; this e2e fixture builder must emit it, no security use."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/licences/generate.py",
+      "contentSha256": "409e6865aa2ae84545ce4aeccaf896b498b32d8ef481defb686db145bef4a361",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "run_cmd runs fixed go and npm licence-listing argv built in this generator with a timeout; no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/release/dogfood_gate.py",
+      "contentSha256": "1618f4c61e5c4af45907fa25273ce56a719fd7d519a473175001077bb7bd3745",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Self-test re-invokes this script via sys.executable -I with fixed case argv; no shell, no outside input."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/release/dogfood_pass.py",
+      "contentSha256": "a7c289853dfe14d5a0ba0c15c31eb528d616cace5a5aa163ba1a12e3fc4ed7be",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Runs gh api with a fixed endpoint argv built in the script and a timeout; no shell."
+    }
+  ]
+}

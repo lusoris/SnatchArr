@@ -1,0 +1,551 @@
+{
+  "capability": {
+    "checkedAt": "2026-11-12T13:29:47.637Z",
+    "ready": [
+      {
+        "configSource": "codacy",
+        "displayName": "Opengrep",
+        "filesRouted": 42,
+        "installation": "codacy",
+        "runner": "local",
+        "toolId": "Semgrep",
+        "version": "1.30.0"
+      }
+    ],
+    "unavailable": []
+  },
+  "errors": [],
+  "issues": [
+    {
+      "category": "Security",
+      "column": 12,
+      "endColumn": 6,
+      "endLine": 283,
+      "filePath": ".config/lefthook/scripts/common.py",
+      "line": 275,
+      "lineContent": "    return subprocess.Popen(",
+      "message": "Detected subprocess function 'Popen' without a static string.",
+      "multilineContent": [
+        "    return subprocess.Popen(",
+        "        args,",
+        "        cwd=cwd,",
+        "        env=env,",
+        "        start_new_session=True,",
+        "        stdin=subprocess.DEVNULL,",
+        "        stdout=subprocess.PIPE,",
+        "        stderr=subprocess.PIPE,",
+        "    )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 14,
+      "endColumn": 10,
+      "endLine": 336,
+      "filePath": ".config/lefthook/scripts/common.py",
+      "line": 328,
+      "lineContent": "        with subprocess.Popen(",
+      "message": "Detected subprocess function 'Popen' without a static string.",
+      "multilineContent": [
+        "        with subprocess.Popen(",
+        "            args,",
+        "            cwd=cwd,",
+        "            env=settings,",
+        "            start_new_session=True,",
+        "            stdin=subprocess.PIPE if data is not None else None,",
+        "            stdout=subprocess.PIPE if capture else None,",
+        "            stderr=subprocess.PIPE if capture else None,",
+        "        ) as process:"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 10,
+      "endLine": 114,
+      "filePath": "tools/ci/clones_check.py",
+      "line": 106,
+      "lineContent": "        proc = subprocess.run(",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        proc = subprocess.run(",
+        "            cmd,",
+        "            cwd=str(root),",
+        "            env=env,",
+        "            capture_output=True,",
+        "            text=True,",
+        "            timeout=TIMEOUT_SECONDS,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 13,
+      "endColumn": 16,
+      "filePath": "tools/ci/clones_check.py",
+      "line": 107,
+      "lineContent": "            cmd,",
+      "message": "Detected subprocess function 'run' with user controlled data.",
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 116,
+      "filePath": "tools/ci/codacy_opengrep_scan.py",
+      "line": 88,
+      "lineContent": "        return subprocess.run(argv, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, check=False)  # nosec B603  # argument lists built in this file, no shell",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 10,
+      "endLine": 125,
+      "filePath": "tools/ci/dependency_snapshot.py",
+      "line": 119,
+      "lineContent": "        proc = subprocess.run(",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        proc = subprocess.run(",
+        "            command,",
+        "            input=tar_bytes,",
+        "            capture_output=True,",
+        "            timeout=TIMEOUT_SECONDS,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 10,
+      "endLine": 289,
+      "filePath": "tools/ci/image_release_age_check.py",
+      "line": 283,
+      "lineContent": "        proc = subprocess.run(  # nosec B603  # fixed argv invoking own --judge mode, no shell",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        proc = subprocess.run(  # nosec B603  # fixed argv invoking own --judge mode, no shell",
+        "            [sys.executable, \"-I\", str(Path(__file__).resolve()), \"--judge\"],",
+        "            input=payload,",
+        "            capture_output=True,",
+        "            timeout=REGEX_DEADLINE,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 10,
+      "endLine": 59,
+      "filePath": "tools/ci/nosec_check.py",
+      "line": 53,
+      "lineContent": "        proc = subprocess.run(  # nosec B603  # fixed git argv list, no shell; path patterns are fixed",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        proc = subprocess.run(  # nosec B603  # fixed git argv list, no shell; path patterns are fixed",
+        "            [git, \"ls-files\", \"-z\", \"--\", \"*.py\", \"*.go\"],",
+        "            cwd=root,",
+        "            capture_output=True,",
+        "            timeout=GIT_TIMEOUT_SECONDS,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 18,
+      "endColumn": 10,
+      "endLine": 100,
+      "filePath": "tools/ci/priority_presets_mutation_test.py",
+      "line": 98,
+      "lineContent": "        result = subprocess.run(",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        result = subprocess.run(",
+        "            command, cwd=ROOT, capture_output=True, text=True, timeout=180, check=False",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 18,
+      "endColumn": 10,
+      "endLine": 429,
+      "filePath": "tools/ci/release_closes_check.py",
+      "line": 423,
+      "lineContent": "        result = subprocess.run(  # nosec B603  # fixed git argv list in a throwaway self-test repository",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        result = subprocess.run(  # nosec B603  # fixed git argv list in a throwaway self-test repository",
+        "            argv,",
+        "            capture_output=True,",
+        "            text=True,",
+        "            timeout=GIT_TIMEOUT_SECONDS,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 18,
+      "endColumn": 10,
+      "endLine": 772,
+      "filePath": "tools/ci/release_e2e_check.py",
+      "line": 768,
+      "lineContent": "        result = subprocess.run(",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        result = subprocess.run(",
+        "            [sys.executable, \"-I\", str(Path(__file__).resolve()), \"--repo\", str(repo),",
+        "             \"--exceptions\", path.name],",
+        "            capture_output=True, text=True, timeout=GIT_TIMEOUT_SECONDS, check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 62,
+      "filePath": "tools/ci/run_bounded.py",
+      "line": 69,
+      "lineContent": "        return subprocess.Popen(cmd, start_new_session=GROUP)  # nosec B603  # caller's argument list, no shell",
+      "message": "Detected subprocess function 'Popen' without a static string.",
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 18,
+      "endColumn": 145,
+      "filePath": "tools/ci/secret_scan.py",
+      "line": 148,
+      "lineContent": "        result = subprocess.run(command, cwd=source, env=environment, capture_output=True, text=True, timeout=SCAN_TIMEOUT_SECONDS, check=False)",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 68,
+      "endLine": 43,
+      "filePath": "tools/ci/semgrep_scan.py",
+      "line": 42,
+      "lineContent": "        return subprocess.run(command, cwd=root, capture_output=True, text=True,",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        return subprocess.run(command, cwd=root, capture_output=True, text=True,",
+        "                              timeout=TIMEOUT_SECONDS, check=False)"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 68,
+      "endLine": 52,
+      "filePath": "tools/ci/trivy_scan.py",
+      "line": 51,
+      "lineContent": "        return subprocess.run(command, input=stdin, capture_output=True,",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        return subprocess.run(command, input=stdin, capture_output=True,",
+        "                              timeout=TIMEOUT_SECONDS, check=False)"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 10,
+      "endLine": 185,
+      "filePath": "tools/ci/web_strings_scan.py",
+      "line": 178,
+      "lineContent": "        proc = subprocess.run(",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        proc = subprocess.run(",
+        "            cmd,",
+        "            cwd=str(root),",
+        "            capture_output=True,",
+        "            text=True,",
+        "            timeout=TIMEOUT_SECONDS,",
+        "            check=True,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 32,
+      "endColumn": 57,
+      "filePath": "tools/e2e/forceimport/mktorrent.py",
+      "fix": {
+        "applicability": "safe",
+        "edits": [
+          {
+            "endColumn": 57,
+            "endLine": 57,
+            "startColumn": 32,
+            "startLine": 57,
+            "text": "hashlib.sha256(buf[:PIECE])"
+          }
+        ]
+      },
+      "line": 57,
+      "lineContent": "                    out.append(hashlib.sha1(buf[:PIECE]).digest())",
+      "message": "Detected SHA1 hash algorithm which is considered insecure.",
+      "patternId": "Semgrep_python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+      "severity": "High",
+      "suggestion": "                    out.append(hashlib.sha256(buf[:PIECE]).digest())",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 20,
+      "endColumn": 37,
+      "filePath": "tools/e2e/forceimport/mktorrent.py",
+      "fix": {
+        "applicability": "safe",
+        "edits": [
+          {
+            "endColumn": 37,
+            "endLine": 60,
+            "startColumn": 20,
+            "startLine": 60,
+            "text": "hashlib.sha256(buf)"
+          }
+        ]
+      },
+      "line": 60,
+      "lineContent": "        out.append(hashlib.sha1(buf).digest())",
+      "message": "Detected SHA1 hash algorithm which is considered insecure.",
+      "patternId": "Semgrep_python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+      "severity": "High",
+      "suggestion": "        out.append(hashlib.sha256(buf).digest())",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 11,
+      "endColumn": 38,
+      "filePath": "tools/e2e/forceimport/mktorrent.py",
+      "fix": {
+        "applicability": "safe",
+        "edits": [
+          {
+            "endColumn": 38,
+            "endLine": 84,
+            "startColumn": 11,
+            "startLine": 84,
+            "text": "hashlib.sha256(bencode(info))"
+          }
+        ]
+      },
+      "line": 84,
+      "lineContent": "    print(hashlib.sha1(bencode(info)).hexdigest())",
+      "message": "Detected SHA1 hash algorithm which is considered insecure.",
+      "patternId": "Semgrep_python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+      "severity": "High",
+      "suggestion": "    print(hashlib.sha256(bencode(info)).hexdigest())",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 15,
+      "endColumn": 10,
+      "endLine": 41,
+      "filePath": "tools/licences/generate.py",
+      "line": 33,
+      "lineContent": "        res = subprocess.run(",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        res = subprocess.run(",
+        "            cmd,",
+        "            cwd=cwd,",
+        "            env=env,",
+        "            capture_output=True,",
+        "            text=True,",
+        "            timeout=timeout,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 18,
+      "endColumn": 10,
+      "endLine": 553,
+      "filePath": "tools/release/dogfood_gate.py",
+      "line": 547,
+      "lineContent": "        result = subprocess.run(",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        result = subprocess.run(",
+        "            [sys.executable, \"-I\", str(Path(__file__)), *command],",
+        "            capture_output=True,",
+        "            text=True,",
+        "            timeout=GH_TIMEOUT_SECONDS,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 18,
+      "endColumn": 10,
+      "endLine": 253,
+      "filePath": "tools/release/dogfood_pass.py",
+      "line": 247,
+      "lineContent": "        result = subprocess.run(",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        result = subprocess.run(",
+        "            command,",
+        "            capture_output=True,",
+        "            text=True,",
+        "            timeout=GH_TIMEOUT_SECONDS,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    }
+  ],
+  "metadata": {
+    "completedAt": "2026-11-12T13:29:56.253Z",
+    "durationMs": 9662,
+    "executionMode": "strict",
+    "phaseTimings": {
+      "availabilityMs": 1030,
+      "fileDiscoveryMs": 21,
+      "fileRoutingMs": 1,
+      "installMs": 0,
+      "toolExecutionMs": 8591,
+      "toolUpdateMs": 0
+    },
+    "startedAt": "2026-11-12T13:29:46.591Z"
+  },
+  "patternSummary": {
+    "groups": [
+      {
+        "category": "Security",
+        "categoryLabel": "Security",
+        "patterns": [
+          {
+            "category": "Security",
+            "fileCount": 17,
+            "issueCount": 18,
+            "noisy": false,
+            "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+            "severity": "Error",
+            "title": "Audit Dangerous Subprocess Use",
+            "toolDisplayName": "Opengrep",
+            "toolId": "Semgrep"
+          },
+          {
+            "category": "Security",
+            "fileCount": 1,
+            "issueCount": 1,
+            "noisy": false,
+            "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+            "severity": "Error",
+            "title": "Avoid Dangerous Subprocess Use with Tainted Environment Arguments",
+            "toolDisplayName": "Opengrep",
+            "toolId": "Semgrep"
+          }
+        ],
+        "severity": "Error",
+        "severityLabel": "CRITICAL",
+        "totalIssues": 19,
+        "totalPatterns": 2
+      },
+      {
+        "category": "Security",
+        "categoryLabel": "Security",
+        "patterns": [
+          {
+            "category": "Security",
+            "fileCount": 1,
+            "issueCount": 3,
+            "noisy": false,
+            "patternId": "Semgrep_python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+            "severity": "High",
+            "title": "Avoid Insecure SHA1 Hash Algorithm",
+            "toolDisplayName": "Opengrep",
+            "toolId": "Semgrep"
+          }
+        ],
+        "severity": "High",
+        "severityLabel": "HIGH",
+        "totalIssues": 3,
+        "totalPatterns": 1
+      }
+    ],
+    "noisyPatternCount": 0,
+    "noisyThreshold": 500,
+    "totalIssues": 22,
+    "totalPatterns": 3
+  },
+  "toolResults": [
+    {
+      "durationMs": 8590,
+      "errorCount": 0,
+      "filesAnalyzed": 42,
+      "issueCount": 22,
+      "status": "success",
+      "toolId": "Semgrep"
+    }
+  ]
+}

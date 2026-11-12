@@ -681,6 +681,9 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/squash_merge_test.sh
 	sh tools/ci/semgrep_scan_test.sh
+	sh tools/ci/codacy_opengrep_scan_test.sh
+	python3 -I tools/ci/codacy_opengrep_scan.py --self-test
+	python3 -I tools/ci/codacy_opengrep_scan.py --base-ref origin/main
 	bash tools/ci/generated_files_test.sh
 	bash tools/e2e/planted_test.sh
 	bash tools/e2e/schema_check_test.sh
@@ -711,6 +714,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.
 workflows-lint: ## actionlint + pinned actions (zizmor) on every workflow file, with planted cases
+	python3 -I tools/ci/codacy_opengrep_scan.py
 	bash tools/ci/workflow-check_test.sh
 	bash tools/ci/workflow-check.sh
 
