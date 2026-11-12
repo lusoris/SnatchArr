@@ -1788,6 +1788,14 @@ func (s *JellyfinLoginUnauthorized) Validate() error {
 	return nil
 }
 
+func (s *JellyfinLoginUnprocessableEntity) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *JellyfinQuickConnectAuthenticateRequest) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer

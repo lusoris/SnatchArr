@@ -3963,6 +3963,10 @@ type JellyfinLoginUnauthorized ProblemStatusCode
 
 func (*JellyfinLoginUnauthorized) jellyfinLoginRes() {}
 
+type JellyfinLoginUnprocessableEntity ProblemStatusCode
+
+func (*JellyfinLoginUnprocessableEntity) jellyfinLoginRes() {}
+
 // Ref: #/components/schemas/JellyfinQuickConnect
 type JellyfinQuickConnect struct {
 	Code   string `json:"code"`

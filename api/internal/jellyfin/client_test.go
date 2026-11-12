@@ -600,117 +600,139 @@ func clientByTokenFailureCases(token string) []clientByTokenCase {
 
 func TestClient_ByToken(t *testing.T) {
 	t.Parallel()
-	const (
-		serviceKey = "service-admin-api-key"
-		userToken  = "secret-user-token-xyz987"
-	)
 	for _, tc := range clientByTokenCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			var hits atomic.Int32
-			var gotMeAuth, gotMePath, gotUserAuth string
-
-			mux := http.NewServeMux()
-			mux.HandleFunc("/Users/Me", func(w http.ResponseWriter, r *http.Request) {
-				hits.Add(1)
-				gotMePath = r.URL.Path
-				gotMeAuth = r.Header.Get("Authorization")
-				if tc.upstreamStatus != http.StatusOK {
-					w.WriteHeader(tc.upstreamStatus)
-					_, _ = w.Write([]byte(`{"message":"token rejected"}`))
-					return
-				}
-				var policy any
-				if !tc.nilPolicy {
-					policy = map[string]any{
-						"IsAdministrator":   tc.memberAdmin,
-						"IsDisabled":        tc.memberDisabled,
-						"MaxParentalRating": 18,
-						"BlockedTags":       []string{"gore"},
-						"AllowedTags":       []string{"family"},
-						"EnableAllFolders":  false,
-						"EnabledFolders":    []string{"lib-movies"},
-					}
-				}
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"Id":     "jf-me-id-1",
-					"Name":   "Eve",
-					"Policy": policy,
-				})
-			})
-			mux.HandleFunc("/Users/jf-me-id-1", func(w http.ResponseWriter, r *http.Request) {
-				gotUserAuth = r.Header.Get("Authorization")
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"Id":   "jf-me-id-1",
-					"Name": "Eve",
-					"Policy": map[string]any{
-						"IsAdministrator": false,
-						"IsDisabled":      false,
-					},
-				})
-			})
-
-			var srv *httptest.Server
-			if tc.useTLS {
-				srv = httptest.NewTLSServer(mux)
-			} else {
-				srv = httptest.NewServer(mux)
-			}
-			t.Cleanup(srv.Close)
-
-			origClient := srv.Client()
-			cl, err := jellyfin.NewClient(srv.URL, serviceKey, 2*time.Second, "TestUA", origClient)
-			if err != nil {
-				t.Fatalf("NewClient() error = %v", err)
-			}
-			cl.SetAllowPlainHTTPToken(tc.allowPlainHTTP)
-
-			m, err := cl.ByToken(t.Context(), tc.token)
-			if gotHits := hits.Load(); gotHits != tc.wantHits {
-				t.Fatalf("server hits = %d, want %d (err=%v)", gotHits, tc.wantHits, err)
-			}
-			if tc.wantErr != nil {
-				if !errors.Is(err, tc.wantErr) {
-					t.Fatalf("ByToken() err = %v, want %v", err, tc.wantErr)
-				}
-				if tc.token != "" && strings.TrimSpace(tc.token) != "" && strings.Contains(err.Error(), strings.TrimSpace(tc.token)) {
-					t.Fatalf("ByToken() error leaked user token: %q", err.Error())
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ByToken() unexpected error = %v", err)
-			}
-			if origClient.CheckRedirect != nil {
-				t.Fatal("ByToken mutated shared http.Client CheckRedirect")
-			}
-			if gotMePath != "/Users/Me" {
-				t.Fatalf("path = %q, want /Users/Me", gotMePath)
-			}
-			if !strings.Contains(gotMeAuth, `Token="`+userToken+`"`) {
-				t.Fatalf("Authorization %q missing user token", gotMeAuth)
-			}
-			if strings.Contains(gotMeAuth, serviceKey) {
-				t.Fatalf("Authorization %q leaked service key", gotMeAuth)
-			}
-			if m.ID != "jf-me-id-1" || m.Name != "Eve" || m.Admin != tc.wantAdmin || m.Disabled != tc.wantDisabled {
-				t.Fatalf("Member = %+v, want ID=jf-me-id-1 Name=Eve Admin=%v Disabled=%v", m, tc.wantAdmin, tc.wantDisabled)
-			}
-			if m.Policy.MaxParentalRating == nil || *m.Policy.MaxParentalRating != 18 || len(m.Policy.EnabledFolders) != 1 || m.Policy.EnabledFolders[0] != "lib-movies" {
-				t.Fatalf("Member.Policy = %+v, want rating 18 and EnabledFolders=[lib-movies]", m.Policy)
-			}
-
-			// Service client must remain isolated from the user token.
-			if _, uErr := cl.User(t.Context(), "jf-me-id-1"); uErr != nil {
-				t.Fatalf("User() after ByToken error = %v", uErr)
-			}
-			if !strings.Contains(gotUserAuth, `Token="`+serviceKey+`"`) || strings.Contains(gotUserAuth, userToken) {
-				t.Fatalf("service User() auth header = %q, want service key only", gotUserAuth)
-			}
+			testClientByTokenCase(t, tc)
 		})
+	}
+}
+
+const (
+	byTokenServiceKey = "service-admin-api-key"
+	byTokenUserToken  = "secret-user-token-xyz987"
+)
+
+type byTokenServerState struct {
+	hits     atomic.Int32
+	meAuth   string
+	mePath   string
+	userAuth string
+}
+
+func testClientByTokenCase(t *testing.T, tc clientByTokenCase) {
+	t.Helper()
+	srv, state := newByTokenTestServer(t, tc)
+	origClient := srv.Client()
+	cl, err := jellyfin.NewClient(srv.URL, byTokenServiceKey, 2*time.Second, "TestUA", origClient)
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	cl.SetAllowPlainHTTPToken(tc.allowPlainHTTP)
+	m, err := cl.ByToken(t.Context(), tc.token)
+	if gotHits := state.hits.Load(); gotHits != tc.wantHits {
+		t.Fatalf("server hits = %d, want %d (err=%v)", gotHits, tc.wantHits, err)
+	}
+	if tc.wantErr != nil {
+		testClientByTokenError(t, tc, err)
+		return
+	}
+	testClientByTokenSuccess(t, cl, origClient, state, tc, m, err)
+}
+
+func newByTokenTestServer(t *testing.T, tc clientByTokenCase) (*httptest.Server, *byTokenServerState) {
+	t.Helper()
+	state := &byTokenServerState{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/Users/Me", byTokenMeHandler(state, tc))
+	mux.HandleFunc("/Users/jf-me-id-1", byTokenUserHandler(state))
+	if tc.useTLS {
+		srv := httptest.NewTLSServer(mux)
+		t.Cleanup(srv.Close)
+		return srv, state
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, state
+}
+
+func byTokenMeHandler(state *byTokenServerState, tc clientByTokenCase) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		state.hits.Add(1)
+		state.mePath = r.URL.Path
+		state.meAuth = r.Header.Get("Authorization")
+		if tc.upstreamStatus != http.StatusOK {
+			w.WriteHeader(tc.upstreamStatus)
+			_, _ = w.Write([]byte(`{"message":"token rejected"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"Id": "jf-me-id-1", "Name": "Eve", "Policy": byTokenPolicy(tc),
+		})
+	}
+}
+
+func byTokenPolicy(tc clientByTokenCase) any {
+	if tc.nilPolicy {
+		return nil
+	}
+	return map[string]any{
+		"IsAdministrator": tc.memberAdmin, "IsDisabled": tc.memberDisabled,
+		"MaxParentalRating": 18, "BlockedTags": []string{"gore"}, "AllowedTags": []string{"family"},
+		"EnableAllFolders": false, "EnabledFolders": []string{"lib-movies"},
+	}
+}
+
+func byTokenUserHandler(state *byTokenServerState) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		state.userAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"Id": "jf-me-id-1", "Name": "Eve",
+			"Policy": map[string]any{"IsAdministrator": false, "IsDisabled": false},
+		})
+	}
+}
+
+func testClientByTokenError(t *testing.T, tc clientByTokenCase, err error) {
+	t.Helper()
+	if !errors.Is(err, tc.wantErr) {
+		t.Fatalf("ByToken() err = %v, want %v", err, tc.wantErr)
+	}
+	if tc.token != "" && strings.TrimSpace(tc.token) != "" && strings.Contains(err.Error(), strings.TrimSpace(tc.token)) {
+		t.Fatalf("ByToken() error leaked user token: %q", err.Error())
+	}
+}
+
+func testClientByTokenSuccess(t *testing.T, cl *jellyfin.Client, origClient *http.Client, state *byTokenServerState, tc clientByTokenCase, m jellyfin.Member, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("ByToken() unexpected error = %v", err)
+	}
+	if origClient.CheckRedirect != nil {
+		t.Fatal("ByToken mutated shared http.Client CheckRedirect")
+	}
+	if state.mePath != "/Users/Me" {
+		t.Fatalf("path = %q, want /Users/Me", state.mePath)
+	}
+	if !strings.Contains(state.meAuth, `Token="`+byTokenUserToken+`"`) {
+		t.Fatalf("Authorization %q missing user token", state.meAuth)
+	}
+	if strings.Contains(state.meAuth, byTokenServiceKey) {
+		t.Fatalf("Authorization %q leaked service key", state.meAuth)
+	}
+	if m.ID != "jf-me-id-1" || m.Name != "Eve" || m.Admin != tc.wantAdmin || m.Disabled != tc.wantDisabled {
+		t.Fatalf("Member = %+v, want ID=jf-me-id-1 Name=Eve Admin=%v Disabled=%v", m, tc.wantAdmin, tc.wantDisabled)
+	}
+	if m.Policy.MaxParentalRating == nil || *m.Policy.MaxParentalRating != 18 || len(m.Policy.EnabledFolders) != 1 || m.Policy.EnabledFolders[0] != "lib-movies" {
+		t.Fatalf("Member.Policy = %+v, want rating 18 and EnabledFolders=[lib-movies]", m.Policy)
+	}
+	if _, uErr := cl.User(t.Context(), "jf-me-id-1"); uErr != nil {
+		t.Fatalf("User() after ByToken error = %v", uErr)
+	}
+	if !strings.Contains(state.userAuth, `Token="`+byTokenServiceKey+`"`) || strings.Contains(state.userAuth, byTokenUserToken) {
+		t.Fatalf("service User() auth header = %q, want service key only", state.userAuth)
 	}
 }
 
