@@ -25,13 +25,14 @@ new_repo() {
     git -C "$dir" config commit.gpgsign false
 }
 
-# test_planted_isc004: verify that implicit string concatenation (ISC004) is caught and refused.
-test_planted_isc004() {
-    local repo="$work/repo-isc004"
+# planted_rule NAME SOURCE RULE: verify that main.py holding SOURCE fails ruff_check.sh with RULE named,
+# under the repository's settings without its own per-file exceptions.
+planted_rule() {
+    local name=$1 source=$2 rule=$3
+    local repo="$work/repo-$name"
     new_repo "$repo"
-    # the repository's settings without its own per-file exceptions
     sed '/^\[lint.per-file-ignores\]/,$d' "$REPO_ROOT/ruff.toml" > "$repo/ruff.toml"
-    printf '%s\n' 'x = ["a" "b", "c"]' > "$repo/main.py"
+    printf '%s\n' "$source" > "$repo/main.py"
     git -C "$repo" add ruff.toml main.py
     git -C "$repo" commit -q -m "initial"
 
@@ -41,13 +42,49 @@ test_planted_isc004() {
     set -e
 
     if [ "$status" -eq 0 ]; then
-        echo "FAIL isc004: expected non-zero exit status, got 0"
+        echo "FAIL $name: expected non-zero exit status, got 0"
         failed=1
-    elif ! echo "$out" | grep -q "ISC004"; then
-        echo "FAIL isc004: expected output to mention ISC004, got: $out"
+    elif ! echo "$out" | grep -q "$rule"; then
+        echo "FAIL $name: expected output to mention $rule, got: $out"
         failed=1
     else
-        echo "ok   planted ISC004 refused"
+        echo "ok   planted $rule refused"
+    fi
+}
+
+dtz011_source=$(printf '%s\n' 'import datetime' '' 'x = datetime.date.today()')
+
+# test_planted_rules: implicit string concatenation (ISC004, default set) and a local-time date
+# (DTZ011, added by ruff.toml extend-select) are refused.
+test_planted_rules() {
+    planted_rule isc004 'x = ["a" "b", "c"]' ISC004
+    planted_rule dtz011 "$dtz011_source" DTZ011
+}
+
+# test_dtz011_needs_extend_select: the planted DTZ011 file passes once the extend-select line is
+# gone, so the refusal above comes from that line. If a ruff bump adds DTZ011 to the default set,
+# this case fails and the line can go.
+test_dtz011_needs_extend_select() {
+    local repo="$work/repo-dtz011-default"
+    new_repo "$repo"
+    sed -e '/^\[lint.per-file-ignores\]/,$d' -e '/^extend-select = \["DTZ011"\]$/d' "$REPO_ROOT/ruff.toml" > "$repo/ruff.toml"
+    printf '%s\n' "$dtz011_source" > "$repo/main.py"
+    git -C "$repo" add ruff.toml main.py
+    git -C "$repo" commit -q -m "initial"
+
+    set +e
+    out=$(sh "$check" "$cache" "$repo" 2>&1)
+    status=$?
+    set -e
+
+    if grep -v '^#' "$repo/ruff.toml" | grep -q DTZ011; then
+        echo "FAIL dtz011-default: the extend-select line was not removed from the copy"
+        failed=1
+    elif [ "$status" -ne 0 ]; then
+        echo "FAIL dtz011-default: without extend-select the planted file should pass, got $status: $out"
+        failed=1
+    else
+        echo "ok   planted DTZ011 passes without extend-select"
     fi
 }
 
@@ -271,7 +308,8 @@ test_hook_floor() {
     fi
 }
 
-test_planted_isc004
+test_planted_rules
+test_dtz011_needs_extend_select
 test_clean
 test_req_without_hash
 test_version_mismatch
