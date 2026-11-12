@@ -5,9 +5,9 @@
 //   docker run --rm --network none --read-only -v .../renovate_presets_dump.mjs:/probe/dump.mjs:ro \
 //     --entrypoint node <RENOVATE_IMAGE> /probe/dump.mjs
 //
-// Reads built-in preset groups, Docker-capable built-in manager names and dist files emitting
-// non-Docker depTypes ("github-runner", "php2shell-runtime"), then writes one JSON object to
-// stdout. Iterative bounded walk (no recursion), no network, no writes.
+// Reads built-in preset groups, Docker-capable manager names, manager-name migrations and dist
+// files emitting non-Docker depTypes ("github-runner", "php2shell-runtime"), then writes one JSON
+// object to stdout. Iterative bounded walk (no recursion), no network, no writes.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +18,12 @@ const MAX_DIST_ENTRIES = 20000;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const TRACKED_DEP_TYPES = ['github-runner', 'php2shell-runtime'];
 const DOCKER_IMPORT_RE =
-  /from "(?:\.\.\/)+(?:datasource\/docker\/[^"]*|manager\/dockerfile\/extract\.js|dockerfile\/extract\.js)"/;
+  /from (["'])(?:\.\.\/)+(?:datasource\/docker\/[^"']*|manager\/dockerfile\/extract\.js|dockerfile\/extract\.js)\1/;
+const MANAGER_MIGRATION_FILES = {
+  matchManagers: 'config/migrations/custom/match-managers-migration.js',
+  enabledManagers: 'config/migrations/custom/enabled-managers-migration.js',
+};
+const MAX_MANAGER_RENAMES = 64;
 
 /** Read a UTF-8 file after checking that its size does not exceed MAX_FILE_BYTES. */
 function readBoundedText(filePath) {
@@ -88,6 +93,29 @@ function scanDistSources(distRoot, jsFiles) {
   return { importingManagers, depTypeEmitters };
 }
 
+/** Read the bounded literal manager renames used by Renovate's config migrations. */
+function readManagerRenames(distRoot) {
+  const managerRenames = {};
+  for (const [field, rel] of Object.entries(MANAGER_MIGRATION_FILES)) {
+    const text = readBoundedText(path.join(distRoot, rel));
+    const renames = {};
+    const caseRe = /case "([^"]+)": return "([^"]+)";/g;
+    let caseCount = 0;
+    for (const match of text.matchAll(caseRe)) {
+      caseCount += 1;
+      if (caseCount > MAX_MANAGER_RENAMES) {
+        throw new Error(`${rel}: exceeds ${MAX_MANAGER_RENAMES} manager renames`);
+      }
+      renames[match[1]] = match[2];
+    }
+    if (Object.keys(renames).length === 0) {
+      throw new Error(`${rel}: yielded no manager renames`);
+    }
+    managerRenames[field] = renames;
+  }
+  return managerRenames;
+}
+
 /** Collect sorted built-in manager names that support Docker or import Docker/Dockerfile code. */
 function collectDockerManagers(apiMap, importingManagers) {
   if (!(apiMap instanceof Map) || apiMap.size === 0) {
@@ -129,7 +157,13 @@ async function main() {
 
   const jsFiles = listDistJsFiles(distRoot);
   const { importingManagers, depTypeEmitters } = scanDistSources(distRoot, jsFiles);
+  if (!importingManagers.has('github-actions')) {
+    throw new Error(
+      'Docker import scan found no import-only manager (github-actions); DOCKER_IMPORT_RE may be stale',
+    );
+  }
   const dockerManagers = collectDockerManagers(managerApiMod?.default, importingManagers);
+  const managerRenames = readManagerRenames(distRoot);
 
   const payload = {
     renovateVersion: pkg.version,
@@ -137,6 +171,7 @@ async function main() {
     groups,
     dockerManagers,
     depTypeEmitters,
+    managerRenames,
   };
   process.stdout.write(`${JSON.stringify(payload)}\n`);
 }

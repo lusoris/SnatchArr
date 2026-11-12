@@ -25,6 +25,7 @@ import shutil
 import subprocess  # nosec B404  # runs docker with a fixed argument list, never a shell
 import sys
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -32,6 +33,7 @@ from collections import Counter, deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol, Self
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -45,7 +47,12 @@ from renovate_managers import (
     parse_str_list,
 )
 from renovate_regex import ConfigError, RefusedError, ascii_lower, extract_named_groups
-from renovate_rules import RULE_REDIRECT_KEYS, TOP_REDIRECT_KEYS, UNSUPPORTED_OVERRIDES
+from renovate_rules import (
+    RULE_REDIRECT_KEYS,
+    TOP_REDIRECT_KEYS,
+    UNSUPPORTED_OVERRIDES,
+    is_age_disabled,
+)
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_REPO_ROOT = HERE.parents[1]
@@ -60,6 +67,9 @@ MAX_PRESETS = 4096
 MAX_CONFIG_NODES = 1 << 20
 MAX_RULE_STEPS = MAX_PRESETS * 8
 MAX_ENV_LINES = 1024
+MAX_MANAGER_RENAMES = 64
+MAX_STDERR_READS = 1 << 16
+READ_CHUNK_BYTES = 65536
 
 HORISTES_REF = "github>plurano/horistes"
 GITHUB_API_HOST = "api.github.com"
@@ -170,6 +180,7 @@ class DumpData:
     renovate_version: str
     groups: dict[str, dict[str, dict[str, object]]]
     docker_capable_managers: frozenset[str]
+    manager_renames: dict[str, dict[str, str]]
 
 
 @dataclass(frozen=True)
@@ -179,6 +190,7 @@ class RepoContext:
     top_extends: tuple[str, ...]
     repo_rule_extends: tuple[tuple[int, tuple[str, ...]], ...]
     enabled_managers: frozenset[str] | None
+    has_top_minimum_release_age: bool
     repo_docker_deptypes: frozenset[str]
     repo_has_dynamic_docker_deptype: bool
     repo_docker_manager_patterns: tuple[str, ...]
@@ -207,6 +219,13 @@ class ClosureState:
     excluded_reasons: Counter[str] = field(default_factory=Counter)
 
 
+class Readable(Protocol):
+    """Minimal byte-stream interface used by bounded response readers."""
+
+    def read(self, size: int = -1) -> bytes:
+        """Read up to SIZE bytes."""
+
+
 class HttpsRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Allow only HTTPS redirects and strip `Authorization` on any cross-host redirect."""
 
@@ -233,7 +252,8 @@ class HttpsRedirectHandler(urllib.request.HTTPRedirectHandler):
 def read_bounded_file(path: Path, cap: int, label: str) -> bytes:
     """Read regular file PATH up to CAP bytes, raising ConfigError when missing or oversized."""
     try:
-        raw = path.read_bytes()
+        with path.open("rb") as handle:
+            raw = handle.read(cap + 1)
     except OSError as exc:
         raise ConfigError(f"{label}: {exc}") from exc
     if b"\0" in raw:
@@ -276,6 +296,25 @@ def read_renovate_image(tool_versions: Path) -> str:
     return image
 
 
+def drain_process_stderr(
+    proc: subprocess.Popen[bytes], err_chunks: list[bytes], overflow: threading.Event
+) -> None:
+    """Drain bounded child stderr while retaining only its first READ_CHUNK_BYTES."""
+    if proc.stderr is None:
+        return
+    kept = 0
+    for _ in range(MAX_STDERR_READS):
+        chunk = proc.stderr.read(READ_CHUNK_BYTES)
+        if not chunk:
+            return
+        if kept < READ_CHUNK_BYTES:
+            saved = chunk[: READ_CHUNK_BYTES - kept]
+            err_chunks.append(saved)
+            kept += len(saved)
+    overflow.set()
+    proc.kill()
+
+
 def run_docker_dump(image: str, dump_script: Path) -> bytes:
     """Run `renovate_presets_dump.mjs` offline inside IMAGE with a 120 s / 32 MiB bound."""
     docker = shutil.which("docker")
@@ -287,6 +326,7 @@ def run_docker_dump(image: str, dump_script: Path) -> bytes:
         "--entrypoint", "node", image, "/probe/dump.mjs",
     ]
     timed_out = threading.Event()
+    stderr_overflow = threading.Event()
     err_chunks: list[bytes] = []
     try:
         proc = subprocess.Popen(  # nosec B603  # fixed docker argv list, no shell
@@ -302,8 +342,7 @@ def run_docker_dump(image: str, dump_script: Path) -> bytes:
 
     def drain_stderr() -> None:
         """Read bounded stderr so the child cannot block on pipe buffer space."""
-        if proc.stderr is not None:
-            err_chunks.append(proc.stderr.read(65536))
+        drain_process_stderr(proc, err_chunks, stderr_overflow)
 
     timer = threading.Timer(DOCKER_TIMEOUT_SECONDS, on_timeout)
     err_thread = threading.Thread(target=drain_stderr, daemon=True)
@@ -320,21 +359,62 @@ def run_docker_dump(image: str, dump_script: Path) -> bytes:
         timer.cancel()
     if timed_out.is_set():
         raise ConfigError(f"docker dump timed out after {DOCKER_TIMEOUT_SECONDS}s")
+    if stderr_overflow.is_set():
+        raise ConfigError(
+            f"docker dump stderr exceeded bounded drain of {MAX_STDERR_READS} reads"
+        )
     if rc != 0:
         detail = b"".join(err_chunks).decode("utf-8", errors="replace").strip()
         raise ConfigError(f"docker dump exited {rc}: {detail}")
     return out
 
 
-def default_https_opener(req: urllib.request.Request, timeout: int) -> bytes:
+def read_with_deadline(
+    resp: Readable,
+    limit: int,
+    timeout: float,
+    clock: Callable[[], float] = time.monotonic,
+) -> bytes:
+    """Read at most LIMIT + 1 bytes from RESP within one total TIMEOUT."""
+    deadline = clock() + timeout
+    chunks: list[bytes] = []
+    remaining = limit + 1
+    max_reads = limit // READ_CHUNK_BYTES + 2
+    for _ in range(max_reads):
+        if clock() > deadline:
+            raise TimeoutError(f"response read exceeded {timeout}s")
+        chunk = resp.read(min(READ_CHUNK_BYTES, remaining))
+        if clock() > deadline:
+            raise TimeoutError(f"response read exceeded {timeout}s")
+        if not chunk:
+            return b"".join(chunks)
+        saved = chunk[:remaining]
+        chunks.append(saved)
+        remaining -= len(saved)
+        if remaining == 0:
+            return b"".join(chunks)
+    raise TimeoutError(f"response read exceeded {max_reads} reads")
+
+
+def default_https_opener(
+    req: urllib.request.Request,
+    timeout: int,
+    build_opener: Callable[..., urllib.request.OpenerDirector] = urllib.request.build_opener,
+) -> bytes:
     """Execute HTTPS request REQ against `api.github.com` and read up to MAX_HTTP_BYTES + 1."""
     parsed = urllib.parse.urlsplit(req.full_url)
     if parsed.scheme != "https" or parsed.hostname != GITHUB_API_HOST:
         raise ConfigError(f"refused non-GitHub-API URL: {req.full_url!r}")
-    opener = urllib.request.build_opener(HttpsRedirectHandler())
+    opener = build_opener(HttpsRedirectHandler())
+    started = time.monotonic()
     with opener.open(req, timeout=timeout) as resp:  # nosec B310  # fixed https://api.github.com URL verified above; redirects restricted to https
-        data: bytes = resp.read(MAX_HTTP_BYTES + 1)
-    return data
+        remaining = timeout - (time.monotonic() - started)
+        if remaining <= 0:
+            raise TimeoutError(f"response read exceeded {timeout}s")
+        try:
+            return read_with_deadline(resp, MAX_HTTP_BYTES, remaining)
+        except TimeoutError as exc:
+            raise TimeoutError(f"response read exceeded {timeout}s") from exc
 
 
 def github_api_get(
@@ -479,6 +559,42 @@ def parse_docker_managers(raw_mgrs: object, label: str) -> frozenset[str]:
     return frozenset(lowered)
 
 
+def parse_manager_rename_map(raw_map: object, field: str, label: str) -> dict[str, str]:
+    """Validate one bounded manager rename map from the Renovate dump."""
+    if not isinstance(raw_map, dict):
+        raise ConfigError(f"{label}: managerRenames[{field!r}] must be an object")
+    if len(raw_map) > MAX_MANAGER_RENAMES:
+        raise ConfigError(
+            f"{label}: managerRenames[{field!r}] exceeds {MAX_MANAGER_RENAMES} entries"
+        )
+    renames: dict[str, str] = {}
+    for old, new in raw_map.items():
+        if (
+            not isinstance(old, str)
+            or not isinstance(new, str)
+            or LITERAL_MATCHER_RE.fullmatch(old) is None
+            or LITERAL_MATCHER_RE.fullmatch(new) is None
+        ):
+            raise ConfigError(
+                f"{label}: managerRenames[{field!r}] has an invalid manager name"
+            )
+        renames[old] = new
+    return renames
+
+
+def parse_manager_renames(raw_renames: object, label: str) -> dict[str, dict[str, str]]:
+    """Validate the matchManagers and enabledManagers migration maps."""
+    if not isinstance(raw_renames, dict):
+        raise ConfigError(f"{label}: managerRenames must be an object")
+    expected = {"matchManagers", "enabledManagers"}
+    if set(raw_renames) != expected:
+        raise ConfigError(f"{label}: managerRenames must contain {sorted(expected)}")
+    return {
+        field: parse_manager_rename_map(raw_renames[field], field, label)
+        for field in sorted(expected)
+    }
+
+
 def parse_dump(raw: bytes, label: str) -> DumpData:
     """Validate JSON bytes from `renovate_presets_dump.mjs` or `--dump`."""
     data = load_json_object(raw, label)
@@ -488,10 +604,12 @@ def parse_dump(raw: bytes, label: str) -> DumpData:
     capable = parse_docker_managers(data.get("dockerManagers"), label)
     validate_emitters(data.get("depTypeEmitters"))
     groups = parse_groups_map(data.get("groups"))
+    manager_renames = parse_manager_renames(data.get("managerRenames"), label)
     return DumpData(
         renovate_version=version,
         groups=groups,
         docker_capable_managers=capable,
+        manager_renames=manager_renames,
     )
 
 
@@ -621,7 +739,9 @@ def load_non_record_pin_paths(repo_root: Path) -> tuple[str, ...]:
     return tuple(sorted(paths))
 
 
-def load_repo_context(repo_root: Path) -> RepoContext:
+def load_repo_context(
+    repo_root: Path, manager_renames: dict[str, dict[str, str]]
+) -> RepoContext:
     """Load `renovate.json` and tracked non-record image pin paths from REPO_ROOT."""
     cfg_path = repo_root / "renovate.json"
     repo_cfg = load_json_object(
@@ -631,13 +751,19 @@ def load_repo_context(repo_root: Path) -> RepoContext:
     top_extends = parse_extends(repo_cfg)
     rule_extends = extract_repo_rule_extends(repo_cfg)
     raw_enabled = parse_enabled_managers(repo_cfg)
-    enabled = None if raw_enabled is None else frozenset(ascii_lower(m) for m in raw_enabled)
+    enabled_renames = manager_renames["enabledManagers"]
+    enabled = (
+        None
+        if raw_enabled is None
+        else frozenset(ascii_lower(enabled_renames.get(m, m)) for m in raw_enabled)
+    )
     deptypes, dynamic_dt, mgr_patterns = inspect_repo_custom_managers(repo_cfg)
     pin_paths = load_non_record_pin_paths(repo_root)
     return RepoContext(
         top_extends=top_extends,
         repo_rule_extends=rule_extends,
         enabled_managers=enabled,
+        has_top_minimum_release_age="minimumReleaseAge" in repo_cfg,
         repo_docker_deptypes=deptypes,
         repo_has_dynamic_docker_deptype=dynamic_dt,
         repo_docker_manager_patterns=mgr_patterns,
@@ -824,6 +950,9 @@ def rule_exclusion_reason(
         return "datasource"
 
     managers = literal_matcher_values(rule, union_matchers, "matchManagers")
+    if managers is not None:
+        renames = state.dump.manager_renames["matchManagers"]
+        managers = [renames.get(manager, manager) for manager in managers]
     if managers is not None and all(
         is_manager_non_docker_or_disabled(m, state) for m in managers
     ):
@@ -987,6 +1116,14 @@ def judge_top_preset(preset_ref: str, body: dict[str, object], state: ClosureSta
     """Judge one top-context preset body against rules 3a–3f and return its `extends` list."""
     check_nested_directives(body, preset_ref, allow_rule_extends=True)
     check_top_prohibited_keys(preset_ref, body, state)
+    if "minimumReleaseAge" in body:
+        age = body["minimumReleaseAge"]
+        if age is not None and not isinstance(age, str):
+            raise ConfigError(f"{preset_ref}: top-level minimumReleaseAge must be string or null")
+        if not state.repo.has_top_minimum_release_age and is_age_disabled(age):
+            raise RefusedError(
+                f"{preset_ref}: top-level minimumReleaseAge {age!r} disables the release wait"
+            )
     judge_top_subobjects(preset_ref, body, state.repo)
     if "ignorePaths" in body:
         judge_ignore_paths(preset_ref, body["ignorePaths"], state.repo)
@@ -1136,6 +1273,84 @@ def self_test_redirects() -> None:
     raise AssertionError("http redirect was not refused")
 
 
+def self_test_read_with_deadline() -> None:
+    """Verify response read success, total-deadline refusal and LIMIT + 1 boundary."""
+    class FakeResponse:
+        """Return caller-provided chunks while respecting the requested read size."""
+
+        def __init__(self, chunks: list[bytes]) -> None:
+            """Queue the chunks the fake body returns in order."""
+            self.chunks = deque(chunks)
+
+        def read(self, size: int = -1) -> bytes:
+            """Return the next chunk, split at `size` like a real response."""
+            chunk = self.chunks.popleft() if self.chunks else b""
+            if size >= 0 and len(chunk) > size:
+                self.chunks.appendleft(chunk[size:])
+                return chunk[:size]
+            return chunk
+
+    if read_with_deadline(FakeResponse([b"abc"]), 8, 1, clock=lambda: 0.0) != b"abc":
+        raise AssertionError("under-deadline response mismatch")
+    times = iter((0.0, 0.0, 0.0, 2.0))
+    try:
+        read_with_deadline(
+            FakeResponse([b"a", b"b"]), 8, 1, clock=lambda: next(times)
+        )
+    except TimeoutError as exc:
+        if str(exc) != "response read exceeded 1s":
+            raise
+    else:
+        raise AssertionError("mid-body deadline was not refused")
+    boundary = read_with_deadline(
+        FakeResponse([b"abcdef"]), 4, 1, clock=lambda: 0.0
+    )
+    if boundary != b"abcde":
+        raise AssertionError("LIMIT + 1 boundary mismatch")
+    try:
+        read_with_deadline(FakeResponse([b"a"] * 4), 8, 1, clock=lambda: 0.0)
+    except TimeoutError as exc:
+        if str(exc) != "response read exceeded 2 reads":
+            raise
+    else:
+        raise AssertionError("read count bound was not refused")
+
+
+def self_test_https_opener() -> None:
+    """Verify the live opener reads the body through `read_with_deadline`, not one short read."""
+    class TrickleResponse:
+        """Return one byte per read, like a body arriving in small pieces."""
+
+        def __init__(self) -> None:
+            """Queue a three-byte body delivered one byte per read."""
+            self.left = deque([b"a", b"b", b"c"])
+
+        def __enter__(self) -> Self:
+            """Act as its own context manager, like `urlopen` responses."""
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            """Hold no resource, so leaving the context does nothing."""
+
+        def read(self, _size: int = -1) -> bytes:
+            """Return one byte, then an empty read at end of body."""
+            return self.left.popleft() if self.left else b""
+
+    class FakeOpener:
+        """Stand in for `urllib.request.OpenerDirector` without network access."""
+
+        def open(self, _req: object, timeout: float) -> TrickleResponse:
+            """Refuse a call without a deadline, else return the trickling body."""
+            if timeout <= 0:
+                raise AssertionError("opener called without a deadline")
+            return TrickleResponse()
+
+    req = urllib.request.Request(f"https://{GITHUB_API_HOST}/repos/x/y")
+    body = default_https_opener(req, 5, build_opener=lambda *_h: FakeOpener())
+    if body != b"abc":
+        raise AssertionError(f"live opener read {body!r}, want b'abc'")
+
+
 def run_self_test() -> int:
     """Execute offline unit tests for `horistes` HTTP fetch and redirect handling."""
     sha = "1075f6323bffb41e599fae6d7113a19029b33f2d"
@@ -1143,6 +1358,8 @@ def run_self_test() -> int:
     self_test_renovate_json_fallback(sha)
     self_test_horistes_errors(sha)
     self_test_redirects()
+    self_test_read_with_deadline()
+    self_test_https_opener()
     print("renovate_presets: self-test ok")
     return 0
 
@@ -1186,7 +1403,7 @@ def run_check(args: argparse.Namespace) -> int:
         token = os.environ.get("GH_TOKEN") or None
         horistes_sha, horistes = fetch_horistes(token=token)
 
-    repo = load_repo_context(args.repo_root.resolve())
+    repo = load_repo_context(args.repo_root.resolve(), dump.manager_renames)
     state = ClosureState(dump=dump, horistes=horistes, repo=repo)
     walk_closure(state)
     print(format_summary(horistes_sha, state))

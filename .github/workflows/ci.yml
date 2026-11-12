@@ -79,14 +79,21 @@ jobs:
       # reads as its staged UTF-8 blob.
       - name: Image digest pins use one digest per tag and carry Renovate release-age coverage, after their planted cases
         run: bash tools/ci/image_pin_check_test.sh && python3 -I tools/ci/image_pin_check.py && python3 -I tools/ci/image_pin_check.py --index && bash tools/ci/image_release_age_check_test.sh && python3 -I tools/ci/image_release_age_check.py && python3 -I tools/ci/image_release_age_check.py --index
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Renovate presets reachable from renovate.json keep Docker release-age coverage, after their planted cases
         env:
           GH_TOKEN: ${{ github.token }}
+          # mirror.gcr.io carries no signatures, so the same digest is verified on ghcr.io.
+          RENOVATE_SIGNED_REPO: ghcr.io/renovatebot/renovate
+          RENOVATE_SIGNER_ISSUER: https://token.actions.githubusercontent.com
+          RENOVATE_SIGNER: https://github.com/renovatebot/renovate/.github/workflows/build.yml@refs/heads/main
         run: |
           set -euo pipefail
           bash tools/ci/renovate_presets_test.sh
           . tools/ci/tool-versions.env
-          docker pull --quiet "$RENOVATE_IMAGE"
+          digest="${RENOVATE_IMAGE##*@}"
+          timeout 300 cosign verify --certificate-oidc-issuer "$RENOVATE_SIGNER_ISSUER" --certificate-identity "$RENOVATE_SIGNER" "$RENOVATE_SIGNED_REPO@$digest" > /dev/null
+          timeout 600 docker pull --quiet "$RENOVATE_IMAGE"
           python3 -I tools/ci/renovate_presets.py
       - name: The release dogfood gate and pass recorder refuse their planted cases
         run: make release-dogfood-check

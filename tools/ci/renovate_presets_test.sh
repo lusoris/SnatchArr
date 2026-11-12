@@ -44,14 +44,16 @@ pathlib.Path(sys.argv[1], "renovate.json").write_text(json.dumps(cfg), encoding=
   (cd "$dir" && git add renovate.json)
 }
 
-# write_stub_fixtures DUMP_PATH HORISTES_PATH [GROUPS_PATCH_JSON] [HORISTES_JSON] [EMITTERS_JSON]:
+# write_stub_fixtures DUMP_PATH HORISTES_PATH [GROUPS_PATCH_JSON] [HORISTES_JSON]
+# [EMITTERS_JSON] [RENAMES_JSON]:
 # emit a valid stub dump JSON and horistes JSON with optional overrides.
 write_stub_fixtures() {
   local dump_path="$1" horistes_path="$2"
   local groups_patch="${3:-"{}"}" horistes_json="${4:-}" emitters_json="${5:-}"
+  local renames_json="${6:-}"
   python3 -I -c '
 import json, pathlib, sys
-dump_p, hor_p, g_patch, h_raw, e_raw = sys.argv[1:6]
+dump_p, hor_p, g_patch, h_raw, e_raw, r_raw = sys.argv[1:7]
 groups = {
     "default": {
         "semanticCommits": {"semanticCommits": "enabled"},
@@ -74,27 +76,41 @@ emitters = json.loads(e_raw) if e_raw else {
         "config/presets/internal/security.preset.js",
     ],
 }
+renames = json.loads(r_raw) if r_raw else {
+    "matchManagers": {
+        "regex": "custom.regex",
+        "renovate-config-presets": "renovate-config",
+    },
+    "enabledManagers": {
+        "yarn": "npm",
+        "regex": "custom.regex",
+        "renovate-config-presets": "renovate-config",
+    },
+}
 dump = {
     "renovateVersion": "44.234.0",
     "node": "v24.22.2",
     "groups": groups,
     "dockerManagers": ["dockerfile", "github-actions", "maven", "nuget"],
     "depTypeEmitters": emitters,
+    "managerRenames": renames,
 }
 horistes = json.loads(h_raw) if h_raw else {"extends": ["config:recommended"]}
 pathlib.Path(dump_p).write_text(json.dumps(dump), encoding="utf-8")
 pathlib.Path(hor_p).write_text(json.dumps(horistes), encoding="utf-8")
-' "$dump_path" "$horistes_path" "$groups_patch" "$horistes_json" "$emitters_json"
+' "$dump_path" "$horistes_path" "$groups_patch" "$horistes_json" "$emitters_json" "$renames_json"
 }
 
-# expect_preset_case NAME WANT_RC NEEDLE HORISTES_JSON [GROUPS_PATCH_JSON] [REPO_DIR] [EMITTERS_JSON]:
+# expect_preset_case NAME WANT_RC NEEDLE HORISTES_JSON [GROUPS_PATCH_JSON] [REPO_DIR]
+# [EMITTERS_JSON] [RENAMES_JSON]:
 # run renovate_presets.py against stub dump + horistes under a 10s bound and assert verdict.
 expect_preset_case() {
   local name="$1" want="$2" needle="$3" hor_json="$4"
-  local g_patch="${5:-"{}"}" repo_dir="${6:-$BASE_REPO}" e_json="${7:-}"
+  local g_patch="${5:-"{}"}" repo_dir="${6:-$BASE_REPO}" e_json="${7:-}" r_json="${8:-}"
   local dir="$work/case-$name" rc=0 out
   mkdir -p "$dir"
-  write_stub_fixtures "$dir/dump.json" "$dir/horistes.json" "$g_patch" "$hor_json" "$e_json"
+  write_stub_fixtures \
+    "$dir/dump.json" "$dir/horistes.json" "$g_patch" "$hor_json" "$e_json" "$r_json"
   out="$(run_bounded 10 python3 -I "$check" \
     --dump "$dir/dump.json" \
     --horistes "$dir/horistes.json" \
@@ -103,10 +119,12 @@ expect_preset_case() {
   echo "ok   $name"
 }
 
-# test_dump_mjs: verify renovate_presets_dump.mjs against positive and broken synthetic dist trees.
-test_dump_mjs() {
-  local root="$work/fake-renovate" bad="$work/bad-renovate" out rc=0
+# write_fake_dist ROOT: synthetic Renovate dist tree with a Docker-datasource manager,
+# an import-only Docker manager (github-actions), dep-type emitters and both manager migrations.
+write_fake_dist() {
+  local root="$1"
   mkdir -p "$root/dist/config/presets/internal" \
+    "$root/dist/config/migrations/custom" \
     "$root/dist/modules/manager/dockerfile" \
     "$root/dist/modules/manager/github-actions" \
     "$root/dist/modules/manager/npm"
@@ -128,12 +146,34 @@ EOF
 export const RUNNER = "github-runner";
 EOF
   cat > "$root/dist/modules/manager/github-actions/extract.js" <<'EOF'
-import { x } from "../../datasource/docker/common.js";
+import { x } from '../../datasource/docker/common.js';
 export const kind = "github-runner";
 EOF
   cat > "$root/dist/modules/manager/npm/extract.js" <<'EOF'
 export const n = 1;
 EOF
+  cat > "$root/dist/config/migrations/custom/match-managers-migration.js" <<'EOF'
+export function migrate(value) {
+  switch (value) {
+    case "regex": return "custom.regex";
+    case "renovate-config-presets": return "renovate-config";
+  }
+}
+EOF
+  cat > "$root/dist/config/migrations/custom/enabled-managers-migration.js" <<'EOF'
+export function migrate(value) {
+  switch (value) {
+    case "yarn": return "npm";
+    case "regex": return "custom.regex";
+    case "renovate-config-presets": return "renovate-config";
+  }
+}
+EOF
+}
+
+# check_dump_positive ROOT: dump.mjs over the intact fake dist emits the expected payload.
+check_dump_positive() {
+  local root="$1" out
   out="$(RENOVATE_ROOT="$root" node "$dump_mjs")"
   python3 -I -c '
 import json, sys
@@ -145,13 +185,60 @@ if d["depTypeEmitters"]["github-runner"] != [
     "modules/manager/github-actions/extract.js",
 ]:
     raise SystemExit(f"unexpected emitters: {d}")
+if d["managerRenames"]["matchManagers"]["regex"] != "custom.regex":
+    raise SystemExit(f"missing matchManagers rename: {d}")
+if d["managerRenames"]["enabledManagers"]["yarn"] != "npm":
+    raise SystemExit(f"missing enabledManagers rename: {d}")
 ' "$out"
   echo "ok   dump-mjs-positive"
+}
 
-  mkdir -p "$bad"
-  out="$(RENOVATE_ROOT="$bad" node "$dump_mjs" 2>&1)" || rc=$?
-  check_case "dump-mjs-missing-pkg" 1 "$rc" "renovate_presets_dump: error:" "$out"
-  echo "ok   dump-mjs-missing-pkg"
+# expect_dump_failure NAME ROOT NEEDLE: dump.mjs over ROOT must exit 1 and print NEEDLE.
+expect_dump_failure() {
+  local name="$1" root="$2" needle="$3" out rc=0
+  out="$(RENOVATE_ROOT="$root" node "$dump_mjs" 2>&1)" || rc=$?
+  check_case "$name" 1 "$rc" "$needle" "$out"
+  echo "ok   $name"
+}
+
+# test_dump_mjs: verify renovate_presets_dump.mjs against positive and broken synthetic dist trees.
+test_dump_mjs() {
+  local root="$work/fake-renovate" mig="dist/config/migrations/custom"
+  write_fake_dist "$root"
+  check_dump_positive "$root"
+
+  cp -R "$root" "$work/no-import-renovate"
+  printf '%s\n' 'export const kind = "github-runner";' \
+    > "$work/no-import-renovate/dist/modules/manager/github-actions/extract.js"
+  expect_dump_failure "dump-mjs-stale-import-regex" "$work/no-import-renovate" \
+    "DOCKER_IMPORT_RE may be stale"
+
+  cp -R "$root" "$work/no-migration-renovate"
+  rm "$work/no-migration-renovate/$mig/match-managers-migration.js"
+  expect_dump_failure "dump-mjs-missing-migration" "$work/no-migration-renovate" \
+    "match-managers-migration.js"
+
+  cp -R "$root" "$work/zero-migration-renovate"
+  printf '%s\n' 'export const unchanged = true;' \
+    > "$work/zero-migration-renovate/$mig/enabled-managers-migration.js"
+  expect_dump_failure "dump-mjs-zero-case-migration" "$work/zero-migration-renovate" \
+    "yielded no manager renames"
+
+  cp -R "$root" "$work/many-migrations"
+  python3 -I - "$work/many-migrations/$mig/match-managers-migration.js" <<'PY'
+import pathlib
+import sys
+
+pathlib.Path(sys.argv[1]).write_text(
+    "\n".join(f'case "m{i}": return "n{i}";' for i in range(65)),
+    encoding="utf-8",
+)
+PY
+  expect_dump_failure "dump-mjs-over-max-renames" "$work/many-migrations" \
+    "exceeds 64 manager renames"
+
+  mkdir -p "$work/bad-renovate"
+  expect_dump_failure "dump-mjs-missing-pkg" "$work/bad-renovate" "renovate_presets_dump: error:"
 }
 
 # 0. Horistes fetch self-test (no network) + dump.mjs unit test.
@@ -165,6 +252,35 @@ write_base_repo "$BASE_REPO"
 # 1. Baseline clean closure.
 expect_preset_case "baseline-pass" 0 "renovate_presets: ok (renovate=44.234.0, horistes=offline" \
   '{"extends":["config:recommended"]}'
+expect_preset_case "malformed-manager-renames" 1 "managerRenames must be an object" \
+  '{"description":"ok"}' "{}" "$BASE_REPO" "" '[]'
+expect_preset_case "missing-manager-rename-map" 1 "managerRenames must contain" \
+  '{"description":"ok"}' "{}" "$BASE_REPO" "" '{"matchManagers":{}}'
+expect_preset_case "malformed-manager-rename-map" 1 \
+  "managerRenames['matchManagers'] must be an object" \
+  '{"description":"ok"}' "{}" "$BASE_REPO" "" \
+  '{"matchManagers":[],"enabledManagers":{}}'
+expect_preset_case "invalid-manager-rename-name" 1 "has an invalid manager name" \
+  '{"description":"ok"}' "{}" "$BASE_REPO" "" \
+  '{"matchManagers":{"bad name":"npm"},"enabledManagers":{}}'
+RENAMES_64="$(python3 -I -c '
+import json
+print(json.dumps({
+    "matchManagers": {f"m{i}": f"n{i}" for i in range(64)},
+    "enabledManagers": {"regex": "custom.regex"},
+}))
+')"
+expect_preset_case "manager-renames-at-cap" 0 "renovate_presets: ok" \
+  '{"description":"ok"}' "{}" "$BASE_REPO" "" "$RENAMES_64"
+RENAMES_65="$(python3 -I -c '
+import json
+print(json.dumps({
+    "matchManagers": {f"m{i}": f"n{i}" for i in range(65)},
+    "enabledManagers": {"regex": "custom.regex"},
+}))
+')"
+expect_preset_case "manager-renames-over-cap" 1 "exceeds 64 entries" \
+  '{"description":"ok"}' "{}" "$BASE_REPO" "" "$RENAMES_65"
 
 # 2. Override & redirect keys (all exit 3).
 expect_preset_case "override-datasource" 3 "packageRules[0]: key 'overrideDatasource' is not allowed on a Docker-reachable rule" \
@@ -231,6 +347,18 @@ expect_preset_case "exclude-github-runner-deptype" 0 "excluded=1 (depType=1)" \
   '{"packageRules":[{"matchDepTypes":["github-runner"],"matchManagers":["github-actions"],"enabled":false}]}'
 expect_preset_case "exclude-maven-datasource" 0 "excluded=1 (datasource=1)" \
   '{"packageRules":[{"matchDatasources":["maven"],"enabled":false}]}'
+expect_preset_case "renamed-regex-manager-refused" 3 \
+  "key 'enabled' is false on a Docker-reachable rule" \
+  '{"packageRules":[{"matchManagers":["regex"],"enabled":false}]}'
+expect_preset_case "unrenamed-npm-manager-excluded" 0 "excluded=1 (manager=1)" \
+  '{"packageRules":[{"matchManagers":["npm"],"enabled":false}]}'
+
+REPO_RENAMED_ENABLED="$work/repo-renamed-enabled"
+write_base_repo "$REPO_RENAMED_ENABLED" '{"enabledManagers":["regex"]}'
+expect_preset_case "renamed-enabled-manager-refused" 3 \
+  "key 'enabled' is false on a Docker-reachable rule" \
+  '{"packageRules":[{"matchManagers":["custom.regex"],"enabled":false}]}' \
+  "{}" "$REPO_RENAMED_ENABLED"
 
 # 5. Preset customManagers.
 expect_preset_case "preset-cm-docker" 3 "customManagers[0]: key 'datasourceTemplate' ('docker')" \
@@ -271,6 +399,20 @@ expect_preset_case "top-docker-manager-block" 3 "top-level Docker-capable manage
   '{"dockerfile":{"enabled":false}}'
 expect_preset_case "top-enabled-managers" 3 "top-level key 'enabledManagers' is not allowed" \
   '{"enabledManagers":["npm"]}'
+
+# 7a. A preset cannot disable the top-level release wait unless the repository overrides it.
+expect_preset_case "top-age-null" 3 "top-level minimumReleaseAge None disables the release wait" \
+  '{"minimumReleaseAge":null}'
+expect_preset_case "top-age-zero" 3 "top-level minimumReleaseAge '0 days' disables the release wait" \
+  '{"minimumReleaseAge":"0 days"}'
+expect_preset_case "top-age-positive" 0 "renovate_presets: ok" \
+  '{"minimumReleaseAge":"3 days"}'
+REPO_TOP_AGE="$work/repo-top-age"
+write_base_repo "$REPO_TOP_AGE" '{"minimumReleaseAge":"3 days"}'
+expect_preset_case "top-age-repo-override" 0 "renovate_presets: ok" \
+  '{"minimumReleaseAge":null}' "{}" "$REPO_TOP_AGE"
+expect_preset_case "top-age-invalid-type" 1 "minimumReleaseAge must be string or null" \
+  '{"minimumReleaseAge":3}'
 
 # 8. Nested extends inside packageRules and disallowed nested extends.
 expect_preset_case "nested-rule-extends-refused" 3 "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
@@ -345,6 +487,10 @@ dump = {
         ],
         "php2shell-runtime": ["config/presets/internal/security.preset.js"],
     },
+    "managerRenames": {
+        "matchManagers": {"regex": "custom.regex"},
+        "enabledManagers": {"regex": "custom.regex", "yarn": "npm"},
+    },
 }
 (d / "dump.json").write_text(json.dumps(dump), encoding="utf-8")
 (d / "horistes.json").write_text(json.dumps({"extends": ["big:p0"]}), encoding="utf-8")
@@ -393,3 +539,99 @@ tv_rc=0
 tv_out="$(python3 -I "$check" --tool-versions "$BAD_TV" --repo-root "$BASE_REPO" 2>&1)" || tv_rc=$?
 check_case "unpinned-renovate-image" 3 "$tv_rc" "is not pinned by version and sha256 digest" "$tv_out"
 echo "ok   unpinned-renovate-image"
+
+# 12. Local reads stay bounded, and a large stderr stream cannot block the Docker dump child.
+FAKE_BIN="$work/fake-bin"
+mkdir -p "$FAKE_BIN"
+cat > "$FAKE_BIN/docker" <<'PY'
+#!/usr/bin/env python3
+import sys
+
+sys.stderr.write("x" * (1 << 20))
+sys.stdout.write('{"dump":"ok"}')
+PY
+chmod +x "$FAKE_BIN/docker"
+run_bounded 10 python3 -I - "$check" "$FAKE_BIN" "$work" <<'PY'
+import importlib.util
+import os
+import pathlib
+import sys
+
+spec = importlib.util.spec_from_file_location("renovate_presets", sys.argv[1])
+if spec is None or spec.loader is None:
+    raise SystemExit("cannot load renovate_presets module")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+module.DOCKER_TIMEOUT_SECONDS = 5
+os.environ["PATH"] = f"{sys.argv[2]}:{os.environ['PATH']}"
+if module.run_docker_dump("example.invalid/x:1@sha256:" + "a" * 64, pathlib.Path(sys.argv[1])) != b'{"dump":"ok"}':
+    raise SystemExit("large-stderr dump output mismatch")
+module.MAX_STDERR_READS = 1
+try:
+    module.run_docker_dump("example.invalid/x:1@sha256:" + "a" * 64, pathlib.Path(sys.argv[1]))
+except module.ConfigError as exc:
+    if "stderr exceeded bounded drain" not in str(exc):
+        raise
+else:
+    raise SystemExit("stderr drain read bound was not enforced")
+bounded = pathlib.Path(sys.argv[3], "bounded.txt")
+bounded.write_bytes(b"x" * 5)
+if module.read_bounded_file(bounded, 5, "bounded") != b"x" * 5:
+    raise SystemExit("cap boundary was not accepted")
+bounded.write_bytes(b"x" * 6)
+try:
+    module.read_bounded_file(bounded, 5, "bounded")
+except module.ConfigError as exc:
+    if "exceeds cap of 5" not in str(exc):
+        raise
+else:
+    raise SystemExit("oversized local file was accepted")
+PY
+echo "ok   bounded-file-and-docker-stderr"
+
+# 13. Both CI entry points invoke this check; planted copies prove every assertion fails closed.
+assert_wiring() {
+  python3 -I - "$1" "$2" "$3" <<'PY'
+import pathlib
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+if sys.argv[2] == "workflow":
+    marker = "      - name: Renovate presets reachable from renovate.json keep Docker release-age coverage, after their planted cases\n"
+    if marker not in text:
+        raise SystemExit("presets workflow step is missing")
+    section = text.split(marker, 1)[1].split("\n      - name:", 1)[0]
+else:
+    marker = "workflows-lint:"
+    if marker not in text:
+        raise SystemExit("workflows-lint target is missing")
+    section = text.split(marker, 1)[1].split("\n\n", 1)[0]
+if sys.argv[3] not in section:
+    raise SystemExit(f"missing wiring: {sys.argv[3]}")
+PY
+}
+
+assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow \
+  "python3 -I tools/ci/renovate_presets.py"
+assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow "cosign verify"
+assert_wiring "$HERE/../../Makefile" makefile "python3 -I tools/ci/renovate_presets.py"
+
+sed '/python3 -I tools\/ci\/renovate_presets.py/d' "$HERE/../../.github/workflows/ci.yml" \
+  > "$work/ci-no-check.yml"
+if assert_wiring "$work/ci-no-check.yml" workflow "python3 -I tools/ci/renovate_presets.py"; then
+  echo "FAIL wiring: workflow copy without checker passed" >&2
+  exit 1
+fi
+sed '/cosign verify/d' "$HERE/../../.github/workflows/ci.yml" > "$work/ci-no-cosign.yml"
+if assert_wiring "$work/ci-no-cosign.yml" workflow "cosign verify"; then
+  echo "FAIL wiring: workflow copy without cosign verification passed" >&2
+  exit 1
+fi
+sed '/python3 -I tools\/ci\/renovate_presets.py/d' "$HERE/../../Makefile" \
+  > "$work/make-no-check"
+if assert_wiring "$work/make-no-check" makefile "python3 -I tools/ci/renovate_presets.py"; then
+  echo "FAIL wiring: Makefile copy without checker passed" >&2
+  exit 1
+fi
+echo "ok   checker-wiring"
