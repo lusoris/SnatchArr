@@ -110,6 +110,8 @@ if op != "first-rule":
 }
 
 expect 0 "recorded report replay" "ok   tool error" python3 -I "$SCAN" --self-test --today "$DAY"
+# No partial-scan mode: every live scan replays the canary and checks stale entries.
+expect 2 "partial scan mode refused" "unrecognized arguments: --files" python3 -I "$SCAN" --files tools/ci/codacy_opengrep_scan.py --today "$DAY"
 expect 0 "matching listing" "Opengrep listing: exact match" python3 -I "$SCAN" --drift "$FIXTURES/enabled-python-ids.txt"
 sed '$d' "$FIXTURES/enabled-python-ids.txt" > "$WORK/listing.txt"
 expect 1 "removed listing id, stale metadata" "listing metadata hash or count differs" python3 -I "$SCAN" --drift "$WORK/listing.txt"

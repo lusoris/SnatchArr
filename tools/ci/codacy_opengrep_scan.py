@@ -4,8 +4,7 @@
 """Mirror Codacy's enabled Opengrep (Semgrep) Python rules locally, against a shrink-only baseline.
 
 Modes (one at a time):
-  (none)           scan every tracked Python file, then the live canary; network, Linux x64
-  --files F...     scan the named files only; no stale-entry check and no canary
+  (none)           run the live canary, then scan every tracked Python file; network, Linux x64
   --self-test      replay the recorded reports and the planted cases; offline
   --drift LISTING  compare a Codacy pattern listing with the checked-in config; offline
   --base-ref REF   refuse a baseline that grew (a new key or a higher count), or a kept entry
@@ -590,18 +589,18 @@ def canary_check(root: Path, home: Path, baseline: Counter[str], version: str, r
     return canary_problems(canary, baseline, version)
 
 
-def scan(root: Path, today: date, files: list[str] | None, report_out: Path | None) -> list[str]:
-    """Scan FILES, or the canary first and then every tracked Python file; return the failures."""
+def scan(root: Path, today: date, report_out: Path | None) -> list[str]:
+    """Run the canary first, then scan every tracked Python file; return the failures."""
     versions = tool_versions(root)
     version = versions["OPENGREP_VERSION"]
     baseline = baseline_counts(load_baseline(root, today))
-    targets = sorted(files) if files else tracked_files(root)
+    targets = tracked_files(root)
     with codacy_home(versions) as home:
-        problems = [] if files else canary_check(root, home, baseline, version, report_out)
+        problems = canary_check(root, home, baseline, version, report_out)
         report = live_report(root, root, home, targets)
         save_report(report_out, "tree-report.json", report)
-    problems += report_problems(report, targets, baseline, version, enforce_stale=not files)
-    if not problems and not files:
+    problems += report_problems(report, targets, baseline, version)
+    if not problems:
         print(f"codacy-opengrep: canary: the 58af3cb4 defect is one new {CANARY_RULE.rsplit('.', 1)[-1]} finding; {len(targets)} files, 0 new, 0 stale")
     return problems
 
@@ -840,7 +839,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     mode.add_argument("--self-test", action="store_true", help="replay recorded reports and planted cases")
     mode.add_argument("--drift", type=Path, metavar="LISTING", help="compare a pattern listing with the config")
     mode.add_argument("--base-ref", metavar="REF", help="refuse a baseline that is no shrink of the one at REF")
-    mode.add_argument("--files", nargs="+", metavar="FILE", help="scan only these files")
     parser.add_argument("--today", type=parse_today, default=datetime.now(UTC).date(), help="date for the expiry check (default: today in UTC)")
     parser.add_argument("--report-out", type=Path, metavar="DIR", help="write the live reports here")
     return parser.parse_args(argv)
@@ -859,7 +857,7 @@ def main(argv: list[str]) -> int:
         if args.base_ref:
             problems = shrink_problems(ROOT, args.base_ref, args.today)
         else:
-            problems = scan(ROOT, args.today, args.files, args.report_out)
+            problems = scan(ROOT, args.today, args.report_out)
     except ScanError as err:
         problems = [str(err)]
     for problem in problems:
