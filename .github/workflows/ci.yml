@@ -34,7 +34,7 @@ jobs:
   workflows:
     name: Workflows (actionlint, pinned actions)
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - &stop-draft
         name: Stop on a draft pull request

@@ -17,6 +17,7 @@ Exit 0 = ok, 1 = input error, 3 = refused.
 from __future__ import annotations
 
 import argparse
+import http.client
 import io
 import json
 import os
@@ -170,7 +171,7 @@ KNOWN_RULE_KEYS = MEASURED_RULE_KEYS | frozenset(FORBIDDEN_DOCKER_RULE_KEYS)
 EXCLUSION_MATCHER_KEYS = ("matchDatasources", "matchManagers", "matchDepTypes")
 SKIP_WALK_KEYS = frozenset({"content", "onboardingConfig"})
 
-OpenerFunc = Callable[[urllib.request.Request, int], bytes]
+OpenerFunc = Callable[[urllib.request.Request, float], bytes]
 
 
 @dataclass(frozen=True)
@@ -396,9 +397,24 @@ def read_with_deadline(
     raise TimeoutError(f"response read exceeded {max_reads} reads")
 
 
+def open_https_response(
+    opener: urllib.request.OpenerDirector,
+    req: urllib.request.Request,
+    timeout: float,
+    bodies: list[bytes],
+    errors: list[Exception],
+) -> None:
+    """Open REQ and read its capped body, recording one result or the original exception."""
+    try:
+        with opener.open(req, timeout=timeout) as resp:  # nosec B310  # fixed https://api.github.com URL verified above; redirects restricted to https
+            bodies.append(read_with_deadline(resp, MAX_HTTP_BYTES, timeout))
+    except (OSError, http.client.HTTPException, ValueError) as exc:  # what urllib raises; default_https_opener re-raises it unchanged
+        errors.append(exc)
+
+
 def default_https_opener(
     req: urllib.request.Request,
-    timeout: int,
+    timeout: float,
     build_opener: Callable[..., urllib.request.OpenerDirector] = urllib.request.build_opener,
 ) -> bytes:
     """Execute HTTPS request REQ against `api.github.com` and read up to MAX_HTTP_BYTES + 1."""
@@ -406,15 +422,22 @@ def default_https_opener(
     if parsed.scheme != "https" or parsed.hostname != GITHUB_API_HOST:
         raise ConfigError(f"refused non-GitHub-API URL: {req.full_url!r}")
     opener = build_opener(HttpsRedirectHandler())
-    started = time.monotonic()
-    with opener.open(req, timeout=timeout) as resp:  # nosec B310  # fixed https://api.github.com URL verified above; redirects restricted to https
-        remaining = timeout - (time.monotonic() - started)
-        if remaining <= 0:
-            raise TimeoutError(f"response read exceeded {timeout}s")
-        try:
-            return read_with_deadline(resp, MAX_HTTP_BYTES, remaining)
-        except TimeoutError as exc:
-            raise TimeoutError(f"response read exceeded {timeout}s") from exc
+    bodies: list[bytes] = []
+    errors: list[Exception] = []
+    worker = threading.Thread(
+        target=open_https_response,
+        args=(opener, req, timeout, bodies, errors),
+        daemon=True,
+    )
+    worker.start()
+    worker.join(timeout=timeout)
+    if worker.is_alive():
+        raise TimeoutError(f"response read exceeded {timeout}s")
+    if errors:
+        raise errors[0]
+    if not bodies:
+        raise ConfigError("HTTPS response worker ended without a body or a urllib error; its traceback is on stderr")
+    return bodies[0]
 
 
 def github_api_get(
@@ -1351,6 +1374,79 @@ def self_test_https_opener() -> None:
         raise AssertionError(f"live opener read {body!r}, want b'abc'")
 
 
+def self_test_https_opener_deadline() -> None:
+    """Verify one deadline bounds blocked opener and response reads."""
+    class BlockingResponse:
+        """Block its only body read until the daemon worker is abandoned."""
+
+        def __enter__(self) -> Self:
+            """Act as its own context manager."""
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            """Hold no resource after the timed-out daemon worker exits."""
+
+        def read(self, _size: int = -1) -> bytes:
+            """Block beyond the outer response deadline."""
+            threading.Event().wait()
+            return b""
+
+    class BlockingOpen:
+        """Block opening the response beyond the outer response deadline."""
+
+        def open(self, _req: object, timeout: float) -> BlockingResponse:
+            """Block before a response can be returned."""
+            if timeout <= 0:
+                raise AssertionError("opener called without a deadline")
+            threading.Event().wait()
+            return BlockingResponse()
+
+    class BlockingRead:
+        """Return a response whose body read blocks beyond the deadline."""
+
+        def open(self, _req: object, timeout: float) -> BlockingResponse:
+            """Return a blocking response."""
+            if timeout <= 0:
+                raise AssertionError("opener called without a deadline")
+            return BlockingResponse()
+
+    req = urllib.request.Request(f"https://{GITHUB_API_HOST}/repos/x/y")
+    for opener in (BlockingOpen(), BlockingRead()):
+        started = time.monotonic()
+        try:
+            default_https_opener(req, 0.2, build_opener=lambda *_h, o=opener: o)
+        except TimeoutError as exc:
+            if str(exc) != "response read exceeded 0.2s":
+                raise
+            if time.monotonic() - started > 1.2:
+                raise AssertionError("blocked response outlived deadline tolerance")
+        else:
+            raise AssertionError("blocked response did not time out")
+
+
+def self_test_https_opener_exception() -> None:
+    """Verify worker HTTP errors retain their identity and message."""
+    req = urllib.request.Request(f"https://{GITHUB_API_HOST}/repos/x/y")
+    expected = make_http_error(req.full_url, 503)
+
+    class FailingOpener:
+        """Raise the prebuilt HTTP error from the worker thread."""
+
+        def open(self, _req: object, timeout: float) -> Readable:
+            """Propagate the exact HTTP error object."""
+            if timeout <= 0:
+                raise AssertionError("opener called without a deadline")
+            raise expected
+
+    try:
+        default_https_opener(req, 1, build_opener=lambda *_h: FailingOpener())
+    except urllib.error.HTTPError as exc:
+        if exc is not expected:
+            raise AssertionError("worker HTTP error identity changed") from exc
+    else:
+        raise AssertionError("worker HTTP error was not propagated")
+
+
 def run_self_test() -> int:
     """Execute offline unit tests for `horistes` HTTP fetch and redirect handling."""
     sha = "1075f6323bffb41e599fae6d7113a19029b33f2d"
@@ -1360,6 +1456,8 @@ def run_self_test() -> int:
     self_test_redirects()
     self_test_read_with_deadline()
     self_test_https_opener()
+    self_test_https_opener_deadline()
+    self_test_https_opener_exception()
     print("renovate_presets: self-test ok")
     return 0
 

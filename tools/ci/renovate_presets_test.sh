@@ -617,6 +617,37 @@ assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow \
 assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow "cosign verify"
 assert_wiring "$HERE/../../Makefile" makefile "python3 -I tools/ci/renovate_presets.py"
 
+# assert_workflow_timeout CI_YML: require enough workflows-job budget for bounded commands.
+assert_workflow_timeout() {
+  python3 -I - "$1" <<'PY'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+job_match = re.search(r"^  workflows:\n(?P<body>.*?)(?=^  [a-z][a-z0-9_-]*:\n|\Z)", text, re.M | re.S)
+if job_match is None:
+    raise SystemExit("workflows job is missing")
+job = job_match.group("body")
+minutes = re.search(r"^    timeout-minutes: ([0-9]+)$", job, re.M)
+if minutes is None:
+    raise SystemExit("workflows job timeout-minutes is missing")
+step = re.search(
+    r"^      - name: Renovate presets reachable from renovate\.json keep Docker release-age coverage, after their planted cases\n(?P<body>.*?)(?=^      - name:|\Z)",
+    job,
+    re.M | re.S,
+)
+if step is None:
+    raise SystemExit("presets workflow step is missing")
+required = sum(int(value) for value in re.findall(r"^\s*timeout ([0-9]+)\b", step.group("body"), re.M)) + 300
+available = int(minutes.group(1)) * 60
+if available < required:
+    raise SystemExit(f"workflows timeout {available}s is below required {required}s")
+PY
+}
+
+assert_workflow_timeout "$HERE/../../.github/workflows/ci.yml"
+
 sed '/python3 -I tools\/ci\/renovate_presets.py/d' "$HERE/../../.github/workflows/ci.yml" \
   > "$work/ci-no-check.yml"
 if assert_wiring "$work/ci-no-check.yml" workflow "python3 -I tools/ci/renovate_presets.py"; then
@@ -632,6 +663,12 @@ sed '/python3 -I tools\/ci\/renovate_presets.py/d' "$HERE/../../Makefile" \
   > "$work/make-no-check"
 if assert_wiring "$work/make-no-check" makefile "python3 -I tools/ci/renovate_presets.py"; then
   echo "FAIL wiring: Makefile copy without checker passed" >&2
+  exit 1
+fi
+awk '!done && sub(/timeout-minutes: 25/, "timeout-minutes: 10") { done = 1 } { print }' "$HERE/../../.github/workflows/ci.yml" \
+  > "$work/ci-short-timeout.yml"
+if assert_workflow_timeout "$work/ci-short-timeout.yml"; then
+  echo "FAIL wiring: workflow copy with insufficient timeout passed" >&2
   exit 1
 fi
 echo "ok   checker-wiring"
