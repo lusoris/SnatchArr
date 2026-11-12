@@ -25,13 +25,14 @@ new_repo() {
     git -C "$dir" config commit.gpgsign false
 }
 
-# test_planted_isc004: verify that implicit string concatenation (ISC004) is caught and refused.
-test_planted_isc004() {
-    local repo="$work/repo-isc004"
+# planted_rule NAME SOURCE RULE: verify that main.py holding SOURCE fails ruff_check.sh with RULE named,
+# under the repository's settings without its own per-file exceptions.
+planted_rule() {
+    local name=$1 source=$2 rule=$3
+    local repo="$work/repo-$name"
     new_repo "$repo"
-    # the repository's settings without its own per-file exceptions
     sed '/^\[lint.per-file-ignores\]/,$d' "$REPO_ROOT/ruff.toml" > "$repo/ruff.toml"
-    printf '%s\n' 'x = ["a" "b", "c"]' > "$repo/main.py"
+    printf '%s\n' "$source" > "$repo/main.py"
     git -C "$repo" add ruff.toml main.py
     git -C "$repo" commit -q -m "initial"
 
@@ -41,14 +42,21 @@ test_planted_isc004() {
     set -e
 
     if [ "$status" -eq 0 ]; then
-        echo "FAIL isc004: expected non-zero exit status, got 0"
+        echo "FAIL $name: expected non-zero exit status, got 0"
         failed=1
-    elif ! echo "$out" | grep -q "ISC004"; then
-        echo "FAIL isc004: expected output to mention ISC004, got: $out"
+    elif ! echo "$out" | grep -q "$rule"; then
+        echo "FAIL $name: expected output to mention $rule, got: $out"
         failed=1
     else
-        echo "ok   planted ISC004 refused"
+        echo "ok   planted $rule refused"
     fi
+}
+
+# test_planted_rules: implicit string concatenation (ISC004, default set) and a local-time date
+# (DTZ011, added by ruff.toml extend-select) are refused.
+test_planted_rules() {
+    planted_rule isc004 'x = ["a" "b", "c"]' ISC004
+    planted_rule dtz011 "$(printf '%s\n' 'import datetime' '' 'x = datetime.date.today()')" DTZ011
 }
 
 # test_clean: verify that clean code matching ruff.toml rules passes with exit status 0.
@@ -271,7 +279,7 @@ test_hook_floor() {
     fi
 }
 
-test_planted_isc004
+test_planted_rules
 test_clean
 test_req_without_hash
 test_version_mismatch

@@ -9,6 +9,12 @@
 
 target-version = "py314"
 
+# Rules beyond the default set, one reason each:
+# - DTZ011: date.today() reads the runner's local time zone, so a date check such as a baseline
+#   expiry can pass on one runner and fail on another. Use datetime.now(UTC).date().
+[lint]
+extend-select = ["DTZ011"]
+
 # Exceptions: one file and its rules per entry. The comment above each entry
 # names its category, entry date, expiry and reason. tools/ci/ruff_check.sh
 # refuses an entry without that comment, an expired entry, and an entry whose
