@@ -9,6 +9,10 @@
 
 target-version = "py314"
 
+# Rules Codacy's Ruff pattern set enables beyond the default set, so a local run finds them first.
+[lint]
+extend-select = ["DTZ011"]
+
 # Exceptions: one file and its rules per entry. The comment above each entry
 # names its category, entry date, expiry and reason. tools/ci/ruff_check.sh
 # refuses an entry without that comment, an expired entry, and an entry whose

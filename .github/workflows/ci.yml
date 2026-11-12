@@ -77,9 +77,13 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "pull_request" ]; then
             python3 -I tools/ci/codacy_opengrep_scan.py --base-ref "$BASE_SHA"
-          elif [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ] || ! git rev-parse --verify -q "$BEFORE_SHA^{commit}" >/dev/null; then
-            echo "Skipping the Opengrep shrink check: no valid before sha on $EVENT_NAME ($BEFORE_SHA)"
+          elif [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "Skipping the Opengrep shrink check: $EVENT_NAME has no before commit ($BEFORE_SHA)"
           else
+            # A force-push leaves the before commit out of the clone: fetch it, and fail when it is gone.
+            if ! git rev-parse --verify -q "$BEFORE_SHA^{commit}" >/dev/null; then
+              timeout 120 git fetch --no-tags --quiet origin "$BEFORE_SHA"
+            fi
             python3 -I tools/ci/codacy_opengrep_scan.py --base-ref "$BEFORE_SHA"
           fi
       - name: The release publish order check refuses its planted cases
