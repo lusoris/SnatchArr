@@ -1,11 +1,11 @@
 {
   "capability": {
-    "checkedAt": "2026-11-12T17:00:43.501Z",
+    "checkedAt": "2026-11-12T20:16:25.528Z",
     "ready": [
       {
         "configSource": "codacy",
         "displayName": "Opengrep",
-        "filesRouted": 42,
+        "filesRouted": 45,
         "installation": "codacy",
         "runner": "local",
         "toolId": "Semgrep",
@@ -265,6 +265,24 @@
     {
       "category": "Security",
       "column": 16,
+      "endColumn": 10,
+      "endLine": 156,
+      "filePath": "tools/ci/renovate_presets.py",
+      "line": 154,
+      "lineContent": "        proc = subprocess.Popen(  # nosec B603  # fixed docker argv list, no shell",
+      "message": "Detected subprocess function 'Popen' without a static string.",
+      "multilineContent": [
+        "        proc = subprocess.Popen(  # nosec B603  # fixed docker argv list, no shell",
+        "            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
       "endColumn": 62,
       "filePath": "tools/ci/run_bounded.py",
       "line": 69,
@@ -500,18 +518,18 @@
     }
   ],
   "metadata": {
-    "completedAt": "2026-11-12T17:00:51.495Z",
-    "durationMs": 8764,
+    "completedAt": "2026-11-12T20:16:39.539Z",
+    "durationMs": 15159,
     "executionMode": "strict",
     "phaseTimings": {
-      "availabilityMs": 754,
-      "fileDiscoveryMs": 5,
+      "availabilityMs": 1128,
+      "fileDiscoveryMs": 6,
       "fileRoutingMs": 3,
       "installMs": 0,
-      "toolExecutionMs": 7984,
-      "toolUpdateMs": 0
+      "toolExecutionMs": 13998,
+      "toolUpdateMs": 1
     },
-    "startedAt": "2026-11-12T17:00:42.731Z"
+    "startedAt": "2026-11-12T20:16:24.380Z"
   },
   "patternSummary": {
     "groups": [
@@ -521,8 +539,8 @@
         "patterns": [
           {
             "category": "Security",
-            "fileCount": 17,
-            "issueCount": 18,
+            "fileCount": 18,
+            "issueCount": 19,
             "noisy": false,
             "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
             "severity": "Error",
@@ -544,7 +562,7 @@
         ],
         "severity": "Error",
         "severityLabel": "CRITICAL",
-        "totalIssues": 22,
+        "totalIssues": 23,
         "totalPatterns": 2
       },
       {
@@ -571,15 +589,15 @@
     ],
     "noisyPatternCount": 0,
     "noisyThreshold": 500,
-    "totalIssues": 25,
+    "totalIssues": 26,
     "totalPatterns": 3
   },
   "toolResults": [
     {
-      "durationMs": 7984,
+      "durationMs": 13996,
       "errorCount": 0,
-      "filesAnalyzed": 42,
-      "issueCount": 25,
+      "filesAnalyzed": 45,
+      "issueCount": 26,
       "status": "success",
       "toolId": "Semgrep"
     }

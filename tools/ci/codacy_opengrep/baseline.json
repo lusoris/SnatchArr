@@ -146,6 +146,17 @@
     },
     {
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "filePath": "tools/ci/renovate_presets.py",
+      "contentSha256": "79d31767e931139d82b1aa3216152f3de3d68095fd8b96b1a2c5b4aa5c827ad4",
+      "count": "1",
+      "category": "D",
+      "entered": "2026-11-12",
+      "expires": "2027-03-12",
+      "issue": "1098",
+      "reason": "Runs the digest-pinned RENOVATE_IMAGE that read_renovate_image validates, with a fixed docker argv, --network none, --read-only and a 120 s timeout; no shell."
+    },
+    {
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
       "filePath": "tools/ci/run_bounded.py",
       "contentSha256": "53bb86594e56f6c7e9209511ef50cd494c892468815cfb607e9b2f480fc593ce",
       "count": "1",
