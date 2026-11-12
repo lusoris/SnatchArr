@@ -10,8 +10,8 @@
 # a zizmor requirements file without hashes, a go install at @latest, at @main or without a
 # package, and azure/setup-helm without a version, at latest, or with the version in the next
 # step, and a ${{ }} expression expanded into a run script (accepted: setup-helm pinned to a
-# release). Last: Renovate reads the actionlint image
-# pin, zizmor-requirements.txt, every go install pin and every setup-helm version in the
+# release). Last: Renovate reads both workflow-gate image
+# pins, zizmor-requirements.txt, every go install pin and every setup-helm version in the
 # workflows, and neither @latest, a variable nor a helm version of latest.
 # Adapted from github.com/golusoris/goenvoy.
 #
@@ -245,27 +245,79 @@ cp "$HERE/tool-versions.env" "$WORK/copy-nohash/tools/ci/"
 grep -v '^[[:space:]]*--hash=' "$HERE/zizmor-requirements.txt" > "$WORK/copy-nohash/tools/ci/zizmor-requirements.txt"
 HERE="$WORK/copy-nohash/tools/ci" expect_refusal clean "zizmor is not pinned by version and hash"
 
-# renovate_reads PINS: how many patterns of the Renovate manager for the pin file match PINS
-# exactly once. A pattern that matches nothing stops the updates without an error.
+# renovate_reads PINS [CONFIG]: print the sorted named captures produced by the Renovate manager.
 renovate_reads() {
   jq -r --rawfile pins "$1" '
     [ .customManagers[]
       | select(.managerFilePatterns == ["tools/ci/tool-versions.env"])
       | .matchStrings[] as $pattern
-      | [ $pins | match($pattern; "g") ] | select(length == 1) ]
-    | length
-  ' "$HERE/../../renovate.json"
+      | [ $pins | capture($pattern; "g") ] | select(length == 1) | .[]
+      | [.depName, .currentValue, .currentDigest] | @tsv ]
+    | sort | .[]
+  ' "${2:-$HERE/../../renovate.json}"
 }
-if [ "$(renovate_reads "$HERE/tool-versions.env")" != 1 ]; then
-  echo "FAIL renovate: renovate.json does not read the image pin of tools/ci/tool-versions.env" >&2
+
+# Repository-owned literal pin file.
+# shellcheck disable=SC1091
+. "$HERE/tool-versions.env"
+# Print the depName, version and digest a pinned image reference yields, tab separated.
+pin_capture() {
+  local image="$1" without_registry dep_name version digest
+  without_registry="${image#*/}"
+  dep_name="${without_registry%%:*}"
+  version="${image#*:}"
+  version="${version%%@*}"
+  digest="${image##*@}"
+  printf '%s\t%s\t%s\n' "$dep_name" "$version" "$digest"
+}
+EXPECTED_CAPTURES="$(
+  pin_capture "$ACTIONLINT_IMAGE"
+  pin_capture "$RENOVATE_IMAGE"
+)"
+EXPECTED_CAPTURES="$(printf '%s\n' "$EXPECTED_CAPTURES" | sort)"
+
+# Succeed when renovate.json captures exactly the pins in tool-versions.env (or the given copy).
+renovate_captures_match() {
+  [ "$(renovate_reads "$1" "${2:-$HERE/../../renovate.json}")" = "$EXPECTED_CAPTURES" ]
+}
+
+if ! renovate_captures_match "$HERE/tool-versions.env"; then
+  echo "FAIL renovate: renovate.json does not capture both image pins exactly" >&2
   exit 1
 fi
-echo "ok   renovate: the image pin is read"
-if [ "$(renovate_reads "$WORK/copy/tools/ci/tool-versions.env")" != 0 ]; then
+echo "ok   renovate: both image pins and all named captures are exact"
+if [ "$(renovate_reads "$WORK/copy/tools/ci/tool-versions.env" | wc -l)" != 1 ]; then
   echo "FAIL renovate: the pin without a digest is still read" >&2
   exit 1
 fi
+sed 's/^\(RENOVATE_IMAGE=.*\)@sha256:.*$/\1/' "$HERE/tool-versions.env" > "$WORK/copy-renovate-nodigest"
+if [ "$(renovate_reads "$WORK/copy-renovate-nodigest" | wc -l)" != 1 ]; then
+  echo "FAIL renovate: the renovate pin without a digest is still read" >&2
+  exit 1
+fi
 echo "ok   renovate: a pin without a digest is not read"
+
+cp "$HERE/../../renovate.json" "$WORK/renovate-wrong-depname.json"
+python3 -I - "$WORK/renovate-wrong-depname.json" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+cfg = json.loads(path.read_text(encoding="utf-8"))
+for manager in cfg["customManagers"]:
+    if manager.get("managerFilePatterns") == ["tools/ci/tool-versions.env"]:
+        manager["matchStrings"] = [
+            pattern.replace("(?<depName>renovate/renovate)", "(?<depName>renovate)/renovate")
+            for pattern in manager["matchStrings"]
+        ]
+path.write_text(json.dumps(cfg), encoding="utf-8")
+PY
+if renovate_captures_match "$HERE/tool-versions.env" "$WORK/renovate-wrong-depname.json"; then
+  echo "FAIL renovate: wrong depName capture passed" >&2
+  exit 1
+fi
+echo "ok   renovate: wrong depName capture is refused"
 
 # renovate_go_reads FILE...: matches of the Renovate manager for workflow go installs, summed.
 renovate_go_reads() {
@@ -326,4 +378,4 @@ if jq -e -n --arg file "tools/ci/zizmor.txt" --arg pat "$PIP_PATTERN" '$file | t
 fi
 echo "ok   renovate: pip_requirements reads tools/ci/zizmor-requirements.txt and ignores zizmor.txt"
 
-echo "workflow check: 7 accepted, 19 refused; Renovate reads 1 image pin, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
+echo "workflow check: 7 accepted, 19 refused; Renovate reads 2 image pins, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"

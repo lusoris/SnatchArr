@@ -55,13 +55,14 @@
       "datasourceTemplate": "github-digest"
     },
     {
-      "description": "The image of the workflow gate, pinned by version and digest on one line (tools/ci/workflow-check.sh)",
+      "description": "Images of the workflow gate, each pinned by version and digest on one line (tools/ci/workflow-check.sh, tools/ci/renovate_presets.py)",
       "customType": "regex",
       "managerFilePatterns": [
         "tools/ci/tool-versions.env"
       ],
       "matchStrings": [
-        "ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
+        "ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n",
+        "RENOVATE_IMAGE=mirror\\.gcr\\.io/(?<depName>renovate/renovate):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
