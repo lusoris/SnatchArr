@@ -349,6 +349,83 @@ setup_negation_glob_undo() {
     }'
 }
 
+# setup_uncertain_keeps: a later rule that may apply but sets no release age leaves earlier coverage in force.
+setup_uncertain_keeps() {
+    track a.yml "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchDepNames": ["ghcr.io/planted/undated"],
+          "minimumReleaseAge": null
+        },
+        {
+          "matchDatasources": ["docker"],
+          "matchFileNames": ["a.yml"],
+          "labels": ["media"]
+        }
+      ]
+    }'
+}
+
+# setup_uncertain_wait_keeps_override: a later rule that may apply sets a wait, but the earlier Docker Hub
+# override keeps the lookup dated, so the pin stays covered.
+setup_uncertain_wait_keeps_override() {
+    track a.yml "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchDepNames": ["ghcr.io/planted/undated"],
+          "overridePackageName": "planted/undated"
+        },
+        {
+          "matchDatasources": ["docker"],
+          "matchFileNames": ["a.yml"],
+          "minimumReleaseAge": "3 days"
+        }
+      ]
+    }'
+}
+
+# setup_datasource_negation_undo: a later matchDatasources ["!npm"] rule applies to docker and restores the wait.
+setup_datasource_negation_undo() {
+    track a.yml "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchDepNames": ["ghcr.io/planted/undated"],
+          "minimumReleaseAge": null
+        },
+        {
+          "matchDatasources": ["!npm"],
+          "minimumReleaseAge": "3 days"
+        }
+      ]
+    }'
+}
+
+# setup_accumulated_redirect_undated: a later rule matching the name an earlier override set
+# redirects the lookup to an undated registry, so the pin is uncovered.
+setup_accumulated_redirect_undated() {
+    track a.yml "image: mirror.gcr.io/library/postgres:18@sha256:$D"
+    track renovate.json '{
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchDepNames": ["mirror.gcr.io/library/postgres"],
+          "overridePackageName": "postgres"
+        },
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["postgres"],
+          "overridePackageName": "ghcr.io/x/pg"
+        }
+      ]
+    }'
+}
+
 # setup_override_dep_name: rule holding overrideDepName that may apply fails closed naming rule index.
 setup_override_dep_name() {
     track a.yml "image: ghcr.io/planted/undated:1@sha256:$D"
@@ -499,6 +576,9 @@ run_repo_case matcher-free-null 0 setup_matcher_free_null "image_release_age_che
 run_repo_case accumulated-pkg-name 0 setup_accumulated_pkg_name "image_release_age_check: ok (1 undated images covered)"
 run_repo_case unmodeled-then-definite 0 setup_unmodeled_then_definite "image_release_age_check: ok (1 undated images covered)"
 run_repo_case top-level-age-null 0 setup_top_level_age_null "image_release_age_check: ok (1 undated images covered)"
+run_repo_case uncertain-keeps 0 setup_uncertain_keeps "image_release_age_check: ok (1 undated images covered)"
+run_repo_case uncertain-wait-keeps-override 0 setup_uncertain_wait_keeps_override \
+    "image_release_age_check: ok (1 undated images covered)"
 
 run_repo_case own-image 3 setup_own_image \
     "image_release_age_check: ghcr.io/o/x (a.yml:1)" \
@@ -526,6 +606,12 @@ run_repo_case negation-undo 3 setup_negation_undo \
     "$ADVICE"
 run_repo_case negation-glob-undo 3 setup_negation_glob_undo \
     "packageRules[1]: ambiguous rule applicability"
+run_repo_case datasource-negation-undo 3 setup_datasource_negation_undo \
+    "image_release_age_check: ghcr.io/planted/undated (a.yml:1)" \
+    "$ADVICE"
+run_repo_case accumulated-redirect-undated 3 setup_accumulated_redirect_undated \
+    "image_release_age_check: mirror.gcr.io/library/postgres (a.yml:1)" \
+    "$ADVICE"
 run_repo_case override-dep-name 3 setup_override_dep_name \
     "packageRules[0]"
 run_repo_case registry-aliases 3 setup_registry_aliases \
