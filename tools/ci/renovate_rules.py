@@ -6,8 +6,10 @@ Models `matchRegexOrGlobList` (`lib/util/string-match.ts`), two-barrier RE2 patt
 (syntax allow-list in `re2_subset.py` plus parse-tree opcode/code/flag allow-list), config-key
 allow-lists across top level, `packageRules`, `customManagers`, `vulnerabilityAlerts` and
 `lockFileMaintenance`, zero-duration `minimumReleaseAge` parsing (`util/pretty-time.js` + `ms`),
-`overridePackageName` templates, `record`-file protection against `customManagers`, and ordered
-`packageRules` state evaluation over all live pins without file I/O or subprocess calls.
+`getDepFromImageRef` `depName` normalization (`lib/modules/manager/dockerfile/extract.ts`),
+`overridePackageName` templates, `record`-file protection against `enabledManagers` built-in
+`managerFilePatterns` and `customManagers`, and ordered `packageRules` state evaluation over all
+live pins without file I/O or subprocess calls.
 """
 
 from __future__ import annotations
@@ -39,6 +41,11 @@ MODELED_RULE_KEYS = SUPPORTED_MATCHERS | frozenset({
     "minimumReleaseAgeBehaviour",
     "overridePackageName",
 })
+# `enabled` stays inert: the check answers whether the age wait holds a pin back once Renovate
+# looks it up. `enabled: false` skips the lookup on purpose (an opt-out, not a silent wait), so it
+# never counts as coverage; a pin only a disable rule matches is still refused. A `matchFileNames`
+# disable (the praetor-managed files rule in renovate.json) may match any pin here, so refusing a
+# matching disable would refuse the live config.
 INERT_RULE_KEYS = frozenset({
     "allowedVersions",
     "automerge",
@@ -101,6 +108,38 @@ DOCKER_FORBIDDEN_MANAGER_KEYS = (
     "registryUrlTemplate",
 )
 DOCKER_ALLOWED_GROUPS = frozenset({"depName", "currentValue", "currentDigest"})
+# Default `managerFilePatterns` from Renovate 44.234.0 `lib/modules/manager/<name>/index.ts`
+# (`defaultConfig`); `"custom.regex"` delegates file matching to `customManagers`.
+BUILTIN_MANAGER_FILE_PATTERNS: dict[str, tuple[str, ...]] = {
+    "cargo": (r"/(^|/)Cargo\.toml$/",),
+    "custom.regex": (),
+    "devcontainer": (
+        r"/^.devcontainer/devcontainer.json$/",
+        r"/^.devcontainer.json$/",
+        r"/^.devcontainer/[^/]+/devcontainer.json$/",
+    ),
+    "docker-compose": (r"/(^|/)(?:docker-)?compose[^/]*\.ya?ml$/",),
+    "dockerfile": (
+        r"/(^|/|\.)([Dd]ocker|[Cc]ontainer)file$/",
+        r"/(^|/)([Dd]ocker|[Cc]ontainer)file[^/]*$/",
+    ),
+    "github-actions": (
+        r"/(^|/)(workflow-templates|\.(?:github|gitea|forgejo)/(?:workflows|actions))/.+\.ya?ml$/",
+        r"/(^|/)action\.ya?ml$/",
+    ),
+    "gomod": (r"/(^|/)go\.mod$/",),
+    "helm-values": (r"/(^|/)values\.ya?ml$/",),
+    "helmv3": (r"/(^|/)Chart\.ya?ml$/",),
+    "npm": (
+        r"/(^|/)package\.json$/",
+        r"/(^|/)pnpm-workspace\.yaml$/",
+        r"/(^|/)\.yarnrc\.yml$/",
+    ),
+    "pip_requirements": (r"/(^|/)[\w-]*requirements([-._]\w+)?\.(txt|pip)$/",),
+    "rust-toolchain": (r"/(^|/)rust-toolchain(\.toml)?$/",),
+}
+DOCKER_DEP_PREFIXES = ("amd64", "arm64", "library")
+QUAY_DEP_RE = re.compile(r"^quay\.io(?::[1-9][0-9]{0,4})?", re.IGNORECASE | re.ASCII)
 UNKNOWN_KEY_SUFFIX = (
     "classify it in tools/ci/renovate_rules.py after checking it cannot redirect a Docker "
     "lookup or change release age"
@@ -208,6 +247,7 @@ class ParsedConfig:
     behaviour_optional: bool
     rules: tuple[CoverageRule, ...]
     manager_patterns: tuple[ManagerFilePattern, ...]
+    enabled_managers: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -239,6 +279,16 @@ def is_dated(name: str | None) -> bool:
         return False
     host = registry_host(name)
     return (host is None or host in DATED_HOSTS) and name == name.lower()
+
+
+def docker_dep_name(name: str) -> str:
+    """Normalize Docker `depName` per Renovate 44.234.0 `dockerfile/extract.ts` `getDepFromImageRef`."""
+    dep_name = name
+    for prefix in DOCKER_DEP_PREFIXES:
+        dep_name = dep_name.removeprefix(f"{prefix}/")
+    if QUAY_DEP_RE.search(dep_name):
+        dep_name = QUAY_DEP_RE.sub("quay.io", dep_name, count=1)
+    return dep_name
 
 
 def is_age_disabled(age: str | None) -> bool:
@@ -653,6 +703,41 @@ def file_pattern_may_match(entry: ManagerFilePattern, record_path: str) -> bool:
     return bool(entry.regex.search(record_path))
 
 
+def check_builtin_patterns(mgr: str, sorted_records: list[str]) -> None:
+    """Refuse when any default `managerFilePatterns` regex of MGR matches SORTED_RECORDS."""
+    for pat in BUILTIN_MANAGER_FILE_PATTERNS[mgr]:
+        rx = compile_regex_literal(pat, pat)
+        for rec in sorted_records:
+            if rx.search(rec):
+                raise RefusedError(
+                    f"enabledManagers: {mgr} default managerFilePatterns entry {pat} "
+                    f"reads record file {rec}: a record pin must be one no updater moves"
+                )
+
+
+def check_records_not_builtin(
+    enabled_managers: tuple[str, ...] | None, records: Iterable[str]
+) -> None:
+    """Refuse missing/unmodeled `enabledManagers` or built-in patterns hitting RECORDS."""
+    sorted_records = sorted(set(records))
+    if not sorted_records:
+        return
+    first_rec = sorted_records[0]
+    if enabled_managers is None:
+        raise RefusedError(
+            f"enabledManagers is absent or empty: every built-in Renovate manager may read "
+            f"record file {first_rec}; list enabledManagers so the check can rule them out"
+        )
+    for mgr in sorted(set(enabled_managers)):
+        if mgr not in BUILTIN_MANAGER_FILE_PATTERNS:
+            raise RefusedError(
+                f"enabledManagers entry {mgr} is not modeled: its default "
+                f"managerFilePatterns may read record file {first_rec}; add it to "
+                "BUILTIN_MANAGER_FILE_PATTERNS in tools/ci/renovate_rules.py"
+            )
+        check_builtin_patterns(mgr, sorted_records)
+
+
 def check_records_not_managed(
     file_patterns: Iterable[ManagerFilePattern], records: Iterable[str]
 ) -> None:
@@ -736,6 +821,20 @@ def parse_rule(raw: object, index: int) -> CoverageRule | None:
     )
 
 
+def parse_enabled_managers(data: dict[str, object]) -> tuple[str, ...] | None:
+    """Validate optional `enabledManagers` on DATA; return `None` when every manager is enabled.
+
+    `getEnabledManagersList` (`lib/modules/manager/index.ts`) filters only when
+    `enabledManagers?.length` is non-zero, so absent, null and `[]` all enable every manager.
+    """
+    raw = data.get("enabledManagers")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise ConfigError("renovate.json: enabledManagers must be a list of strings")
+    return tuple(raw) or None
+
+
 def parse_custom_managers(data: dict[str, object]) -> tuple[ManagerFilePattern, ...]:
     """Validate `customManagers` on DATA and return compiled `ManagerFilePattern` entries."""
     raw_managers = data.get("customManagers", [])
@@ -775,6 +874,7 @@ def parse_config(config: str | dict[str, object]) -> ParsedConfig:
     validate_top_level(data)
     validate_sub_object(data, "vulnerabilityAlerts", ALLOWED_VULN_KEYS)
     validate_sub_object(data, "lockFileMaintenance", ALLOWED_LOCK_KEYS)
+    enabled_managers = parse_enabled_managers(data)
     manager_patterns = parse_custom_managers(data)
     has_age, top_age = parse_optional_str(data, "minimumReleaseAge", "top-level")
     _, top_beh = parse_optional_str(data, "minimumReleaseAgeBehaviour", "top-level")
@@ -784,6 +884,7 @@ def parse_config(config: str | dict[str, object]) -> ParsedConfig:
         behaviour_optional=(top_beh == "timestamp-optional"),
         rules=rules,
         manager_patterns=manager_patterns,
+        enabled_managers=enabled_managers,
     )
 
 
@@ -849,11 +950,15 @@ def step_states(
 
 
 def is_name_covered(
-    dep_name: str, age_null: bool, beh_opt: bool, rules: Iterable[CoverageRule]
+    dep_name: str,
+    package_name: str,
+    age_null: bool,
+    beh_opt: bool,
+    rules: Iterable[CoverageRule],
 ) -> bool:
-    """Walk RULES over deduplicated `RuleState`s for DEP_NAME; fail closed on mixed states."""
+    """Walk RULES over deduplicated `RuleState`s for `(DEP_NAME, PACKAGE_NAME)`; fail closed."""
     states: set[RuleState] = {
-        RuleState(age_null=age_null, behaviour_optional=beh_opt, package_name=dep_name)
+        RuleState(age_null=age_null, behaviour_optional=beh_opt, package_name=package_name)
     }
     forked: list[int] = []
     for rule in rules:
@@ -867,6 +972,17 @@ def is_name_covered(
     raise RefusedError(
         f"{where}: ambiguous rule applicability leaves coverage mixed for {dep_name}"
     )
+
+
+def is_pin_covered(name: str, parsed: ParsedConfig) -> bool:
+    """Report whether every Renovate extraction variant of NAME is covered under PARSED."""
+    norm = docker_dep_name(name)
+    variants = ((name, name),) if norm == name else ((name, name), (norm, name))
+    results = [
+        is_name_covered(dep, pkg, parsed.age_null, parsed.behaviour_optional, parsed.rules)
+        for dep, pkg in variants
+    ]
+    return all(results)
 
 
 def check_input_domain(values: Iterable[str], kind: str) -> None:
@@ -888,12 +1004,10 @@ def judge(
     check_input_domain(name_list, "image name")
     check_input_domain(record_list, "record path")
     parsed = parse_config(config)
-    check_records_not_managed(parsed.manager_patterns, record_list)
-    return [
-        name
-        for name in name_list
-        if not is_name_covered(name, parsed.age_null, parsed.behaviour_optional, parsed.rules)
-    ]
+    if record_list:
+        check_records_not_builtin(parsed.enabled_managers, record_list)
+        check_records_not_managed(parsed.manager_patterns, record_list)
+    return [name for name in name_list if not is_pin_covered(name, parsed)]
 
 
 def self_test_match_list() -> None:
@@ -1040,6 +1154,7 @@ def self_test_override_and_aliases() -> None:
 def self_test_managers_and_records() -> None:
     """Assert customManagers Docker rules and record-file protection fail closed."""
     mgr_exact = {
+        "enabledManagers": ["custom.regex"],
         "customManagers": [
             {
                 "customType": "regex",
@@ -1047,21 +1162,25 @@ def self_test_managers_and_records() -> None:
                 "matchStrings": ["(?<depName>a):(?<currentValue>1)"],
                 "datasourceTemplate": "docker",
             }
-        ]
+        ],
     }
     if judge(mgr_exact, [], records=["other.md"]) != []:
         raise AssertionError("unrelated record file should pass")
     for rec in ("docs/adr.md", "DOCS/ADR.MD"):
         try:
             judge(mgr_exact, [], records=[rec])
-        except RefusedError:
+        except RefusedError as exc:
+            if "customManagers[0]" not in str(exc):
+                raise AssertionError(f"unexpected RefusedError on {rec!r}: {exc}") from exc
             continue
         raise AssertionError(f"record file {rec!r} matched by exact manager was not refused")
     dotted_mgr = {**mgr_exact["customManagers"][0], "managerFilePatterns": ["./docs/adr.md"]}
-    dotted = {"customManagers": [dotted_mgr]}
+    dotted = {"enabledManagers": ["custom.regex"], "customManagers": [dotted_mgr]}
     try:
         judge(dotted, [], records=["docs/adr.md"])
-    except RefusedError:
+    except RefusedError as exc:
+        if "customManagers[0]" not in str(exc):
+            raise AssertionError(f"unexpected RefusedError on dotted manager: {exc}") from exc
         return
     raise AssertionError("'./docs/adr.md' must count as a possible match for record docs/adr.md")
 
@@ -1073,6 +1192,74 @@ def expect_failure(call: object, error: type[Exception], what: str) -> None:
     except error:
         return
     raise AssertionError(f"{what} was not refused with {error.__name__}")
+
+
+def self_test_builtin_managers() -> None:
+    """Compile every built-in manager pattern and test record-file hits and misses."""
+    for mgr, pats in BUILTIN_MANAGER_FILE_PATTERNS.items():
+        for pat in pats:
+            compile_regex_literal(pat, f"{mgr}:{pat}")
+    hits = (
+        ("cargo", "Cargo.toml"),
+        ("devcontainer", ".devcontainer/devcontainer.json"),
+        ("docker-compose", "compose.yaml"),
+        ("dockerfile", "Dockerfile"),
+        ("github-actions", ".github/workflows/a.yml"),
+        ("gomod", "go.mod"),
+        ("helm-values", "charts/x/values.yaml"),
+        ("helmv3", "charts/x/Chart.yaml"),
+        ("npm", "package.json"),
+        ("pip_requirements", "tools/ci/ruff-requirements.txt"),
+        ("rust-toolchain", "rust-toolchain.toml"),
+    )
+    non_empty = {mgr for mgr, pats in BUILTIN_MANAGER_FILE_PATTERNS.items() if pats}
+    if {mgr for mgr, _ in hits} != non_empty:
+        raise AssertionError("self_test_builtin_managers must hit every non-empty manager")
+    for mgr, rec in hits:
+        expect_failure(
+            lambda m=mgr, r=rec: judge({"enabledManagers": [m]}, [], records=[r]),
+            RefusedError,
+            f"{mgr} hitting {rec}",
+        )
+    all_mgrs = {"enabledManagers": sorted(BUILTIN_MANAGER_FILE_PATTERNS)}
+    safe_records = [
+        "docs/adr/0019-foreign-title-search.md",
+        "tools/e2e/pushtitle/images.yaml",
+        "tools/e2e/pushtitle_live.sh",
+    ]
+    if judge(all_mgrs, [], records=safe_records) != []:
+        raise AssertionError("repo record files must miss all modeled built-in managers")
+    expect_failure(
+        lambda: judge({"enabledManagers": ["kubernetes"]}, [], records=["rec.yml"]),
+        RefusedError,
+        "unmodeled enabledManagers entry",
+    )
+    expect_failure(
+        lambda: judge({"enabledManagers": "dockerfile"}, []), ConfigError, "bad enabledManagers"
+    )
+
+
+def self_test_docker_dep_name() -> None:
+    """Run table-driven assertions for `docker_dep_name` normalization."""
+    cases = (
+        ("library/x", "x"),
+        ("amd64/x", "x"),
+        ("arm64/library/x", "x"),
+        ("library/amd64/x", "amd64/x"),
+        ("quay.io:5000/a/b", "quay.io/a/b"),
+        ("QUAY.IO:443/a", "quay.io/a"),
+        ("Quay.io/a", "quay.io/a"),
+        ("quay.io:0123/a", "quay.io:0123/a"),
+        ("quay.io:123456/a", "quay.io6/a"),
+        ("ghcr.io/library/x", "ghcr.io/library/x"),
+        ("docker.io/library/x", "docker.io/library/x"),
+        ("quayio/x", "quayio/x"),
+        ("ghcr.io/a/b", "ghcr.io/a/b"),
+    )
+    for raw, want in cases:
+        got = docker_dep_name(raw)
+        if got != want:
+            raise AssertionError(f"docker_dep_name({raw!r}) = {got!r}, want {want!r}")
 
 
 def self_test_walker_alone() -> None:
@@ -1105,12 +1292,21 @@ def self_test_groups_and_inputs() -> None:
     for hidden in (r"\Q[\E(?<packageName>x)", r"[(?<packageName>x)]", r"\(?P<registryUrl>x)"):
         expect_failure(lambda m=hidden: judge(with_match(m), []), RefusedError, hidden)
     expect_failure(lambda: judge(with_match("(?<depName"), []), ConfigError, "unclosed group")
-    if judge({}, ["ghcr.io/a/b"], records=["tools/e2e/x.yaml"]) != ["ghcr.io/a/b"]:
+    for all_on in ({}, {"enabledManagers": None}, {"enabledManagers": []}):
+        expect_failure(
+            lambda c=all_on: judge(c, ["ghcr.io/a/b"], records=["tools/e2e/x.yaml"]),
+            RefusedError,
+            f"record file under {all_on!r}",
+        )
+    only_regex = {"enabledManagers": ["custom.regex"]}
+    if judge(only_regex, ["ghcr.io/a/b"], records=["tools/e2e/x.yaml"]) != ["ghcr.io/a/b"]:
         raise AssertionError("printable ASCII inputs must be judged")
     outside = (("ghcr.io/a/b\n", "r.yml"), ("ghcr.io/a/b\v", "r.yml"), ("a", "réc.yml"))
     for name, rec in outside:
         expect_failure(
-            lambda n=name, r=rec: judge({}, [n], records=[r]), RefusedError, repr((name, rec))
+            lambda n=name, r=rec: judge(only_regex, [n], records=[r]),
+            RefusedError,
+            repr((name, rec)),
         )
 
 
@@ -1126,6 +1322,8 @@ def main(argv: list[str] | None = None) -> int:
         self_test_zero_age()
         self_test_override_and_aliases()
         self_test_managers_and_records()
+        self_test_builtin_managers()
+        self_test_docker_dep_name()
         self_test_groups_and_inputs()
         self_test_walker_alone()
         print("ok   renovate_rules self-test")

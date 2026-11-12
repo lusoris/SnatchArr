@@ -9,9 +9,11 @@ preset's 3-day `minimumReleaseAge`, an undated pin on any other registry host (`
 never ages and is never proposed unless `renovate.json` covers it via a disabled
 `minimumReleaseAge` (`null`, `""`, `"0"`, `"0 days"`),
 `minimumReleaseAgeBehaviour: "timestamp-optional"`, or an `overridePackageName` resolving to a
-dated Docker Hub name. Every live pin (dated included) is judged so an override from Docker Hub
+dated Docker Hub name. Covered means the age wait cannot hold the pin back once Renovate looks it
+up; `enabled: false` skips the lookup on purpose, so it counts neither as coverage nor as a
+refusal. Every live pin (dated included) is judged so an override from Docker Hub
 to an undated registry is caught; `image-pin-check: record` files are skipped only while no
-`customManagers` file pattern may read them.
+enabled built-in manager or `customManagers` file pattern may read them.
 
 Exit 0 = ok, 1 = input error, 3 = refused.
 """

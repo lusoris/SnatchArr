@@ -849,20 +849,21 @@ setup_nonzero_mixed() {
 # setup_record_pin_skipped: undated pin in an image-pin-check: record file needs no Renovate rule.
 setup_record_pin_skipped() {
     track rec.yml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
-    track renovate.json '{"packageRules": []}'
+    track renovate.json '{"enabledManagers": ["dockerfile", "docker-compose", "custom.regex"], "packageRules": []}'
 }
 
 # setup_record_pin_live_twin: undated pin in both a record file and a live file reports only the live location.
 setup_record_pin_live_twin() {
     track rec.yml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
     track live.yml "image: ghcr.io/planted/undated:1@sha256:$D"
-    track renovate.json '{"packageRules": []}'
+    track renovate.json '{"enabledManagers": ["dockerfile", "docker-compose", "custom.regex"], "packageRules": []}'
 }
 
 # setup_record_read_by_manager: customManager targeting a record-marked file is refused.
 setup_record_read_by_manager() {
     track rec.yml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
     track renovate.json '{
+      "enabledManagers": ["dockerfile", "docker-compose", "custom.regex"],
       "customManagers": [{
         "customType": "regex",
         "managerFilePatterns": ["rec.yml"],
@@ -877,6 +878,7 @@ setup_record_read_by_manager() {
 setup_record_read_by_dotted_manager() {
     track rec.yml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
     track renovate.json '{
+      "enabledManagers": ["dockerfile", "docker-compose", "custom.regex"],
       "customManagers": [{
         "customType": "regex",
         "managerFilePatterns": ["./rec.yml"],
@@ -884,6 +886,139 @@ setup_record_read_by_dotted_manager() {
         "datasourceTemplate": "docker"
       }],
       "packageRules": []
+    }'
+}
+
+# setup_record_read_by_dockerfile: built-in dockerfile manager default pattern reading a record Dockerfile is refused.
+setup_record_read_by_dockerfile() {
+    track Dockerfile "# image-pin-check: record" "FROM ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{"enabledManagers": ["dockerfile"], "packageRules": []}'
+}
+
+# setup_record_read_by_compose: built-in docker-compose manager default pattern reading a record compose.yaml is refused.
+setup_record_read_by_compose() {
+    track compose.yaml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{"enabledManagers": ["docker-compose"], "packageRules": []}'
+}
+
+# setup_record_no_enabled_managers: omitting enabledManagers when a record file exists fails closed.
+setup_record_no_enabled_managers() {
+    track rec.yml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{"packageRules": []}'
+}
+
+# setup_record_empty_enabled_managers: enabledManagers [] enables every manager in Renovate, so a record file fails closed.
+setup_record_empty_enabled_managers() {
+    track rec.yml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{"enabledManagers": [], "packageRules": []}'
+}
+
+# setup_record_unknown_manager: unmodeled enabledManagers entry when a record file exists fails closed.
+setup_record_unknown_manager() {
+    track rec.yml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{"enabledManagers": ["kubernetes"], "packageRules": []}'
+}
+
+# setup_quay_port_depname: matchDepNames with quay.io:port misses built-in normalized depName quay.io/team/app.
+setup_quay_port_depname() {
+    track a.yml "image: quay.io:5000/team/app:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [{
+        "matchDatasources": ["docker"],
+        "matchDepNames": ["quay.io:5000/team/app"],
+        "minimumReleaseAge": null
+      }]
+    }'
+}
+
+# setup_quay_port_both_names: matchDepNames covering both raw quay.io:port and normalized quay.io covers the pin.
+setup_quay_port_both_names() {
+    track a.yml "image: quay.io:5000/team/app:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [{
+        "matchDatasources": ["docker"],
+        "matchDepNames": ["quay.io:5000/team/app", "quay.io/team/app"],
+        "minimumReleaseAge": null
+      }]
+    }'
+}
+
+# setup_quay_port_package_name: matchPackageNames matches raw packageName across both extraction variants.
+setup_quay_port_package_name() {
+    track a.yml "image: quay.io:5000/team/app:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [{
+        "matchDatasources": ["docker"],
+        "matchPackageNames": ["quay.io:5000/team/app"],
+        "minimumReleaseAge": null
+      }]
+    }'
+}
+
+# setup_quay_uppercase_regex: case-sensitive regex on Quay.io misses lowercase normalized quay.io depName.
+setup_quay_uppercase_regex() {
+    track a.yml "image: Quay.io/team/app:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [{
+        "matchDatasources": ["docker"],
+        "matchDepNames": ["/^Quay\\.io\\/team\\/app$/"],
+        "minimumReleaseAge": null
+      }]
+    }'
+}
+
+# setup_library_prefix_override: library/busybox normalizes depName to busybox, so a rule on busybox can redirect it undated.
+setup_library_prefix_override() {
+    track a.yml "image: library/busybox:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [{
+        "matchDatasources": ["docker"],
+        "matchDepNames": ["busybox"],
+        "overridePackageName": "ghcr.io/planted/busybox"
+      }]
+    }'
+}
+
+# setup_library_raw_override: raw custom.regex depName library/busybox redirected undated is still refused.
+setup_library_raw_override() {
+    track a.yml "image: library/busybox:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [{
+        "matchDatasources": ["docker"],
+        "matchDepNames": ["library/busybox"],
+        "overridePackageName": "ghcr.io/planted/busybox"
+      }]
+    }'
+}
+
+# setup_disabled_not_coverage: enabled false on a matching rule never counts as release-age coverage.
+setup_disabled_not_coverage() {
+    track a.yml "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [{
+        "matchDatasources": ["docker"],
+        "matchDepNames": ["ghcr.io/planted/undated"],
+        "enabled": false
+      }]
+    }'
+}
+
+# setup_disabled_after_null: a later inert enabled false rule leaves earlier minimumReleaseAge null coverage intact.
+setup_disabled_after_null() {
+    track a.yml "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchDepNames": ["ghcr.io/planted/undated"],
+          "minimumReleaseAge": null
+        },
+        {
+          "matchDatasources": ["docker"],
+          "matchDepNames": ["ghcr.io/planted/undated"],
+          "enabled": false
+        }
+      ]
     }'
 }
 
@@ -935,6 +1070,12 @@ run_repo_case zero-age-bare 0 setup_zero_age_bare \
     "image_release_age_check: ok (1 images checked, 1 undated covered)"
 run_repo_case record-pin-skipped 0 setup_record_pin_skipped \
     "image_release_age_check: ok (0 images checked, 0 undated covered)"
+run_repo_case quay-port-both-names 0 setup_quay_port_both_names \
+    "image_release_age_check: ok (1 images checked, 1 undated covered)"
+run_repo_case quay-port-package-name 0 setup_quay_port_package_name \
+    "image_release_age_check: ok (1 images checked, 1 undated covered)"
+run_repo_case disabled-after-null 0 setup_disabled_after_null \
+    "image_release_age_check: ok (1 images checked, 1 undated covered)"
 
 run_repo_case own-image 3 setup_own_image \
     "image_release_age_check: ghcr.io/o/x (a.yml:1)" \
@@ -1016,6 +1157,33 @@ run_repo_case record-read-by-dotted-manager 3 setup_record_read_by_dotted_manage
     "managerFilePatterns entry ./rec.yml reads record file rec.yml"
 run_repo_case custom-docker-quoted-group 3 setup_custom_docker_quoted_group \
     "registryUrl"
+run_repo_case record-read-by-dockerfile 3 setup_record_read_by_dockerfile \
+    "dockerfile default managerFilePatterns entry" \
+    "reads record file Dockerfile"
+run_repo_case record-read-by-compose 3 setup_record_read_by_compose \
+    "docker-compose default managerFilePatterns entry" \
+    "reads record file compose.yaml"
+run_repo_case record-no-enabled-managers 3 setup_record_no_enabled_managers \
+    "enabledManagers is absent or empty"
+run_repo_case record-empty-enabled-managers 3 setup_record_empty_enabled_managers \
+    "enabledManagers is absent or empty"
+run_repo_case record-unknown-manager 3 setup_record_unknown_manager \
+    "enabledManagers entry kubernetes is not modeled"
+run_repo_case quay-port-depname 3 setup_quay_port_depname \
+    "image_release_age_check: quay.io:5000/team/app (a.yml:1)" \
+    "$ADVICE"
+run_repo_case quay-uppercase-regex 3 setup_quay_uppercase_regex \
+    "image_release_age_check: Quay.io/team/app (a.yml:1)" \
+    "$ADVICE"
+run_repo_case library-prefix-override 3 setup_library_prefix_override \
+    "image_release_age_check: library/busybox (a.yml:1)" \
+    "$ADVICE"
+run_repo_case library-raw-override 3 setup_library_raw_override \
+    "image_release_age_check: library/busybox (a.yml:1)" \
+    "$ADVICE"
+run_repo_case disabled-not-coverage 3 setup_disabled_not_coverage \
+    "image_release_age_check: ghcr.io/planted/undated (a.yml:1)" \
+    "$ADVICE"
 
 run_repo_case bad-json 1 setup_bad_json "image_release_age_check: error:"
 run_repo_case missing-renovate 1 setup_missing_renovate "image_release_age_check: error: renovate.json:"
