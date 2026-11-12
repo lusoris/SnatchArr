@@ -12,6 +12,7 @@ target-version = "py314"
 # Rules beyond the default set, one reason each:
 # - DTZ011: date.today() reads the runner's local time zone, so a date check such as a baseline
 #   expiry can pass on one runner and fail on another. Use datetime.now(UTC).date().
+#   Codacy applies it too once its Ruff tool reads this file; that parity is issue #1104.
 [lint]
 extend-select = ["DTZ011"]
 
