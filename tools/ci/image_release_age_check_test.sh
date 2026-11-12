@@ -1036,6 +1036,377 @@ setup_custom_docker_quoted_group() {
     }'
 }
 
+# setup_capture_override_ghcr: custom.regex depName capture redirected to ghcr.io is judged and refused even when the full mirror pin is covered.
+setup_capture_override_ghcr() {
+    track tools/x.env "ACTIONLINT_IMAGE=mirror.gcr.io/rhysd/actionlint:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"]
+      }],
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["/^mirror\\.gcr\\.io\\//"],
+          "minimumReleaseAge": null
+        },
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["rhysd/actionlint"],
+          "overridePackageName": "ghcr.io/rhysd/actionlint"
+        }
+      ]
+    }'
+}
+
+# setup_capture_covered: custom.regex depName capture redirected to ghcr.io passes when minimumReleaseAge null covers it.
+setup_capture_covered() {
+    track tools/x.env "ACTIONLINT_IMAGE=mirror.gcr.io/rhysd/actionlint:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"]
+      }],
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["/^mirror\\.gcr\\.io\\//"],
+          "minimumReleaseAge": null
+        },
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["rhysd/actionlint"],
+          "overridePackageName": "ghcr.io/rhysd/actionlint",
+          "minimumReleaseAge": null
+        }
+      ]
+    }'
+}
+
+# setup_capture_python_group: RE2 (?P<depName>...) named-group spelling is extracted and judged identically to (?<depName>...).
+setup_capture_python_group() {
+    track tools/x.env "ACTIONLINT_IMAGE=mirror.gcr.io/rhysd/actionlint:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?P<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"]
+      }],
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["/^mirror\\.gcr\\.io\\//"],
+          "minimumReleaseAge": null
+        },
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["rhysd/actionlint"],
+          "overridePackageName": "ghcr.io/rhysd/actionlint"
+        }
+      ]
+    }'
+}
+
+# setup_capture_path_nocase: exact managerFilePatterns matches tracked paths case-insensitively like Renovate minimatch nocase.
+setup_capture_path_nocase() {
+    track tools/x.env "ACTIONLINT_IMAGE=mirror.gcr.io/rhysd/actionlint:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["Tools/X.env"],
+        "matchStrings": ["ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"]
+      }],
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["/^mirror\\.gcr\\.io\\//"],
+          "minimumReleaseAge": null
+        },
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["rhysd/actionlint"],
+          "overridePackageName": "ghcr.io/rhysd/actionlint"
+        }
+      ]
+    }'
+}
+
+# setup_capture_path_non_ascii: minimatch nocase matches `Ä/x.env` to tracked `ä/x.env`; the check folds ASCII only, so it refuses.
+setup_capture_path_non_ascii() {
+    track ä/x.env "ACTIONLINT_IMAGE=mirror.gcr.io/rhysd/actionlint:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["Ä/x.env"],
+        "matchStrings": ["ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"]
+      }],
+      "packageRules": [
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["/^mirror\\.gcr\\.io\\//"],
+          "minimumReleaseAge": null
+        },
+        {
+          "matchDatasources": ["docker"],
+          "matchPackageNames": ["rhysd/actionlint"],
+          "overridePackageName": "ghcr.io/rhysd/actionlint"
+        }
+      ]
+    }'
+}
+
+# setup_capture_absent_file: exact managerFilePatterns naming an absent path yields zero captures and passes.
+setup_capture_absent_file() {
+    track a.yml "image: postgres:18-alpine@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/none.env"],
+        "matchStrings": ["ACTIONLINT_IMAGE=(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)\\n"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_docker_manager_glob_path: Docker customManager using a glob managerFilePatterns entry is refused.
+setup_docker_manager_glob_path() {
+    track tools/x.env "image: postgres:18-alpine@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["**/x.env"],
+        "matchStrings": ["image: (?<depName>postgres):(?<currentValue>[^@\\s]+)"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_docker_manager_regex_path: Docker customManager using a regex managerFilePatterns entry is refused.
+setup_docker_manager_regex_path() {
+    track tools/x.env "image: postgres:18-alpine@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["/x\\.env$/"],
+        "matchStrings": ["image: (?<depName>postgres):(?<currentValue>[^@\\s]+)"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_matchstring_end_anchor: Docker matchStrings entry with $ anchor is refused due to Python re vs RE2 trailing-newline divergence.
+setup_matchstring_end_anchor() {
+    track tools/x.env "ACTIONLINT_IMAGE=postgres:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["ACTIONLINT_IMAGE=(?<depName>postgres):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n$"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_matchstring_empty: Docker matchStrings entry with minimum width 0 is refused because Renovate regexMatchAll does not advance on empty matches.
+setup_matchstring_empty() {
+    track tools/x.env "image: postgres:18-alpine@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["(?<depName>[a-z]*)"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_matchstring_empty_repeat: Docker matchStrings entry containing a zero-minimum-width repeat body is refused.
+setup_matchstring_empty_repeat() {
+    track tools/x.env "image: postgres:18-alpine@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["(?:[a-z]*)*(?<depName>x)"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_depname_under_repeat: Docker matchStrings entry placing depName inside a repeat with max > 1 is refused.
+setup_depname_under_repeat() {
+    track tools/x.env "image: postgres:18-alpine@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["(?:(?<depName>[a-z]+),)+"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_content_vertical_tab: managed file containing \v (\x0b) is refused because Python \s and RE2 \s diverge on vertical tab.
+setup_content_vertical_tab() {
+    mkdir -p tools
+    printf 'IMG=postgres:1\013\nimage: postgres:18-alpine@sha256:%s\n' "$D" > tools/x.env
+    git add tools/x.env
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["IMG=(?<depName>postgres):(?<currentValue>[0-9]+)"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_content_not_utf8: managed file containing invalid UTF-8 bytes is refused because Renovate replaces them with U+FFFD.
+setup_content_not_utf8() {
+    mkdir -p tools
+    printf 'IMG=postgres:1\377\nimage: postgres:18-alpine@sha256:%s\n' "$D" > tools/x.env
+    git add tools/x.env
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["IMG=(?<depName>postgres):(?<currentValue>[0-9]+)"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_capture_non_ascii: captured depName outside printable ASCII fails closed under check_input_domain.
+setup_capture_non_ascii() {
+    mkdir -p tools
+    printf 'IMG=ghcr.io/\303\244/x:1\nimage: postgres:18-alpine@sha256:%s\n' "$D" > tools/x.env
+    git add tools/x.env
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["IMG=(?<depName>[^:\\s]+):(?<currentValue>[0-9]+)\\n"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_too_many_matches: managed file reaching Renovate regexMatchAll 10000-iteration cap is refused.
+setup_too_many_matches() {
+    mkdir -p tools
+    python3 -I -c 'import sys; sys.stdout.write("IMG=postgres:1\n" * 10000)' > tools/x.env
+    git add tools/x.env
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["IMG=(?<depName>postgres):(?<currentValue>[0-9]+)\\n"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_managed_file_symlink: tracked symlink named in Docker customManager managerFilePatterns is refused.
+setup_managed_file_symlink() {
+    mkdir -p tools
+    track tools/target.env "IMG=postgres:1"
+    ln -s target.env tools/x.env
+    git add tools/x.env
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "customManagers": [{
+        "customType": "regex",
+        "datasourceTemplate": "docker",
+        "managerFilePatterns": ["tools/x.env"],
+        "matchStrings": ["IMG=(?<depName>postgres):(?<currentValue>[0-9]+)\\n"]
+      }],
+      "packageRules": []
+    }'
+}
+
+# setup_preset_helm_record: unmodeled extends preset judges record pins live and refuses uncovered Chart.yaml pin.
+setup_preset_helm_record() {
+    track charts/demo/Chart.yaml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "extends": ["customManagers:helmChartYamlAppVersions"],
+      "packageRules": []
+    }'
+}
+
+# setup_preset_modeled_record: extends containing only MODELED_PRESETS preserves record-pin exclusion.
+setup_preset_modeled_record() {
+    track charts/demo/Chart.yaml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "extends": [":semanticCommits", "helpers:pinGitHubActionDigests", "docker:pinDigests"],
+      "packageRules": []
+    }'
+}
+
+# setup_preset_unmodeled_spelling: default:semanticCommits spelling outside MODELED_PRESETS judges record pins live.
+setup_preset_unmodeled_spelling() {
+    track charts/demo/Chart.yaml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "extends": ["default:semanticCommits", "github>x/y"],
+      "packageRules": []
+    }'
+}
+
+# setup_extends_string: string-valued extends (Renovate allowString) is parsed and unmodeled preset judges record pins live.
+setup_extends_string() {
+    track charts/demo/Chart.yaml "# image-pin-check: record" "image: ghcr.io/planted/undated:1@sha256:$D"
+    track renovate.json '{
+      "enabledManagers": ["custom.regex"],
+      "extends": "github>x/y",
+      "packageRules": []
+    }'
+}
+
+# setup_extends_bad_type: non-string, non-string-list extends raises ConfigError (exit 1).
+setup_extends_bad_type() {
+    track a.yml "image: postgres:18-alpine@sha256:$D"
+    track renovate.json '{
+      "extends": 1,
+      "packageRules": []
+    }'
+}
+
 run_repo_case null-exact 0 setup_null_exact "image_release_age_check: ok (1 images checked, 1 undated covered)"
 run_repo_case null-regex-i 0 setup_null_regex_i "image_release_age_check: ok (1 images checked, 1 undated covered)"
 run_repo_case timestamp-optional 0 setup_timestamp_optional "image_release_age_check: ok (1 images checked, 1 undated covered)"
@@ -1076,6 +1447,12 @@ run_repo_case quay-port-package-name 0 setup_quay_port_package_name \
     "image_release_age_check: ok (1 images checked, 1 undated covered)"
 run_repo_case disabled-after-null 0 setup_disabled_after_null \
     "image_release_age_check: ok (1 images checked, 1 undated covered)"
+run_repo_case capture-covered 0 setup_capture_covered \
+    "image_release_age_check: ok (1 images checked, 1 undated covered)"
+run_repo_case capture-absent-file 0 setup_capture_absent_file \
+    "image_release_age_check: ok (1 images checked, 0 undated covered)"
+run_repo_case preset-modeled-record 0 setup_preset_modeled_record \
+    "image_release_age_check: ok (0 images checked, 0 undated covered)"
 
 run_repo_case own-image 3 setup_own_image \
     "image_release_age_check: ghcr.io/o/x (a.yml:1)" \
@@ -1184,6 +1561,49 @@ run_repo_case library-raw-override 3 setup_library_raw_override \
 run_repo_case disabled-not-coverage 3 setup_disabled_not_coverage \
     "image_release_age_check: ghcr.io/planted/undated (a.yml:1)" \
     "$ADVICE"
+run_repo_case capture-override-ghcr 3 setup_capture_override_ghcr \
+    "image_release_age_check: rhysd/actionlint (customManagers[0] tools/x.env:1)" \
+    "$ADVICE"
+run_repo_case capture-python-group 3 setup_capture_python_group \
+    "image_release_age_check: rhysd/actionlint (customManagers[0] tools/x.env:1)" \
+    "$ADVICE"
+run_repo_case capture-path-nocase 3 setup_capture_path_nocase \
+    "image_release_age_check: rhysd/actionlint (customManagers[0] tools/x.env:1)" \
+    "$ADVICE"
+run_repo_case capture-path-non-ascii 3 setup_capture_path_non_ascii \
+    "customManagers[0]: managerFilePatterns entry 'Ä/x.env' is outside printable ASCII"
+run_repo_case docker-manager-glob-path 3 setup_docker_manager_glob_path \
+    "customManagers[0]: managerFilePatterns entry **/x.env is a glob or regex"
+run_repo_case docker-manager-regex-path 3 setup_docker_manager_regex_path \
+    'customManagers[0]: managerFilePatterns entry /x\.env$/ is a glob or regex'
+run_repo_case matchstring-end-anchor 3 setup_matchstring_end_anchor \
+    "customManagers[0].matchStrings[0]: '\$' anchor is refused"
+run_repo_case matchstring-empty 3 setup_matchstring_empty \
+    "customManagers[0].matchStrings[0]: pattern minimum width is 0"
+run_repo_case matchstring-empty-repeat 3 setup_matchstring_empty_repeat \
+    "customManagers[0].matchStrings[0]: repeat body has minimum width 0"
+run_repo_case depname-under-repeat 3 setup_depname_under_repeat \
+    "customManagers[0].matchStrings[0]: 'depName' group under a repeat with max > 1 is refused"
+run_repo_case content-vertical-tab 3 setup_content_vertical_tab \
+    "customManagers[0]: tools/x.env contains"
+run_repo_case content-not-utf8 3 setup_content_not_utf8 \
+    "customManagers[0]: tools/x.env is not valid UTF-8"
+run_repo_case capture-non-ascii 3 setup_capture_non_ascii \
+    "captured depName" \
+    "is outside printable ASCII"
+run_repo_case too-many-matches 3 setup_too_many_matches \
+    "customManagers[0].matchStrings[0]: tools/x.env reached 10000 matches"
+run_repo_case managed-file-symlink 3 setup_managed_file_symlink \
+    "customManagers file tools/x.env cannot be read like Renovate reads it"
+run_repo_case preset-helm-record 3 setup_preset_helm_record \
+    "image_release_age_check: ghcr.io/planted/undated (charts/demo/Chart.yaml:2 (record pin judged live: extends entry customManagers:helmChartYamlAppVersions is not modeled))" \
+    "$ADVICE"
+run_repo_case preset-unmodeled-spelling 3 setup_preset_unmodeled_spelling \
+    "image_release_age_check: ghcr.io/planted/undated (charts/demo/Chart.yaml:2 (record pin judged live: extends entry default:semanticCommits is not modeled))" \
+    "$ADVICE"
+run_repo_case extends-string 3 setup_extends_string \
+    "image_release_age_check: ghcr.io/planted/undated (charts/demo/Chart.yaml:2 (record pin judged live: extends entry github>x/y is not modeled))" \
+    "$ADVICE"
 
 run_repo_case bad-json 1 setup_bad_json "image_release_age_check: error:"
 run_repo_case missing-renovate 1 setup_missing_renovate "image_release_age_check: error: renovate.json:"
@@ -1199,6 +1619,8 @@ run_repo_case re2-flag 1 setup_re2_flag "invalid regex"
 run_repo_case re2-empty-min 1 setup_re2_empty_min "invalid regex"
 run_repo_case re2-posix-class 1 setup_re2_posix_class "invalid regex"
 run_repo_case oversized-renovate 1 setup_oversized_renovate "image_release_age_check: error: renovate.json: exceeds 1048576 bytes"
+run_repo_case extends-bad-type 1 setup_extends_bad_type \
+    "image_release_age_check: error: renovate.json: extends must be a string or a list of strings"
 
 new_repo "$work/redos-deadline"
 (cd "$work/redos-deadline" && setup_redos_deadline)
@@ -1247,6 +1669,8 @@ out=$(python3 -I "$check" --root "$work/index-only-configs" 2>&1) || status=$?
 check_case index-only-configs/worktree 1 "$status" "image_release_age_check: error: renovate.json: missing" "$out"
 echo "ok   index-only-configs"
 
+python3 -I "$HERE/renovate_regex.py" --self-test
+python3 -I "$HERE/renovate_managers.py" --self-test
 python3 -I "$HERE/renovate_rules.py" --self-test
 python3 -I "$HERE/re2_subset.py" --self-test
 

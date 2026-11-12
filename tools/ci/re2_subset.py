@@ -4,7 +4,8 @@
 
 Tokenizes regex bodies before `re._parser.parse` and accepts only constructs with identical
 semantics in Python `re` (with `re.ASCII`) and Renovate 44.234.0's RE2 wrapper (`util/regex.js`),
-enforcing RE2's 1000 counted-repetition and nested-repetition product limits (`RepetitionWalker`).
+enforcing RE2's 1000 counted-repetition and nested-repetition product limits (`RepetitionWalker`)
+and rewriting allowed `(?<name>` openers to Python `(?P<name>` at exact tokenizer group offsets.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from dataclasses import dataclass, field
 
 MAX_REPEAT_BOUND = 1000
 PRINTABLE_MIN = 0x20
@@ -34,6 +36,15 @@ BRACE_QUANT_RE = re.compile(r"\{([0-9]+)(,([0-9]*))?\}", re.ASCII)
 
 class SubsetError(ValueError):
     """Raised when a regex body uses syntax outside the modeled RE2 subset."""
+
+
+@dataclass
+class SubsetState:
+    """Group allow-list and `(?<` -> `(?P<` rewrite offsets collected during tokenization."""
+
+    allowed_groups: frozenset[str] = frozenset()
+    seen_groups: set[str] = field(default_factory=set)
+    rewrite_offsets: list[int] = field(default_factory=list)
 
 
 def parse_hex_escape(body: str, pos: int) -> tuple[int, int]:
@@ -183,22 +194,50 @@ def parse_quantifier(body: str, pos: int, atom_mult: int | None) -> tuple[int, i
     return mult, end
 
 
-def parse_open_group(body: str, pos: int) -> int:
-    """Validate `(` or `(?:` at POS and return the offset after the opener."""
+def parse_named_group(body: str, pos: int, state: SubsetState) -> int:
+    """Validate `(?<name>` or `(?P<name>` at POS against STATE and record `(?<` rewrites."""
+    is_short = body.startswith("?<", pos + 1)
+    name_start = pos + (3 if is_short else 4)
+    close = body.find(">", name_start)
+    if close == -1:
+        raise SubsetError(f"unclosed named group at offset {pos}")
+    name = body[name_start:close]
+    if not name.isascii() or not name.isidentifier() or name not in state.allowed_groups:
+        raise SubsetError(f"unsupported group name {name!r} at offset {pos}")
+    if name in state.seen_groups:
+        raise SubsetError(f"duplicate group name {name!r} at offset {pos}")
+    state.seen_groups.add(name)
+    if is_short:
+        state.rewrite_offsets.append(pos)
+    return close + 1
+
+
+def parse_open_group(body: str, pos: int, state: SubsetState) -> int:
+    """Validate `(`, `(?:`, or an allowed named group at POS; return the offset after opener."""
     if not body.startswith("?", pos + 1):
         return pos + 1
     if body.startswith("?:", pos + 1):
         return pos + 3
+    if (
+        state.allowed_groups
+        and body.startswith(("?<", "?P<"), pos + 1)
+        and not body.startswith(("?<=", "?<!"), pos + 1)
+    ):
+        return parse_named_group(body, pos, state)
     tok = body[pos : pos + 4]
     raise SubsetError(f"unsupported group {tok!r} at offset {pos}")
 
 
 def step_group(
-    body: str, pos: int, stack: list[tuple[int, int]], cur_max: int
+    body: str,
+    pos: int,
+    stack: list[tuple[int, int]],
+    cur_max: int,
+    state: SubsetState,
 ) -> tuple[int, int | None, int]:
     """Advance across `(` or `)` at POS, updating STACK and returning `(next_pos, atom_mult, cur_max)`."""
     if body[pos] == "(":
-        next_pos = parse_open_group(body, pos)
+        next_pos = parse_open_group(body, pos, state)
         stack.append((pos, cur_max))
         return next_pos, None, 1
     if not stack:
@@ -213,6 +252,7 @@ def step_token(
     atom_mult: int | None,
     cur_max: int,
     stack: list[tuple[int, int]],
+    state: SubsetState,
 ) -> tuple[int, int | None, int]:
     """Consume one regex token at POS and return `(next_pos, next_atom_mult, next_cur_max)`."""
     ch = body[pos]
@@ -226,26 +266,46 @@ def step_token(
     if ch == "[":
         return parse_char_class(body, pos), 1, cur_max
     if ch in "()":
-        return step_group(body, pos, stack, cur_max)
+        return step_group(body, pos, stack, cur_max, state)
     if ch in "*+?{":
         mult, end = parse_quantifier(body, pos, atom_mult)
         return end, None, max(cur_max, mult)
     raise SubsetError(f"unsupported token {ch!r} at offset {pos}")
 
 
-def check_re2_subset(body: str, label: str) -> None:
-    """Validate that regex BODY for LABEL stays inside the modeled RE2 syntax subset."""
+def rewrite_python_groups(body: str, offsets: list[int]) -> str:
+    """Insert `P` into each `(?<` opener recorded at OFFSETS by the tokenizer."""
+    if not offsets:
+        return body
+    parts: list[str] = []
+    last = 0
+    for off in offsets:
+        parts.append(body[last : off + 2])
+        parts.append("P")
+        last = off + 2
+    parts.append(body[last:])
+    return "".join(parts)
+
+
+def check_re2_subset(
+    body: str,
+    label: str,
+    allowed_groups: frozenset[str] = frozenset(),
+) -> str:
+    """Validate regex BODY for LABEL against the RE2 subset and return its Python `re` body."""
     if not isinstance(body, str) or not isinstance(label, str):
         raise SubsetError("regex body and label must be strings at offset 0")
+    state = SubsetState(allowed_groups=allowed_groups)
     stack: list[tuple[int, int]] = []
     pos = 0
     atom_mult: int | None = None
     cur_max = 1
     while pos < len(body):
-        pos, atom_mult, cur_max = step_token(body, pos, atom_mult, cur_max, stack)
+        pos, atom_mult, cur_max = step_token(body, pos, atom_mult, cur_max, stack, state)
     if stack:
         open_pos, _ = stack[-1]
         raise SubsetError(f"unbalanced '(' at offset {open_pos}")
+    return rewrite_python_groups(body, state.rewrite_offsets)
 
 
 SELF_TEST_ACCEPTED = (
@@ -379,6 +439,36 @@ def self_test_refused() -> None:
             raise AssertionError(f"pattern {pat!r} was not refused")
 
 
+def self_test_allowed_groups() -> None:
+    """Assert `allowed_groups` accepts and rewrites only real `(?<name>` / `(?P<name>` openers."""
+    allowed = frozenset({"depName", "currentValue"})
+    rewritten = check_re2_subset(
+        r"\((?<depName>a)\)[(?<depName>]:(?P<currentValue>1)",
+        "match",
+        allowed_groups=allowed,
+    )
+    want = r"\((?P<depName>a)\)[(?<depName>]:(?P<currentValue>1)"
+    if rewritten != want:
+        raise AssertionError(f"rewritten body = {rewritten!r}, want {want!r}")
+    refused = (
+        r"(?<other>a)",
+        r"(?P<other>a)",
+        r"(?<1bad>a)",
+        r"(?<depName>a)|(?<depName>b)",
+        r"(?<depName",
+        r"(?<=a)(?<depName>b)",
+        r"(?<!a)(?<depName>b)",
+    )
+    for pat in refused:
+        try:
+            check_re2_subset(pat, "match", allowed_groups=allowed)
+        except SubsetError as exc:
+            if "offset" not in str(exc):
+                raise AssertionError(f"SubsetError for {pat!r} lacked offset: {exc}") from exc
+        else:
+            raise AssertionError(f"pattern {pat!r} was not refused under allowed_groups")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run `--self-test` when requested."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -387,6 +477,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.self_test:
         self_test_accepted()
         self_test_refused()
+        self_test_allowed_groups()
         print("ok   re2_subset self-test")
     return 0
 
