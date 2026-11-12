@@ -79,6 +79,15 @@ jobs:
       # reads as its staged UTF-8 blob.
       - name: Image digest pins use one digest per tag and carry Renovate release-age coverage, after their planted cases
         run: bash tools/ci/image_pin_check_test.sh && python3 -I tools/ci/image_pin_check.py && python3 -I tools/ci/image_pin_check.py --index && bash tools/ci/image_release_age_check_test.sh && python3 -I tools/ci/image_release_age_check.py && python3 -I tools/ci/image_release_age_check.py --index
+      - name: Renovate presets reachable from renovate.json keep Docker release-age coverage, after their planted cases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bash tools/ci/renovate_presets_test.sh
+          . tools/ci/tool-versions.env
+          docker pull --quiet "$RENOVATE_IMAGE"
+          python3 -I tools/ci/renovate_presets.py
       - name: The release dogfood gate and pass recorder refuse their planted cases
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases

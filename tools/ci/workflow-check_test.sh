@@ -10,8 +10,8 @@
 # a zizmor requirements file without hashes, a go install at @latest, at @main or without a
 # package, and azure/setup-helm without a version, at latest, or with the version in the next
 # step, and a ${{ }} expression expanded into a run script (accepted: setup-helm pinned to a
-# release). Last: Renovate reads the actionlint image
-# pin, zizmor-requirements.txt, every go install pin and every setup-helm version in the
+# release). Last: Renovate reads both workflow-gate image
+# pins, zizmor-requirements.txt, every go install pin and every setup-helm version in the
 # workflows, and neither @latest, a variable nor a helm version of latest.
 # Adapted from github.com/golusoris/goenvoy.
 #
@@ -256,13 +256,18 @@ renovate_reads() {
     | length
   ' "$HERE/../../renovate.json"
 }
-if [ "$(renovate_reads "$HERE/tool-versions.env")" != 1 ]; then
-  echo "FAIL renovate: renovate.json does not read the image pin of tools/ci/tool-versions.env" >&2
+if [ "$(renovate_reads "$HERE/tool-versions.env")" != 2 ]; then
+  echo "FAIL renovate: renovate.json does not read both image pins of tools/ci/tool-versions.env" >&2
   exit 1
 fi
-echo "ok   renovate: the image pin is read"
-if [ "$(renovate_reads "$WORK/copy/tools/ci/tool-versions.env")" != 0 ]; then
+echo "ok   renovate: both image pins are read"
+if [ "$(renovate_reads "$WORK/copy/tools/ci/tool-versions.env")" != 1 ]; then
   echo "FAIL renovate: the pin without a digest is still read" >&2
+  exit 1
+fi
+sed 's/^\(RENOVATE_IMAGE=.*\)@sha256:.*$/\1/' "$HERE/tool-versions.env" > "$WORK/copy-renovate-nodigest"
+if [ "$(renovate_reads "$WORK/copy-renovate-nodigest")" != 1 ]; then
+  echo "FAIL renovate: the renovate pin without a digest is still read" >&2
   exit 1
 fi
 echo "ok   renovate: a pin without a digest is not read"
@@ -326,4 +331,4 @@ if jq -e -n --arg file "tools/ci/zizmor.txt" --arg pat "$PIP_PATTERN" '$file | t
 fi
 echo "ok   renovate: pip_requirements reads tools/ci/zizmor-requirements.txt and ignores zizmor.txt"
 
-echo "workflow check: 7 accepted, 19 refused; Renovate reads 1 image pin, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
+echo "workflow check: 7 accepted, 19 refused; Renovate reads 2 image pins, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
