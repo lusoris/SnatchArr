@@ -171,10 +171,14 @@ export function migrate(value) {
 EOF
 }
 
-# check_dump_positive ROOT: dump.mjs over the intact fake dist emits the expected payload.
+# check_dump_positive ROOT [PRELOAD]: intact fake dist emits byte-identical payload, even on short reads.
 check_dump_positive() {
   local root="$1" out
-  out="$(RENOVATE_ROOT="$root" node "$dump_mjs")"
+  if [ -n "${2:-}" ]; then
+    out="$(RENOVATE_ROOT="$root" node --import "$2" "$dump_mjs")"
+  else
+    out="$(RENOVATE_ROOT="$root" node "$dump_mjs")"
+  fi
   python3 -I -c '
 import json, sys
 d = json.loads(sys.argv[1])
@@ -189,6 +193,21 @@ if d["managerRenames"]["matchManagers"]["regex"] != "custom.regex":
     raise SystemExit(f"missing matchManagers rename: {d}")
 if d["managerRenames"]["enabledManagers"]["yarn"] != "npm":
     raise SystemExit(f"missing enabledManagers rename: {d}")
+expected = {
+    "renovateVersion": "44.234.0", "node": d["node"],
+    "groups": {"default": {"semanticCommits": {"semanticCommits": "enabled"}}},
+    "dockerManagers": ["dockerfile", "github-actions"],
+    "depTypeEmitters": {
+        "github-runner": ["modules/manager/github-actions/dep-types.js", "modules/manager/github-actions/extract.js"],
+        "php2shell-runtime": ["config/presets/internal/security.preset.js"],
+    },
+    "managerRenames": {
+        "matchManagers": {"regex": "custom.regex", "renovate-config-presets": "renovate-config"},
+        "enabledManagers": {"yarn": "npm", "regex": "custom.regex", "renovate-config-presets": "renovate-config"},
+    },
+}
+if sys.argv[1] != json.dumps(expected, separators=(",", ":")):
+    raise SystemExit("dump payload bytes or key order changed")
 ' "$out"
   echo "ok   dump-mjs-positive"
 }
@@ -201,11 +220,87 @@ expect_dump_failure() {
   echo "ok   $name"
 }
 
+# test_dump_proto ROOT: preserve prototype-like migration names until Python validation.
+test_dump_proto() {
+  local root="$work/proto-renovate" out
+  cp -R "$1" "$root"
+  printf '%s\n' 'case "__proto__": return "dockerfile";' \
+    >> "$root/dist/config/migrations/custom/match-managers-migration.js"
+  out="$(RENOVATE_ROOT="$root" node "$dump_mjs")"
+  python3 -I -c '
+import json, sys
+if json.loads(sys.argv[1])["managerRenames"]["matchManagers"].get("__proto__") != "dockerfile":
+    raise SystemExit("prototype-like manager rename was silently dropped")
+' "$out"
+  echo "ok   dump-mjs-proto-preserved"
+}
+
+# test_dump_reads ROOT: refuse symlinks, non-files, oversized files and growth after fstat.
+test_dump_reads() {
+  local root="$1" out rc=0
+  cp -R "$root" "$work/symlink-renovate"
+  mv "$work/symlink-renovate/package.json" "$work/symlink-renovate/real.json"
+  ln -s real.json "$work/symlink-renovate/package.json"
+  expect_dump_failure "dump-mjs-symlink" "$work/symlink-renovate" "renovate_presets_dump: error:"
+  cp -R "$root" "$work/nonfile-renovate"
+  rm "$work/nonfile-renovate/package.json"
+  mkdir "$work/nonfile-renovate/package.json"
+  expect_dump_failure "dump-mjs-nonfile" "$work/nonfile-renovate" "expected regular file"
+  cp -R "$root" "$work/oversize-renovate"
+  python3 -I -c 'import pathlib, sys; pathlib.Path(sys.argv[1]).write_bytes(b" " * (8 * 1024 * 1024 + 1))' \
+    "$work/oversize-renovate/package.json"
+  expect_dump_failure "dump-mjs-oversize" "$work/oversize-renovate" "exceeds cap"
+  cp -R "$root" "$work/growing-renovate"
+  cat > "$work/grow.mjs" <<'JS'
+import fs from 'node:fs';
+import path from 'node:path';
+const original = fs.fstatSync;
+let first = true;
+fs.fstatSync = (...args) => {
+  const stat = original(...args);
+  if (first) {
+    first = false;
+    fs.appendFileSync(path.join(process.env.RENOVATE_ROOT, 'package.json'), ' ');
+  }
+  return stat;
+};
+JS
+  out="$(RENOVATE_ROOT="$work/growing-renovate" node --import "$work/grow.mjs" "$dump_mjs" 2>&1)" || rc=$?
+  check_case "dump-mjs-growth" 1 "$rc" "grew while reading" "$out"
+  echo "ok   dump-mjs-growth"
+}
+
+# test_dump_read_boundaries ROOT: accept the exact size cap and accumulate partial descriptor reads.
+test_dump_read_boundaries() {
+  local root="$1"
+  cp -R "$root" "$work/at-cap-renovate"
+  python3 -I - "$work/at-cap-renovate/package.json" <<'PY'
+import pathlib
+import sys
+
+package = pathlib.Path(sys.argv[1])
+package.write_bytes(package.read_bytes().ljust(8 * 1024 * 1024, b" "))
+PY
+  check_dump_positive "$work/at-cap-renovate"
+  echo "ok   dump-mjs-at-cap"
+  cat > "$work/short-reads.mjs" <<'JS'
+import fs from 'node:fs';
+const original = fs.readSync;
+fs.readSync = (fd, buffer, offset, length, position) =>
+  original(fd, buffer, offset, Math.min(length, 7), position);
+JS
+  check_dump_positive "$root" "$work/short-reads.mjs"
+  echo "ok   dump-mjs-short-reads"
+}
+
 # test_dump_mjs: verify renovate_presets_dump.mjs against positive and broken synthetic dist trees.
 test_dump_mjs() {
   local root="$work/fake-renovate" mig="dist/config/migrations/custom"
   write_fake_dist "$root"
   check_dump_positive "$root"
+  test_dump_proto "$root"
+  test_dump_reads "$root"
+  test_dump_read_boundaries "$root"
 
   cp -R "$root" "$work/no-import-renovate"
   printf '%s\n' 'export const kind = "github-runner";' \
@@ -263,6 +358,12 @@ expect_preset_case "malformed-manager-rename-map" 1 \
 expect_preset_case "invalid-manager-rename-name" 1 "has an invalid manager name" \
   '{"description":"ok"}' "{}" "$BASE_REPO" "" \
   '{"matchManagers":{"bad name":"npm"},"enabledManagers":{}}'
+expect_preset_case "proto-manager-rename-source" 1 "has an invalid manager name" \
+  '{"description":"ok"}' "{}" "$BASE_REPO" "" \
+  '{"matchManagers":{"__proto__":"dockerfile"},"enabledManagers":{}}'
+expect_preset_case "proto-manager-rename-target" 1 "has an invalid manager name" \
+  '{"description":"ok"}' "{}" "$BASE_REPO" "" \
+  '{"matchManagers":{},"enabledManagers":{"npm":"__proto__"}}'
 RENAMES_64="$(python3 -I -c '
 import json
 print(json.dumps({
@@ -617,9 +718,9 @@ assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow \
 assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow "cosign verify"
 assert_wiring "$HERE/../../Makefile" makefile "python3 -I tools/ci/renovate_presets.py"
 
-# assert_workflow_timeout CI_YML: require enough workflows-job budget for bounded commands.
+# assert_workflow_timeout CI_YML [minimum]: require enough budget or print its ceiling in minutes.
 assert_workflow_timeout() {
-  python3 -I - "$1" <<'PY'
+  python3 -I - "$1" "${2:-assert}" <<'PY'
 import pathlib
 import re
 import sys
@@ -641,9 +742,74 @@ if step is None:
     raise SystemExit("presets workflow step is missing")
 required = sum(int(value) for value in re.findall(r"^\s*timeout ([0-9]+)\b", step.group("body"), re.M)) + 300
 available = int(minutes.group(1)) * 60
-if available < required:
+if sys.argv[2] == "minimum":
+    print((required + 59) // 60)
+elif available < required:
     raise SystemExit(f"workflows timeout {available}s is below required {required}s")
 PY
+}
+
+# write_workflow_timeout SOURCE TARGET MINUTES: rewrite exactly one timeout in the workflows job.
+write_workflow_timeout() {
+  python3 -I - "$1" "$2" "$3" <<'PY'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+job_match = re.search(r"^  workflows:\n(?P<body>.*?)(?=^  [a-z][a-z0-9_-]*:\n|\Z)", text, re.M | re.S)
+if job_match is None:
+    raise SystemExit("workflows job is missing")
+body, changed = re.subn(r"^    timeout-minutes: [0-9]+$", f"    timeout-minutes: {int(sys.argv[3])}", job_match.group("body"), flags=re.M)
+if changed != 1 or body == job_match.group("body"):
+    raise SystemExit(f"timeout mutation must change exactly one line (matched {changed})")
+pathlib.Path(sys.argv[2]).write_text(
+    text[:job_match.start("body")] + body + text[job_match.end("body"):], encoding="utf-8"
+)
+PY
+}
+
+# test_workflow_timeout: prove value-independent mutation, exact-one-line refusal and both boundaries.
+test_workflow_timeout() {
+  local ci="$HERE/../../.github/workflows/ci.yml" minimum
+  minimum="$(assert_workflow_timeout "$ci" minimum)"
+  python3 -I - "$ci" "$work" "$minimum" <<'PY'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+pattern = r"(^  workflows:\n.*?)^    timeout-minutes: [0-9]+$"
+for name, replacement in (
+    ("26", "    timeout-minutes: 26"),
+    ("boundary-source", f"    timeout-minutes: {int(sys.argv[3]) + 1}"),
+    ("missing", ""),
+    ("duplicate", "    timeout-minutes: 25\n    timeout-minutes: 26"),
+):
+    fixture, changed = re.subn(pattern, lambda m: m.group(1) + replacement, text, count=1, flags=re.M | re.S)
+    if changed != 1:
+        raise SystemExit("cannot seed workflows timeout fixture")
+    pathlib.Path(sys.argv[2], f"ci-{name}.yml").write_text(fixture, encoding="utf-8")
+PY
+  write_workflow_timeout "$work/ci-26.yml" "$work/ci-short-timeout.yml" 10
+  if assert_workflow_timeout "$work/ci-short-timeout.yml"; then
+    echo "FAIL wiring: workflow copy with insufficient timeout passed (source timeout 26)" >&2
+    exit 1
+  fi
+  write_workflow_timeout "$work/ci-boundary-source.yml" "$work/ci-boundary.yml" "$minimum"
+  assert_workflow_timeout "$work/ci-boundary.yml"
+  write_workflow_timeout "$work/ci-boundary-source.yml" "$work/ci-below-boundary.yml" "$((minimum - 1))"
+  if assert_workflow_timeout "$work/ci-below-boundary.yml"; then
+    echo "FAIL wiring: workflow timeout one minute below the boundary passed" >&2
+    exit 1
+  fi
+  for name in missing duplicate; do
+    if write_workflow_timeout "$work/ci-$name.yml" "$work/ci-bad-mutation.yml" 10; then
+      echo "FAIL wiring: $name timeout mutation did not refuse its match count" >&2
+      exit 1
+    fi
+  done
+  echo "ok   workflow-timeout-26-and-boundaries (minimum=${minimum}m)"
 }
 
 assert_workflow_timeout "$HERE/../../.github/workflows/ci.yml"
@@ -665,10 +831,5 @@ if assert_wiring "$work/make-no-check" makefile "python3 -I tools/ci/renovate_pr
   echo "FAIL wiring: Makefile copy without checker passed" >&2
   exit 1
 fi
-awk '!done && sub(/timeout-minutes: 25/, "timeout-minutes: 10") { done = 1 } { print }' "$HERE/../../.github/workflows/ci.yml" \
-  > "$work/ci-short-timeout.yml"
-if assert_workflow_timeout "$work/ci-short-timeout.yml"; then
-  echo "FAIL wiring: workflow copy with insufficient timeout passed" >&2
-  exit 1
-fi
+test_workflow_timeout
 echo "ok   checker-wiring"

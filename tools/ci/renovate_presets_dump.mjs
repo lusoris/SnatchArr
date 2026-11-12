@@ -24,17 +24,39 @@ const MANAGER_MIGRATION_FILES = {
   enabledManagers: 'config/migrations/custom/enabled-managers-migration.js',
 };
 const MAX_MANAGER_RENAMES = 64;
+const DIST_MODULES = Object.freeze({
+  presets: 'config/presets/internal/index.js',
+  managerApi: 'modules/manager/api.js',
+});
 
 /** Read a UTF-8 file after checking that its size does not exceed MAX_FILE_BYTES. */
 function readBoundedText(filePath) {
-  const st = fs.lstatSync(filePath);
-  if (!st.isFile()) {
-    throw new Error(`${filePath}: expected regular file`);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path under RENOVATE_ROOT in the digest-pinned Renovate image, run with --network none --read-only; no request or user input reaches it.
+  const fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) {
+      throw new Error(`${filePath}: expected regular file`);
+    }
+    if (st.size > MAX_FILE_BYTES) {
+      throw new Error(`${filePath}: ${st.size} bytes exceeds cap ${MAX_FILE_BYTES}`);
+    }
+    const buf = Buffer.alloc(st.size);
+    let offset = 0;
+    while (offset < buf.length) {
+      const read = fs.readSync(fd, buf, offset, buf.length - offset, null);
+      if (read === 0) {
+        break;
+      }
+      offset += read;
+    }
+    if (fs.readSync(fd, Buffer.alloc(1), 0, 1, null) !== 0) {
+      throw new Error(`${filePath}: grew while reading`);
+    }
+    return buf.subarray(0, offset).toString('utf8');
+  } finally {
+    fs.closeSync(fd);
   }
-  if (st.size > MAX_FILE_BYTES) {
-    throw new Error(`${filePath}: ${st.size} bytes exceeds cap ${MAX_FILE_BYTES}`);
-  }
-  return fs.readFileSync(filePath, 'utf8');
 }
 
 /** Iteratively list every .js file under distRoot as sorted relative POSIX paths. */
@@ -46,6 +68,7 @@ function listDistJsFiles(distRoot) {
   while (stack.length > 0) {
     const relDir = stack.pop();
     const absDir = relDir === '' ? distRoot : path.join(distRoot, relDir);
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path under RENOVATE_ROOT in the digest-pinned Renovate image, run with --network none --read-only; no request or user input reaches it.
     const entries = fs.readdirSync(absDir, { withFileTypes: true });
     entries.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
 
@@ -70,16 +93,13 @@ function listDistJsFiles(distRoot) {
 /** Scan dist .js files for Docker-importing managers and tracked depType string literals. */
 function scanDistSources(distRoot, jsFiles) {
   const importingManagers = new Set();
-  const depTypeEmitters = {
-    'github-runner': [],
-    'php2shell-runtime': [],
-  };
+  const depTypeEmitters = new Map(TRACKED_DEP_TYPES.map((t) => [t, []]));
 
   for (const rel of jsFiles) {
     const text = readBoundedText(path.join(distRoot, rel));
     for (const depType of TRACKED_DEP_TYPES) {
       if (text.includes(`"${depType}"`)) {
-        depTypeEmitters[depType].push(rel);
+        depTypeEmitters.get(depType).push(rel);
       }
     }
     if (rel.startsWith('modules/manager/')) {
@@ -95,10 +115,10 @@ function scanDistSources(distRoot, jsFiles) {
 
 /** Read the bounded literal manager renames used by Renovate's config migrations. */
 function readManagerRenames(distRoot) {
-  const managerRenames = {};
+  const managerRenames = new Map();
   for (const [field, rel] of Object.entries(MANAGER_MIGRATION_FILES)) {
     const text = readBoundedText(path.join(distRoot, rel));
-    const renames = {};
+    const renames = new Map();
     const caseRe = /case "([^"]+)": return "([^"]+)";/g;
     let caseCount = 0;
     for (const match of text.matchAll(caseRe)) {
@@ -106,14 +126,14 @@ function readManagerRenames(distRoot) {
       if (caseCount > MAX_MANAGER_RENAMES) {
         throw new Error(`${rel}: exceeds ${MAX_MANAGER_RENAMES} manager renames`);
       }
-      renames[match[1]] = match[2];
+      renames.set(match[1], match[2]);
     }
-    if (Object.keys(renames).length === 0) {
+    if (renames.size === 0) {
       throw new Error(`${rel}: yielded no manager renames`);
     }
-    managerRenames[field] = renames;
+    managerRenames.set(field, Object.fromEntries(renames));
   }
-  return managerRenames;
+  return Object.fromEntries(managerRenames);
 }
 
 /** Collect sorted built-in manager names that support Docker or import Docker/Dockerfile code. */
@@ -136,6 +156,17 @@ function collectDockerManagers(apiMap, importingManagers) {
   return names;
 }
 
+/** Import one fixed dist module from the pinned Renovate image. */
+async function importDistModule(distRoot, key) {
+  const relativePath = new Map(Object.entries(DIST_MODULES)).get(key);
+  if (relativePath === undefined) {
+    throw new Error(`unknown dist module ${key}`);
+  }
+  const url = pathToFileURL(path.join(distRoot, relativePath)).href;
+  // eslint-disable-next-line no-unsanitized/method -- Path under RENOVATE_ROOT in the digest-pinned Renovate image, run with --network none --read-only; no request or user input reaches it.
+  return import(url);
+}
+
 /** Load Renovate dist metadata and print the single JSON payload to stdout. */
 async function main() {
   const root = process.env.RENOVATE_ROOT || DEFAULT_RENOVATE_ROOT;
@@ -145,10 +176,8 @@ async function main() {
   }
 
   const distRoot = path.join(root, 'dist');
-  const presetsUrl = pathToFileURL(path.join(distRoot, 'config/presets/internal/index.js')).href;
-  const managerApiUrl = pathToFileURL(path.join(distRoot, 'modules/manager/api.js')).href;
-  const presetsMod = await import(presetsUrl);
-  const managerApiMod = await import(managerApiUrl);
+  const presetsMod = await importDistModule(distRoot, 'presets');
+  const managerApiMod = await importDistModule(distRoot, 'managerApi');
 
   const groups = presetsMod?.groups;
   if (typeof groups !== 'object' || groups === null || Array.isArray(groups)) {
@@ -170,7 +199,7 @@ async function main() {
     node: process.version,
     groups,
     dockerManagers,
-    depTypeEmitters,
+    depTypeEmitters: Object.fromEntries(depTypeEmitters),
     managerRenames,
   };
   process.stdout.write(`${JSON.stringify(payload)}\n`);
