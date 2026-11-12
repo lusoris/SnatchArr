@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golusoris/goenvoy/mediaserver/jellyfin/v3"
@@ -16,19 +18,30 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
+const maxTokenRedirects = 5
+
+var errRedirectRefused = errors.New("jellyfin redirect refused")
+
 // Client implements Authenticator on top of goenvoy jellyfin v3.
 type Client struct {
-	baseURL    string
-	timeout    time.Duration
-	userAgent  string
-	httpClient *http.Client
-	svcClient  *jellyfin.Client
+	baseURL             string
+	baseScheme          string
+	baseHost            string
+	timeout             time.Duration
+	userAgent           string
+	httpClient          *http.Client
+	svcClient           *jellyfin.Client
+	allowPlainHTTPToken bool
 }
 
 // NewClient creates a new Jellyfin Authenticator client.
 func NewClient(baseURL, apiKey string, timeout time.Duration, userAgent string, httpClient *http.Client) (*Client, error) {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
+	}
+	parsedBase, err := url.Parse(strings.TrimRight(strings.TrimSpace(baseURL), "/"))
+	if err != nil {
+		return nil, fmt.Errorf("jellyfin: parse base url: %w", err)
 	}
 	opts := []jellyfin.Option{
 		jellyfin.WithAccessToken(apiKey),
@@ -45,11 +58,22 @@ func NewClient(baseURL, apiKey string, timeout time.Duration, userAgent string, 
 	}
 	return &Client{
 		baseURL:    baseURL,
+		baseScheme: strings.ToLower(parsedBase.Scheme),
+		baseHost:   parsedBase.Host,
 		timeout:    timeout,
 		userAgent:  userAgent,
 		httpClient: httpClient,
 		svcClient:  svc,
 	}, nil
+}
+
+// SetAllowPlainHTTPToken controls whether ByToken permits non-HTTPS base URLs (dev profile only).
+func (c *Client) SetAllowPlainHTTPToken(allow bool) {
+	c.allowPlainHTTPToken = allow
+}
+
+func (c *Client) isHTTPS() bool {
+	return strings.EqualFold(c.baseScheme, "https")
 }
 
 func (c *Client) newFreshClient() (*jellyfin.Client, error) {
@@ -116,6 +140,65 @@ func (c *Client) SignIn(ctx context.Context, user, pw string) (Member, error) {
 		return Member{}, mapAPIError(err, false)
 	}
 	return toMember(res.User)
+}
+
+// ByToken verifies a signed-in user's Jellyfin access token via GET /Users/Me.
+func (c *Client) ByToken(ctx context.Context, token string) (Member, error) {
+	trimmed := strings.TrimSpace(token)
+	if trimmed == "" {
+		return Member{}, fmt.Errorf("%w: empty jellyfin token", domain.ErrBadRequest)
+	}
+	if !c.isHTTPS() && !c.allowPlainHTTPToken {
+		return Member{}, fmt.Errorf("%w: jellyfin token sign-in needs an https jellyfin url in the prod profile", domain.ErrForbidden)
+	}
+	cl, err := c.newTokenClient(trimmed)
+	if err != nil {
+		return Member{}, err
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	u, err := cl.GetCurrentUser(reqCtx)
+	if err != nil {
+		if errors.Is(err, errRedirectRefused) {
+			return Member{}, fmt.Errorf("%w: jellyfin redirect refused", domain.ErrUnreachable)
+		}
+		return Member{}, mapAPIError(err, true)
+	}
+	return toMember(u)
+}
+
+func (c *Client) newTokenClient(token string) (*jellyfin.Client, error) {
+	hc := &http.Client{
+		Timeout:       c.timeout,
+		CheckRedirect: c.checkTokenRedirect,
+	}
+	if c.httpClient != nil {
+		clCopy := *c.httpClient
+		clCopy.CheckRedirect = c.checkTokenRedirect
+		hc = &clCopy
+	}
+	cl, err := jellyfin.New(
+		c.baseURL,
+		jellyfin.WithAccessToken(token),
+		jellyfin.WithUserAgent(c.userAgent),
+		jellyfin.WithHTTPClient(hc),
+		jellyfin.WithTimeout(c.timeout),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("jellyfin: create token client: %w", err)
+	}
+	return cl, nil
+}
+
+func (c *Client) checkTokenRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxTokenRedirects {
+		return errRedirectRefused
+	}
+	if req.URL == nil || !strings.EqualFold(req.URL.Scheme, c.baseScheme) || !strings.EqualFold(req.URL.Host, c.baseHost) {
+		return errRedirectRefused
+	}
+	return nil
 }
 
 // QuickConnectEnabled checks if Quick Connect is enabled on the server.

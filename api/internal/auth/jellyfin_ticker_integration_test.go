@@ -32,6 +32,10 @@ func (m *tickerMockAuthenticator) SignIn(context.Context, string, string) (jelly
 	return jellyfin.Member{}, domain.ErrNotFound
 }
 
+func (m *tickerMockAuthenticator) ByToken(context.Context, string) (jellyfin.Member, error) {
+	return jellyfin.Member{}, domain.ErrNotFound
+}
+
 func (m *tickerMockAuthenticator) QuickConnectEnabled(context.Context) (bool, error) {
 	return false, domain.ErrNotFound
 }

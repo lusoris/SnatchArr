@@ -213,7 +213,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start a session with Jellyfin credentials */
+        /** Start a session with Jellyfin credentials or a Jellyfin access token */
         post: operations["jellyfinLogin"];
         delete?: never;
         options?: never;
@@ -1975,6 +1975,12 @@ export interface components {
             username: string;
             password: string;
         };
+        JellyfinSessionRequest: {
+            username?: string;
+            password?: string;
+            /** @description Jellyfin access token of the signed-in user; never logged. */
+            access_token?: string;
+        };
         JellyfinQuickConnect: {
             code: string;
             secret: string;
@@ -3574,7 +3580,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["JellyfinLoginRequest"];
+                "application/json": components["schemas"]["JellyfinSessionRequest"];
             };
         };
         responses: {
@@ -3587,6 +3593,9 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             429: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };

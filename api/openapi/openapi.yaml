@@ -282,14 +282,14 @@ paths:
     post:
       tags: [auth]
       operationId: jellyfinLogin
-      summary: Start a session with Jellyfin credentials
+      summary: Start a session with Jellyfin credentials or a Jellyfin access token
       security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/JellyfinLoginRequest"
+              $ref: "#/components/schemas/JellyfinSessionRequest"
       responses:
         "200":
           description: Session started
@@ -297,6 +297,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Session"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
         "429":
           $ref: "#/components/responses/Problem"
         default:
@@ -3038,6 +3044,22 @@ components:
         password:
           type: string
           maxLength: 1024
+
+    JellyfinSessionRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 256
+        password:
+          type: string
+          maxLength: 1024
+        access_token:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Jellyfin access token of the signed-in user; never logged.
 
     JellyfinQuickConnect:
       type: object

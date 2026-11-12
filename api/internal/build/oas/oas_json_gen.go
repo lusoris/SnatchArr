@@ -8334,6 +8334,103 @@ func (s *JellyfinQuickConnectAuthenticateRequest) UnmarshalJSON(data []byte) err
 	return s.Decode(d)
 }
 
+// Encode implements json.Marshaler.
+func (s *JellyfinSessionRequest) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *JellyfinSessionRequest) encodeFields(e *jx.Encoder) {
+	{
+		if s.Username.Set {
+			e.FieldStart("username")
+			s.Username.Encode(e)
+		}
+	}
+	{
+		if s.Password.Set {
+			e.FieldStart("password")
+			s.Password.Encode(e)
+		}
+	}
+	{
+		if s.AccessToken.Set {
+			e.FieldStart("access_token")
+			s.AccessToken.Encode(e)
+		}
+	}
+}
+
+var jsonFieldsNameOfJellyfinSessionRequest = [3]string{
+	0: "username",
+	1: "password",
+	2: "access_token",
+}
+
+// Decode decodes JellyfinSessionRequest from json.
+func (s *JellyfinSessionRequest) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode JellyfinSessionRequest to nil")
+	}
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "username":
+			if err := func() error {
+				s.Username.Reset()
+				if err := s.Username.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"username\"")
+			}
+		case "password":
+			if err := func() error {
+				s.Password.Reset()
+				if err := s.Password.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"password\"")
+			}
+		case "access_token":
+			if err := func() error {
+				s.AccessToken.Reset()
+				if err := s.AccessToken.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"access_token\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode JellyfinSessionRequest")
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *JellyfinSessionRequest) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *JellyfinSessionRequest) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes ListAPIKeysOKApplicationJSON as json.
 func (s ListAPIKeysOKApplicationJSON) Encode(e *jx.Encoder) {
 	unwrapped := []ApiKey(s)

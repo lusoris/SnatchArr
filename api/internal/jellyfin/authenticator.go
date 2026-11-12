@@ -42,6 +42,7 @@ type Member struct {
 // Authenticator authenticates users and manages Quick Connect against Jellyfin.
 type Authenticator interface {
 	SignIn(ctx context.Context, user, pw string) (Member, error)
+	ByToken(ctx context.Context, token string) (Member, error)
 	QuickConnectEnabled(ctx context.Context) (bool, error)
 	InitiateQuickConnect(ctx context.Context) (code, secret string, err error)
 	QuickConnectAuthorized(ctx context.Context, secret string) (bool, error)
@@ -94,6 +95,10 @@ func (disabledAuthenticator) SignIn(context.Context, string, string) (Member, er
 	return Member{}, domain.ErrNotFound
 }
 
+func (disabledAuthenticator) ByToken(context.Context, string) (Member, error) {
+	return Member{}, domain.ErrNotFound
+}
+
 func (disabledAuthenticator) QuickConnectEnabled(context.Context) (bool, error) {
 	return false, domain.ErrNotFound
 }
@@ -114,12 +119,23 @@ func (disabledAuthenticator) User(context.Context, string) (Member, error) {
 	return Member{}, domain.ErrNotFound
 }
 
-// ProvideAuthenticator provides an Authenticator to the fx graph.
-func ProvideAuthenticator(cfg config.Options) (Authenticator, error) {
+// ProvideAuthenticator provides an Authenticator configured from cfg to the fx graph.
+// A non-nil logger receives one startup warning when token sign-in is refused
+// because the prod profile points at a plain-http Jellyfin URL.
+func ProvideAuthenticator(cfg config.Options, logger *slog.Logger) (Authenticator, error) {
 	if !cfg.Jellyfin.Enabled {
 		return disabledAuthenticator{}, nil
 	}
-	return NewClient(cfg.Jellyfin.URL, cfg.Jellyfin.APIKey, cfg.Jellyfin.Timeout, DefaultUserAgent, nil)
+	cl, err := NewClient(cfg.Jellyfin.URL, cfg.Jellyfin.APIKey, cfg.Jellyfin.Timeout, DefaultUserAgent, nil)
+	if err != nil {
+		return nil, err
+	}
+	allowPlain := cfg.Profile == config.ProfileDev
+	cl.SetAllowPlainHTTPToken(allowPlain)
+	if !allowPlain && !cl.isHTTPS() && logger != nil {
+		logger.Warn("jellyfin token sign-in refused: url is not https")
+	}
+	return cl, nil
 }
 
 // ProvideRevalidator provides the Jellyfin session Revalidator to the fx graph.

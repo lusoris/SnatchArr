@@ -33,6 +33,7 @@ import (
 
 type fakeJellyfinAuthenticator struct {
 	signInFunc                 func(ctx context.Context, user, pw string) (jellyfin.Member, error)
+	byTokenFunc                func(ctx context.Context, token string) (jellyfin.Member, error)
 	quickConnectEnabledFunc    func(ctx context.Context) (bool, error)
 	initiateQuickConnectFunc   func(ctx context.Context) (code, secret string, err error)
 	quickConnectAuthorizedFunc func(ctx context.Context, secret string) (bool, error)
@@ -43,6 +44,13 @@ type fakeJellyfinAuthenticator struct {
 func (f *fakeJellyfinAuthenticator) SignIn(ctx context.Context, user, pw string) (jellyfin.Member, error) {
 	if f.signInFunc != nil {
 		return f.signInFunc(ctx, user, pw)
+	}
+	return jellyfin.Member{}, domain.ErrUnauthorized
+}
+
+func (f *fakeJellyfinAuthenticator) ByToken(ctx context.Context, token string) (jellyfin.Member, error) {
+	if f.byTokenFunc != nil {
+		return f.byTokenFunc(ctx, token)
 	}
 	return jellyfin.Member{}, domain.ErrUnauthorized
 }
@@ -830,4 +838,558 @@ func TestJellyfin_QuickConnect_WrongSecretRefused(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/problem+json") {
 		t.Errorf("Content-Type = %q, want application/problem+json", ct)
 	}
+}
+
+func hasSessionCookie(cookies []*http.Cookie) bool {
+	for _, c := range cookies {
+		if c.Name == "snatcharr_session" && c.Value != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestJellyfin_TokenSession_HandlerIntegration(t *testing.T) {
+	t.Parallel()
+
+	defaultCfg := config.JellyfinOptions{
+		Enabled:     true,
+		URL:         "https://jellyfin.example.com",
+		APIKey:      "api-key-test",
+		Timeout:     5 * time.Second,
+		DefaultRole: domain.RoleRequester,
+	}
+
+	t.Run("positive valid token starts session with cookie csrf and mapped roles", func(t *testing.T) {
+		t.Parallel()
+		roleCases := []struct {
+			name         string
+			defaultRole  domain.Role
+			member       jellyfin.Member
+			wantRole     oas.UserRole
+			wantUsername string
+		}{
+			{
+				name:         "requester default",
+				defaultRole:  domain.RoleRequester,
+				member:       jellyfin.Member{ID: "jf-tok-req-1", Name: "erin", Admin: false},
+				wantRole:     oas.UserRoleRequester,
+				wantUsername: "jf-erin",
+			},
+			{
+				name:         "viewer default",
+				defaultRole:  domain.RoleViewer,
+				member:       jellyfin.Member{ID: "jf-tok-view-1", Name: "frank", Admin: false},
+				wantRole:     oas.UserRoleViewer,
+				wantUsername: "jf-frank",
+			},
+			{
+				name:         "admin maps to FirstAdmin",
+				defaultRole:  domain.RoleRequester,
+				member:       jellyfin.Member{ID: "jf-tok-adm-1", Name: "grace", Admin: true},
+				wantRole:     oas.UserRoleAdmin,
+				wantUsername: "admin",
+			},
+		}
+
+		for _, tc := range roleCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				cfg := defaultCfg
+				cfg.DefaultRole = tc.defaultRole
+				fakeAuth := &fakeJellyfinAuthenticator{
+					byTokenFunc: func(_ context.Context, token string) (jellyfin.Member, error) {
+						if token != "valid-user-token" {
+							return jellyfin.Member{}, domain.ErrUnauthorized
+						}
+						return tc.member, nil
+					},
+					userFunc: func(_ context.Context, id string) (jellyfin.Member, error) {
+						return tc.member, nil
+					},
+				}
+				f := setupJellyfinFixture(t, cfg, fakeAuth)
+
+				req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(`{"access_token":"valid-user-token"}`))
+				req.Header.Set("Content-Type", "application/json")
+				rec := httptest.NewRecorder()
+				f.router.ServeHTTP(rec, req)
+
+				if rec.Code != http.StatusOK {
+					t.Fatalf("POST /auth/jellyfin status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+				}
+				var sess oas.Session
+				if err := json.NewDecoder(rec.Body).Decode(&sess); err != nil {
+					t.Fatalf("decode session: %v", err)
+				}
+				if sess.User.Role != tc.wantRole || sess.User.Username != tc.wantUsername {
+					t.Fatalf("session user = (%q, %q), want (%q, %q)", sess.User.Username, sess.User.Role, tc.wantUsername, tc.wantRole)
+				}
+				if sess.CsrfToken == "" {
+					t.Fatal("expected non-empty csrf_token in session response")
+				}
+				cookies := rec.Result().Cookies()
+				if !hasSessionCookie(cookies) {
+					t.Fatalf("expected snatcharr_session cookie in %+v", cookies)
+				}
+
+				sessRec := getSessionRequestHelper(f, cookies)
+				if sessRec.Code != http.StatusOK {
+					t.Fatalf("GET /auth/session with token session cookie = %d, want 200", sessRec.Code)
+				}
+			})
+		}
+	})
+
+	t.Run("negative and boundary request forms and auth failures", func(t *testing.T) {
+		t.Parallel()
+		cases := []struct {
+			name       string
+			enabled    bool
+			body       string
+			wantStatus int
+			wantSubstr string
+			member     jellyfin.Member
+			byTokenErr error
+		}{
+			{
+				name:       "negative invalid or expired token yields 401 without session cookie",
+				enabled:    true,
+				body:       `{"access_token":"expired-token"}`,
+				wantStatus: http.StatusUnauthorized,
+				byTokenErr: domain.ErrUnauthorized,
+			},
+			{
+				name:       "negative disabled member yields 401 without session cookie",
+				enabled:    true,
+				body:       `{"access_token":"disabled-user-token"}`,
+				wantStatus: http.StatusUnauthorized,
+				member:     jellyfin.Member{ID: "jf-dis-tok", Name: "dis", Disabled: true},
+			},
+			{
+				name:       "negative both access_token and username+password yields 400",
+				enabled:    true,
+				body:       `{"access_token":"tok","username":"alice","password":"pwd"}`,
+				wantStatus: http.StatusBadRequest,
+				wantSubstr: "both an access token and credentials",
+			},
+			{
+				name:       "negative both access_token and username yields 400",
+				enabled:    true,
+				body:       `{"access_token":"tok","username":"alice"}`,
+				wantStatus: http.StatusBadRequest,
+				wantSubstr: "both an access token and credentials",
+			},
+			{
+				name:       "negative both access_token and password yields 400",
+				enabled:    true,
+				body:       `{"access_token":"tok","password":"pwd"}`,
+				wantStatus: http.StatusBadRequest,
+				wantSubstr: "both an access token and credentials",
+			},
+			{
+				name:       "boundary empty object yields 400",
+				enabled:    true,
+				body:       `{}`,
+				wantStatus: http.StatusBadRequest,
+			},
+			{
+				name:       "boundary password without username or token yields 400",
+				enabled:    true,
+				body:       `{"password":"pwd"}`,
+				wantStatus: http.StatusBadRequest,
+			},
+			{
+				name:       "boundary empty string access_token rejected by ogen minLength",
+				enabled:    true,
+				body:       `{"access_token":""}`,
+				wantStatus: http.StatusUnprocessableEntity,
+			},
+			{
+				name:       "boundary whitespace access_token rejected with 400",
+				enabled:    true,
+				body:       `{"access_token":"   "}`,
+				wantStatus: http.StatusBadRequest,
+				byTokenErr: fmt.Errorf("%w: empty jellyfin token", domain.ErrBadRequest),
+			},
+			{
+				name:       "negative jellyfin disabled with access_token yields 404",
+				enabled:    false,
+				body:       `{"access_token":"any-token"}`,
+				wantStatus: http.StatusNotFound,
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				cfg := defaultCfg
+				cfg.Enabled = tc.enabled
+				fakeAuth := &fakeJellyfinAuthenticator{
+					byTokenFunc: func(_ context.Context, _ string) (jellyfin.Member, error) {
+						if tc.byTokenErr != nil {
+							return jellyfin.Member{}, tc.byTokenErr
+						}
+						return tc.member, nil
+					},
+				}
+				f := setupJellyfinFixture(t, cfg, fakeAuth)
+
+				req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(tc.body))
+				req.Header.Set("Content-Type", "application/json")
+				rec := httptest.NewRecorder()
+				f.router.ServeHTTP(rec, req)
+
+				if rec.Code != tc.wantStatus {
+					t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tc.wantStatus, rec.Body.String())
+				}
+				if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/problem+json") {
+					t.Fatalf("Content-Type = %q, want application/problem+json", ct)
+				}
+				if hasSessionCookie(rec.Result().Cookies()) {
+					t.Fatal("unexpected snatcharr_session cookie on failed login")
+				}
+				if tc.wantSubstr != "" && !strings.Contains(rec.Body.String(), tc.wantSubstr) {
+					t.Fatalf("body = %q, want substring %q", rec.Body.String(), tc.wantSubstr)
+				}
+			})
+		}
+	})
+
+	t.Run("negative prod profile with plain http jellyfin url yields 403 without network call", func(t *testing.T) {
+		t.Parallel()
+		var upstreamHits atomic.Int32
+		jfSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			upstreamHits.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(jfSrv.Close)
+
+		f := setupJellyfinFixture(t, defaultCfg, &fakeJellyfinAuthenticator{})
+		prodCfg := config.Default()
+		prodCfg.Profile = config.ProfileProd
+		prodCfg.Jellyfin = config.JellyfinOptions{
+			Enabled:     true,
+			URL:         jfSrv.URL,
+			APIKey:      "svc-key",
+			Timeout:     2 * time.Second,
+			DefaultRole: domain.RoleRequester,
+		}
+		realAuth, err := jellyfin.ProvideAuthenticator(prodCfg, nil)
+		if err != nil {
+			t.Fatalf("ProvideAuthenticator: %v", err)
+		}
+		f.h.cfg = prodCfg
+		f.h.jellyfin = realAuth
+
+		req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(`{"access_token":"user-tok-prod-http"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		f.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403 (body: %s)", rec.Code, rec.Body.String())
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/problem+json") {
+			t.Fatalf("Content-Type = %q, want application/problem+json", ct)
+		}
+		if hasSessionCookie(rec.Result().Cookies()) {
+			t.Fatal("unexpected snatcharr_session cookie on 403")
+		}
+		if got := upstreamHits.Load(); got != 0 {
+			t.Fatalf("upstream hits = %d, want 0", got)
+		}
+	})
+
+	t.Run("negative token ip lockout yields 429 with Retry-After", func(t *testing.T) {
+		t.Parallel()
+		fakeAuth := &fakeJellyfinAuthenticator{
+			byTokenFunc: func(_ context.Context, _ string) (jellyfin.Member, error) {
+				return jellyfin.Member{}, domain.ErrUnauthorized
+			},
+		}
+		f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+
+		for i := 1; i <= auth.LockoutMaxFails; i++ {
+			req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(`{"access_token":"bad-tok"}`))
+			req.RemoteAddr = "198.51.100.77:12345"
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			f.router.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("attempt %d: status = %d, want 401", i, rec.Code)
+			}
+		}
+
+		req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(`{"access_token":"bad-tok"}`))
+		req.RemoteAddr = "198.51.100.77:12345"
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		f.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("locked status = %d, want 429 (body: %s)", rec.Code, rec.Body.String())
+		}
+		if got := rec.Header().Get("Retry-After"); got == "" {
+			t.Fatal("expected Retry-After header on 429")
+		}
+	})
+}
+
+func TestJellyfin_PlantedCheck_TokenIgnoresSpoofedUserHeaders(t *testing.T) {
+	t.Parallel()
+
+	defaultCfg := config.JellyfinOptions{
+		Enabled:     true,
+		URL:         "https://jellyfin.example.com",
+		APIKey:      "api-key-test",
+		Timeout:     5 * time.Second,
+		DefaultRole: domain.RoleRequester,
+	}
+
+	fakeAuth := &fakeJellyfinAuthenticator{
+		byTokenFunc: func(_ context.Context, token string) (jellyfin.Member, error) {
+			if token != "real-token" {
+				return jellyfin.Member{}, domain.ErrUnauthorized
+			}
+			return jellyfin.Member{ID: "jf-verified-me-id", Name: "verifieduser", Admin: false}, nil
+		},
+	}
+	f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+
+	// Pre-create another Jellyfin user matching the spoofed header ID so any header trust would sign into it.
+	if _, err := f.h.auth.ProvisionJellyfinUser(t.Context(), jellyfin.Member{ID: "other-spoofed-id", Name: "victim"}, domain.RoleRequester); err != nil {
+		t.Fatalf("ProvisionJellyfinUser victim: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(`{"access_token":"real-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Jellyfin-User-Id", "other-spoofed-id")
+	req.Header.Set("X-Emby-Userid", "other-spoofed-id")
+	rec := httptest.NewRecorder()
+	f.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	var sess oas.Session
+	if err := json.NewDecoder(rec.Body).Decode(&sess); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	if sess.User.Username != "jf-verifieduser" {
+		t.Fatalf("PLANTED DEFECT TRIGGERED: session username = %q, want jf-verifieduser (spoofed header trusted)", sess.User.Username)
+	}
+
+	loadReq := httptest.NewRequest(http.MethodGet, PathPrefix+"/auth/session", nil)
+	for _, c := range rec.Result().Cookies() {
+		loadReq.AddCookie(c)
+	}
+	rawSess, err := f.sessMgr.Load(loadReq)
+	if err != nil {
+		t.Fatalf("sessMgr.Load: %v", err)
+	}
+	origin, ok, oErr := auth.SSOOriginFrom(rawSess)
+	if oErr != nil || !ok || origin.Subject != "jf-verified-me-id" {
+		t.Fatalf("SSOOriginFrom = (%+v, %v, %v), want Subject=jf-verified-me-id", origin, ok, oErr)
+	}
+}
+
+func TestJellyfin_TokenSession_RouterContract_Unit(t *testing.T) {
+	t.Parallel()
+
+	newUnitRouter := func(t *testing.T, cfg config.Options, jfAuth jellyfin.Authenticator) http.Handler {
+		t.Helper()
+		logger := slog.New(slog.DiscardHandler)
+		authSvc, err := auth.NewServiceWithHasher(nil, testHasher, nil, nil, logger)
+		if err != nil {
+			t.Fatalf("NewServiceWithHasher: %v", err)
+		}
+		h := &Handlers{
+			cfg:      cfg,
+			auth:     authSvc,
+			jellyfin: jfAuth,
+			logger:   logger,
+		}
+		srv, err := oas.NewServer(h, &Security{},
+			oas.WithPathPrefix(PathPrefix),
+			oas.WithErrorHandler(ErrorHandler(logger)),
+		)
+		if err != nil {
+			t.Fatalf("oas.NewServer: %v", err)
+		}
+		return withHTTP(srv)
+	}
+
+	cases := []struct {
+		name       string
+		enabled    bool
+		profile    config.Profile
+		body       string
+		byTokenErr error
+		member     jellyfin.Member
+		wantStatus int
+		wantSubstr string
+		wantRetry  bool
+	}{
+		{
+			name:       "negative both access_token and username yields 400",
+			enabled:    true,
+			profile:    config.ProfileDev,
+			body:       `{"access_token":"tok","username":"alice"}`,
+			wantStatus: http.StatusBadRequest,
+			wantSubstr: "both an access token and credentials",
+		},
+		{
+			name:       "negative both access_token and password yields 400",
+			enabled:    true,
+			profile:    config.ProfileDev,
+			body:       `{"access_token":"tok","password":"secret"}`,
+			wantStatus: http.StatusBadRequest,
+			wantSubstr: "both an access token and credentials",
+		},
+		{
+			name:       "boundary empty json object yields 400",
+			enabled:    true,
+			profile:    config.ProfileDev,
+			body:       `{}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "boundary password without username or access_token yields 400",
+			enabled:    true,
+			profile:    config.ProfileDev,
+			body:       `{"password":"secret"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "boundary empty string access_token rejected by ogen minLength",
+			enabled:    true,
+			profile:    config.ProfileDev,
+			body:       `{"access_token":""}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantSubstr: "access_token",
+		},
+		{
+			name:       "boundary whitespace access_token yields 400",
+			enabled:    true,
+			profile:    config.ProfileDev,
+			body:       `{"access_token":"   "}`,
+			byTokenErr: fmt.Errorf("%w: empty jellyfin token", domain.ErrBadRequest),
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "negative invalid or expired token yields 401 without cookie",
+			enabled:    true,
+			profile:    config.ProfileDev,
+			body:       `{"access_token":"expired-tok"}`,
+			byTokenErr: domain.ErrUnauthorized,
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "negative disabled member yields 401 without cookie",
+			enabled:    true,
+			profile:    config.ProfileDev,
+			body:       `{"access_token":"dis-tok"}`,
+			member:     jellyfin.Member{ID: "jf-dis", Name: "dis", Disabled: true},
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "negative rate limited yields 429 with Retry-After",
+			enabled:    true,
+			profile:    config.ProfileDev,
+			body:       `{"access_token":"any-tok"}`,
+			byTokenErr: fmt.Errorf("%w: account locked", domain.ErrTooManyRequests),
+			wantStatus: http.StatusTooManyRequests,
+			wantRetry:  true,
+		},
+		{
+			name:       "negative jellyfin disabled yields 404",
+			enabled:    false,
+			profile:    config.ProfileDev,
+			body:       `{"access_token":"any-tok"}`,
+			wantStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Default()
+			cfg.Profile = tc.profile
+			cfg.Jellyfin = config.JellyfinOptions{
+				Enabled:     tc.enabled,
+				URL:         "https://jellyfin.example.com",
+				APIKey:      "svc-key",
+				Timeout:     2 * time.Second,
+				DefaultRole: domain.RoleRequester,
+			}
+			fakeAuth := &fakeJellyfinAuthenticator{
+				byTokenFunc: func(_ context.Context, _ string) (jellyfin.Member, error) {
+					if tc.byTokenErr != nil {
+						return jellyfin.Member{}, tc.byTokenErr
+					}
+					return tc.member, nil
+				},
+			}
+			router := newUnitRouter(t, cfg, fakeAuth)
+			req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(tc.body))
+			req.RemoteAddr = ""
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+			if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/problem+json") {
+				t.Fatalf("Content-Type = %q, want application/problem+json", ct)
+			}
+			if hasSessionCookie(rec.Result().Cookies()) {
+				t.Fatal("unexpected snatcharr_session cookie on failed login")
+			}
+			if tc.wantSubstr != "" && !strings.Contains(rec.Body.String(), tc.wantSubstr) {
+				t.Fatalf("body = %q, want substring %q", rec.Body.String(), tc.wantSubstr)
+			}
+			if tc.wantRetry && rec.Header().Get("Retry-After") == "" {
+				t.Fatal("expected Retry-After header on 429")
+			}
+		})
+	}
+
+	t.Run("negative prod profile with plain http jellyfin url yields 403 without hitting upstream", func(t *testing.T) {
+		t.Parallel()
+		var hits atomic.Int32
+		jfSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(jfSrv.Close)
+
+		cfg := config.Default()
+		cfg.Profile = config.ProfileProd
+		cfg.Jellyfin = config.JellyfinOptions{
+			Enabled:     true,
+			URL:         jfSrv.URL,
+			APIKey:      "svc-key",
+			Timeout:     2 * time.Second,
+			DefaultRole: domain.RoleRequester,
+		}
+		realAuth, err := jellyfin.ProvideAuthenticator(cfg, nil)
+		if err != nil {
+			t.Fatalf("ProvideAuthenticator: %v", err)
+		}
+		router := newUnitRouter(t, cfg, realAuth)
+		req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(`{"access_token":"tok-prod"}`))
+		req.RemoteAddr = ""
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403 (body: %s)", rec.Code, rec.Body.String())
+		}
+		if hits.Load() != 0 {
+			t.Fatalf("upstream hits = %d, want 0", hits.Load())
+		}
+	})
 }

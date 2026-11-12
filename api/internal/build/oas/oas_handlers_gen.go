@@ -14086,7 +14086,7 @@ func (s *Server) handleImportSeerrInstancesRequest(args [1]string, argsEscaped b
 
 // handleJellyfinLoginRequest handles jellyfinLogin operation.
 //
-// Start a session with Jellyfin credentials.
+// Start a session with Jellyfin credentials or a Jellyfin access token.
 //
 // POST /auth/jellyfin
 func (s *Server) handleJellyfinLoginRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -14183,7 +14183,7 @@ func (s *Server) handleJellyfinLoginRequest(args [0]string, argsEscaped bool, w 
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    JellyfinLoginOperation,
-			OperationSummary: "Start a session with Jellyfin credentials",
+			OperationSummary: "Start a session with Jellyfin credentials or a Jellyfin access token",
 			OperationID:      "jellyfinLogin",
 			Body:             request,
 			RawBody:          rawBody,
@@ -14192,7 +14192,7 @@ func (s *Server) handleJellyfinLoginRequest(args [0]string, argsEscaped bool, w 
 		}
 
 		type (
-			Request  = *JellyfinLoginRequest
+			Request  = *JellyfinSessionRequest
 			Params   = struct{}
 			Response = JellyfinLoginRes
 		)

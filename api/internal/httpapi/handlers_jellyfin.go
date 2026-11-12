@@ -17,13 +17,12 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
 )
 
-// JellyfinLogin authenticates a user using Jellyfin credentials.
-func (h *Handlers) JellyfinLogin(ctx context.Context, req *oas.JellyfinLoginRequest) (oas.JellyfinLoginRes, error) {
+// JellyfinLogin authenticates a user using Jellyfin credentials or a Jellyfin access token.
+func (h *Handlers) JellyfinLogin(ctx context.Context, req *oas.JellyfinSessionRequest) (oas.JellyfinLoginRes, error) {
 	if !h.cfg.Jellyfin.Enabled {
 		return nil, domain.ErrNotFound
 	}
-	ip := remoteIP(ctx)
-	m, err := h.auth.LoginJellyfin(ctx, h.jellyfin, req.Username, req.Password, ip)
+	m, err := h.authenticateJellyfinSession(ctx, req)
 	if err != nil {
 		if errors.Is(err, domain.ErrTooManyRequests) {
 			if w, ok := writerFrom(ctx); ok {
@@ -33,6 +32,26 @@ func (h *Handlers) JellyfinLogin(ctx context.Context, req *oas.JellyfinLoginRequ
 		return nil, err
 	}
 	return h.startJellyfinSession(ctx, m)
+}
+
+func (h *Handlers) authenticateJellyfinSession(ctx context.Context, req *oas.JellyfinSessionRequest) (jellyfin.Member, error) {
+	if req == nil {
+		return jellyfin.Member{}, fmt.Errorf("%w: provide either an access token or credentials", domain.ErrBadRequest)
+	}
+	hasToken := req.AccessToken.IsSet()
+	hasUser := req.Username.IsSet()
+	hasPassword := req.Password.IsSet()
+	if hasToken && (hasUser || hasPassword) {
+		return jellyfin.Member{}, fmt.Errorf("%w: cannot provide both an access token and credentials", domain.ErrBadRequest)
+	}
+	if !hasToken && !hasUser {
+		return jellyfin.Member{}, fmt.Errorf("%w: provide either an access token or credentials", domain.ErrBadRequest)
+	}
+	ip := remoteIP(ctx)
+	if hasToken {
+		return h.auth.LoginJellyfinToken(ctx, h.jellyfin, req.AccessToken.Value, ip)
+	}
+	return h.auth.LoginJellyfin(ctx, h.jellyfin, req.Username.Value, req.Password.Value, ip)
 }
 
 // JellyfinQuickConnectInitiate initiates a Quick Connect flow on Jellyfin.

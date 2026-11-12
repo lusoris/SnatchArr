@@ -5,12 +5,16 @@
 package jellyfin_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -480,14 +484,17 @@ func TestProvideAuthenticator_Disabled(t *testing.T) {
 	cfg := config.Default()
 	cfg.Jellyfin.Enabled = false
 
-	auth, err := jellyfin.ProvideAuthenticator(cfg)
+	auth, err := jellyfin.ProvideAuthenticator(cfg, nil)
 	if err != nil {
 		t.Fatalf("ProvideAuthenticator returned error: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	if _, err := auth.SignIn(ctx, "a", "b"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+	if _, err := auth.ByToken(ctx, "tok"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound from ByToken, got %v", err)
 	}
 	if _, err := auth.QuickConnectEnabled(ctx); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
@@ -503,5 +510,434 @@ func TestProvideAuthenticator_Disabled(t *testing.T) {
 	}
 	if _, err := auth.User(ctx, "u"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestProvideAuthenticator_TokenTransportPolicy(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name           string
+		profile        config.Profile
+		rawURL         string
+		wantAllowPlain bool
+		wantWarn       bool
+	}{
+		{
+			name:           "negative prod plain http logs warning and refuses plain token",
+			profile:        config.ProfileProd,
+			rawURL:         "http://jellyfin.local:8096",
+			wantAllowPlain: false,
+			wantWarn:       true,
+		},
+		{
+			name:           "positive prod https logs no warning",
+			profile:        config.ProfileProd,
+			rawURL:         "https://jellyfin.example.com",
+			wantAllowPlain: false,
+			wantWarn:       false,
+		},
+		{
+			name:           "positive dev plain http allows plain token without warning",
+			profile:        config.ProfileDev,
+			rawURL:         "http://jellyfin.local:8096",
+			wantAllowPlain: true,
+			wantWarn:       false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+			cfg := config.Default()
+			cfg.Profile = tc.profile
+			cfg.Jellyfin.Enabled = true
+			cfg.Jellyfin.URL = tc.rawURL
+			cfg.Jellyfin.APIKey = "svc-key"
+			cfg.Jellyfin.Timeout = 2 * time.Second
+
+			auth, err := jellyfin.ProvideAuthenticator(cfg, logger)
+			if err != nil {
+				t.Fatalf("ProvideAuthenticator() error = %v", err)
+			}
+			cl, ok := auth.(*jellyfin.Client)
+			if !ok {
+				t.Fatalf("ProvideAuthenticator() = %T, want *jellyfin.Client", auth)
+			}
+			if got := cl.AllowPlainHTTPToken(); got != tc.wantAllowPlain {
+				t.Fatalf("AllowPlainHTTPToken() = %v, want %v", got, tc.wantAllowPlain)
+			}
+			logged := strings.Contains(buf.String(), "jellyfin token sign-in refused: url is not https")
+			if logged != tc.wantWarn {
+				t.Fatalf("warn logged = %v (buf=%q), want %v", logged, buf.String(), tc.wantWarn)
+			}
+		})
+	}
+}
+
+func TestClient_ByToken(t *testing.T) {
+	t.Parallel()
+
+	const (
+		serviceKey = "service-admin-api-key"
+		userToken  = "secret-user-token-xyz987"
+	)
+
+	cases := []struct {
+		name           string
+		useTLS         bool
+		allowPlainHTTP bool
+		token          string
+		upstreamStatus int
+		memberAdmin    bool
+		memberDisabled bool
+		nilPolicy      bool
+		wantErr        error
+		wantHits       int32
+		wantAdmin      bool
+		wantDisabled   bool
+	}{
+		{
+			name:           "positive https valid token returns member with policy",
+			useTLS:         true,
+			token:          userToken,
+			upstreamStatus: http.StatusOK,
+			memberAdmin:    true,
+			memberDisabled: false,
+			wantHits:       1,
+			wantAdmin:      true,
+			wantDisabled:   false,
+		},
+		{
+			name:           "positive disabled user returned with Disabled true",
+			useTLS:         true,
+			token:          userToken,
+			upstreamStatus: http.StatusOK,
+			memberAdmin:    false,
+			memberDisabled: true,
+			wantHits:       1,
+			wantAdmin:      false,
+			wantDisabled:   true,
+		},
+		{
+			name:           "positive dev profile allows plain http base url",
+			useTLS:         false,
+			allowPlainHTTP: true,
+			token:          userToken,
+			upstreamStatus: http.StatusOK,
+			memberAdmin:    false,
+			memberDisabled: false,
+			wantHits:       1,
+		},
+		{
+			name:           "negative prod plain http base url refused before network call",
+			useTLS:         false,
+			allowPlainHTTP: false,
+			token:          userToken,
+			upstreamStatus: http.StatusOK,
+			wantErr:        domain.ErrForbidden,
+			wantHits:       0,
+		},
+		{
+			name:           "boundary empty token refused before network call",
+			useTLS:         true,
+			token:          "",
+			upstreamStatus: http.StatusOK,
+			wantErr:        domain.ErrBadRequest,
+			wantHits:       0,
+		},
+		{
+			name:           "boundary whitespace token refused before network call",
+			useTLS:         true,
+			token:          "   \t\n ",
+			upstreamStatus: http.StatusOK,
+			wantErr:        domain.ErrBadRequest,
+			wantHits:       0,
+		},
+		{
+			name:           "negative upstream 401 maps to ErrUnauthorized without leaking token",
+			useTLS:         true,
+			token:          userToken,
+			upstreamStatus: http.StatusUnauthorized,
+			wantErr:        domain.ErrUnauthorized,
+			wantHits:       1,
+		},
+		{
+			name:           "negative upstream 403 maps to ErrUnauthorized",
+			useTLS:         true,
+			token:          userToken,
+			upstreamStatus: http.StatusForbidden,
+			wantErr:        domain.ErrUnauthorized,
+			wantHits:       1,
+		},
+		{
+			name:           "negative upstream 404 maps to ErrUnauthorized",
+			useTLS:         true,
+			token:          userToken,
+			upstreamStatus: http.StatusNotFound,
+			wantErr:        domain.ErrUnauthorized,
+			wantHits:       1,
+		},
+		{
+			name:           "negative nil policy maps to ErrUnauthorized",
+			useTLS:         true,
+			token:          userToken,
+			upstreamStatus: http.StatusOK,
+			nilPolicy:      true,
+			wantErr:        domain.ErrUnauthorized,
+			wantHits:       1,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var hits atomic.Int32
+			var gotMeAuth, gotMePath, gotUserAuth string
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("/Users/Me", func(w http.ResponseWriter, r *http.Request) {
+				hits.Add(1)
+				gotMePath = r.URL.Path
+				gotMeAuth = r.Header.Get("Authorization")
+				if tc.upstreamStatus != http.StatusOK {
+					w.WriteHeader(tc.upstreamStatus)
+					_, _ = w.Write([]byte(`{"message":"token rejected"}`))
+					return
+				}
+				var policy any
+				if !tc.nilPolicy {
+					policy = map[string]any{
+						"IsAdministrator":   tc.memberAdmin,
+						"IsDisabled":        tc.memberDisabled,
+						"MaxParentalRating": 18,
+						"BlockedTags":       []string{"gore"},
+						"AllowedTags":       []string{"family"},
+						"EnableAllFolders":  false,
+						"EnabledFolders":    []string{"lib-movies"},
+					}
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"Id":     "jf-me-id-1",
+					"Name":   "Eve",
+					"Policy": policy,
+				})
+			})
+			mux.HandleFunc("/Users/jf-me-id-1", func(w http.ResponseWriter, r *http.Request) {
+				gotUserAuth = r.Header.Get("Authorization")
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"Id":   "jf-me-id-1",
+					"Name": "Eve",
+					"Policy": map[string]any{
+						"IsAdministrator": false,
+						"IsDisabled":      false,
+					},
+				})
+			})
+
+			var srv *httptest.Server
+			if tc.useTLS {
+				srv = httptest.NewTLSServer(mux)
+			} else {
+				srv = httptest.NewServer(mux)
+			}
+			t.Cleanup(srv.Close)
+
+			origClient := srv.Client()
+			cl, err := jellyfin.NewClient(srv.URL, serviceKey, 2*time.Second, "TestUA", origClient)
+			if err != nil {
+				t.Fatalf("NewClient() error = %v", err)
+			}
+			cl.SetAllowPlainHTTPToken(tc.allowPlainHTTP)
+
+			m, err := cl.ByToken(t.Context(), tc.token)
+			if gotHits := hits.Load(); gotHits != tc.wantHits {
+				t.Fatalf("server hits = %d, want %d (err=%v)", gotHits, tc.wantHits, err)
+			}
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("ByToken() err = %v, want %v", err, tc.wantErr)
+				}
+				if tc.token != "" && strings.TrimSpace(tc.token) != "" && strings.Contains(err.Error(), strings.TrimSpace(tc.token)) {
+					t.Fatalf("ByToken() error leaked user token: %q", err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ByToken() unexpected error = %v", err)
+			}
+			if origClient.CheckRedirect != nil {
+				t.Fatal("ByToken mutated shared http.Client CheckRedirect")
+			}
+			if gotMePath != "/Users/Me" {
+				t.Fatalf("path = %q, want /Users/Me", gotMePath)
+			}
+			if !strings.Contains(gotMeAuth, `Token="`+userToken+`"`) {
+				t.Fatalf("Authorization %q missing user token", gotMeAuth)
+			}
+			if strings.Contains(gotMeAuth, serviceKey) {
+				t.Fatalf("Authorization %q leaked service key", gotMeAuth)
+			}
+			if m.ID != "jf-me-id-1" || m.Name != "Eve" || m.Admin != tc.wantAdmin || m.Disabled != tc.wantDisabled {
+				t.Fatalf("Member = %+v, want ID=jf-me-id-1 Name=Eve Admin=%v Disabled=%v", m, tc.wantAdmin, tc.wantDisabled)
+			}
+			if m.Policy.MaxParentalRating == nil || *m.Policy.MaxParentalRating != 18 || len(m.Policy.EnabledFolders) != 1 || m.Policy.EnabledFolders[0] != "lib-movies" {
+				t.Fatalf("Member.Policy = %+v, want rating 18 and EnabledFolders=[lib-movies]", m.Policy)
+			}
+
+			// Service client must remain isolated from the user token.
+			if _, uErr := cl.User(t.Context(), "jf-me-id-1"); uErr != nil {
+				t.Fatalf("User() after ByToken error = %v", uErr)
+			}
+			if !strings.Contains(gotUserAuth, `Token="`+serviceKey+`"`) || strings.Contains(gotUserAuth, userToken) {
+				t.Fatalf("service User() auth header = %q, want service key only", gotUserAuth)
+			}
+		})
+	}
+}
+
+func TestClient_ByToken_Redirects(t *testing.T) {
+	t.Parallel()
+
+	const userToken = "redirect-check-token-999"
+
+	t.Run("negative https to plain http downgrade refused before contacting target", func(t *testing.T) {
+		t.Parallel()
+		var plainHits atomic.Int32
+		var plainAuth atomic.Value
+		plainTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			plainHits.Add(1)
+			plainAuth.Store(r.Header.Get("Authorization"))
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(plainTarget.Close)
+
+		tlsBase := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, plainTarget.URL+"/Users/Me", http.StatusTemporaryRedirect)
+		}))
+		t.Cleanup(tlsBase.Close)
+
+		cl, err := jellyfin.NewClient(tlsBase.URL, "svc-key", 2*time.Second, "TestUA", tlsBase.Client())
+		if err != nil {
+			t.Fatalf("NewClient() error = %v", err)
+		}
+
+		_, err = cl.ByToken(t.Context(), userToken)
+		if !errors.Is(err, domain.ErrUnreachable) {
+			t.Fatalf("ByToken() on scheme downgrade = %v, want ErrUnreachable", err)
+		}
+		if got := plainHits.Load(); got != 0 {
+			t.Fatalf("plain http redirect target hits = %d, want 0 (auth=%v)", got, plainAuth.Load())
+		}
+	})
+
+	t.Run("negative foreign host redirect refused and target never sees Authorization", func(t *testing.T) {
+		t.Parallel()
+		var foreignHits atomic.Int32
+		var foreignAuth atomic.Value
+		foreignSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			foreignHits.Add(1)
+			foreignAuth.Store(r.Header.Get("Authorization"))
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(foreignSrv.Close)
+
+		baseSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, foreignSrv.URL+"/Users/Me", http.StatusTemporaryRedirect)
+		}))
+		t.Cleanup(baseSrv.Close)
+
+		cl, err := jellyfin.NewClient(baseSrv.URL, "svc-key", 2*time.Second, "TestUA", baseSrv.Client())
+		if err != nil {
+			t.Fatalf("NewClient() error = %v", err)
+		}
+		cl.SetAllowPlainHTTPToken(true)
+
+		_, err = cl.ByToken(t.Context(), userToken)
+		if !errors.Is(err, domain.ErrUnreachable) {
+			t.Fatalf("ByToken() on foreign host redirect = %v, want ErrUnreachable", err)
+		}
+		if got := foreignHits.Load(); got != 0 {
+			t.Fatalf("foreign redirect target hits = %d, want 0", got)
+		}
+		if gotAuth, _ := foreignAuth.Load().(string); gotAuth != "" {
+			t.Fatalf("foreign target saw Authorization header: %q", gotAuth)
+		}
+	})
+
+	hopCases := []struct {
+		name     string
+		hops     int
+		wantErr  error
+		wantName string
+	}{
+		{
+			name:     "positive 1 same-host same-scheme redirect followed",
+			hops:     1,
+			wantName: "Hopper",
+		},
+		{
+			name:     "boundary 4 same-host redirects followed",
+			hops:     4,
+			wantName: "Hopper",
+		},
+		{
+			name:    "boundary 5 same-host redirects refused",
+			hops:    5,
+			wantErr: domain.ErrUnreachable,
+		},
+	}
+
+	for _, tc := range hopCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var finalAuth string
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				step, _ := strconv.Atoi(r.URL.Query().Get("hop"))
+				if step < tc.hops {
+					http.Redirect(w, r, "/Users/Me?hop="+strconv.Itoa(step+1), http.StatusTemporaryRedirect)
+					return
+				}
+				finalAuth = r.Header.Get("Authorization")
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"Id":   "jf-hop-id",
+					"Name": "Hopper",
+					"Policy": map[string]any{
+						"IsAdministrator": false,
+						"IsDisabled":      false,
+					},
+				})
+			}))
+			t.Cleanup(srv.Close)
+
+			cl, err := jellyfin.NewClient(srv.URL, "svc-key", 2*time.Second, "TestUA", srv.Client())
+			if err != nil {
+				t.Fatalf("NewClient() error = %v", err)
+			}
+
+			m, err := cl.ByToken(t.Context(), userToken)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("ByToken() with %d hops = %v, want %v", tc.hops, err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ByToken() with %d hops unexpected error = %v", tc.hops, err)
+			}
+			if m.Name != tc.wantName {
+				t.Fatalf("Member.Name = %q, want %q", m.Name, tc.wantName)
+			}
+			if !strings.Contains(finalAuth, `Token="`+userToken+`"`) {
+				t.Fatalf("final hop Authorization = %q, want user token", finalAuth)
+			}
+		})
 	}
 }

@@ -23,3 +23,8 @@ func (r *Revalidator) SetCache(subject string, role domain.Role, t time.Time) {
 	defer r.mu.Unlock()
 	r.cache[cacheKey(subject, role)] = t
 }
+
+// AllowPlainHTTPToken reports whether c permits ByToken over plain HTTP (primarily for tests).
+func (c *Client) AllowPlainHTTPToken() bool {
+	return c.allowPlainHTTPToken
+}
