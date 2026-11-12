@@ -644,8 +644,8 @@ func newByTokenTestServer(t *testing.T, tc clientByTokenCase) (*httptest.Server,
 	t.Helper()
 	state := &byTokenServerState{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/Users/Me", byTokenMeHandler(state, tc))
-	mux.HandleFunc("/Users/jf-me-id-1", byTokenUserHandler(state))
+	mux.HandleFunc("/Users/Me", byTokenMeHandler(t, state, tc))
+	mux.HandleFunc("/Users/jf-me-id-1", byTokenUserHandler(t, state))
 	if tc.useTLS {
 		srv := httptest.NewTLSServer(mux)
 		t.Cleanup(srv.Close)
@@ -656,20 +656,26 @@ func newByTokenTestServer(t *testing.T, tc clientByTokenCase) (*httptest.Server,
 	return srv, state
 }
 
-func byTokenMeHandler(state *byTokenServerState, tc clientByTokenCase) http.HandlerFunc {
+// byTokenMeHandler reports write failures with t.Errorf: it runs on the server goroutine, where t.Fatal is not allowed.
+func byTokenMeHandler(t *testing.T, state *byTokenServerState, tc clientByTokenCase) http.HandlerFunc {
+	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
 		state.hits.Add(1)
 		state.mePath = r.URL.Path
 		state.meAuth = r.Header.Get("Authorization")
 		if tc.upstreamStatus != http.StatusOK {
 			w.WriteHeader(tc.upstreamStatus)
-			_, _ = w.Write([]byte(`{"message":"token rejected"}`))
+			if _, err := w.Write([]byte(`{"message":"token rejected"}`)); err != nil {
+				t.Errorf("write /Users/Me rejection body: %v", err)
+			}
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"Id": "jf-me-id-1", "Name": "Eve", "Policy": byTokenPolicy(tc),
-		})
+		}); err != nil {
+			t.Errorf("encode /Users/Me body: %v", err)
+		}
 	}
 }
 
@@ -684,14 +690,17 @@ func byTokenPolicy(tc clientByTokenCase) any {
 	}
 }
 
-func byTokenUserHandler(state *byTokenServerState) http.HandlerFunc {
+func byTokenUserHandler(t *testing.T, state *byTokenServerState) http.HandlerFunc {
+	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
 		state.userAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"Id": "jf-me-id-1", "Name": "Eve",
 			"Policy": map[string]any{"IsAdministrator": false, "IsDisabled": false},
-		})
+		}); err != nil {
+			t.Errorf("encode /Users/jf-me-id-1 body: %v", err)
+		}
 	}
 }
 
@@ -840,7 +849,10 @@ func testTokenRedirectHop(t *testing.T, token string, tc tokenRedirectHopCase) {
 		}
 		finalAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "jf-hop-id", "Name": "Hopper", "Policy": map[string]any{"IsAdministrator": false, "IsDisabled": false}})
+		body := map[string]any{"Id": "jf-hop-id", "Name": "Hopper", "Policy": map[string]any{"IsAdministrator": false, "IsDisabled": false}}
+		if encErr := json.NewEncoder(w).Encode(body); encErr != nil {
+			t.Errorf("encode hop body: %v", encErr)
+		}
 	}))
 	t.Cleanup(srv.Close)
 	cl, err := jellyfin.NewClient(srv.URL, "svc-key", 2*time.Second, "TestUA", srv.Client())

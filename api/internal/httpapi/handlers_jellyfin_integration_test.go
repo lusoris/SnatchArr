@@ -921,7 +921,12 @@ func testTokenSessionRole(t *testing.T, defaultCfg config.JellyfinOptions, tc to
 			return jellyfin.Member{}, domain.ErrUnauthorized
 		}
 		return tc.member, nil
-	}, userFunc: func(_ context.Context, _ string) (jellyfin.Member, error) { return tc.member, nil }}
+	}, userFunc: func(_ context.Context, id string) (jellyfin.Member, error) {
+		if id != tc.member.ID {
+			t.Errorf("Jellyfin user lookup id = %q, want %q", id, tc.member.ID)
+		}
+		return tc.member, nil
+	}}
 	f := setupJellyfinFixture(t, cfg, fakeAuth)
 	req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(`{"access_token":"valid-user-token"}`))
 	req.Header.Set("Content-Type", "application/json")
