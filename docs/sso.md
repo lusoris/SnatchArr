@@ -9,7 +9,7 @@ SnatchArr supports three external sign-in mechanisms:
 
 1. **OpenID Connect (OIDC)**: Authorization code flow with PKCE S256 against identity providers like Authentik, Keycloak, Okta, or Google.
 2. **Trusted reverse-proxy authentication**: Pre-authenticated user identity asserted via a reverse-proxy HTTP header (Authelia, Authentik proxy outpost, Cloudflare Access, Tailscale).
-3. **Jellyfin authentication**: Direct credential sign-in and Quick Connect against a Jellyfin server ([ADR-0026](adr/0026-accounts-and-roles.md)).
+3. **Jellyfin authentication**: Direct credential sign-in, Quick Connect, and companion-plugin access-token exchange against a Jellyfin server ([ADR-0026](adr/0026-accounts-and-roles.md), [ADR-0028](adr/0028-jellyfin-plugin.md), [ADR-0035](adr/0035-jellyfin-integration.md)).
 
 Both modes resolve a role from the identity's groups ([ADR-0023](adr/0023-sso-viewer-role.md), [ADR-0026](adr/0026-accounts-and-roles.md), `sso.ResolveRole` in `api/internal/sso/role.go`):
 
@@ -148,10 +148,11 @@ To prevent unauthorized access when using proxy authentication:
 
 ## Jellyfin sign-in
 
-SnatchArr supports Jellyfin authentication via user credentials or Quick Connect ([ADR-0026](adr/0026-accounts-and-roles.md)):
+SnatchArr supports three Jellyfin sign-in paths ([ADR-0026](adr/0026-accounts-and-roles.md), [ADR-0028](adr/0028-jellyfin-plugin.md), [ADR-0035](adr/0035-jellyfin-integration.md)):
 
-1. **Credential sign-in**: `POST /api/v1/auth/jellyfin` authenticates against Jellyfin's `/Users/AuthenticateByName`.
+1. **Credential sign-in**: `POST /api/v1/auth/jellyfin` with `username` and `password` authenticates against Jellyfin's `/Users/AuthenticateByName`.
 2. **Quick Connect**: `POST /api/v1/auth/jellyfin/quickconnect/initiate` initiates an authorization code flow displayed in the Jellyfin client, and `POST /api/v1/auth/jellyfin/quickconnect/authenticate` completes authentication once approved on the Jellyfin server.
+3. **Access-token exchange (companion plugin)**: `POST /api/v1/auth/jellyfin` with `access_token` verifies the signed-in user's Jellyfin token directly against Jellyfin's `GET /Users/Me` (`jellyfin.Client.ByToken` in `api/internal/jellyfin/client.go`), maps the returned user and policy under the same rules below, and issues a standard `snatcharr_session` cookie and CSRF token. Incoming identity headers (such as `X-Jellyfin-User-Id` or `X-Emby-UserId`) are ignored. Cross-scheme and cross-host HTTP redirects are refused (`502`). In the default `prod` profile (`APP_SNATCHARR_PROFILE=prod`), token exchange requires an `https://` `APP_SNATCHARR_JELLYFIN_URL` and refuses plain `http://` URLs with `403` before any network call (while credential sign-in and Quick Connect continue to work over `http://`). Local deployments without TLS run under `APP_SNATCHARR_PROFILE=dev`, matching `APP_SNATCHARR_OIDC_ISSUER_URL`.
 
 ### Role mapping and user provisioning
 
@@ -165,7 +166,7 @@ SnatchArr supports Jellyfin authentication via user credentials or Quick Connect
 | Environment variable | Helm value | Default | Description |
 | --- | --- | --- | --- |
 | `APP_SNATCHARR_JELLYFIN_ENABLED` | `jellyfin.enabled` | `false` | Enable Jellyfin authentication. |
-| `APP_SNATCHARR_JELLYFIN_URL` | `jellyfin.url` | | Base URL of the Jellyfin server (e.g. `http://jellyfin:8096`). Must be absolute http/https with host. |
+| `APP_SNATCHARR_JELLYFIN_URL` | `jellyfin.url` | | Base URL of the Jellyfin server (e.g. `https://jellyfin.example.com` or `http://jellyfin:8096`). Must be absolute http/https with host; access-token exchange requires `https://` in `prod` (`http://` allowed in `APP_SNATCHARR_PROFILE=dev`). |
 | `APP_SNATCHARR_JELLYFIN_API_KEY` | via `jellyfin.existingSecret` or `jellyfin.secretKeyRef` | | Jellyfin server API key for querying Quick Connect state and user policies. |
 | `APP_SNATCHARR_JELLYFIN_TIMEOUT` | `jellyfin.timeout` | `10s` | Request timeout for communication with Jellyfin. |
 | `APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE` | `jellyfin.defaultRole` | `requester` | Role for non-admin Jellyfin users on first sign-in (`requester` or `viewer`). |

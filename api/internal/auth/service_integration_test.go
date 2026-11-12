@@ -654,12 +654,20 @@ func TestExternalUsername_Boundary(t *testing.T) {
 }
 
 type fakeJellyfinAuth struct {
-	signInFunc func(ctx context.Context, user, pw string) (jellyfin.Member, error)
+	signInFunc  func(ctx context.Context, user, pw string) (jellyfin.Member, error)
+	byTokenFunc func(ctx context.Context, token string) (jellyfin.Member, error)
 }
 
 func (f *fakeJellyfinAuth) SignIn(ctx context.Context, user, pw string) (jellyfin.Member, error) {
 	if f.signInFunc != nil {
 		return f.signInFunc(ctx, user, pw)
+	}
+	return jellyfin.Member{}, domain.ErrUnauthorized
+}
+
+func (f *fakeJellyfinAuth) ByToken(ctx context.Context, token string) (jellyfin.Member, error) {
+	if f.byTokenFunc != nil {
+		return f.byTokenFunc(ctx, token)
 	}
 	return jellyfin.Member{}, domain.ErrUnauthorized
 }
@@ -825,6 +833,136 @@ func TestLoginJellyfin_NonAuthErrorDoesNotLockOut(t *testing.T) {
 
 	if _, err := svc.LoginJellyfin(ctx, authMock, username, "secret", clientIP); err != nil {
 		t.Fatalf("LoginJellyfin with correct credentials after upstream errors = %v, want success", err)
+	}
+}
+
+func TestLoginJellyfinToken_LockoutAndStatus(t *testing.T) {
+	t.Parallel()
+	svc, clk, authMock := newTokenLockoutService(t)
+	testTokenLockoutBoundary(t, svc, authMock)
+	testTokenLockoutCooldown(t, svc, clk, authMock)
+	testTokenLockoutEmptyIP(t, svc, authMock)
+	testTokenLockoutDisabledMember(t, svc, authMock)
+	testTokenLockoutForbidden(t, svc, authMock)
+}
+
+const (
+	validJellyfinToken = "valid-jf-access-token-abc"
+	badJellyfinToken   = "bad-jf-access-token-xyz"
+
+	// tokenLockoutTimeout bounds every store-backed call in the token lockout helpers.
+	tokenLockoutTimeout = 15 * time.Second
+)
+
+func newTokenLockoutService(t *testing.T) (*auth.Service, *clockwork.FakeClock, *fakeJellyfinAuth) {
+	t.Helper()
+	svc, clk := newServiceWithClock(t)
+	ctx, cancel := context.WithTimeout(t.Context(), tokenLockoutTimeout)
+	defer cancel()
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	return svc, clk, &fakeJellyfinAuth{byTokenFunc: tokenLockoutMember}
+}
+
+func tokenLockoutMember(_ context.Context, token string) (jellyfin.Member, error) {
+	switch token {
+	case validJellyfinToken:
+		return jellyfin.Member{ID: "jf-tok-bob", Name: "bob"}, nil
+	case "disabled-tok":
+		return jellyfin.Member{ID: "jf-tok-dis", Name: "dis", Disabled: true}, nil
+	case "forbidden-tok":
+		return jellyfin.Member{}, domain.ErrForbidden
+	default:
+		return jellyfin.Member{}, domain.ErrUnauthorized
+	}
+}
+
+func testTokenLockoutBoundary(t *testing.T, svc *auth.Service, authMock *fakeJellyfinAuth) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), tokenLockoutTimeout)
+	defer cancel()
+	for i := 1; i < auth.LockoutMaxFails; i++ {
+		_, err := svc.LoginJellyfinToken(ctx, authMock, badJellyfinToken, "198.51.100.41")
+		if !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("ip1 fail %d: err = %v, want ErrUnauthorized", i, err)
+		}
+		if strings.Contains(err.Error(), badJellyfinToken) {
+			t.Fatalf("error leaked raw token: %q", err.Error())
+		}
+	}
+	m, err := svc.LoginJellyfinToken(ctx, authMock, validJellyfinToken, "198.51.100.41")
+	if err != nil || m.ID != "jf-tok-bob" {
+		t.Fatalf("LoginJellyfinToken after %d fails = (%+v, %v), want jf-tok-bob", auth.LockoutMaxFails-1, m, err)
+	}
+}
+
+func testTokenLockoutCooldown(t *testing.T, svc *auth.Service, clk *clockwork.FakeClock, authMock *fakeJellyfinAuth) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), tokenLockoutTimeout)
+	defer cancel()
+	const clientIP = "198.51.100.42"
+	for i := 1; i <= auth.LockoutMaxFails; i++ {
+		if _, err := svc.LoginJellyfinToken(ctx, authMock, badJellyfinToken, clientIP); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("ip2 fail %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+	if _, err := svc.LoginJellyfinToken(ctx, authMock, validJellyfinToken, clientIP); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("LoginJellyfinToken on locked ip2 = %v, want ErrTooManyRequests", err)
+	}
+	if _, err := svc.LoginJellyfinToken(ctx, authMock, validJellyfinToken, "198.51.100.43"); err != nil {
+		t.Fatalf("LoginJellyfinToken on clean ip3 while ip2 locked = %v, want nil (no global lockout)", err)
+	}
+	clk.Advance(auth.LockoutCooldown + time.Second)
+	if _, err := svc.LoginJellyfinToken(ctx, authMock, validJellyfinToken, clientIP); err != nil {
+		t.Fatalf("LoginJellyfinToken on ip2 after cooldown = %v, want nil", err)
+	}
+}
+
+func testTokenLockoutEmptyIP(t *testing.T, svc *auth.Service, authMock *fakeJellyfinAuth) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), tokenLockoutTimeout)
+	defer cancel()
+	for i := 1; i <= auth.LockoutMaxFails+3; i++ {
+		ipArg := ""
+		if i%2 == 0 {
+			ipArg = "   "
+		}
+		if _, err := svc.LoginJellyfinToken(ctx, authMock, badJellyfinToken, ipArg); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("empty ip attempt %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+	if _, err := svc.LoginJellyfinToken(ctx, authMock, validJellyfinToken, ""); err != nil {
+		t.Fatalf("LoginJellyfinToken with empty ip after >MaxFails bad attempts = %v, want nil", err)
+	}
+}
+
+func testTokenLockoutDisabledMember(t *testing.T, svc *auth.Service, authMock *fakeJellyfinAuth) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), tokenLockoutTimeout)
+	defer cancel()
+	for i := 1; i <= auth.LockoutMaxFails; i++ {
+		_, err := svc.LoginJellyfinToken(ctx, authMock, "disabled-tok", "198.51.100.44")
+		if !errors.Is(err, domain.ErrUnauthorized) || !errors.Is(err, auth.ErrMemberDisabled) {
+			t.Fatalf("disabled attempt %d: err = %v, want ErrUnauthorized + ErrMemberDisabled", i, err)
+		}
+	}
+	if _, err := svc.LoginJellyfinToken(ctx, authMock, validJellyfinToken, "198.51.100.44"); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("ipDis after disabled failures = %v, want ErrTooManyRequests", err)
+	}
+}
+
+func testTokenLockoutForbidden(t *testing.T, svc *auth.Service, authMock *fakeJellyfinAuth) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), tokenLockoutTimeout)
+	defer cancel()
+	for i := 1; i <= auth.LockoutMaxFails+2; i++ {
+		if _, err := svc.LoginJellyfinToken(ctx, authMock, "forbidden-tok", "198.51.100.45"); !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("forbidden attempt %d: err = %v, want ErrForbidden", i, err)
+		}
+	}
+	if _, err := svc.LoginJellyfinToken(ctx, authMock, validJellyfinToken, "198.51.100.45"); err != nil {
+		t.Fatalf("LoginJellyfinToken after ErrForbidden attempts = %v, want nil", err)
 	}
 }
 

@@ -27,6 +27,10 @@ func (m *mockAuthenticator) SignIn(context.Context, string, string) (jellyfin.Me
 	return jellyfin.Member{}, domain.ErrNotFound
 }
 
+func (m *mockAuthenticator) ByToken(context.Context, string) (jellyfin.Member, error) {
+	return jellyfin.Member{}, domain.ErrNotFound
+}
+
 func (m *mockAuthenticator) QuickConnectEnabled(context.Context) (bool, error) {
 	return false, domain.ErrNotFound
 }

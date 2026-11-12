@@ -3921,6 +3921,14 @@ func (s *ItemSearchRequest) SetGroupID(val OptInt64) {
 	s.GroupID = val
 }
 
+type JellyfinLoginBadRequest ProblemStatusCode
+
+func (*JellyfinLoginBadRequest) jellyfinLoginRes() {}
+
+type JellyfinLoginForbidden ProblemStatusCode
+
+func (*JellyfinLoginForbidden) jellyfinLoginRes() {}
+
 // Ref: #/components/schemas/JellyfinLoginRequest
 type JellyfinLoginRequest struct {
 	Username string `json:"username"`
@@ -3946,6 +3954,18 @@ func (s *JellyfinLoginRequest) SetUsername(val string) {
 func (s *JellyfinLoginRequest) SetPassword(val string) {
 	s.Password = val
 }
+
+type JellyfinLoginTooManyRequests ProblemStatusCode
+
+func (*JellyfinLoginTooManyRequests) jellyfinLoginRes() {}
+
+type JellyfinLoginUnauthorized ProblemStatusCode
+
+func (*JellyfinLoginUnauthorized) jellyfinLoginRes() {}
+
+type JellyfinLoginUnprocessableEntity ProblemStatusCode
+
+func (*JellyfinLoginUnprocessableEntity) jellyfinLoginRes() {}
 
 // Ref: #/components/schemas/JellyfinQuickConnect
 type JellyfinQuickConnect struct {
@@ -3986,6 +4006,44 @@ func (s *JellyfinQuickConnectAuthenticateRequest) GetSecret() string {
 // SetSecret sets the value of Secret.
 func (s *JellyfinQuickConnectAuthenticateRequest) SetSecret(val string) {
 	s.Secret = val
+}
+
+// Ref: #/components/schemas/JellyfinSessionRequest
+type JellyfinSessionRequest struct {
+	Username OptString `json:"username"`
+	Password OptString `json:"password"`
+	// Jellyfin access token of the signed-in user; never logged.
+	AccessToken OptString `json:"access_token"`
+}
+
+// GetUsername returns the value of Username.
+func (s *JellyfinSessionRequest) GetUsername() OptString {
+	return s.Username
+}
+
+// GetPassword returns the value of Password.
+func (s *JellyfinSessionRequest) GetPassword() OptString {
+	return s.Password
+}
+
+// GetAccessToken returns the value of AccessToken.
+func (s *JellyfinSessionRequest) GetAccessToken() OptString {
+	return s.AccessToken
+}
+
+// SetUsername sets the value of Username.
+func (s *JellyfinSessionRequest) SetUsername(val OptString) {
+	s.Username = val
+}
+
+// SetPassword sets the value of Password.
+func (s *JellyfinSessionRequest) SetPassword(val OptString) {
+	s.Password = val
+}
+
+// SetAccessToken sets the value of AccessToken.
+func (s *JellyfinSessionRequest) SetAccessToken(val OptString) {
+	s.AccessToken = val
 }
 
 type LinkJellyfinIdentityConflict ProblemStatusCode
@@ -7285,7 +7343,6 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 }
 
 func (*ProblemStatusCode) deleteInstanceRes() {}
-func (*ProblemStatusCode) jellyfinLoginRes()  {}
 func (*ProblemStatusCode) listAPIKeysRes()    {}
 func (*ProblemStatusCode) listIdentitiesRes() {}
 func (*ProblemStatusCode) loginRes()          {}

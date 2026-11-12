@@ -222,6 +222,55 @@ func (s *Service) LoginJellyfin(ctx context.Context, a jellyfin.Authenticator, u
 	return m, nil
 }
 
+// LoginJellyfinToken verifies a Jellyfin access token via GET /Users/Me and enforces IP lockout on "ip:"+ip.
+func (s *Service) LoginJellyfinToken(ctx context.Context, a jellyfin.Authenticator, token, clientIP string) (jellyfin.Member, error) {
+	ip := strings.TrimSpace(clientIP)
+	var ipKey string
+	if ip != "" {
+		ipKey = "ip:" + ip
+	}
+	if err := s.checkIPLockout(ctx, ipKey, ip); err != nil {
+		return jellyfin.Member{}, err
+	}
+	m, err := a.ByToken(ctx, token)
+	if err != nil {
+		if errors.Is(err, domain.ErrUnauthorized) {
+			s.recordIPFailure(ctx, ipKey)
+			s.logger.InfoContext(ctx, "auth: jellyfin token login rejected", slog.String("ip", ip))
+			return jellyfin.Member{}, fmt.Errorf("%w: invalid jellyfin token", domain.ErrUnauthorized)
+		}
+		return jellyfin.Member{}, fmt.Errorf("auth: jellyfin token sign-in: %w", err)
+	}
+	if m.Disabled {
+		s.recordIPFailure(ctx, ipKey)
+		s.logger.InfoContext(ctx, "auth: jellyfin token login rejected: user disabled", slog.String("subject", m.ID), slog.String("ip", ip))
+		return jellyfin.Member{}, fmt.Errorf("%w: %w", domain.ErrUnauthorized, ErrMemberDisabled)
+	}
+	return m, nil
+}
+
+func (s *Service) checkIPLockout(ctx context.Context, ipKey, ip string) error {
+	if ipKey == "" {
+		return nil
+	}
+	if err := s.checkKey(ctx, ipKey); err != nil {
+		if errors.Is(err, domain.ErrTooManyRequests) {
+			s.logger.WarnContext(ctx, "auth: login locked", slog.String("ip", ip))
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *Service) recordIPFailure(ctx context.Context, ipKey string) {
+	if ipKey == "" {
+		return
+	}
+	if err := s.lockout.Fail(ctx, ipKey); err != nil {
+		s.logger.WarnContext(ctx, "auth: record failure failed", slog.String("key", ipKey), slog.String("error", err.Error()))
+	}
+}
+
 func (s *Service) checkLockout(ctx context.Context, userKey, ipKey, username, ip string) error {
 	if err := s.checkKey(ctx, userKey); err != nil {
 		if errors.Is(err, domain.ErrTooManyRequests) {
