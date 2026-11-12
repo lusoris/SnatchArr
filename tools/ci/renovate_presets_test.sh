@@ -167,24 +167,30 @@ expect_preset_case "baseline-pass" 0 "renovate_presets: ok (renovate=44.234.0, h
   '{"extends":["config:recommended"]}'
 
 # 2. Override & redirect keys (all exit 3).
-expect_preset_case "override-datasource" 3 "packageRules[0]: key 'overrideDatasource'" \
+expect_preset_case "override-datasource" 3 "packageRules[0]: key 'overrideDatasource' is not allowed on a Docker-reachable rule" \
   '{"packageRules":[{"matchDatasources":["docker"],"overrideDatasource":"npm"}]}'
-expect_preset_case "override-package-name-unscoped" 3 "packageRules[0]: key 'overridePackageName'" \
+expect_preset_case "override-package-name-unscoped" 3 "packageRules[0]: key 'overridePackageName' is not allowed on a Docker-reachable rule" \
   '{"packageRules":[{"overridePackageName":"x"}]}'
-expect_preset_case "rule-registry-urls" 3 "packageRules[0]: key 'registryUrls'" \
+expect_preset_case "rule-registry-urls" 3 "packageRules[0]: key 'registryUrls' is not allowed on a Docker-reachable rule" \
   '{"packageRules":[{"registryUrls":["https://ghcr.io"]}]}'
-expect_preset_case "top-registry-aliases" 3 "top-level key 'registryAliases'" \
+expect_preset_case "top-registry-aliases" 3 "top-level key 'registryAliases' is not allowed" \
   '{"registryAliases":{"a":"b"}}'
 
 # 3. enabled: false refusals (all exit 3).
-expect_preset_case "disable-docker-datasource" 3 "packageRules[0]: key 'enabled' is false" \
+expect_preset_case "disable-docker-datasource" 3 "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
   '{"packageRules":[{"matchDatasources":["docker"],"enabled":false}]}'
-expect_preset_case "disable-nonliteral-datasource" 3 "packageRules[0]: key 'enabled' is false" \
+expect_preset_case "disable-nonliteral-datasource" 3 "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
   '{"packageRules":[{"matchDatasources":["!npm"],"enabled":false}]}'
-expect_preset_case "disable-dockerfile-manager" 3 "packageRules[0]: key 'enabled' is false" \
+expect_preset_case "disable-dockerfile-manager" 3 "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
   '{"packageRules":[{"matchManagers":["dockerfile"],"enabled":false}]}'
-expect_preset_case "disable-stage-deptype" 3 "packageRules[0]: key 'enabled' is false" \
+expect_preset_case "disable-stage-deptype" 3 "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
   '{"packageRules":[{"matchDepTypes":["stage"],"enabled":false}]}'
+expect_preset_case "disable-mixed-datasource" 3 "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
+  '{"packageRules":[{"matchDatasources":["npm","docker"],"enabled":false}]}'
+expect_preset_case "disable-mixed-manager" 3 "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
+  '{"packageRules":[{"matchManagers":["npm","dockerfile"],"enabled":false}]}'
+expect_preset_case "disable-mixed-deptype" 3 "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
+  '{"packageRules":[{"matchDepTypes":["github-runner","stage"],"enabled":false}]}'
 expect_preset_case "top-enabled-false" 3 "top-level key 'enabled' is false" \
   '{"enabled":false}'
 
@@ -199,7 +205,7 @@ write_base_repo "$REPO_DEPTYPE" '{
   }]
 }'
 expect_preset_case "disable-deptype-used-by-repo-docker-mgr" 3 \
-  "packageRules[0]: key 'enabled' is false" \
+  "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
   '{"packageRules":[{"matchDepTypes":["github-runner"],"enabled":false}]}' \
   "{}" "$REPO_DEPTYPE"
 
@@ -214,7 +220,7 @@ write_base_repo "$REPO_DYN_DEPTYPE" '{
   }]
 }'
 expect_preset_case "disable-deptype-with-templated-repo-mgr" 3 \
-  "packageRules[0]: key 'enabled' is false" \
+  "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
   '{"packageRules":[{"matchDepTypes":["github-runner"],"enabled":false}]}' \
   "{}" "$REPO_DYN_DEPTYPE"
 
@@ -237,20 +243,20 @@ expect_preset_case "preset-cm-github-tags-pass" 0 "renovate_presets: ok" \
   '{"customManagers":[{"customType":"regex","managerFilePatterns":["a"],"matchStrings":["(?<depName>x)"],"datasourceTemplate":"github-tags"}]}'
 
 # 6. Disallowed preset forms & ignorePresets.
-expect_preset_case "preset-form-other-github" 3 "non-built-in preset 'github>someone/else'" \
+expect_preset_case "preset-form-other-github" 3 "non-built-in preset 'github>someone/else' is refused" \
   '{"extends":["github>someone/else"]}'
-expect_preset_case "preset-form-local" 3 "non-built-in preset 'local>x/y'" \
+expect_preset_case "preset-form-local" 3 "non-built-in preset 'local>x/y' is refused" \
   '{"extends":["local>x/y"]}'
-expect_preset_case "preset-form-parameterized" 3 "templated or parameterized preset 'config:recommended(a)'" \
+expect_preset_case "preset-form-parameterized" 3 "templated or parameterized preset 'config:recommended(a)' is refused" \
   '{"extends":["config:recommended(a)"]}'
-expect_preset_case "preset-form-template" 3 "templated or parameterized preset '{{x}}'" \
+expect_preset_case "preset-form-template" 3 "templated or parameterized preset '{{x}}' is refused" \
   '{"extends":["{{x}}"]}'
 expect_preset_case "preset-form-missing" 3 "unresolved preset 'group:missing'" \
   '{"extends":["group:missing"]}'
 
 REPO_IGNORE_PRESETS="$work/repo-ignore-presets"
 write_base_repo "$REPO_IGNORE_PRESETS" '{"ignorePresets":[":prHourlyLimit2"]}'
-expect_preset_case "repo-ignore-presets" 3 "renovate.json: key 'ignorePresets'" \
+expect_preset_case "repo-ignore-presets" 3 "renovate.json: key 'ignorePresets' at ignorePresets is refused" \
   '{"description":"ok"}' "{}" "$REPO_IGNORE_PRESETS"
 
 expect_preset_case "preset-ignore-presets" 3 "key 'ignorePresets' at ignorePresets is refused" \
@@ -261,23 +267,63 @@ expect_preset_case "unknown-top-key" 3 "unknown top-level key 'mysteryTopOption'
   '{"mysteryTopOption":true}'
 expect_preset_case "unknown-rule-key" 3 "packageRules[0]: unknown rule key 'mysteryRuleOption'" \
   '{"packageRules":[{"mysteryRuleOption":1}]}'
-expect_preset_case "top-docker-manager-block" 3 "top-level Docker-capable manager block 'dockerfile'" \
+expect_preset_case "top-docker-manager-block" 3 "top-level Docker-capable manager block 'dockerfile' is not allowed" \
   '{"dockerfile":{"enabled":false}}'
-expect_preset_case "top-enabled-managers" 3 "top-level key 'enabledManagers'" \
+expect_preset_case "top-enabled-managers" 3 "top-level key 'enabledManagers' is not allowed" \
   '{"enabledManagers":["npm"]}'
 
 # 8. Nested extends inside packageRules and disallowed nested extends.
-expect_preset_case "nested-rule-extends-refused" 3 "packageRules[0]: key 'enabled' is false" \
+expect_preset_case "nested-rule-extends-refused" 3 "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
   '{"packageRules":[{"extends":["monorepo:x"]}]}' \
   '{"monorepo":{"x":{"matchDatasources":["docker"],"enabled":false}}}'
-expect_preset_case "nested-extends-outside-rules" 3 "key 'extends' at vulnerabilityAlerts.extends" \
+expect_preset_case "chained-rule-preset-extends-refused" 3 \
+  "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
+  '{"packageRules":[{"extends":["grp:a"]}]}' \
+  '{"grp":{"a":{"extends":["grp:b"]},"b":{"matchDatasources":["docker"],"enabled":false}}}'
+expect_preset_case "chained-rule-preset-extends-pass" 0 \
+  "excluded=1 (datasource=1)" \
+  '{"packageRules":[{"extends":["grp:a"]}]}' \
+  '{"grp":{"a":{"extends":["grp:b"]},"b":{"matchDatasources":["maven"],"enabled":false}}}'
+expect_preset_case "rule-union-keeps-docker" 3 \
+  "packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
+  '{"packageRules":[{"extends":["grp:d"],"matchDatasources":["npm"],"enabled":false}]}' \
+  '{"grp":{"d":{"matchDatasources":["docker"]}}}'
+expect_preset_case "rule-union-non-docker-pass" 0 \
+  "excluded=1 (datasource=1)" \
+  '{"packageRules":[{"extends":["grp:n"],"matchDatasources":["npm"],"enabled":false}]}' \
+  '{"grp":{"n":{"matchDatasources":["maven"]}}}'
+expect_preset_case "nested-extends-outside-rules" 3 "key 'extends' at vulnerabilityAlerts.extends is outside allowed contexts" \
   '{"vulnerabilityAlerts":{"extends":["config:recommended"]}}'
+
+REPO_RULE_EXTENDS="$work/repo-rule-extends"
+write_base_repo "$REPO_RULE_EXTENDS" '{"packageRules":[{"matchPackageNames":["x"],"extends":["monorepo:bad"]}]}'
+expect_preset_case "repo-rule-extends-refused" 3 \
+  "renovate.json packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
+  '{"extends":["config:recommended"]}' \
+  '{"monorepo":{"bad":{"matchDatasources":["docker"],"enabled":false}}}' \
+  "$REPO_RULE_EXTENDS"
+
+REPO_RULE_EXTENDS_CLEAN="$work/repo-rule-extends-clean"
+write_base_repo "$REPO_RULE_EXTENDS_CLEAN" '{"packageRules":[{"matchPackageNames":["x"],"extends":["monorepo:clean"]}]}'
+expect_preset_case "repo-rule-extends-pass" 0 \
+  "renovate_presets: ok" \
+  '{"extends":["config:recommended"]}' \
+  "{}" \
+  "$REPO_RULE_EXTENDS_CLEAN"
+
+REPO_RULE_EXTENDS_EXCLUDED="$work/repo-rule-extends-excluded"
+write_base_repo "$REPO_RULE_EXTENDS_EXCLUDED" '{"packageRules":[{"matchPackageNames":["x"],"extends":["grp:non-docker"]}]}'
+expect_preset_case "repo-rule-extends-excluded" 0 \
+  "excluded=1 (datasource=1)" \
+  '{"extends":["config:recommended"]}' \
+  '{"grp":{"non-docker":{"matchDatasources":["maven"],"enabled":false}}}' \
+  "$REPO_RULE_EXTENDS_EXCLUDED"
 
 # 9. Cycle safety & MAX_PRESETS cap.
 expect_preset_case "cycle-clean" 0 "renovate_presets: ok" \
   '{"extends":["cyc:a"]}' \
   '{"cyc":{"a":{"extends":["cyc:b"]},"b":{"extends":["cyc:a"]}}}'
-expect_preset_case "cycle-refused" 3 "cyc:b packageRules[0]: key 'enabled' is false" \
+expect_preset_case "cycle-refused" 3 "cyc:b packageRules[0]: key 'enabled' is false on a Docker-reachable rule" \
   '{"extends":["cyc:a"]}' \
   '{"cyc":{"a":{"extends":["cyc:b"]},"b":{"extends":["cyc:a"],"packageRules":[{"matchDatasources":["docker"],"enabled":false}]}}}'
 
