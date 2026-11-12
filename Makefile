@@ -252,7 +252,7 @@ worker-cover: ## cargo-llvm-cov line coverage gate for the Rust workspace
 # ── end-to-end smoke (#19) ────────────────────────────────────────────────────
 E2E_BIN := api/tmp/e2e
 # The Postgres the integration tests pin (storetest), through the Docker Hub mirror.
-E2E_POSTGRES ?= mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+E2E_POSTGRES ?= mirror.gcr.io/library/postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
 E2E_API_IMAGE ?= snatcharr-api:e2e
 E2E_WORKER_IMAGE ?= snatcharr-worker:e2e
 e2e-smoke: ## Postgres + api + two workers + fakearr end to end (needs Docker unless SMOKE_DSN is set)
@@ -676,7 +676,7 @@ roadmap-check: ## docs/roadmap.md milestone table shape (offline) and the schedu
 	python3 -I tools/ci/roadmap_render.py --check-shape
 	sh tools/ci/roadmap_test.sh
 
-workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons, the devcontainer engine pin and the release pull request body, against their cases
+workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons, the devcontainer engine pin, one digest per image tag and the release pull request body, against their cases
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/squash_merge_test.sh
@@ -694,6 +694,9 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/download_retry_check.py
 	bash tools/ci/engine_pin_check_test.sh
 	python3 -I tools/ci/engine_pin_check.py
+	bash tools/ci/image_pin_check_test.sh
+	python3 -I tools/ci/image_pin_check.py
+	python3 -I tools/ci/image_pin_check.py --index
 	bash tools/ci/release_body_check_test.sh
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test

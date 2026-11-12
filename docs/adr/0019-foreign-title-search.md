@@ -3,6 +3,7 @@
 SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
+<!-- image-pin-check: record (the verified image pins below; tools/ci/image_pin_check.py compares them only with the other record files) -->
 
 # ADR-0019: Foreign-title search and release push without proxy indexers
 

@@ -7,7 +7,7 @@
 # container on exit (HISS-19).
 set -euo pipefail
 
-: "${E2E_POSTGRES:=mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873}"
+: "${E2E_POSTGRES:=mirror.gcr.io/library/postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5}"
 
 if [ -z "${SMOKE_DSN:-}" ]; then
     cid=$(docker run -d --rm -e POSTGRES_PASSWORD=smoke -p 127.0.0.1::5432 "$E2E_POSTGRES")

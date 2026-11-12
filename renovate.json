@@ -501,6 +501,31 @@
         "cordanaLLM/praetor/**"
       ],
       "enabled": false
+    },
+    {
+      "description": "The Docker datasource dates tags only on Docker Hub, so the mirror.gcr.io Postgres pins never aged past minimumReleaseAge and every branch dropped them while the storetest pin moved alone (#1068). mirror.gcr.io serves the Docker Hub library images under their Docker Hub digests, so these pins look up Docker Hub and age with the storetest pin; the files keep the mirror name",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "mirror.gcr.io/library/postgres"
+      ],
+      "overridePackageName": "postgres"
+    },
+    {
+      "description": "The Postgres pins of the tests and CI move in one pull request: tools/ci/image_pin_check.py refuses one image tag pinned to two digests. It sets no automerge: a group branch automerges only when every update in it does, and the rule for custom manager pins keeps the storetest and end-to-end pins merged by hand",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchManagers": [
+        "custom.regex",
+        "github-actions"
+      ],
+      "matchDepNames": [
+        "postgres",
+        "mirror.gcr.io/library/postgres"
+      ],
+      "groupName": "postgres test images"
     }
   ],
   "platformCommit": "enabled",
