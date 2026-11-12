@@ -130,10 +130,41 @@ check_exceptions() {
   done
 }
 
+# check_hook_floor RUFF: reads floor=NN from .config/lefthook/python.sh and holds every
+# Python script lefthook starts through python.sh (plus sibling imports) to Python 3.NN syntax.
+check_hook_floor() {
+  hook_files="$(python3 -I "$HERE/hook_python_files.py" .)" || {
+    echo "error: hook_python_files.py failed" >&2
+    exit 1
+  }
+  python_sh=".config/lefthook/python.sh"
+  if [ -z "$hook_files" ] && [ ! -f "$python_sh" ]; then
+    return 0
+  fi
+  if [ ! -f "$python_sh" ]; then
+    echo "error: $python_sh: missing hook Python wrapper" >&2
+    exit 1
+  fi
+  floor="$(sed -n 's/^floor=\([^#[:space:]]*\).*/\1/p' "$python_sh")"
+  case "$floor" in
+    '' | *[!0-9]*)
+      echo "error: $python_sh: missing or non-numeric floor=NN" >&2
+      exit 1
+      ;;
+  esac
+  [ -n "$hook_files" ] || return 0
+  if ! printf '%s\n' "$hook_files" | tr '\n' '\0' | xargs -0 "$1" check --isolated --target-version "py3$floor" --select E902 --output-format concise; then
+    echo "error: hook scripts must parse on Python 3.$floor" >&2
+    exit 1
+  fi
+}
+
 cd "$root"
 check_exceptions "$ruff" "${RUFF_CHECK_TODAY:-$(date +%F)}"
 if [ -z "$(git ls-files '*.py')" ]; then
+  check_hook_floor "$ruff"
   exit 0
 fi
 
 git ls-files -z '*.py' | xargs -0 "$ruff" check --no-cache --output-format concise
+check_hook_floor "$ruff"

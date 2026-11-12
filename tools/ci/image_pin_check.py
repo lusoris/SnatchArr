@@ -9,7 +9,8 @@ tag)` key must carry the same digest.
 Grammar (allow-list):
 - not preceded by `[A-Za-z0-9._/-]`, or directly after a shell default operator `${NAME:-` or
   `${NAME-` (`NAME` = `[A-Za-z_][A-Za-z0-9_]*`), as in `image: ${IMG:-postgres:18@sha256:...}`;
-- `name`: optional first component in host form (`[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?/`),
+- `name`: optional first component in `distribution/reference` v0.6.0 host form (domain name of
+  `[a-zA-Z0-9]` / hyphen labels or bracketed IPv6 literal, optional `:port`, trailing `/`),
   followed by one or more `/`-separated path components
   `[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*` (OCI `distribution-spec` `spec.md` line 151 at commit
   `97274622c111`);
@@ -73,7 +74,10 @@ DOCKER_HUB_HOSTS = frozenset({
     "mirror.gcr.io",
 })
 
-HOST_PREFIX = r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?/"
+DOMAIN_COMPONENT = r"(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])"
+DOMAIN_NAME = rf"{DOMAIN_COMPONENT}(?:\.{DOMAIN_COMPONENT})*"
+IPV6_ADDRESS = r"\[(?:[a-fA-F0-9:]+)\]"
+HOST_PREFIX = rf"(?:{DOMAIN_NAME}|{IPV6_ADDRESS})(?::[0-9]+)?/"
 PATH_COMPONENT = r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
 IMAGE_PIN = re.compile(
     r"(?:\$\{[A-Za-z_][A-Za-z0-9_]*:?-|(?<![A-Za-z0-9._/-]))"
@@ -93,6 +97,8 @@ BATCH_HEADER = re.compile(rb"(?P<oid>[0-9a-f]{40}|[0-9a-f]{64}) blob (?P<size>[0
 PinMap = dict[tuple[str, str, bool], dict[str, list[str]]]
 # (repository path, first MAX_BYTES + 1 bytes of its content, or None when it holds no file)
 Content = tuple[str, bytes | None]
+# (repository path, line number, image name as written, tag, digest, record file)
+Pin = tuple[str, int, str, str, str, bool]
 
 
 def run_git(root: Path, args: list[str], stdin: IO[bytes] | None = None, stdout: IO[bytes] | None = None) -> bytes:
@@ -298,22 +304,39 @@ def canonical_name(name: str) -> str:
     return name if "/" in name else f"library/{name}"
 
 
-def collect_pins(contents: Iterable[Content]) -> PinMap:
-    """Map each `(canonical name, tag, record file)` in CONTENTS to its digest locations."""
-    found: PinMap = defaultdict(lambda: defaultdict(list))
+def iter_pins(contents: Iterable[Content]) -> Iterator[Pin]:
+    """Yield `(rel, lineno, name, tag, digest, record file)` for each literal image pin in CONTENTS."""
     for rel, raw in contents:
         lines = text_lines(raw, rel)
         record = any(RECORD_MARKER.match(line) for line in lines)
         for lineno, line in enumerate(lines, 1):
             for match in IMAGE_PIN.finditer(line):
-                key = (canonical_name(match.group("name")), match.group("tag"), record)
-                found[key][match.group("digest")].append(f"{rel}:{lineno}")
+                yield (
+                    rel,
+                    lineno,
+                    match.group("name"),
+                    match.group("tag"),
+                    match.group("digest"),
+                    record,
+                )
+
+
+def collect_pins(contents: Iterable[Content]) -> PinMap:
+    """Map each `(canonical name, tag, record file)` in CONTENTS to its digest locations."""
+    found: PinMap = defaultdict(lambda: defaultdict(list))
+    for rel, lineno, name, tag, digest, record in iter_pins(contents):
+        found[(canonical_name(name), tag, record)][digest].append(f"{rel}:{lineno}")
     return found
+
+
+def read_contents(root: Path, *, index: bool = False) -> Iterator[Content]:
+    """Yield ROOT's tracked files from its git index (when INDEX is set) or working tree."""
+    return index_contents(root) if index else worktree_contents(root)
 
 
 def load_pins(root: Path, *, index: bool = False) -> PinMap:
     """Collect image pins from ROOT's git index (when INDEX is set) or working tree."""
-    return collect_pins(index_contents(root) if index else worktree_contents(root))
+    return collect_pins(read_contents(root, index=index))
 
 
 def check(root: Path, *, index: bool = False) -> int:
@@ -340,16 +363,21 @@ def check(root: Path, *, index: bool = False) -> int:
     return 0
 
 
-def main() -> int:
-    """Parse CLI arguments and run the container image digest check."""
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+def parse_cli(description: str) -> argparse.Namespace:
+    """Parse the `--root` and `--index` options that every image check built on read_contents takes."""
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--root", type=Path, default=Path("."), help="repository root (default .)")
     parser.add_argument(
         "--index",
         action="store_true",
         help="scan git index content instead of working-tree files",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Parse CLI arguments and run the container image digest check."""
+    args = parse_cli(__doc__.splitlines()[0])
     try:
         return check(args.root, index=args.index)
     except (OSError, ValueError, subprocess.SubprocessError) as error:

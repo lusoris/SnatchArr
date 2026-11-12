@@ -20,29 +20,6 @@ A=$(printf '%064d' 0 | tr 0 a)
 B=$(printf '%064d' 0 | tr 0 b)
 B_UPPER=$(printf '%s' "$B" | tr abcdef ABCDEF)
 
-# track PATH LINE...: write LINE... to PATH and stage it in the current test repository.
-track() {
-    local file=$1
-    shift
-    mkdir -p "$(dirname "$file")"
-    printf '%s\n' "$@" > "$file"
-    git add "$file"
-}
-
-# run_case NAME WANT_RC SETUP NEEDLE...: build a fixture with SETUP and assert WANT_RC + NEEDLEs.
-run_case() {
-    local name=$1 want=$2 setup=$3 repo out status=0 needle
-    shift 3
-    repo="$work/$name"
-    new_repo "$repo"
-    (cd "$repo" && "$setup")
-    out=$(python3 -I "$check" --root "$repo" 2>&1) || status=$?
-    for needle in "$@"; do
-        check_case "$name" "$want" "$status" "$needle" "$out"
-    done
-    echo "ok   $name"
-}
-
 # setup_aligned: mirror.gcr.io/library/postgres and bare postgres share one tag and digest.
 setup_aligned() {
     track .github/workflows/ci.yml "services:" "  image: mirror.gcr.io/library/postgres:18-alpine@sha256:$A"
@@ -92,6 +69,12 @@ setup_port_registry() {
     track b.yml "image: postgres:18-alpine@sha256:$A"
 }
 
+# setup_ipv6_host_drift: a bracketed IPv6 literal host with port pinned to two digests mismatches.
+setup_ipv6_host_drift() {
+    track a.yml "image: [2001:db8::1]:5000/team/app:1@sha256:$A"
+    track b.yml "image: [2001:db8::1]:5000/team/app:1@sha256:$B"
+}
+
 # setup_hex_boundary: 65-char hex and uppercase hex are not valid 64-lowercase-hex digests.
 setup_hex_boundary() {
     track a.yml "image: postgres:18-alpine@sha256:$A"
@@ -133,34 +116,38 @@ setup_marker_mid_line() {
     track b.sh 'echo "# image-pin-check: record"' "img=postgres:18-alpine@sha256:$B  # image-pin-check: record"
 }
 
-run_case aligned 0 setup_aligned "image_pin_check: ok"
-run_case drift 3 setup_drift \
+run_repo_case aligned 0 setup_aligned "image_pin_check: ok"
+run_repo_case drift 3 setup_drift \
     "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
     "  sha256:${A:0:12} .github/workflows/ci.yml:2" \
     "  sha256:${B:0:12} api/storetest.go:2" \
     "move every pin of one image tag in one change; Renovate groups them (renovate.json)"
-run_case hub-aliases 3 setup_hub_aliases \
+run_repo_case hub-aliases 3 setup_hub_aliases \
     "image_pin_check: library/x:1.0 is pinned to 2 digests" \
     "  sha256:${A:0:12} a.yml:1, b.yml:1, c.yml:1" \
     "  sha256:${B:0:12} d.yml:1"
-run_case other-registry 0 setup_other_registry "image_pin_check: ok"
-run_case other-tag 0 setup_other_tag "image_pin_check: ok"
-run_case variable-digest 0 setup_variable_digest "image_pin_check: ok"
-run_case untracked 0 setup_untracked "image_pin_check: ok"
-run_case port-registry 0 setup_port_registry "image_pin_check: ok"
-run_case hex-boundary 0 setup_hex_boundary "image_pin_check: ok"
-run_case shell-default 3 setup_shell_default \
+run_repo_case other-registry 0 setup_other_registry "image_pin_check: ok"
+run_repo_case other-tag 0 setup_other_tag "image_pin_check: ok"
+run_repo_case variable-digest 0 setup_variable_digest "image_pin_check: ok"
+run_repo_case untracked 0 setup_untracked "image_pin_check: ok"
+run_repo_case port-registry 0 setup_port_registry "image_pin_check: ok"
+run_repo_case ipv6-host-drift 3 setup_ipv6_host_drift \
+    "image_pin_check: [2001:db8::1]:5000/team/app:1 is pinned to 2 digests" \
+    "  sha256:${A:0:12} a.yml:1" \
+    "  sha256:${B:0:12} b.yml:1"
+run_repo_case hex-boundary 0 setup_hex_boundary "image_pin_check: ok"
+run_repo_case shell-default 3 setup_shell_default \
     "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
     "  sha256:${A:0:12} a.yml:1" \
     "  sha256:${B:0:12} compose.yaml:3, run.sh:1, run.sh:2"
-run_case dash-boundary 0 setup_dash_boundary "image_pin_check: ok (2 image tags across 2 pins)"
-run_case records-separate 0 setup_records_separate "image_pin_check: ok (1 image tags across 2 pins)"
-run_case records-drift 3 setup_records_drift \
+run_repo_case dash-boundary 0 setup_dash_boundary "image_pin_check: ok (2 image tags across 2 pins)"
+run_repo_case records-separate 0 setup_records_separate "image_pin_check: ok (1 image tags across 2 pins)"
+run_repo_case records-drift 3 setup_records_drift \
     "image_pin_check: library/postgres:18-alpine is pinned to 2 digests in record files" \
     "  sha256:${A:0:12} r1.sh:3" \
     "  sha256:${B:0:12} r2.go:2" \
     "a file of measured pins that no updater moves takes an \`image-pin-check: record\` comment line"
-run_case marker-mid-line 3 setup_marker_mid_line \
+run_repo_case marker-mid-line 3 setup_marker_mid_line \
     "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
     "  sha256:${B:0:12} b.sh:2"
 
@@ -510,15 +497,12 @@ echo "ok   index-missing-blob"
 # CI (.github/workflows/ci.yml) and `make workflows-verify` (Makefile) run both readers: the
 # working tree as checked out, and the index, where a working-tree-encoding file reads as its
 # staged blob (case index-encoding).
-repo_root=$(cd "$HERE/../.." && pwd)
-for wired in .github/workflows/ci.yml Makefile; do
-    for reader in '' ' --index'; do
-        if ! grep -q -E "python3 -I tools/ci/image_pin_check\\.py${reader}( &&|\$)" "$repo_root/$wired"; then
-            echo "FAIL wiring: $wired runs no 'python3 -I tools/ci/image_pin_check.py$reader'" >&2
-            exit 1
-        fi
-    done
-done
+assert_wired image_pin_check.py .github/workflows/ci.yml Makefile
+mkdir -p "$work/wired-commented/tools/ci"
+printf '%s\n' 'workflows-verify:' '	# python3 -I tools/ci/image_pin_check.py' '	# python3 -I tools/ci/image_pin_check.py --index' > "$work/wired-commented/Makefile"
+status=0
+out=$(sh -c '. "$1"; HERE="$2"; assert_wired "$3" Makefile' _ "$HERE/test_lib.sh" "$work/wired-commented/tools/ci" image_pin_check.py 2>&1) || status=$?
+check_case wiring-commented 1 "$status" "FAIL wiring: Makefile runs no 'python3 -I tools/ci/image_pin_check.py'" "$out"
 echo "ok   wiring"
 
 # assert_bounded WANT NEEDLE SECONDS CMD...: `run_bounded SECONDS CMD...` must exit WANT with
