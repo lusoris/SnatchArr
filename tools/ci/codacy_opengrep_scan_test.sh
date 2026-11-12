@@ -5,9 +5,10 @@
 # Replays the Opengrep scanner fixtures and kills its mutants offline: listing
 # hash and ID-set drift, a dropped comparison, lost multiplicity, collapsed
 # literal whitespace, an ignored tool error, an unbounded download, a canary
-# error that ends the scan, a deleted or expired baseline entry, and a baseline
-# that grows, raises a count, extends an expiry or rewrites a kept entry against
-# an earlier commit. Then holds the Makefile, lefthook and CI to the scanner runs.
+# error that ends the scan, ignored live listing drift, a deleted or expired
+# baseline entry, and a baseline that grows, raises a count, extends an expiry
+# or rewrites a kept entry against an earlier commit. Then holds the Makefile,
+# lefthook and CI to the scanner runs.
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -133,6 +134,8 @@ mutate "$WORK/kept" 'KEPT_FIELDS = ("entered", "category", "issue", "reason")' '
 expect 1 "mutant ignoring issue and reason changes" "FAIL changed issue refused" python3 -I "$WORK/kept/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
 mutate "$WORK/canary" "except ScanError as err:  # the tree scan still runs" "except OSError as err:  # the tree scan still runs"
 expect 1 "mutant letting a canary error end the scan" "canary: cannot read" python3 -I "$WORK/canary/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
+mutate "$WORK/live" 'return [f"live listing drift against {label}: added={added}, removed={removed}"] if added or removed else []' 'return []'
+expect 1 "mutant ignoring live listing drift" "FAIL live listing missing a configured ID refused" python3 -I "$WORK/live/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
 
 make_root "$WORK/deleted"
 edit_json "$WORK/deleted/$BASELINE" drop-first
@@ -191,6 +194,7 @@ for wired in "Makefile:python3 -I tools/ci/codacy_opengrep_scan.py --self-test" 
   ".github/workflows/ci.yml:python3 -I tools/ci/codacy_opengrep_scan.py --self-test" \
   ".github/workflows/ci.yml:python3 -I tools/ci/codacy_opengrep_scan.py --base-ref" \
   ".github/workflows/ci.yml:python3 -I tools/ci/codacy_opengrep_scan.py$" \
+  ".github/workflows/ci.yml:CODACY_PROJECT_TOKEN: [\$][{][{] secrets.CODACY_PROJECT_TOKEN [}][}]$" \
   ".github/workflows/ci.yml:git fetch --no-tags --quiet origin \"[\$]BEFORE_SHA\""; do
   pattern="${wired#*:}"
   case "$pattern" in
@@ -202,6 +206,6 @@ for wired in "Makefile:python3 -I tools/ci/codacy_opengrep_scan.py --self-test" 
     exit 1
   fi
 done
-echo "ok   Makefile, lefthook and CI run the self-test, the shrink check, the install and the live scan"
+echo "ok   Makefile, lefthook and CI run the self-test, the shrink check, the install and the live scan; CI passes the Codacy token"
 
 echo "codacy-opengrep scan: fixtures, drift, expiry, shrink-only and mutants refused"

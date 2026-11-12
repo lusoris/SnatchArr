@@ -4,7 +4,9 @@
 """Mirror Codacy's enabled Opengrep (Semgrep) Python rules locally, against a shrink-only baseline.
 
 Modes (one at a time):
-  (none)           run the live canary, then scan every tracked Python file; network, Linux x64
+  (none)           run the live canary, scan every tracked Python file, then compare the config with
+                   the patterns Codacy enables live (CODACY_PROJECT_TOKEN or CODACY_API_TOKEN;
+                   skipped, saying so, without one); network, Linux x64
   --self-test      replay the recorded reports and the planted cases; offline
   --drift LISTING  compare a Codacy pattern listing with the checked-in config; offline
   --base-ref REF   refuse a baseline that grew (a new key or a higher count), or a kept entry
@@ -21,12 +23,18 @@ The canary renames the parameter of judge_in_child in tools/ci/image_release_age
 `job` to `request`, the defect commit 58af3cb4 planted, and requires exactly one new finding of
 the Django subprocess-injection rule. It runs before the tree scan and fails when the rules stop
 reporting that defect.
+
+The live listing check pages Codacy's listRepositoryToolPatterns (enabled patterns of the Opengrep
+tool, in the config's languages) for the GitHub origin repository and fails on any added or removed
+ID. The CLI's own `init --remote` cannot serve it: it skips the patterns of a tool Codacy marks
+usesConfigurationFile, and Codacy marks Opengrep so. The CLI never sees CODACY_* variables.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import platform
@@ -36,9 +44,12 @@ import subprocess  # nosec B404  # fixed argument lists built in this file, neve
 import sys
 import tempfile
 import threading
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -80,6 +91,17 @@ DOWNLOAD_DEADLINE_SECONDS = 180
 MAX_DOWNLOAD_BYTES = 128 * 1024 * 1024
 CHUNK_BYTES = 1024 * 1024
 MAX_READS = 1 << 20
+CODACY_API = "https://app.codacy.com/api/v3"
+CODACY_TOOL = "Opengrep"
+TOKEN_VARS = (("CODACY_PROJECT_TOKEN", "project-token"), ("CODACY_API_TOKEN", "api-token"))  # Codacy's names, repository token first
+TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{8,256}")
+ORIGIN_RE = re.compile(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9][A-Za-z0-9_.-]{0,99})/([A-Za-z0-9][A-Za-z0-9_.-]{0,99}?)(?:\.git)?/?")
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+PATTERN_RE = re.compile(r"[A-Za-z0-9_.:/-]{1,300}")
+LANGUAGE_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#-]{0,40}")
+LISTING_PAGE_SIZE = 100  # the API maximum
+MAX_LISTING_PAGES = 32
+LISTING_DEADLINE_SECONDS = 120
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -454,10 +476,10 @@ def copy_capped(response: object, output: object, digest: object) -> int:
             return size
         size += len(chunk)
         if size > MAX_DOWNLOAD_BYTES:
-            raise ScanError(f"Opengrep download passed {MAX_DOWNLOAD_BYTES} bytes")
+            raise ScanError(f"download passed {MAX_DOWNLOAD_BYTES} bytes")
         digest.update(chunk)
         output.write(chunk)
-    raise ScanError(f"Opengrep download did not end within {MAX_READS} reads")
+    raise ScanError(f"download did not end within {MAX_READS} reads")
 
 
 def fetch_into(url: str, destination: Path, opener: Callable[..., object], outcome: dict[str, object]) -> None:
@@ -468,11 +490,13 @@ def fetch_into(url: str, destination: Path, opener: Callable[..., object], outco
             outcome["size"] = copy_capped(response, output, digest)
         outcome["sha256"] = digest.hexdigest()
     except (OSError, ScanError) as err:
-        outcome["error"] = f"Opengrep download failed: {err}"
+        outcome["error"] = f"download failed: {err}"
 
 
 def fetch_within(url: str, destination: Path, deadline: float, opener: Callable[..., object]) -> tuple[str, int]:
     """Download URL in a worker thread and give up once DEADLINE seconds pass, however the socket behaves.
+
+    Serves the Opengrep binary and the Codacy listing pages alike.
 
     A server that trickles bytes just inside the socket timeout cannot hold the scan past DEADLINE;
     the abandoned daemon thread ends with the process.
@@ -482,7 +506,7 @@ def fetch_within(url: str, destination: Path, deadline: float, opener: Callable[
     worker.start()
     worker.join(deadline)
     if worker.is_alive():
-        raise ScanError(f"Opengrep download did not finish within {deadline} s")
+        raise ScanError(f"download did not finish within {deadline} s")
     if "error" in outcome:
         raise ScanError(str(outcome["error"]))
     return str(outcome["sha256"]), int(outcome["size"])
@@ -537,6 +561,14 @@ def remove_generated_config(cwd: Path) -> None:
             return
 
 
+def cli_env(environ: Mapping[str, str], home: Path) -> dict[str, str]:
+    """Return ENVIRON without CODACY_* variables, plus CODACY_GLOBAL_DIR=HOME.
+
+    A token there would let the CLI reach Codacy; the scan uses the checked-in config only.
+    """
+    return {**{key: value for key, value in environ.items() if not key.startswith("CODACY_")}, "CODACY_GLOBAL_DIR": str(home)}
+
+
 def live_report(root: Path, cwd: Path, home: Path, files: list[str]) -> dict[str, object]:
     """Run the pinned CLI in CWD over FILES with the verified Opengrep under HOME; return its report."""
     cli = cli_path(root)
@@ -544,7 +576,7 @@ def live_report(root: Path, cwd: Path, home: Path, files: list[str]) -> dict[str
         report = Path(temporary) / "report.json"
         command = [str(cli), "analyze", ".", "--tool", "Semgrep", "--config-file", str(root / CONFIG), "--output-format", "json", "--output", str(report), "--files", *files, "--fail-if-missing", "--parallel-tools", "1", "--tool-timeout", str(TOOL_TIMEOUT_MS), "--no-log", "--no-update-notifier"]
         try:
-            result = run_capture(command, cwd, CLI_TIMEOUT_SECONDS, dict(os.environ, CODACY_GLOBAL_DIR=str(home)))
+            result = run_capture(command, cwd, CLI_TIMEOUT_SECONDS, cli_env(os.environ, home))
         finally:
             remove_generated_config(cwd)
         if result.returncode not in (0, 1) or not report.is_file():
@@ -603,6 +635,149 @@ def scan(root: Path, today: date, report_out: Path | None) -> list[str]:
     if not problems:
         print(f"codacy-opengrep: canary: the 58af3cb4 defect is one new {CANARY_RULE.rsplit('.', 1)[-1]} finding; {len(targets)} files, 0 new, 0 stale")
     return problems
+
+
+def id_drift(listed: list[str], configured: list[str]) -> tuple[list[str], list[str]]:
+    """Return the IDs LISTED adds to CONFIGURED and the IDs it removes, each sorted."""
+    return sorted(set(listed) - set(configured)), sorted(set(configured) - set(listed))
+
+
+def codacy_auth(environ: Mapping[str, str]) -> tuple[str, str] | None:
+    """Return (header, token) from CODACY_PROJECT_TOKEN, else CODACY_API_TOKEN; None when both are unset or empty."""
+    for variable, header in TOKEN_VARS:
+        token = environ.get(variable, "")
+        if token:
+            if not TOKEN_RE.fullmatch(token):
+                raise ScanError(f"{variable} is malformed: want 8 to 256 letters, digits, - or _")
+            return header, token
+    return None
+
+
+def parse_origin(url: str) -> tuple[str, str] | None:
+    """Return (owner, repository) of a GitHub https or ssh remote URL, or None."""
+    match = ORIGIN_RE.fullmatch(url.strip())
+    return (match.group(1), match.group(2)) if match else None
+
+
+def codacy_repository(root: Path) -> tuple[str, str]:
+    """Return the GitHub (owner, repository) of the origin remote: the coordinates Codacy lists it under."""
+    result = git(root, "remote", "get-url", "origin")
+    coordinates = parse_origin(result.stdout) if result.returncode == 0 else None
+    if coordinates is None:
+        raise ScanError(f"origin is no GitHub repository URL: {(result.stdout or result.stderr).strip()}")
+    return coordinates
+
+
+def config_languages(root: Path) -> str:
+    """Return the config's metadata languages, comma-joined for the listing query."""
+    data = load_json(root / CONFIG)
+    languages = data.get("metadata", {}).get("languages") if isinstance(data, dict) and isinstance(data.get("metadata"), dict) else None
+    if not isinstance(languages, list) or not languages or not all(isinstance(item, str) and LANGUAGE_RE.fullmatch(item) for item in languages):
+        raise ScanError(f"{CONFIG}: metadata.languages must list the languages the mirror covers")
+    return ",".join(languages)
+
+
+def codacy_getter(auth: tuple[str, str], repository: tuple[str, str], scratch: Path, opener: Callable[..., object]) -> Callable[[str, dict[str, str]], object]:
+    """Return get(path, query): one authenticated JSON GET under the repository; all calls share LISTING_DEADLINE_SECONDS."""
+    header, token = auth
+    stop = time.monotonic() + LISTING_DEADLINE_SECONDS
+    base = f"{CODACY_API}/analysis/organizations/gh/{repository[0]}/{repository[1]}"
+    responses: list[Path] = []
+
+    def open_with_token(url: str, timeout: float) -> object:
+        """Open URL with the token header; the token never enters the URL or a message."""
+        return opener(urllib.request.Request(url, headers={header: token, "Accept": "application/json"}), timeout=timeout)
+
+    def get(path: str, query: dict[str, str]) -> object:
+        """Fetch BASE + PATH with QUERY under the remaining deadline and parse the JSON body."""
+        responses.append(scratch / f"response-{len(responses)}.json")
+        try:
+            fetch_within(f"{base}{path}?{urllib.parse.urlencode(query)}", responses[-1], max(stop - time.monotonic(), 0.0), open_with_token)
+        except ScanError as err:  # Codacy answers 404, not 401, to an unknown token
+            raise ScanError(f"GET {path}: {err}") from err
+        return load_json(responses[-1])
+
+    return get
+
+
+def tool_uuid(get: Callable[[str, dict[str, str]], object]) -> str:
+    """Return the uuid of the Opengrep tool in the repository's tool list; refuse it disabled or missing."""
+    data = get("/tools", {})
+    tools = data.get("data") if isinstance(data, dict) else None
+    for tool in tools if isinstance(tools, list) else []:
+        if isinstance(tool, dict) and tool.get("name") == CODACY_TOOL:
+            settings, uuid = tool.get("settings"), tool.get("uuid")
+            if not isinstance(settings, dict) or settings.get("isEnabled") is not True:
+                raise ScanError(f"Codacy has {CODACY_TOOL} disabled for this repository")
+            if not isinstance(uuid, str) or not UUID_RE.fullmatch(uuid):
+                raise ScanError(f"malformed {CODACY_TOOL} uuid")
+            return uuid
+    raise ScanError(f"Codacy lists no {CODACY_TOOL} tool for this repository")
+
+
+def pattern_id(item: object) -> object:
+    """Return the patternDefinition.id of one enabled listing item, else None."""
+    definition = item.get("patternDefinition") if isinstance(item, dict) and item.get("enabled") is True else None
+    return definition.get("id") if isinstance(definition, dict) else None
+
+
+def page_ids(page: object) -> tuple[list[str], str]:
+    """Return the pattern IDs of one listing page and its next cursor ("" on the last page)."""
+    items = page.get("data") if isinstance(page, dict) else None
+    if not isinstance(items, list):
+        raise ScanError("a page without a data list")
+    ids = [pattern_id(item) for item in items]
+    if not all(isinstance(item, str) and PATTERN_RE.fullmatch(item) for item in ids):
+        raise ScanError("a listed pattern is disabled, malformed or has no ID")
+    pagination = page.get("pagination")
+    cursor = pagination.get("cursor") if isinstance(pagination, dict) else None
+    return [str(item) for item in ids], cursor if isinstance(cursor, str) else ""
+
+
+def enabled_ids(get: Callable[[str, dict[str, str]], object], uuid: str, languages: str) -> list[str]:
+    """Page through the enabled patterns of tool UUID in LANGUAGES; refuse a repeated ID or more than MAX_LISTING_PAGES pages."""
+    ids: list[str] = []
+    query = {"enabled": "true", "languages": languages, "limit": str(LISTING_PAGE_SIZE)}
+    for _ in range(MAX_LISTING_PAGES):
+        page, cursor = page_ids(get(f"/tools/{uuid}/patterns", query))
+        ids += page
+        if len(ids) != len(set(ids)):
+            raise ScanError("a pattern ID repeats across pages")
+        if not cursor or not page:
+            return sorted(ids)
+        query = {**query, "cursor": cursor}
+    raise ScanError(f"more than {MAX_LISTING_PAGES} pages")
+
+
+def listing_problems(live: list[str], configured: list[str], label: str) -> list[str]:
+    """Return the drift of the live IDs from the configured ones, empty on an exact match."""
+    added, removed = id_drift(live, configured)
+    return [f"live listing drift against {label}: added={added}, removed={removed}"] if added or removed else []
+
+
+def live_listing(root: Path, environ: Mapping[str, str], opener: Callable[..., object]) -> list[str]:
+    """Compare the config with the patterns Codacy enables live; without a token, skip and say so."""
+    auth = codacy_auth(environ)
+    if auth is None:
+        print(f"codacy-opengrep: live listing skipped: neither {' nor '.join(name for name, _header in TOKEN_VARS)} is set")
+        return []
+    repository = codacy_repository(root)
+    with tempfile.TemporaryDirectory(prefix="snatcharr-codacy-listing-") as temporary:
+        get = codacy_getter(auth, repository, Path(temporary), opener)
+        live = enabled_ids(get, tool_uuid(get), config_languages(root))
+    label = f"gh/{repository[0]}/{repository[1]}"
+    problems = listing_problems(live, config_ids(root), label)
+    if not problems:
+        print(f"codacy-opengrep: live listing: {len(live)} enabled {CODACY_TOOL} patterns on {label}, exact match")
+    return problems
+
+
+def live_drift(root: Path, environ: Mapping[str, str], opener: Callable[..., object]) -> list[str]:
+    """Run the live listing check and return its failures, an error included, so tree findings still print."""
+    try:
+        return live_listing(root, environ, opener)
+    except ScanError as err:
+        return [f"live listing: {err}"]
 
 
 def with_capability(report: object, **fields: str) -> object:
@@ -736,6 +911,74 @@ def download_cases(scratch: Path) -> list[tuple[str, bool]]:
     ]
 
 
+def fake_codacy(pages: list[list[str]], enabled: bool = True, loop: bool = False) -> Callable[[str, dict[str, str]], object]:
+    """Return a get(path, query) stand-in serving one Opengrep tool and PAGES of IDs; LOOP serves a cursor forever."""
+    tools = {"data": [{"name": "Ruff", "uuid": "0" * 8 + "-0000-0000-0000-" + "0" * 12, "settings": {"isEnabled": True}},
+                      {"name": CODACY_TOOL, "uuid": "6792c561-236d-41b7-ba5e-9d6bee0d548b", "settings": {"isEnabled": enabled}}]}
+
+    def get(path: str, query: dict[str, str]) -> object:
+        """Serve the tool list, or the page the cursor names."""
+        if path == "/tools":
+            return tools
+        index = int(query.get("cursor", "0"))
+        following = index + 1 < len(pages) or loop
+        page = pages[index % len(pages)] if not loop else [f"Semgrep_page{index}.rule"]
+        return {"data": [{"enabled": True, "patternDefinition": {"id": item}} for item in page], "pagination": {"cursor": str(index + 1)} if following else {}}
+
+    return get
+
+
+def listed(get: Callable[[str, dict[str, str]], object]) -> list[str]:
+    """Run the listing against GET with the real tool lookup."""
+    return enabled_ids(get, tool_uuid(get), "Python")
+
+
+def request_cases(scratch: Path) -> list[tuple[str, bool]]:
+    """Return (name, held) for the token header, the query and an HTTP error, through the real fetch path."""
+    seen: list[urllib.request.Request] = []
+
+    def answer(request: urllib.request.Request, timeout: float) -> object:
+        """Record REQUEST and answer one empty page, whatever the socket TIMEOUT."""
+        seen.append(request)
+        return io.BytesIO(b'{"data": []}')
+
+    def refuse(request: urllib.request.Request, timeout: float) -> object:
+        """Answer 401 the way urlopen does."""
+        raise urllib.error.HTTPError(request.full_url, 401, f"Unauthorized after {timeout} s", None, None)
+
+    token = "t0ken-" + "x" * 14
+    page = codacy_getter(("project-token", token), ("lusoris", "SnatchArr"), scratch, answer)("/tools/u/patterns", {"enabled": "true", "languages": "Python"})
+    url = seen[0].full_url if seen else ""
+    return [
+        ("listing request sends the token as a header only", page == {"data": []} and seen[0].get_header("Project-token") == token and token not in url),
+        ("listing request names the repository, enabled and the languages", url == f"{CODACY_API}/analysis/organizations/gh/lusoris/SnatchArr/tools/u/patterns?enabled=true&languages=Python"),
+        ("HTTP 401 from Codacy refused", raises(lambda: codacy_getter(("api-token", token), ("lusoris", "SnatchArr"), scratch, refuse)("/tools", {}))),
+    ]
+
+
+def live_cases(configured: list[str]) -> list[tuple[str, bool]]:
+    """Return (name, held) for the live listing: paging, drift both ways, refusals and token handling."""
+    thirds = [configured[0::3], configured[1::3], configured[2::3]]
+    token = "a" * 20
+    return [
+        ("live listing over three pages matches the config", listed(fake_codacy(thirds)) == configured and not listing_problems(configured, configured, "gh/o/r")),
+        ("live listing missing a configured ID refused", refused_with(listing_problems(listed(fake_codacy([configured[:-1]])), configured, "gh/o/r"), "live listing drift")),
+        ("live listing with an extra ID refused", refused_with(listing_problems(listed(fake_codacy([[*configured, "Semgrep_zz.new"]])), configured, "gh/o/r"), "live listing drift")),
+        ("Opengrep disabled on Codacy refused", raises(lambda: listed(fake_codacy(thirds, enabled=False)))),
+        ("disabled pattern in the listing refused", raises(lambda: page_ids({"data": [{"enabled": False, "patternDefinition": {"id": configured[0]}}]}))),
+        ("cursor past the page cap refused", raises(lambda: listed(fake_codacy([configured], loop=True)))),
+        ("repeated page refused", raises(lambda: listed(fake_codacy([configured[:2], configured[1:3]])))),
+        ("no token, or an empty one, skips the live listing", codacy_auth({}) is None and codacy_auth({"CODACY_PROJECT_TOKEN": "", "CODACY_API_TOKEN": ""}) is None),
+        ("repository token preferred over the account token", codacy_auth({"CODACY_PROJECT_TOKEN": token, "CODACY_API_TOKEN": "b" * 20}) == ("project-token", token)),
+        ("account token used alone", codacy_auth({"CODACY_API_TOKEN": token}) == ("api-token", token)),
+        ("token with a newline refused", raises(lambda: codacy_auth({"CODACY_API_TOKEN": token + "\nX-Injected: 1"}))),
+        ("GitHub https and ssh origins accepted", all(parse_origin(url) == ("lusoris", "SnatchArr") for url in ("https://github.com/lusoris/SnatchArr.git", "git@github.com:lusoris/SnatchArr.git", "ssh://git@github.com/lusoris/SnatchArr"))),
+        ("other origin hosts and dot segments refused", parse_origin("https://gitlab.com/lusoris/SnatchArr.git") is None and parse_origin("https://github.com/../x") is None),
+        ("CLI environment drops every CODACY_* variable", cli_env({"CODACY_PROJECT_TOKEN": token, "CODACY_API_BASE_URL": "x", "PATH": "/bin"}, Path("/h")) == {"PATH": "/bin", "CODACY_GLOBAL_DIR": "/h"}),
+        ("live listing error returned with its prefix", refused_with(live_drift(Path("/nonexistent"), {"CODACY_API_TOKEN": "bad token"}, urllib.request.urlopen), "live listing: CODACY_API_TOKEN is malformed")),
+    ]
+
+
 def entry_cases(valid: dict[str, str], configured: set[str]) -> list[tuple[str, bool]]:
     """Return (name, held) for the baseline entry shape and expiry cases, from the valid category D entry VALID."""
     variants = {
@@ -801,8 +1044,8 @@ def run_self_test(root: Path, today: date) -> int:
     sample = sample_entry(config_ids(root))
     with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-selftest-") as temporary:
         scratch = Path(temporary)
-        cases = report_cases(root, baseline_counts(entries), version) + fingerprint_cases() + guard_cases(scratch) + download_cases(scratch)
-    cases += entry_cases(sample, set(config_ids(root))) + shrink_cases(entries, sample)
+        cases = report_cases(root, baseline_counts(entries), version) + fingerprint_cases() + guard_cases(scratch) + download_cases(scratch) + request_cases(scratch)
+    cases += entry_cases(sample, set(config_ids(root))) + shrink_cases(entries, sample) + live_cases(config_ids(root))
     cases.append(("empty baseline: the shrink cases still run", all(held for _name, held in shrink_cases({}, sample))))
     failed = [name for name, held in cases if not held]
     for name, held in cases:
@@ -819,7 +1062,7 @@ def check_drift(root: Path, listing: Path) -> None:
     metadata = data.get("metadata", {}) if isinstance(data, dict) else {}
     if metadata.get("listingSha256") != hashlib.sha256(raw).hexdigest() or metadata.get("listingCount") != len(listed):
         raise ScanError("listing metadata hash or count differs")
-    added, removed = sorted(set(listed) - set(configured)), sorted(set(configured) - set(listed))
+    added, removed = id_drift(listed, configured)
     if listed != sorted(listed) or len(listed) != len(set(listed)) or added or removed:
         raise ScanError(f"listing drift: added={added}, removed={removed}")
 
@@ -858,6 +1101,7 @@ def main(argv: list[str]) -> int:
             problems = shrink_problems(ROOT, args.base_ref, args.today)
         else:
             problems = scan(ROOT, args.today, args.report_out)
+            problems += live_drift(ROOT, os.environ, urllib.request.urlopen)  # nosec B310  # fixed https base, CODACY_API
     except ScanError as err:
         problems = [str(err)]
     for problem in problems:

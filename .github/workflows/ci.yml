@@ -161,6 +161,10 @@ jobs:
         working-directory: tools/ci/codacy_opengrep
         run: npm ci --ignore-scripts --no-audit
       - name: Mirror Codacy Opengrep over tracked Python files
+        # With the repository secret CODACY_PROJECT_TOKEN (a Codacy repository API token), the scan
+        # also compares the config with the patterns Codacy enables live; without it, it says so.
+        env:
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
         run: python3 -I tools/ci/codacy_opengrep_scan.py
 
   trivy:
