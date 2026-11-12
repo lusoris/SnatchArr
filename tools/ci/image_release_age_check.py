@@ -1,14 +1,17 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
-"""Refuse an undated container image digest pin that no renovate.json rule lets Renovate propose.
+"""Refuse any live container image digest pin that renovate.json leaves without age coverage.
 
 Renovate 44.234.0's Docker datasource dates tags only on Docker Hub (`index.docker.io`,
 including `docker.io`, `registry-1.docker.io` and host-less names). Under the `horistes`
 preset's 3-day `minimumReleaseAge`, an undated pin on any other registry host (`mirror.gcr.io`,
 `ghcr.io`, `lscr.io`, `mcr.microsoft.com`, `gcr.io`, `localhost`, `host:port`, `[ipv6]:port`)
-never ages and is never proposed unless `renovate.json` covers it via `minimumReleaseAge: null`,
+never ages and is never proposed unless `renovate.json` covers it via a disabled
+`minimumReleaseAge` (`null`, `""`, `"0"`, `"0 days"`),
 `minimumReleaseAgeBehaviour: "timestamp-optional"`, or an `overridePackageName` resolving to a
-dated Docker Hub name.
+dated Docker Hub name. Every live pin (dated included) is judged so an override from Docker Hub
+to an undated registry is caught; `image-pin-check: record` files are skipped only while no
+`customManagers` file pattern may read them.
 
 Exit 0 = ok, 1 = input error, 3 = refused.
 """
@@ -65,24 +68,46 @@ def keep_configs(
         yield rel, raw
 
 
-def collect_undated_pins(contents: Iterable[image_pin_check.Content]) -> dict[str, list[str]]:
-    """Map each undated image name in CONTENTS to its `file:line` locations."""
+def collect_live_pins(
+    contents: Iterable[image_pin_check.Content],
+) -> tuple[dict[str, list[str]], set[str]]:
+    """Map each live image name in CONTENTS to `file:line` locations and collect record files."""
     found: dict[str, list[str]] = defaultdict(list)
-    for rel, lineno, name, _tag, _digest, _record in image_pin_check.iter_pins(contents):
-        if not is_dated(name):
-            found[name].append(f"{rel}:{lineno}")
-    return found
+    records: set[str] = set()
+    for rel, lineno, name, _tag, _digest, record in image_pin_check.iter_pins(contents):
+        if record:
+            records.add(rel)
+            continue
+        found[name].append(f"{rel}:{lineno}")
+    return found, records
+
+
+def parse_judge_payload(raw: bytes) -> tuple[str | dict[str, object], list[str], list[str]]:
+    """Validate `--judge` JSON request bytes into `(config, names, records)`."""
+    payload = json.loads(raw.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ConfigError("invalid judge payload: top-level value must be an object")
+    config = payload["config"]
+    names = payload["names"]
+    records = payload.get("records", [])
+    if not isinstance(config, (str, dict)):
+        raise ConfigError("invalid judge payload: config must be a string or object")
+    if not isinstance(names, list) or not all(isinstance(item, str) for item in names):
+        raise ConfigError("invalid judge payload: names must be a list of strings")
+    if not isinstance(records, list) or not all(isinstance(item, str) for item in records):
+        raise ConfigError("invalid judge payload: records must be a list of strings")
+    return config, names, records
 
 
 def run_judge_mode() -> int:
-    """Read `{"config", "names"}` JSON on stdin, evaluate pure rules and print JSON verdict."""
+    """Read `{"config", "names", "records"}` JSON on stdin, evaluate rules and print JSON verdict."""
     raw = sys.stdin.buffer.read((MAX_CONFIG_BYTES * 2) + 1)
     if len(raw) > MAX_CONFIG_BYTES * 2:
         json.dump({"status": "config_error", "message": "judge input exceeds bound"}, sys.stdout)
         return 0
     try:
-        payload = json.loads(raw.decode("utf-8"))
-        uncovered = renovate_rules.judge(payload["config"], payload["names"])
+        config, names, records = parse_judge_payload(raw)
+        uncovered = renovate_rules.judge(config, names, records)
     except RefusedError as refused:
         json.dump({"status": "refused", "message": str(refused)}, sys.stdout)
     except ConfigError as error:
@@ -94,9 +119,9 @@ def run_judge_mode() -> int:
     return 0
 
 
-def judge_in_child(config_text: str, names: list[str]) -> list[str]:
+def judge_in_child(config_text: str, names: list[str], records: list[str]) -> list[str]:
     """Run pure `renovate_rules.judge` in an isolated child process bounded by REGEX_DEADLINE."""
-    request = json.dumps({"config": config_text, "names": names}).encode("utf-8")
+    request = json.dumps({"config": config_text, "names": names, "records": records}).encode("utf-8")
     try:
         proc = subprocess.run(  # nosec B603  # fixed argv invoking own --judge mode, no shell
             [sys.executable, "-I", str(Path(__file__).resolve()), "--judge"],
@@ -126,24 +151,28 @@ def judge_in_child(config_text: str, names: list[str]) -> list[str]:
 
 
 def check(root: Path, *, index: bool = False) -> int:
-    """Refuse any undated container image digest pin without Renovate release-age coverage.
+    """Refuse any live container image digest pin without Renovate release-age coverage.
 
     One pass of image_pin_check's reader yields the pins and `renovate.json`, so the
     working-tree mode and the index mode each judge a single snapshot.
     """
     configs: dict[str, bytes | None] = {}
-    undated = collect_undated_pins(
+    live_pins, records = collect_live_pins(
         keep_configs(image_pin_check.read_contents(root, index=index), configs)
     )
     config_text = decode_config(configs.get(RENOVATE_FILE), RENOVATE_FILE)
-    uncovered = judge_in_child(config_text, sorted(undated))
+    names = sorted(live_pins)
+    uncovered = judge_in_child(config_text, names, sorted(records))
     if uncovered:
         for name in uncovered:
-            where = ", ".join(dict.fromkeys(undated[name]))
+            where = ", ".join(dict.fromkeys(live_pins[name]))
             print(f"image_release_age_check: {name} ({where})")
         print(ADVICE)
         return 3
-    print(f"image_release_age_check: ok ({len(undated)} undated images covered)")
+    undated_count = sum(1 for name in names if not is_dated(name))
+    print(
+        f"image_release_age_check: ok ({len(names)} images checked, {undated_count} undated covered)"
+    )
     return 0
 
 
