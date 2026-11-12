@@ -565,6 +565,20 @@
         "mcr.microsoft.com/playwright"
       ],
       "minimumReleaseAgeBehaviour": "timestamp-optional"
+    },
+    {
+      "description": [
+        "Repeats the horistes preset rule for own images so tools/ci/image_release_age_check.py sees the coverage in renovate.json",
+        "Scoped to the exact SnatchArr image names rather than ghcr.io/lusoris/* so the preset's 3-day waits on forked images stay in force"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "ghcr.io/lusoris/snatcharr-api",
+        "ghcr.io/lusoris/snatcharr-worker"
+      ],
+      "minimumReleaseAge": null
     }
   ],
   "platformCommit": "enabled",

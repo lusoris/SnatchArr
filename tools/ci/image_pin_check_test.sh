@@ -69,6 +69,12 @@ setup_port_registry() {
     track b.yml "image: postgres:18-alpine@sha256:$A"
 }
 
+# setup_ipv6_host_drift: a bracketed IPv6 literal host with port pinned to two digests mismatches.
+setup_ipv6_host_drift() {
+    track a.yml "image: [2001:db8::1]:5000/team/app:1@sha256:$A"
+    track b.yml "image: [2001:db8::1]:5000/team/app:1@sha256:$B"
+}
+
 # setup_hex_boundary: 65-char hex and uppercase hex are not valid 64-lowercase-hex digests.
 setup_hex_boundary() {
     track a.yml "image: postgres:18-alpine@sha256:$A"
@@ -125,6 +131,10 @@ run_repo_case other-tag 0 setup_other_tag "image_pin_check: ok"
 run_repo_case variable-digest 0 setup_variable_digest "image_pin_check: ok"
 run_repo_case untracked 0 setup_untracked "image_pin_check: ok"
 run_repo_case port-registry 0 setup_port_registry "image_pin_check: ok"
+run_repo_case ipv6-host-drift 3 setup_ipv6_host_drift \
+    "image_pin_check: [2001:db8::1]:5000/team/app:1 is pinned to 2 digests" \
+    "  sha256:${A:0:12} a.yml:1" \
+    "  sha256:${B:0:12} b.yml:1"
 run_repo_case hex-boundary 0 setup_hex_boundary "image_pin_check: ok"
 run_repo_case shell-default 3 setup_shell_default \
     "image_pin_check: library/postgres:18-alpine is pinned to 2 digests" \
@@ -488,6 +498,11 @@ echo "ok   index-missing-blob"
 # working tree as checked out, and the index, where a working-tree-encoding file reads as its
 # staged blob (case index-encoding).
 assert_wired image_pin_check.py .github/workflows/ci.yml Makefile
+mkdir -p "$work/wired-commented/tools/ci"
+printf '%s\n' 'workflows-verify:' '	# python3 -I tools/ci/image_pin_check.py' '	# python3 -I tools/ci/image_pin_check.py --index' > "$work/wired-commented/Makefile"
+status=0
+out=$(sh -c '. "$1"; HERE="$2"; assert_wired "$3" Makefile' _ "$HERE/test_lib.sh" "$work/wired-commented/tools/ci" image_pin_check.py 2>&1) || status=$?
+check_case wiring-commented 1 "$status" "FAIL wiring: Makefile runs no 'python3 -I tools/ci/image_pin_check.py'" "$out"
 echo "ok   wiring"
 
 # assert_bounded WANT NEEDLE SECONDS CMD...: `run_bounded SECONDS CMD...` must exit WANT with

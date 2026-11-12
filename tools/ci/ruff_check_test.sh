@@ -210,12 +210,74 @@ test_exception_parse_cases() {
     done
 }
 
+# hook_floor_repo DIR PYTHON_SH SIBLING_SRC: throwaway repo with lefthook.yml invoking
+# .config/lefthook/python.sh on tools/hook.py, which imports sibling tools/sibling.py.
+hook_floor_repo() {
+    local dir=$1 python_sh=$2 sibling_src=$3
+    new_repo "$dir"
+    sed '/^\[lint.per-file-ignores\]/,$d' "$REPO_ROOT/ruff.toml" > "$dir/ruff.toml"
+    mkdir -p "$dir/.config/lefthook" "$dir/tools"
+    printf '%s\n' "$python_sh" > "$dir/.config/lefthook/python.sh"
+    cat > "$dir/lefthook.yml" <<'EOF'
+pre-commit:
+  commands:
+    hook:
+      run: sh .config/lefthook/python.sh -I tools/hook.py
+EOF
+    printf '%s\n' 'import sibling' '' 'print(sibling.X)' > "$dir/tools/hook.py"
+    printf '%s\n' "$sibling_src" > "$dir/tools/sibling.py"
+    git -C "$dir" add ruff.toml lefthook.yml .config/lefthook/python.sh tools/hook.py tools/sibling.py
+    git -C "$dir" commit -q -m "initial"
+}
+
+# test_hook_floor: verify PEP 695 type alias in an imported hook sibling is refused on Python
+# 3.10 floor, an implicit alias passes, and python.sh lacking floor=NN fails naming the file.
+test_hook_floor() {
+    local out status
+    hook_floor_repo "$work/hook-pep695" 'floor=10 #' 'type X = int'
+    set +e
+    out=$(sh "$check" "$cache" "$work/hook-pep695" 2>&1)
+    status=$?
+    set -e
+    if [ "$status" -eq 0 ] || ! echo "$out" | grep -q "tools/sibling.py" || ! echo "$out" | grep -q "error: hook scripts must parse on Python 3.10"; then
+        echo "FAIL hook-pep695: expected failure naming tools/sibling.py and Python 3.10 floor, got ($status): $out"
+        failed=1
+    else
+        echo "ok   hook sibling with PEP 695 type alias refused"
+    fi
+
+    hook_floor_repo "$work/hook-implicit-alias" 'floor=10 #' 'X = int | None'
+    set +e
+    out=$(sh "$check" "$cache" "$work/hook-implicit-alias" 2>&1)
+    status=$?
+    set -e
+    if [ "$status" -ne 0 ]; then
+        echo "FAIL hook-implicit-alias: expected exit 0, got $status: $out"
+        failed=1
+    else
+        echo "ok   hook sibling with implicit type alias passes"
+    fi
+
+    hook_floor_repo "$work/hook-no-floor" '# missing floor setting' 'X = 1'
+    set +e
+    out=$(sh "$check" "$cache" "$work/hook-no-floor" 2>&1)
+    status=$?
+    set -e
+    if [ "$status" -eq 0 ] || ! echo "$out" | grep -q ".config/lefthook/python.sh"; then
+        echo "FAIL hook-no-floor: expected failure naming .config/lefthook/python.sh, got ($status): $out"
+        failed=1
+    else
+        echo "ok   python.sh without floor line refused"
+    fi
+}
+
 test_planted_isc004
 test_clean
 test_req_without_hash
 test_version_mismatch
 test_exceptions
 test_exception_parse_cases
+test_hook_floor
 
 if [ "$failed" -ne 0 ]; then
     exit 1

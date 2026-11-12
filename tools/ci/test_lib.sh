@@ -48,9 +48,10 @@ run_bounded() {
 }
 
 # assert_wired CHECK FILE...: checks that each FILE, relative to the repository
-# root above HERE, runs `python3 -I tools/ci/CHECK` twice: over the working tree
-# and with --index, each run ending its line or followed by `&&`. On a missing
-# run, prints the FAIL wiring diagnostic to stderr and exits 1.
+# root above HERE, runs `python3 -I tools/ci/CHECK` twice on uncommented lines:
+# over the working tree and with --index, each run ending its line or followed
+# by `&&`. On a missing run, prints the FAIL wiring diagnostic to stderr and
+# exits 1.
 assert_wired() {
   wired_check=$1
   shift
@@ -58,7 +59,7 @@ assert_wired() {
   wired_pattern=$(printf '%s' "$wired_check" | sed 's/[.]/\\./g')
   for wired_file in "$@"; do
     for wired_reader in '' ' --index'; do
-      if ! grep -q -E "python3 -I tools/ci/${wired_pattern}${wired_reader}( &&|\$)" "$wired_root/$wired_file"; then
+      if ! grep -q -E "^[^#]*python3 -I tools/ci/${wired_pattern}${wired_reader}( &&|\$)" "$wired_root/$wired_file"; then
         printf "FAIL wiring: %s runs no 'python3 -I tools/ci/%s%s'\n" "$wired_file" "$wired_check" "$wired_reader" >&2
         exit 1
       fi

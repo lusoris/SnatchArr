@@ -9,7 +9,8 @@ tag)` key must carry the same digest.
 Grammar (allow-list):
 - not preceded by `[A-Za-z0-9._/-]`, or directly after a shell default operator `${NAME:-` or
   `${NAME-` (`NAME` = `[A-Za-z_][A-Za-z0-9_]*`), as in `image: ${IMG:-postgres:18@sha256:...}`;
-- `name`: optional first component in host form (`[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?/`),
+- `name`: optional first component in `distribution/reference` v0.6.0 host form (domain name of
+  `[a-zA-Z0-9]` / hyphen labels or bracketed IPv6 literal, optional `:port`, trailing `/`),
   followed by one or more `/`-separated path components
   `[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*` (OCI `distribution-spec` `spec.md` line 151 at commit
   `97274622c111`);
@@ -73,7 +74,10 @@ DOCKER_HUB_HOSTS = frozenset({
     "mirror.gcr.io",
 })
 
-HOST_PREFIX = r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?/"
+DOMAIN_COMPONENT = r"(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])"
+DOMAIN_NAME = rf"{DOMAIN_COMPONENT}(?:\.{DOMAIN_COMPONENT})*"
+IPV6_ADDRESS = r"\[(?:[a-fA-F0-9:]+)\]"
+HOST_PREFIX = rf"(?:{DOMAIN_NAME}|{IPV6_ADDRESS})(?::[0-9]+)?/"
 PATH_COMPONENT = r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
 IMAGE_PIN = re.compile(
     r"(?:\$\{[A-Za-z_][A-Za-z0-9_]*:?-|(?<![A-Za-z0-9._/-]))"
