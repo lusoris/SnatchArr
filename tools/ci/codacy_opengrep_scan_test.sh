@@ -45,7 +45,7 @@ make_root() {
   mkdir -p "$1/tools/ci/codacy_opengrep/testdata"
   cp "$SCAN" "$HERE/tool-versions.env" "$1/tools/ci/"
   cp "$HERE/codacy_opengrep/baseline.json" "$HERE/codacy_opengrep/opengrep-python.config.json" "$1/tools/ci/codacy_opengrep/"
-  cp "$FIXTURES/main-report.json" "$FIXTURES/planted-report.json" "$1/tools/ci/codacy_opengrep/testdata/"
+  cp "$FIXTURES/main-report.json" "$FIXTURES/planted-report.json" "$FIXTURES/codacy-api-paths.txt" "$1/tools/ci/codacy_opengrep/testdata/"
 }
 
 # mutate DIR FROM TO: copy a root into DIR whose scanner has the literal line part FROM replaced by
@@ -136,6 +136,12 @@ mutate "$WORK/canary" "except ScanError as err:  # the tree scan still runs" "ex
 expect 1 "mutant letting a canary error end the scan" "canary: cannot read" python3 -I "$WORK/canary/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
 mutate "$WORK/live" 'return [f"live listing drift against {label}: added={added}, removed={removed}"] if added or removed else []' 'return []'
 expect 1 "mutant ignoring live listing drift" "FAIL live listing missing a configured ID refused" python3 -I "$WORK/live/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
+mutate "$WORK/path" '/repositories/{repository[1]}"' '/{repository[1]}"'
+expect 1 "mutant dropping /repositories/ from the API path" "FAIL every Codacy request path matches an operation" python3 -I "$WORK/path/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
+mutate "$WORK/cursor" "if not cursor:" "if not cursor or not page:"
+expect 1 "mutant ending the listing on an empty page" "FAIL empty page with a cursor is followed" python3 -I "$WORK/cursor/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
+mutate "$WORK/redirect" "build_opener(RefuseRedirect)" "build_opener()"
+expect 1 "mutant following redirects with the token" "FAIL token opener refuses a redirect" python3 -I "$WORK/redirect/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
 
 make_root "$WORK/deleted"
 edit_json "$WORK/deleted/$BASELINE" drop-first

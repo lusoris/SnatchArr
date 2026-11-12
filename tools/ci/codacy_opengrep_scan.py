@@ -27,13 +27,16 @@ reporting that defect.
 The live listing check pages Codacy's listRepositoryToolPatterns (enabled patterns of the Opengrep
 tool, in the config's languages) for the GitHub origin repository and fails on any added or removed
 ID. The CLI's own `init --remote` cannot serve it: it skips the patterns of a tool Codacy marks
-usesConfigurationFile, and Codacy marks Opengrep so. The CLI never sees CODACY_* variables.
+usesConfigurationFile, and Codacy marks Opengrep so. The CLI never sees CODACY_* variables. The
+token travels in a header only, through an opener that refuses every redirect, and every request
+path must match an operation of the Codacy API spec excerpt in testdata/codacy-api-paths.txt.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import http.server
 import io
 import json
 import os
@@ -93,6 +96,7 @@ CHUNK_BYTES = 1024 * 1024
 MAX_READS = 1 << 20
 CODACY_API = "https://app.codacy.com/api/v3"
 CODACY_TOOL = "Opengrep"
+API_PATHS = "tools/ci/codacy_opengrep/testdata/codacy-api-paths.txt"
 TOKEN_VARS = (("CODACY_PROJECT_TOKEN", "project-token"), ("CODACY_API_TOKEN", "api-token"))  # Codacy's names, repository token first
 TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{8,256}")
 ORIGIN_RE = re.compile(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9][A-Za-z0-9_.-]{0,99})/([A-Za-z0-9][A-Za-z0-9_.-]{0,99}?)(?:\.git)?/?")
@@ -677,11 +681,24 @@ def config_languages(root: Path) -> str:
     return ",".join(languages)
 
 
+class RefuseRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect: urllib copies the request headers, the Codacy token among them, to the new URL."""
+
+    def redirect_request(self, req: urllib.request.Request, fp: object, code: int, msg: str, headers: object, newurl: str) -> urllib.request.Request | None:
+        """Raise instead of building a request for NEWURL."""
+        raise urllib.error.HTTPError(req.full_url, code, f"redirect to {urllib.parse.urlsplit(newurl).netloc or 'a relative URL'} refused: {msg}", headers, fp)
+
+
+def codacy_open(request: urllib.request.Request, timeout: float) -> object:
+    """Open REQUEST without following redirects, so the token header never leaves the URL it was sent to."""
+    return urllib.request.build_opener(RefuseRedirect).open(request, timeout=timeout)
+
+
 def codacy_getter(auth: tuple[str, str], repository: tuple[str, str], scratch: Path, opener: Callable[..., object]) -> Callable[[str, dict[str, str]], object]:
     """Return get(path, query): one authenticated JSON GET under the repository; all calls share LISTING_DEADLINE_SECONDS."""
     header, token = auth
     stop = time.monotonic() + LISTING_DEADLINE_SECONDS
-    base = f"{CODACY_API}/analysis/organizations/gh/{repository[0]}/{repository[1]}"
+    base = f"{CODACY_API}/analysis/organizations/gh/{repository[0]}/repositories/{repository[1]}"
     responses: list[Path] = []
 
     def open_with_token(url: str, timeout: float) -> object:
@@ -693,7 +710,7 @@ def codacy_getter(auth: tuple[str, str], repository: tuple[str, str], scratch: P
         responses.append(scratch / f"response-{len(responses)}.json")
         try:
             fetch_within(f"{base}{path}?{urllib.parse.urlencode(query)}", responses[-1], max(stop - time.monotonic(), 0.0), open_with_token)
-        except ScanError as err:  # Codacy answers 404, not 401, to an unknown token
+        except ScanError as err:
             raise ScanError(f"GET {path}: {err}") from err
         return load_json(responses[-1])
 
@@ -743,7 +760,7 @@ def enabled_ids(get: Callable[[str, dict[str, str]], object], uuid: str, languag
         ids += page
         if len(ids) != len(set(ids)):
             raise ScanError("a pattern ID repeats across pages")
-        if not cursor or not page:
+        if not cursor:  # Codacy: a cursor, not a nonempty page, means another page follows
             return sorted(ids)
         query = {**query, "cursor": cursor}
     raise ScanError(f"more than {MAX_LISTING_PAGES} pages")
@@ -951,8 +968,119 @@ def request_cases(scratch: Path) -> list[tuple[str, bool]]:
     url = seen[0].full_url if seen else ""
     return [
         ("listing request sends the token as a header only", page == {"data": []} and seen[0].get_header("Project-token") == token and token not in url),
-        ("listing request names the repository, enabled and the languages", url == f"{CODACY_API}/analysis/organizations/gh/lusoris/SnatchArr/tools/u/patterns?enabled=true&languages=Python"),
+        ("listing request names the repository, enabled and the languages", url == f"{CODACY_API}/analysis/organizations/gh/lusoris/repositories/SnatchArr/tools/u/patterns?enabled=true&languages=Python"),
         ("HTTP 401 from Codacy refused", raises(lambda: codacy_getter(("api-token", token), ("lusoris", "SnatchArr"), scratch, refuse)("/tools", {}))),
+    ]
+
+
+class ProbeServer(http.server.HTTPServer):
+    """Loopback server whose handler records, in LANDED, the api-token header each /landing request carried."""
+
+    def __init__(self) -> None:
+        """Bind an ephemeral 127.0.0.1 port; handle_request waits 0.5 s at most."""
+        super().__init__(("127.0.0.1", 0), RedirectProbe)
+        self.timeout = 0.5
+        self.landed: list[str | None] = []
+
+
+class RedirectProbe(http.server.BaseHTTPRequestHandler):
+    """Loopback handler: /start answers 302 to /landing; /landing records the api-token header it got."""
+
+    def do_GET(self) -> None:
+        """Redirect /start, record and answer anything else."""
+        if self.path == "/start":
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{self.server.server_address[1]}/landing")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        landed = getattr(self.server, "landed", None)
+        if isinstance(landed, list):
+            landed.append(self.headers.get("api-token"))
+        self.send_response(200)
+        self.send_header("Content-Length", "2")
+        self.end_headers()
+        self.wfile.write(b"{}")
+
+    def log_message(self, *_args: object) -> None:
+        """Keep the self-test output to its case lines."""
+
+
+def serve_until(server: http.server.HTTPServer, stop: threading.Event) -> None:
+    """Handle loopback requests until STOP is set, at most 64 waits of server.timeout each."""
+    for _ in range(64):
+        if stop.is_set():
+            return
+        server.handle_request()
+
+
+def status_of(opener: Callable[..., object], request: urllib.request.Request) -> str:
+    """Return 'status N' for a response, 'refused N' for a refused redirect, else the HTTP code or error class."""
+    try:
+        with opener(request, timeout=5) as response:
+            return f"status {response.status}"
+    except urllib.error.HTTPError as err:
+        err.close()
+        return f"refused {err.code}" if "refused" in str(err.reason) else f"HTTP {err.code}"
+    except OSError as err:
+        return type(err).__name__
+
+
+def default_open(request: urllib.request.Request, timeout: float) -> object:
+    """Open REQUEST with urllib's default handlers, redirects included: the twin of codacy_open."""
+    return urllib.request.build_opener().open(request, timeout=timeout)
+
+
+def redirect_cases() -> list[tuple[str, bool]]:
+    """Return (name, held): codacy_open refuses a redirect, so the token never lands; the default opener forwards it."""
+    token, stop = "t0ken-" + "y" * 14, threading.Event()
+    with ProbeServer() as server:
+        serving = threading.Thread(target=serve_until, args=(server, stop), daemon=True)
+        serving.start()
+        url = f"http://127.0.0.1:{server.server_address[1]}"
+        refused = status_of(codacy_open, urllib.request.Request(f"{url}/start", headers={"api-token": token}))
+        landed_after_refusal = list(server.landed)
+        direct = status_of(codacy_open, urllib.request.Request(f"{url}/landing"))
+        followed = status_of(default_open, urllib.request.Request(f"{url}/start", headers={"api-token": token}))
+        stop.set()
+        serving.join(timeout=5)
+        landed = list(server.landed)
+    return [
+        ("token opener refuses a redirect, the token never lands", refused == "refused 302" and landed_after_refusal == []),
+        ("token opener answers a request without a redirect", direct == "status 200"),
+        ("default opener follows the redirect with the token (the refusal's twin)", followed == "status 200" and landed == [None, token]),
+    ]
+
+
+def api_templates(root: Path) -> list[re.Pattern[str]]:
+    """Return one regex per GET operation path in API_PATHS; a {name} segment matches one path segment."""
+    templates: list[re.Pattern[str]] = []
+    for line in (root / API_PATHS).read_text(encoding="utf-8").splitlines():
+        if line.strip() and not line.startswith("#"):
+            fields = line.split()
+            if len(fields) != 3 or fields[1] != "GET":
+                raise ScanError(f"{API_PATHS}: expected 'operationId GET path', got {line!r}")
+            templates.append(re.compile(re.sub(r"\\\{[A-Za-z]+\\\}", "[^/?]+", re.escape(fields[2]))))
+    return templates
+
+
+def spec_cases(root: Path, scratch: Path) -> list[tuple[str, bool]]:
+    """Return (name, held): every path the live listing requests matches an operation of the Codacy spec excerpt."""
+    templates = api_templates(root)
+    bodies = iter([json.dumps(fake_codacy([[]])("/tools", {})).encode(), b'{"data": [], "pagination": {}}'])
+    paths: list[str] = []
+
+    def answer(request: urllib.request.Request, timeout: float) -> object:
+        """Record the request path below the API base and serve the next body, whatever the socket TIMEOUT."""
+        paths.append(urllib.parse.urlsplit(request.full_url).path.removeprefix(urllib.parse.urlsplit(CODACY_API).path))
+        return io.BytesIO(next(bodies, b"{}"))
+
+    get = codacy_getter(("project-token", "t" * 20), ("lusoris", "SnatchArr"), scratch, answer)
+    enabled_ids(get, tool_uuid(get), "Python")
+    hits = [[index for index, template in enumerate(templates) if template.fullmatch(path)] for path in paths]
+    return [
+        ("every Codacy request path matches an operation of the API spec excerpt", len(paths) == 2 and all(hits) and {i for hit in hits for i in hit} == set(range(len(templates)))),
+        ("a request path without /repositories/ matches no operation", not any(t.fullmatch("/analysis/organizations/gh/lusoris/SnatchArr/tools") for t in templates)),
     ]
 
 
@@ -967,6 +1095,7 @@ def live_cases(configured: list[str]) -> list[tuple[str, bool]]:
         ("Opengrep disabled on Codacy refused", raises(lambda: listed(fake_codacy(thirds, enabled=False)))),
         ("disabled pattern in the listing refused", raises(lambda: page_ids({"data": [{"enabled": False, "patternDefinition": {"id": configured[0]}}]}))),
         ("cursor past the page cap refused", raises(lambda: listed(fake_codacy([configured], loop=True)))),
+        ("empty page with a cursor is followed", listed(fake_codacy([[], configured])) == configured),
         ("repeated page refused", raises(lambda: listed(fake_codacy([configured[:2], configured[1:3]])))),
         ("no token, or an empty one, skips the live listing", codacy_auth({}) is None and codacy_auth({"CODACY_PROJECT_TOKEN": "", "CODACY_API_TOKEN": ""}) is None),
         ("repository token preferred over the account token", codacy_auth({"CODACY_PROJECT_TOKEN": token, "CODACY_API_TOKEN": "b" * 20}) == ("project-token", token)),
@@ -975,7 +1104,7 @@ def live_cases(configured: list[str]) -> list[tuple[str, bool]]:
         ("GitHub https and ssh origins accepted", all(parse_origin(url) == ("lusoris", "SnatchArr") for url in ("https://github.com/lusoris/SnatchArr.git", "git@github.com:lusoris/SnatchArr.git", "ssh://git@github.com/lusoris/SnatchArr"))),
         ("other origin hosts and dot segments refused", parse_origin("https://gitlab.com/lusoris/SnatchArr.git") is None and parse_origin("https://github.com/../x") is None),
         ("CLI environment drops every CODACY_* variable", cli_env({"CODACY_PROJECT_TOKEN": token, "CODACY_API_BASE_URL": "x", "PATH": "/bin"}, Path("/h")) == {"PATH": "/bin", "CODACY_GLOBAL_DIR": "/h"}),
-        ("live listing error returned with its prefix", refused_with(live_drift(Path("/nonexistent"), {"CODACY_API_TOKEN": "bad token"}, urllib.request.urlopen), "live listing: CODACY_API_TOKEN is malformed")),
+        ("live listing error returned with its prefix", refused_with(live_drift(Path("/nonexistent"), {"CODACY_API_TOKEN": "bad token"}, codacy_open), "live listing: CODACY_API_TOKEN is malformed")),
     ]
 
 
@@ -1045,6 +1174,7 @@ def run_self_test(root: Path, today: date) -> int:
     with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-selftest-") as temporary:
         scratch = Path(temporary)
         cases = report_cases(root, baseline_counts(entries), version) + fingerprint_cases() + guard_cases(scratch) + download_cases(scratch) + request_cases(scratch)
+        cases += spec_cases(root, scratch) + redirect_cases()
     cases += entry_cases(sample, set(config_ids(root))) + shrink_cases(entries, sample) + live_cases(config_ids(root))
     cases.append(("empty baseline: the shrink cases still run", all(held for _name, held in shrink_cases({}, sample))))
     failed = [name for name, held in cases if not held]
@@ -1101,7 +1231,7 @@ def main(argv: list[str]) -> int:
             problems = shrink_problems(ROOT, args.base_ref, args.today)
         else:
             problems = scan(ROOT, args.today, args.report_out)
-            problems += live_drift(ROOT, os.environ, urllib.request.urlopen)  # nosec B310  # fixed https base, CODACY_API
+            problems += live_drift(ROOT, os.environ, codacy_open)
     except ScanError as err:
         problems = [str(err)]
     for problem in problems:
