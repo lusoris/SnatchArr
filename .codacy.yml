@@ -11,6 +11,11 @@ exclude_paths:
   - "api/internal/store/sqlcgen/**"
   - "web/src/lib/api/schema.d.ts"
 engines:
+  # npm writes tools/ci/codacy_opengrep/package-lock.json; Lizard measures it as code. Trivy keeps
+  # reading it for vulnerable packages.
+  lizard:
+    exclude_paths:
+      - "tools/ci/codacy_opengrep/package-lock.json"
   # TSQLLint checks SQL Server dialect; the migrations are PostgreSQL. SQLFluff and the other
   # SQL tools keep reading them.
   tsqllint:

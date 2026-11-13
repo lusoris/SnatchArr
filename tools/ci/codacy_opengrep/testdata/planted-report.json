@@ -1,0 +1,163 @@
+{
+  "capability": {
+    "checkedAt": "2026-11-12T17:00:38.314Z",
+    "ready": [
+      {
+        "configSource": "codacy",
+        "displayName": "Opengrep",
+        "filesRouted": 2,
+        "installation": "codacy",
+        "runner": "local",
+        "toolId": "Semgrep",
+        "version": "1.30.0"
+      }
+    ],
+    "unavailable": []
+  },
+  "errors": [],
+  "issues": [
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 10,
+      "endLine": 289,
+      "filePath": "tools/ci/image_release_age_check.py",
+      "line": 283,
+      "lineContent": "        proc = subprocess.run(  # nosec B603  # fixed argv invoking own --judge mode, no shell",
+      "message": "Detected user input entering a `subprocess` call unsafely.",
+      "multilineContent": [
+        "        proc = subprocess.run(  # nosec B603  # fixed argv invoking own --judge mode, no shell",
+        "            [sys.executable, \"-I\", str(Path(__file__).resolve()), \"--judge\"],",
+        "            input=payload,",
+        "            capture_output=True,",
+        "            timeout=REGEX_DEADLINE,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.django.security.injection.command.subprocess-injection.subprocess-injection",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 16,
+      "endColumn": 10,
+      "endLine": 289,
+      "filePath": "tools/ci/image_release_age_check.py",
+      "line": 283,
+      "lineContent": "        proc = subprocess.run(  # nosec B603  # fixed argv invoking own --judge mode, no shell",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "multilineContent": [
+        "        proc = subprocess.run(  # nosec B603  # fixed argv invoking own --judge mode, no shell",
+        "            [sys.executable, \"-I\", str(Path(__file__).resolve()), \"--judge\"],",
+        "            input=payload,",
+        "            capture_output=True,",
+        "            timeout=REGEX_DEADLINE,",
+        "            check=False,",
+        "        )"
+      ],
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 5,
+      "endColumn": 58,
+      "filePath": "tools/ci/intrafile_canary.py",
+      "line": 18,
+      "lineContent": "    subprocess.run([tool_path()], check=False, timeout=5)",
+      "message": "Detected subprocess function 'run' without a static string.",
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    },
+    {
+      "category": "Security",
+      "column": 20,
+      "endColumn": 33,
+      "filePath": "tools/ci/intrafile_canary.py",
+      "line": 18,
+      "lineContent": "    subprocess.run([tool_path()], check=False, timeout=5)",
+      "message": "Detected subprocess function 'run' with user controlled data.",
+      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+      "severity": "Error",
+      "toolId": "Semgrep"
+    }
+  ],
+  "metadata": {
+    "completedAt": "2026-11-12T17:00:42.578Z",
+    "durationMs": 5107,
+    "executionMode": "strict",
+    "phaseTimings": {
+      "availabilityMs": 828,
+      "fileDiscoveryMs": 7,
+      "fileRoutingMs": 2,
+      "installMs": 0,
+      "toolExecutionMs": 4254,
+      "toolUpdateMs": 0
+    },
+    "startedAt": "2026-11-12T17:00:37.471Z"
+  },
+  "patternSummary": {
+    "groups": [
+      {
+        "category": "Security",
+        "categoryLabel": "Security",
+        "patterns": [
+          {
+            "category": "Security",
+            "fileCount": 2,
+            "issueCount": 2,
+            "noisy": false,
+            "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
+            "severity": "Error",
+            "title": "Audit Dangerous Subprocess Use",
+            "toolDisplayName": "Opengrep",
+            "toolId": "Semgrep"
+          },
+          {
+            "category": "Security",
+            "fileCount": 1,
+            "issueCount": 1,
+            "noisy": false,
+            "patternId": "Semgrep_python.django.security.injection.command.subprocess-injection.subprocess-injection",
+            "severity": "Error",
+            "title": "Avoid Unsafe User Input in subprocess Calls",
+            "toolDisplayName": "Opengrep",
+            "toolId": "Semgrep"
+          },
+          {
+            "category": "Security",
+            "fileCount": 1,
+            "issueCount": 1,
+            "noisy": false,
+            "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+            "severity": "Error",
+            "title": "Avoid Dangerous Subprocess Use with Tainted Environment Arguments",
+            "toolDisplayName": "Opengrep",
+            "toolId": "Semgrep"
+          }
+        ],
+        "severity": "Error",
+        "severityLabel": "CRITICAL",
+        "totalIssues": 4,
+        "totalPatterns": 3
+      }
+    ],
+    "noisyPatternCount": 0,
+    "noisyThreshold": 500,
+    "totalIssues": 4,
+    "totalPatterns": 3
+  },
+  "toolResults": [
+    {
+      "durationMs": 4252,
+      "errorCount": 0,
+      "filesAnalyzed": 2,
+      "issueCount": 4,
+      "status": "success",
+      "toolId": "Semgrep"
+    }
+  ]
+}

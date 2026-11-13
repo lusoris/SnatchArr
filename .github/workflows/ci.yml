@@ -68,6 +68,24 @@ jobs:
       # These run at tag time only otherwise, so a pull request that breaks either script would land green.
       - name: The Codacy configuration excludes generated code, after its planted cases
         run: python3 -I tools/ci/codacy_config.py --self-test && python3 -I tools/ci/codacy_config.py
+      # A pull request may only remove Opengrep baseline entries; a push to main is held to the same rule.
+      - name: The Opengrep baseline only shrinks
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            python3 -I tools/ci/codacy_opengrep_scan.py --base-ref "$BASE_SHA"
+          elif [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "Skipping the Opengrep shrink check: $EVENT_NAME has no before commit ($BEFORE_SHA)"
+          else
+            # A force-push leaves the before commit out of the clone: fetch it, and fail when it is gone.
+            if ! git rev-parse --verify -q "$BEFORE_SHA^{commit}" >/dev/null; then
+              timeout 120 git fetch --no-tags --quiet origin "$BEFORE_SHA"
+            fi
+            python3 -I tools/ci/codacy_opengrep_scan.py --base-ref "$BEFORE_SHA"
+          fi
       - name: The release publish order check refuses its planted cases
         run: python3 -I tools/ci/release_publish_order_check.py --self-test && python3 -I tools/ci/release_publish_order_check.py
       # The devcontainer installs the engine at a literal ref; it must be the PRAETOR_REF pin below.
@@ -129,13 +147,22 @@ jobs:
   semgrep:
     name: Semgrep (own rules, .semgrep.yml)
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    # The Opengrep mirror adds at most 180 s of download and two CLI runs of at most 240 s each
+    # (tools/ci/codacy_opengrep_scan.py); a full local run measured 34 s on 2026-11-12.
+    timeout-minutes: 20
     steps:
       - *stop-draft
       - &checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: The Opengrep ratchet refuses its recorded regressions
+        run: |
+          sh tools/ci/codacy_opengrep_scan_test.sh
+          python3 -I tools/ci/codacy_opengrep_scan.py --self-test
       - name: The scan script refuses its planted cases
         run: sh tools/ci/semgrep_scan_test.sh
       - name: Replay the rule fixtures, then scan the tracked Go files
@@ -146,6 +173,15 @@ jobs:
           set -euo pipefail
           docker pull --quiet "$SEMGREP_IMAGE"
           python3 -I tools/ci/semgrep_scan.py --image "$SEMGREP_IMAGE"
+      - name: Install the pinned Codacy analysis CLI
+        working-directory: tools/ci/codacy_opengrep
+        run: npm ci --ignore-scripts --no-audit
+      - name: Mirror Codacy Opengrep over tracked Python files
+        # With the repository secret CODACY_PROJECT_TOKEN (a Codacy repository API token), the scan
+        # also compares the config with the patterns Codacy enables live; without it, it says so.
+        env:
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+        run: python3 -I tools/ci/codacy_opengrep_scan.py
 
   trivy:
     name: Trivy (lockfiles, secrets, Dockerfiles, Helm chart)

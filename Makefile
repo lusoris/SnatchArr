@@ -50,7 +50,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live arr-pushtitle-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check release-closes-check secret-scan py-lint docs-verify licences licences-check logos logos-check \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live arr-pushtitle-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint tools-opengrep release-e2e-check release-dogfood-check release-closes-check secret-scan py-lint docs-verify licences licences-check logos logos-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check roadmap-check
 
@@ -200,7 +200,7 @@ GOLANGCI   ?= golangci-lint
 TOOLS_PKG  ?= ./tools/...
 TOOLS_TAG  ?= apicompatgate
 TOOLS_ISSUE ?= 1226
-tools-verify: tools-lint tools-test tools-gosec ## golangci-lint + go vet + go test -race + gosec over tools/
+tools-verify: tools-lint tools-test tools-gosec tools-opengrep ## golangci-lint + go vet + go test -race + gosec over tools/, and Codacy's Opengrep Python rules
 
 # The tagged run fails on no finding by itself: it writes every finding to a report, measured
 # against .golangci.yml without its generated exceptions block. tools/ci/lint_exceptions.sh
@@ -227,6 +227,18 @@ tools-test: ## go vet + go test -race over tools/
 # api-gosec scans tools/ without the tag (it runs over ./...); this is the scan with it.
 tools-gosec: ## gosec over tools/ built with the apicompatgate tag
 	$(MAKE) api-gosec GOSEC_PKG=$(TOOLS_PKG) GOSEC_TAGS=$(TOOLS_TAG) GOSEC_SARIF=api/tmp/gosec-tools.sarif
+
+# Codacy's Opengrep Python rules over every tracked Python file, through the @codacy/analysis-cli
+# pinned by tools/ci/codacy_opengrep/package-lock.json, ratcheted by the committed baseline; the
+# scanner downloads the pinned Opengrep release (network). That binary is Linux x86_64 only, so
+# other hosts skip with that reason; CI runs the scan in the semgrep job.
+tools-opengrep: ## Codacy Opengrep Python rules over tracked Python files, against tools/ci/codacy_opengrep/baseline.json
+	case "$$(uname -s)-$$(uname -m)" in
+	  Linux-x86_64) ;;
+	  *) echo "tools-opengrep: skipped on $$(uname -s)-$$(uname -m): the pinned Opengrep binary is Linux x86_64 only"; exit 0 ;;
+	esac
+	(cd tools/ci/codacy_opengrep && npm ci --ignore-scripts --no-audit)
+	python3 -I tools/ci/codacy_opengrep_scan.py
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────
 worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
@@ -681,6 +693,9 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/squash_merge_test.sh
 	sh tools/ci/semgrep_scan_test.sh
+	sh tools/ci/codacy_opengrep_scan_test.sh
+	python3 -I tools/ci/codacy_opengrep_scan.py --self-test
+	python3 -I tools/ci/codacy_opengrep_scan.py --base-ref origin/main
 	bash tools/ci/generated_files_test.sh
 	bash tools/e2e/planted_test.sh
 	bash tools/e2e/schema_check_test.sh

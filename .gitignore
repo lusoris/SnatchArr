@@ -54,3 +54,6 @@ __pycache__/
 .github/instructions/codacy.instructions.md
 .cursor/rules/codacy.mdc
 # END praetor private artifacts
+
+# Pinned Codacy analysis CLI for the Opengrep mirror (npm ci in tools/ci/codacy_opengrep, #1098)
+/tools/ci/codacy_opengrep/node_modules/

@@ -1,0 +1,6 @@
+# Operation paths the live listing calls, copied from Codacy API v3 spec 3.1.0,
+# https://app.codacy.com/api/api-docs/swagger.yaml (sha256 56522618e92bdf8764c4b0fd538a867d84ac0c6b16ec7fd2cbc851734d3725da),
+# read 2026-11-12. Format: operationId method path. Paths are relative to the API base: the spec's
+# server is https://api.codacy.com/api/v3, the scanner calls https://app.codacy.com/api/v3 (same API).
+listRepositoryTools GET /analysis/organizations/{provider}/{remoteOrganizationName}/repositories/{repositoryName}/tools
+listRepositoryToolPatterns GET /analysis/organizations/{provider}/{remoteOrganizationName}/repositories/{repositoryName}/tools/{toolUuid}/patterns

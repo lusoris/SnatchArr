@@ -99,3 +99,10 @@ pre-push:
       run: sh tools/ci/prepush_secret_scan.sh
     gate:
       run: sh .config/lefthook/engine.sh gate run --path=. --admit-unsupported
+    opengrep:
+      # Codacy's Opengrep Python rules, only when the push touches a Python file or the mirror.
+      glob:
+        - "*.py"
+        - "tools/ci/codacy_opengrep/*"
+        - "tools/ci/tool-versions.env"
+      run: make tools-opengrep
