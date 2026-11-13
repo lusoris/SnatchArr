@@ -217,3 +217,29 @@ func TestItemTitlesSonarrLanguageName(t *testing.T) {
 	}
 	assertAliasInput(t, got, arrclient.ItemTitles{Title: "Series", OriginalLanguage: "Thai"})
 }
+
+// TestItemTitlesExternalIDs checks the TVDB, TMDB and IMDB ids reach ItemTitles, trimmed.
+func TestItemTitlesExternalIDs(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		kind domain.AppKind
+		body string
+		want arrclient.ItemTitles
+	}{
+		{"sonarr", domain.KindSonarr, `{"title":"T","tvdbId":81189,"tmdbId":1396,"imdbId":" tt0903747 "}`, arrclient.ItemTitles{TVDBID: 81189, TMDBID: 1396, IMDBID: "tt0903747"}},
+		{"radarr", domain.KindRadarr, `{"title":"T","tmdbId":278,"imdbId":"tt0111161"}`, arrclient.ItemTitles{TMDBID: 278, IMDBID: "tt0111161"}},
+		{"absent", domain.KindRadarr, `{"title":"T"}`, arrclient.ItemTitles{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := fetchItemTitles(t, tc.kind, tc.body, http.StatusOK, 2*time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.TVDBID != tc.want.TVDBID || got.TMDBID != tc.want.TMDBID || got.IMDBID != tc.want.IMDBID {
+				t.Fatalf("ids = %d/%d/%q; want %d/%d/%q", got.TVDBID, got.TMDBID, got.IMDBID, tc.want.TVDBID, tc.want.TMDBID, tc.want.IMDBID)
+			}
+		})
+	}
+}

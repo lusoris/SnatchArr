@@ -53,3 +53,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0045](0045-quality-availability-and-split-series.md) | 2026-10-29 | Quality availability, profile mismatch and split-quality series | Accepted |
 | [0046](0046-download-client-priority-writes.md) | 2026-11-01 | Download client priority and queue-order writes | Accepted |
 | [0047](0047-list-sync-across-instances.md) | 2026-11-10 | List sync across instances | Accepted |
+| [0048](0048-tvdb-metadata-provider.md) | 2026-11-13 | TheTVDB as opt-in metadata provider | Accepted; amends 0019 |

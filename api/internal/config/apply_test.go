@@ -111,6 +111,35 @@ func TestApplySettingTableDriven(t *testing.T) {
 			errIs:   domain.ErrInvalid,
 		},
 		{
+			name: "positive tvdb api key",
+			key:  "snatcharr.metadata.tvdb.api_key",
+			val:  "planted-tvdb-key",
+			check: func(t *testing.T, o Options) {
+				t.Helper()
+				if o.Metadata.TVDB.APIKey != "planted-tvdb-key" {
+					t.Errorf("unexpected tvdb api key length %d", len(o.Metadata.TVDB.APIKey))
+				}
+			},
+		},
+		{
+			name: "positive tvdb pin",
+			key:  "snatcharr.metadata.tvdb.pin",
+			val:  "planted-tvdb-pin",
+			check: func(t *testing.T, o Options) {
+				t.Helper()
+				if o.Metadata.TVDB.PIN != "planted-tvdb-pin" {
+					t.Errorf("unexpected tvdb pin length %d", len(o.Metadata.TVDB.PIN))
+				}
+			},
+		},
+		{
+			name:    "negative unknown tvdb option",
+			key:     "snatcharr.metadata.tvdb.unknown",
+			val:     "x",
+			wantErr: true,
+			errIs:   domain.ErrInvalid,
+		},
+		{
 			name: "boundary empty string",
 			key:  "snatcharr.jellyfin.api_key",
 			val:  "test-jellyfin-api-token",

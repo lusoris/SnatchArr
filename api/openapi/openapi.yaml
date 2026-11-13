@@ -754,6 +754,53 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /instances/{instanceId}/items/{itemId}/foreign-titles:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+      - name: itemId
+        in: path
+        required: true
+        description: Sonarr series ID or Radarr movie ID.
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      tags: [instances]
+      operationId: getForeignTitles
+      summary: Foreign-language search titles of one Sonarr or Radarr item
+      description: |
+        Admin only. Returns the titles SnatchArr would search for one item in one rule
+        language: the *arr instance's own cached aliases and, when the operator set a
+        TheTVDB API key, TheTVDB translations and aliases (ADR-0048). Each title names its
+        source. A TheTVDB failure never fails the request: `tvdb` reports it and the *arr
+        titles still return. Other instance kinds answer 422.
+        Data courtesy of TheTVDB.com.
+      parameters:
+        - name: language
+          in: query
+          required: true
+          description: Foreign-title rule language code, for example `de` or `fr`.
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 8
+        - name: season
+          in: query
+          required: false
+          description: Season to scope season-specific aliases to; omitted = whole-item aliases only.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Foreign titles of the item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForeignTitles"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances/{instanceId}/queue-policy:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
@@ -3333,6 +3380,40 @@ components:
           items:
             $ref: "#/components/schemas/PolicyFilterOption"
 
+    ForeignTitles:
+      type: object
+      description: Search titles of one item in one rule language. Data courtesy of TheTVDB.com.
+      required: [language, titles, tvdb, attribution]
+      properties:
+        language:
+          type: string
+          description: Rule language code the titles were selected for.
+        season:
+          type: integer
+          description: Season the titles were scoped to, when requested.
+        titles:
+          type: array
+          description: Search titles in search order, at most 50.
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/ForeignTitle"
+        tvdb:
+          type: string
+          enum: [disabled, ok, unauthorized, rate_limited, unavailable]
+          description: What the opt-in TheTVDB provider did; `disabled` when no API key is set.
+        attribution:
+          type: string
+          description: TheTVDB attribution; show it next to titles whose source is `tvdb`.
+    ForeignTitle:
+      type: object
+      required: [title, source]
+      properties:
+        title:
+          type: string
+        source:
+          type: string
+          enum: [arr, tvdb]
+          description: Where the title came from.
     ForeignSearchPreflight:
       type: object
       description: Read-only foreign-title search preflight report for an instance. SnatchArr never changes the profile.

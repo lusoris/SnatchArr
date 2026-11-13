@@ -1318,6 +1318,38 @@
     ],
     "type": "object"
   },
+  "getForeignTitles": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "itemId": {
+        "description": "Sonarr series ID or Radarr movie ID.",
+        "minimum": 1,
+        "type": "integer"
+      },
+      "language": {
+        "description": "Foreign-title rule language code, for example `de` or `fr`.",
+        "maxLength": 8,
+        "minLength": 2,
+        "type": "string"
+      },
+      "season": {
+        "description": "Season to scope season-specific aliases to; omitted = whole-item aliases only.",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "instanceId",
+      "itemId",
+      "language"
+    ],
+    "type": "object"
+  },
   "getHourlyCaps": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

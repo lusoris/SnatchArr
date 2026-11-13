@@ -46,6 +46,7 @@ const (
 	GetDownloadClientPriorityPlanOperation    OperationName = "GetDownloadClientPriorityPlan"
 	GetDownloadClientStatusOperation          OperationName = "GetDownloadClientStatus"
 	GetForeignSearchPreflightOperation        OperationName = "GetForeignSearchPreflight"
+	GetForeignTitlesOperation                 OperationName = "GetForeignTitles"
 	GetHourlyCapsOperation                    OperationName = "GetHourlyCaps"
 	GetInstanceOperation                      OperationName = "GetInstance"
 	GetInstancePriorityOperation              OperationName = "GetInstancePriority"

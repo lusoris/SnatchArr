@@ -124,6 +124,22 @@ spec:
                   {{- fail "auth.proxyAuth is enabled: set auth.proxyAuth.existingSecret" }}
                   {{- end }}
             {{- end }}
+            {{- with ((.Values.metadata).tvdb) }}
+            {{- if .existingSecret }}
+            # Opt-in TheTVDB provider (ADR-0048): credentials only from a Secret.
+            - name: APP_SNATCHARR_METADATA_TVDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .existingSecret }}
+                  key: {{ default "tvdb-api-key" .apiKeyKey }}
+            - name: APP_SNATCHARR_METADATA_TVDB_PIN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .existingSecret }}
+                  key: {{ default "tvdb-pin" .pinKey }}
+                  optional: true
+            {{- end }}
+            {{- end }}
             {{- with .Values.config.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

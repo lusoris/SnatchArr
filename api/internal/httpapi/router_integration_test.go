@@ -665,6 +665,20 @@ func stepsPoliciesAndRuns() []routerStep {
 			},
 		},
 		{
+			op:     "getForeignTitles",
+			method: http.MethodGet,
+			path: func(ids *idsState) string {
+				return "/instances/" + ids.instanceID + "/items/7/foreign-titles?language=de"
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["tvdb"] != "disabled" || decoded["attribution"] == "" {
+					t.Fatalf("getForeignTitles = %v; want tvdb disabled and attribution", decoded)
+				}
+			},
+		},
+		{
 			op:     "getQueuePolicy",
 			method: http.MethodGet,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/queue-policy" },
@@ -2773,7 +2787,7 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 		t.Fatal("no operations tested")
 	}
 
-	adminOnlyReads := []string{"listLogs", "getConfigarrStatus", "getPolicyFilterOptions", "getForeignSearchPreflight", "getModule"}
+	adminOnlyReads := []string{"listLogs", "getConfigarrStatus", "getPolicyFilterOptions", "getForeignSearchPreflight", "getForeignTitles", "getModule"}
 	for _, opID := range adminOnlyReads {
 		step, ok := stepsByOp[opID]
 		if !ok {

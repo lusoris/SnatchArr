@@ -28,6 +28,8 @@ func ApplySetting(o *Options, key, val string) error {
 		return applyProxyAuth(o, key, val)
 	case strings.HasPrefix(key, "snatcharr.jellyfin."):
 		return applyJellyfin(o, key, val)
+	case strings.HasPrefix(key, "snatcharr.metadata.tvdb."):
+		return applyTVDB(o, key, val)
 	case strings.HasPrefix(key, "snatcharr.configarr."):
 		return applyConfigarr(o, key, val)
 	case strings.HasPrefix(key, "snatcharr.prowlarr."):
@@ -254,6 +256,18 @@ func applyProxyAuthLists(o *Options, key, val string) error {
 		o.ProxyAuth.ViewerGroups = cleanTrusted(strings.Split(val, ","))
 	default:
 		return fmt.Errorf("%w: unknown proxy_auth option %q", domain.ErrInvalid, key)
+	}
+	return nil
+}
+
+func applyTVDB(o *Options, key, val string) error {
+	switch key {
+	case "snatcharr.metadata.tvdb.api_key":
+		o.Metadata.TVDB.APIKey = val
+	case "snatcharr.metadata.tvdb.pin":
+		o.Metadata.TVDB.PIN = val
+	default:
+		return fmt.Errorf("%w: unknown tvdb option %q", domain.ErrInvalid, key)
 	}
 	return nil
 }

@@ -21,6 +21,21 @@
         }
       }
     },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "tvdb": {
+          "type": "object",
+          "properties": {
+            "existingSecret": { "type": "string" },
+            "apiKeyKey": { "type": "string", "minLength": 1 },
+            "pinKey": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "configarr": {
       "type": "object",
       "properties": {

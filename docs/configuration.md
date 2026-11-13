@@ -24,6 +24,8 @@ UI.
 | `APP_LEADER_NAME` | `snatcharr` | Lock name; one per deployment |
 | `APP_LEADER_IDENTITY` | hostname | This replica's name in logs |
 | `APP_LEADER_PG_RETRY` | `2s` | How often a follower retries the lock |
+| `APP_CACHE_MEMORY_MAX_SIZE` | `10000` | Entries in the shared in-process cache that outbound metadata providers (TheTVDB) use; each provider keeps its own key prefix and expiry |
+| `APP_CACHE_MEMORY_TTL` | `5m` | Default expiry for that cache; a provider with its own expiry (TheTVDB: 24 hours for a hit, 1 hour for an unknown item) overrides it |
 | `APP_SNATCHARR_PROFILE` | `prod` | `prod` or `dev`; `dev` relaxes cookie security and uses the built-in dev key |
 | `APP_SNATCHARR_PUBLIC_URL` | | External base URL (cookies, links) |
 | `APP_SNATCHARR_WORKER_TOKEN` | | Shared bearer the worker presents over gRPC |
@@ -43,6 +45,8 @@ UI.
 | `APP_SNATCHARR_JELLYFIN_API_KEY` | | Jellyfin service account API key |
 | `APP_SNATCHARR_JELLYFIN_TIMEOUT` | `10s` | HTTP request timeout for Jellyfin client calls |
 | `APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE` | `requester` | Role for a non-admin Jellyfin member on first sign-in (`requester` or `viewer`); Jellyfin administrators become admin |
+| `APP_SNATCHARR_METADATA_TVDB_API_KEY` | | Optional TheTVDB API key (secret, write-only). Empty keeps the TVDB provider off and SnatchArr makes no TVDB request. When set, TVDB translations and aliases feed foreign-title search titles ([ADR-0048](adr/0048-tvdb-metadata-provider.md)) |
+| `APP_SNATCHARR_METADATA_TVDB_PIN` | | Optional TheTVDB subscriber PIN (secret, write-only); needed only for a user-supported key. Ignored without the API key |
 | `APP_SNATCHARR_LOGS_RING_SIZE` | `2000` | Log records the API keeps in memory for the admin [Logs](logs.md) page; clamped to 100 to 20000 |
 | `APP_SNATCHARR_WEB_DEV` | `false` | Disable the embedded SPA (Vite dev server proxies instead) |
 | `APP_SNATCHARR_PROXY_TRUSTED` | | Comma-separated CIDRs of trusted reverse proxies (e.g. `10.0.0.0/8`). Enables client IP resolution from `X-Forwarded-For` for login throttling |
@@ -219,6 +223,17 @@ The verdict rules (`api/internal/foreigntitle/radarrlang.go`), covered by langua
 - `skipped`: The profile language differs from the target language or is missing, or the target is unmapped for a profile other than `Any`.
 
 The profile fetch (`api/internal/arrclient/profilelang.go`) uses only `GET /api/v3/qualityprofile`; it never writes quality profile configurations. Profile fetch tests (`api/internal/arrclient/profilelang_test.go`) cover the method, language conversion, upstream failures and response bounds.
+
+### TheTVDB titles (opt-in)
+
+Foreign-title search reads the aliases the Sonarr or Radarr instance already caches. Setting a TheTVDB API key adds TVDB translations and aliases for the series or movie as extra search titles ([ADR-0048](adr/0048-tvdb-metadata-provider.md)). Data courtesy of TheTVDB.com (<https://thetvdb.com>).
+
+- **Off by default.** With no `snatcharr.metadata.tvdb.api_key` (or `APP_SNATCHARR_METADATA_TVDB_API_KEY`), SnatchArr makes no TVDB request. Get a key at <https://thetvdb.com/api-information>; set the optional `snatcharr.metadata.tvdb.pin` only for a user-supported key. Both are secret-class settings: encrypted at rest, write-only in the API, restart to apply, never logged.
+- **What is asked.** Sonarr items use the series' TVDB id. Radarr items are found through TVDB's remote-id search (IMDB id first, then TMDB id; movie hits only). Other app kinds make no call. TVDB uses three-letter language codes; the provider maps each rule language (`de` to `deu`, `fr` to `fra`).
+- **Bounds.** Calls are rate limited, time limited and cached in memory (24 hours for a hit, 1 hour for an unknown item). A refused login (wrong key or PIN) latches: no further TVDB request is made until the key changes and the API restarts. An HTTP 429 is retried a bounded number of times, then reported. A TVDB failure never stops a search: the *arr titles still apply.
+- **Inspect.** `GET /api/v1/instances/{id}/items/{itemId}/foreign-titles?language=de` (admins only; optional `season`) lists the titles SnatchArr would search, each tagged `arr` or `tvdb`, plus the provider status (`disabled`, `ok`, `unauthorized`, `rate_limited`, `unavailable`) and the attribution text. Contract: `getForeignTitles` in `api/openapi/openapi.yaml`; handler `GetForeignTitles` in `api/internal/httpapi/handlers_foreign_titles.go`; provider `api/internal/metadata/tvdb`.
+- **Helm.** Create a Secret with the key `tvdb-api-key` (and `tvdb-pin` for a user-supported key) and set `metadata.tvdb.existingSecret`; `metadata.tvdb.apiKeyKey` and `metadata.tvdb.pinKey` rename the keys. The chart has no inline value for either: the schema refuses one. Test: `deploy/helm/snatcharr/tests/metadata_test.yaml`.
+- **Compose.** The compose file in `deploy/compose/` runs the *arr test stack, not the API; set `APP_SNATCHARR_METADATA_TVDB_API_KEY` (and `APP_SNATCHARR_METADATA_TVDB_PIN`) in the API's environment from your secret store where you run the API.
 
 ## Queue policy
 
