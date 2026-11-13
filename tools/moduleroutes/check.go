@@ -13,6 +13,8 @@ import (
 	"slices"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/lusoris/SnatchArr/tools/internal/openapiops"
 )
 
 // Finding represents a single rule violation in an OpenAPI operation.
@@ -39,8 +41,6 @@ var coreTags = map[string]struct{}{
 	"requests":         {},
 }
 
-var httpMethods = []string{"get", "put", "post", "delete", "options", "head", "patch", "trace"}
-
 type rawOpenAPISpec struct {
 	Paths map[string]map[string]any `yaml:"paths"`
 }
@@ -55,7 +55,7 @@ func CheckSpec(src []byte, regSet map[string]struct{}) ([]Finding, error) {
 	paths := slices.Sorted(maps.Keys(spec.Paths))
 	for _, path := range paths {
 		pathItem := spec.Paths[path]
-		for _, method := range httpMethods {
+		for _, method := range openapiops.PathItemOperations {
 			rawOp, ok := pathItem[method]
 			if !ok {
 				continue

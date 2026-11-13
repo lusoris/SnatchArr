@@ -12,6 +12,8 @@ import (
 	"slices"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/lusoris/SnatchArr/tools/internal/openapiops"
 )
 
 var (
@@ -72,8 +74,7 @@ func processPathItem(path string, pathItem map[string]any, comps Components, res
 	if err != nil {
 		return fmt.Errorf("path %s common params: %w", path, err)
 	}
-	methods := []string{"get", "put", "post", "delete", "patch"}
-	for _, m := range methods {
+	for _, m := range openapiops.PathItemOperations {
 		rawOp, ok := pathItem[m]
 		if !ok {
 			continue

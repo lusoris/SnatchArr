@@ -121,6 +121,57 @@ paths:
 	})
 }
 
+func TestCheckAllPathItemOperations(t *testing.T) {
+	t.Parallel()
+	specYAML := []byte(`openapi: 3.1.0
+info:
+  title: All Operations API
+  version: 0.1.0
+paths:
+  /widgets:
+    get:
+      operationId: getWidget
+      x-module: ""
+    put:
+      operationId: putWidget
+      x-module: ""
+    post:
+      operationId: postWidget
+      x-module: ""
+    delete:
+      operationId: deleteWidget
+      x-module: ""
+    options:
+      operationId: optionsWidget
+      x-module: ""
+    head:
+      operationId: headWidget
+      x-module: ""
+    patch:
+      operationId: patchWidget
+      x-module: ""
+    trace:
+      operationId: traceWidget
+      x-module: ""
+    parameters: []
+    summary: Widget operations
+    servers: []
+    $ref: "#/components/pathItems/Widget"
+`)
+	findings, err := CheckSpec(specYAML, map[string]struct{}{"llm": {}})
+	if err != nil {
+		t.Fatalf("CheckSpec unexpected error: %v", err)
+	}
+	if len(findings) != 8 {
+		t.Fatalf("visited %d operations, want 8: %v", len(findings), findings)
+	}
+	for _, finding := range findings {
+		if finding.Reason != "x-module must be a non-empty string" {
+			t.Errorf("unexpected finding for %s: %q", finding.Method, finding.Reason)
+		}
+	}
+}
+
 func TestGenerateCode(t *testing.T) {
 	t.Parallel()
 	t.Run("real openapi generates empty map", func(t *testing.T) {
