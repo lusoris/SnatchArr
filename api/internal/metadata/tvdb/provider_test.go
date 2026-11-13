@@ -47,8 +47,7 @@ type stub struct {
 	movies   map[string]int   // remote id -> movie id
 	movieAli map[int][]string
 	delay    time.Duration
-	entered  chan struct{} // when set, receives once per request (non-blocking)
-	agent    atomic.Value  // last User-Agent header seen
+	agent    atomic.Value // last User-Agent header seen
 }
 
 func newStub(t *testing.T) *stub {
@@ -68,12 +67,6 @@ func newStub(t *testing.T) *stub {
 func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 	s.total.Add(1)
 	s.agent.Store(r.Header.Get("User-Agent"))
-	if s.entered != nil {
-		select {
-		case s.entered <- struct{}{}:
-		default:
-		}
-	}
 	if s.delay > 0 {
 		time.Sleep(s.delay)
 	}
@@ -551,33 +544,42 @@ func TestNewWithoutPool(t *testing.T) {
 	}
 }
 
-// TestWaitingLookupHonoursDeadline: a lookup queued behind another one gives up at its own
-// deadline instead of waiting for the slot (HISS-02).
+// TestWaitingLookupHonoursDeadline checks a lookup queued behind a held slot gives up with
+// ErrUnavailable and sends no request: at the caller's deadline, and at the provider's own
+// lookup bound when the caller's context has none (HISS-02). The test holds the slot itself
+// for the whole case, so no other lookup can free it first.
 func TestWaitingLookupHonoursDeadline(t *testing.T) {
 	t.Parallel()
-	s := newStub(t)
-	s.series[100] = "Serie 100"
-	s.delay = 300 * time.Millisecond
-	s.entered = make(chan struct{}, 1)
-	p := s.provider(t, plantedKey, "", nil)
-	first := make(chan struct{})
-	go func() {
-		defer close(first)
-		_, _ = p.TitlesFor(context.Background(), sonarrRef(), "de")
-	}()
-	<-s.entered // the first lookup holds the slot and waits on the stub
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
-	defer cancel()
-	_, err := p.TitlesFor(ctx, Ref{Kind: domain.KindSonarr, TVDBID: 100}, "de")
-	if !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("waiting lookup: error = %v, want ErrUnavailable", err)
+	for _, tc := range []struct {
+		name   string
+		bound  time.Duration // provider lookup bound
+		caller time.Duration // caller deadline; 0 = none
+	}{
+		{"caller deadline", lookupTimeout, 2 * time.Second},
+		{"no caller deadline, provider bound", time.Second, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			p := s.provider(t, plantedKey, "", nil)
+			p.lookup = tc.bound
+			ctx := t.Context()
+			if tc.caller > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.caller)
+				defer cancel()
+			}
+			p.slot <- struct{}{} // another lookup holds the slot
+			_, err := p.TitlesFor(ctx, sonarrRef(), "de")
+			<-p.slot
+			if !errors.Is(err, ErrUnavailable) {
+				t.Fatalf("waiting lookup: error = %v, want ErrUnavailable", err)
+			}
+			if n := s.total.Load(); n != 0 {
+				t.Fatalf("waiting lookup sent %d requests, want 0", n)
+			}
+		})
 	}
-	select {
-	case <-first:
-		t.Fatal("waiting lookup returned only after the slot was free")
-	default:
-	}
-	<-first
 }
 
 func TestUserAgentHeader(t *testing.T) {

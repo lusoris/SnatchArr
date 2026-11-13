@@ -9,7 +9,8 @@ import (
 	"testing"
 )
 
-// TestSearchTitlesTranslations checks translations feed the search list only for the rule language.
+// TestSearchTitlesTranslations checks translations feed the search list only for the rule
+// language, and only into the capacity local aliases leave.
 func TestSearchTitlesTranslations(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -23,6 +24,8 @@ func TestSearchTitlesTranslations(t *testing.T) {
 		{Language: "de", Title: " ", Source: "tvdb"},
 		{Language: "de", Title: "der  titel", Source: "tvdb"},
 	}
+	// A marked local alias (German article) that the provider list must never push out.
+	local := []AliasEntry{{Title: "Die Serie"}}
 	for _, tc := range []struct {
 		name string
 		in   AliasInput
@@ -33,7 +36,9 @@ func TestSearchTitlesTranslations(t *testing.T) {
 		{"negative_other_language", AliasInput{Translations: tr[2:3]}, 10, nil},
 		{"boundary_empty", AliasInput{Translations: []LanguageTitle{}}, 10, nil},
 		{"boundary_max_one", AliasInput{Translations: tr}, 1, []string{"Der Titel"}},
-		{"dedupe_with_alias", AliasInput{Translations: tr[:1], Aliases: []AliasEntry{{Title: "der titel"}}}, 10, []string{"Der Titel"}},
+		{"dedupe_local_alias_wins", AliasInput{Translations: tr[:1], Aliases: []AliasEntry{{Title: "der titel"}}}, 10, []string{"der titel"}},
+		{"cap_keeps_local_alias", AliasInput{Translations: tr, Aliases: local}, 1, []string{"Die Serie"}},
+		{"translations_fill_after_alias", AliasInput{Translations: tr, Aliases: local}, 2, []string{"Die Serie", "Der Titel"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

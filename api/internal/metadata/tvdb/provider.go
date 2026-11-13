@@ -43,9 +43,12 @@ const (
 	// NegativeTTL is how long an unknown item stays cached before TVDB is asked again.
 	NegativeTTL = time.Hour
 
-	maxAliases   = 200
-	callTimeout  = 20 * time.Second
-	maxBodyBytes = 4 << 20
+	maxAliases  = 200
+	callTimeout = 20 * time.Second
+	// lookupTimeout bounds one load from its start: the wait for the slot plus at most
+	// four calls (two remote-id searches, the movie, its translation) of callTimeout each.
+	lookupTimeout = 4*callTimeout + 10*time.Second
+	maxBodyBytes  = 4 << 20
 	// TVDB publishes no rate limit (api docs, checked 2026-11-13); this is a conservative
 	// ceiling on every real HTTP request, retries and logins included.
 	defaultRate  = rate.Limit(2)
@@ -125,7 +128,9 @@ type Provider struct {
 	// slot is a one-request semaphore around goenvoy calls: the client rewrites its
 	// request auth in shared state on every call (https://github.com/golusoris/goenvoy/issues/321).
 	// A channel instead of a mutex lets a waiting lookup give up at its context deadline.
-	slot   chan struct{}
+	slot chan struct{}
+	// lookup is lookupTimeout; a field so a test can wait on it without the full bound.
+	lookup time.Duration
 	failed atomic.Bool
 }
 
@@ -176,6 +181,7 @@ func New(apiKey, pin string, l1 *memory.Cache, clk clock.Clock, logger *slog.Log
 	return &Provider{
 		enabled: true, client: client, clk: clk, logger: logger,
 		cache: twotier.NewTyped[entry](tt, cachePrefix), slot: make(chan struct{}, 1),
+		lookup: lookupTimeout,
 	}, nil
 }
 
@@ -266,8 +272,11 @@ func cacheKey(ref Ref) (string, bool) {
 	return "", false
 }
 
-// load runs once per key (singleflight) while holding the provider slot.
+// load runs once per key (singleflight) while holding the provider slot. Its deadline
+// starts before the slot wait, so a caller without one still gives up (HISS-02).
 func (p *Provider) load(ctx context.Context, ref Ref, lang, rule string) (entry, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.lookup)
+	defer cancel()
 	select {
 	case p.slot <- struct{}{}:
 	case <-ctx.Done():
@@ -302,12 +311,8 @@ func (p *Provider) seriesTitles(ctx context.Context, id int, lang, rule string) 
 	if err != nil {
 		return nil, err
 	}
-	var tr *tvdb.Translation
-	err = p.call(ctx, func(c context.Context) (err error) { tr, err = p.client.GetSeriesTranslation(c, id, lang); return })
-	if err != nil && !errors.Is(err, errNotFound) {
-		return nil, err
-	}
-	return collect(rule, lang, tr, base.Aliases), nil
+	fetch := func(c context.Context) (*tvdb.Translation, error) { return p.client.GetSeriesTranslation(c, id, lang) }
+	return p.translated(ctx, fetch, base.Aliases, lang, rule)
 }
 
 func (p *Provider) movieTitles(ctx context.Context, ref Ref, lang, rule string) ([]foreigntitle.LanguageTitle, error) {
@@ -320,12 +325,19 @@ func (p *Provider) movieTitles(ctx context.Context, ref Ref, lang, rule string) 
 	if err != nil {
 		return nil, err
 	}
+	fetch := func(c context.Context) (*tvdb.Translation, error) { return p.client.GetMovieTranslation(c, id, lang) }
+	return p.translated(ctx, fetch, base.Aliases, lang, rule)
+}
+
+// translated fetches one translation through fetch and joins it with the entity's aliases.
+// A missing translation (404) is no error: the aliases still count.
+func (p *Provider) translated(ctx context.Context, fetch func(context.Context) (*tvdb.Translation, error), aliases []tvdb.Alias, lang, rule string) ([]foreigntitle.LanguageTitle, error) {
 	var tr *tvdb.Translation
-	err = p.call(ctx, func(c context.Context) (err error) { tr, err = p.client.GetMovieTranslation(c, id, lang); return })
+	err := p.call(ctx, func(c context.Context) (err error) { tr, err = fetch(c); return })
 	if err != nil && !errors.Is(err, errNotFound) {
 		return nil, err
 	}
-	return collect(rule, lang, tr, base.Aliases), nil
+	return collect(rule, lang, tr, aliases), nil
 }
 
 // findMovie resolves the TVDB movie ID by IMDB ID first, then TMDB ID. Only a movie hit

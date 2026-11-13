@@ -34,6 +34,8 @@ type AliasEntry struct {
 
 // SearchTitles selects original and localized aliases in source order, within maxTitles.
 // Unmarked aliases are omitted because *arr searches them natively (ADR-0019 section 5).
+// Provider translations only fill the capacity the local titles leave (ADR-0048 section 2:
+// the *arr aliases stay the base), so enrichment never displaces a local alias.
 // Language names are compared case-insensitively; app-specific IDs are never shared.
 func SearchTitles(in AliasInput, r Rules, season *int, maxTitles int) []string {
 	if maxTitles <= 0 {
@@ -43,7 +45,6 @@ func SearchTitles(in AliasInput, r Rules, season *int, maxTitles int) []string {
 	if strings.EqualFold(in.OriginalLanguage, r.Name) {
 		c.add(in.OriginalTitle)
 	}
-	c.addTranslations(in.Translations, r)
 	for i := range len(in.Aliases) {
 		if len(c.titles) >= maxTitles {
 			break
@@ -57,6 +58,7 @@ func SearchTitles(in AliasInput, r Rules, season *int, maxTitles int) []string {
 			c.add(alias.Title)
 		}
 	}
+	c.addTranslations(in.Translations, r)
 	return c.titles
 }
 
