@@ -7,13 +7,13 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0049: Metadata proxy
 
-- **Status**: Proposed (planning; build gated on open decisions)
+- **Status**: Accepted (option a, product name and automatic kill switch answered by the operator on 2026-11-13, ledger ids `snatcharr-metadata-proxy-tls-interception`, `snatcharr-metadata-proxy-product-name`, `snatcharr-metadata-proxy-auto-killswitch`; build gated on the remaining open decisions)
 - **Date**: 2026-11-13
 - **Deciders**: lusoris
 
 ## Context
 
-SnatchArr is the project name for the media-stack coordinator: “snatch” means acquire a missing or cutoff-unmet item, and “Arr” refers to the family of \*arr applications; pronounce it “snatch-arr”. The media stack makes overlapping metadata calls from Sonarr, Radarr, Lidarr, Readarr and its forks, Whisparr, Seerr, Jellyfin, Emby, Stash and Bazarr. Prowlarr was examined too and makes no metadata-provider calls (see the matrix). The proposed `metadata-proxy` is a functional component name only; the public product name is an operator decision.
+SnatchArr is the project name for the media-stack coordinator: “snatch” means acquire a missing or cutoff-unmet item, and “Arr” refers to the family of \*arr applications; pronounce it “snatch-arr”. The media stack makes overlapping metadata calls from Sonarr, Radarr, Lidarr, Readarr and its forks, Whisparr, Seerr, Jellyfin, Emby, Stash and Bazarr. Prowlarr was examined too and makes no metadata-provider calls (see the matrix). The component keeps the plain name `metadata-proxy`, with no separate product name (see the decision record).
 
 Seerr evidence is pinned to `seerr-team/seerr` tag `v3.5.2` (commit `18a90b4e`, released 2026-11-12, read from the GitHub releases API on 2026-11-13).
 
@@ -51,11 +51,11 @@ Each app connects to its own proxy listener port, which sets the bounded `app` l
 
 | Option | Scope | Risk |
 | :--- | :--- | :--- |
-| a | TLS-terminating forward proxy plus a fleet CA mounted into each app trust store | CA key custody, per-container trust configuration, pinned clients, provider terms. Needs an operator decision before any build; not built in this unit. |
+| a | TLS-terminating forward proxy plus a fleet CA mounted into each app trust store | CA key custody, per-container trust configuration, pinned clients, provider terms. Not built: the operator declined it for now (see the decision record). |
 | b | CONNECT pass-through everywhere; cache only in reverse-proxy mode where a base URL is configurable | No caching for apps without a configurable base URL; host-level measurement only for them. |
 | c | Per app: CONNECT where nothing better exists, reverse-proxy cache where a base URL is configurable, direct where no route is proven | Less uniform; each app has its own route and kill switch. |
 
-Option a terminates TLS at the proxy and re-signs each provider certificate with a fleet CA, so every participating app must trust that CA. This ADR names the methods and does not choose one. Trust injection per runtime, from pinned source:
+Option a terminates TLS at the proxy and re-signs each provider certificate with a fleet CA, so every participating app must trust that CA. This ADR names the methods and does not choose one; they stay on record for the revisit trigger in the decision record. Trust injection per runtime, from pinned source:
 
 | Runtime (apps) | Trust method | Source |
 | :--- | :--- | :--- |
@@ -71,7 +71,7 @@ CA custody, each with its risk:
 
 Both share three risks: clients that pin provider certificates fail closed, the trust change is process-wide (every TLS call the app makes trusts the fleet CA), and provider terms on caching are unverified per provider.
 
-Recommendation, per app (option c, never option a without the TLS/CA decision):
+Route per app (option c; option a is not built, see the decision record):
 
 | App | Route | Cache | Before-rollout measurement |
 | :--- | :--- | :--- | :--- |
@@ -97,7 +97,7 @@ Before rollout, every app runs in log mode for a fixed window. What that window 
 
 After rollout, the reverse-mode rows add cache hit ratio, upstream calls avoided and latency change; the CONNECT rows keep tunnel counts and timing.
 
-Metrics are declared once in a `metricdef.Catalog` and registered through `golusoris/k8s/metrics/prom`. Names follow the `metricdef` rules at `golusoris/golusoris@914a3db52118676d1af386835ddf65bd8d861bfc:observability/metricdef/metricdef.go`: counters end in `_total` (:30, :152-161), a unit is a base unit carried in the name (`_seconds`, `_bytes`; :74-77, :104-108, :171-184), `_bucket`/`_count`/`_sum`/`_created` are reserved (:102), and every label has a `LabelLimit` with either an `Allow` list or `MaxDistinct` (:60-66, :222-228). The `metadata_proxy_` prefix follows the component name and is revisited with the product-name decision.
+Metrics are declared once in a `metricdef.Catalog` and registered through `golusoris/k8s/metrics/prom`. Names follow the `metricdef` rules at `golusoris/golusoris@914a3db52118676d1af386835ddf65bd8d861bfc:observability/metricdef/metricdef.go`: counters end in `_total` (:30, :152-161), a unit is a base unit carried in the name (`_seconds`, `_bytes`; :74-77, :104-108, :171-184), `_bucket`/`_count`/`_sum`/`_created` are reserved (:102), and every label has a `LabelLimit` with either an `Allow` list or `MaxDistinct` (:60-66, :222-228). The `metadata_proxy_` prefix follows the component name, which the operator kept (see the decision record).
 
 | Name | Kind | Labels (limit) |
 | :--- | :--- | :--- |
@@ -123,13 +123,13 @@ While its proxy is set, an \*arr app has no direct fallback: proxy and timeout e
   - Stash and Bazarr: their app configuration write; the exact API resource is unverified.
 - The runbook disables every app route before the proxy Deployment is removed.
 
-Who flips the kill switch automatically when the proxy is unhealthy is open: a SnatchArr api leader loop could write the \*arr host config, but that makes SnatchArr a writer of \*arr settings, which ADR-0039's ownership split does not cover today.
+The kill switch is manual for the first rollout: an alert on proxy health pages the operator, who follows the runbook. SnatchArr never writes \*arr, Seerr or Jellyfin proxy settings, so ADR-0039's ownership split stays unchanged (see the decision record).
 
 ### Rollout
 
 Rollout is a cluster order, issued after this ADR lands and the image is published:
 
-1. Deploy the proxy in log mode.
+1. Deploy the proxy in log mode, with the proxy-health alert and the kill-switch runbook in place.
 2. Configure one low-risk app (Bazarr or Seerr).
 3. Read its log-mode window: no host outside the allow-list, no indexer or download-client host.
 4. Expand app by app, then switch each app to enforce mode.
@@ -168,11 +168,18 @@ This planning unit performs no rollout.
 [S11]: https://github.com/stashapp/stash/blob/9e9ad972643320e737c711884f10e4285f0f3a88/internal/manager/config/config.go#L150-L1867
 [S12]: https://github.com/morpheus65535/bazarr/blob/8c68f16a1e12f8e7985baeb73fb4199b5149108a/bazarr/app/config.py#L301-L1053
 
+## Decision record
+
+The operator answered three decisions on 2026-11-13 (paraphrased; ledger ids in the first column).
+
+| Decision | Answer | Revisit trigger |
+| :--- | :--- | :--- |
+| TLS interception (option a) and CA custody, `snatcharr-metadata-proxy-tls-interception` | No TLS interception now. Build option c in log mode first and decide after its window, with measured host counts. | Log-mode host counts show a duplicate share for the CONNECT-only apps: a new decision with those numbers. |
+| Product name, `snatcharr-metadata-proxy-product-name` | No separate product name. Image `snatcharr-metadata-proxy`, chart values key `metadataProxy`, metrics `metadata_proxy_*`. | None. |
+| Automatic kill switch, `snatcharr-metadata-proxy-auto-killswitch` | Manual kill switch only for the first rollout: an alert plus the runbook. ADR-0039 stays unchanged. | The log-mode window shows the proxy outage rate: a new decision with those numbers. |
+
 ## Open decisions
 
-- TLS-terminating forward proxy (option a) and fleet CA custody: operator decision before any build.
-- Public product name for the functional `metadata-proxy` component.
-- Automatic kill switch: whether SnatchArr's api leader loop may write \*arr, Seerr and Jellyfin proxy settings when the proxy is unhealthy, and how that reconciles with ADR-0039.
 - Jellyfin and Emby environment route: approval to set process-wide proxy variables on the media servers, and whether Emby stays direct if the trial shows it ignores them.
 - Whisparr: the reverse-proxy route needs a `config.xml` edit and a restart, because no API resource writes `WhisparrMetadata`.
 - Cache TTLs, provider allow-list, log retention and the duplicate-normalization window, once the golusoris caching transport is available.
