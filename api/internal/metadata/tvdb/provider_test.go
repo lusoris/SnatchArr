@@ -42,6 +42,7 @@ type stub struct {
 	loginRC  int
 	dataRC   int // when non-zero every data route answers with this status
 	series   map[int]string
+	noTr     map[int]bool     // series ids whose deu translation answers 404
 	aliases  map[int][]string // series id -> deu aliases
 	movies   map[string]int   // remote id -> movie id
 	movieAli map[int][]string
@@ -117,7 +118,7 @@ func (s *stub) data(w http.ResponseWriter, path string) {
 	case strings.HasSuffix(path, "/translations/deu") && strings.HasPrefix(path, "/series/"):
 		_, _ = fmt.Sscanf(path, "/series/%d/translations/deu", &id)
 		name, ok := s.series[id]
-		if !ok {
+		if !ok || s.noTr[id] {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -267,26 +268,34 @@ func TestOtherKindsMakeNoRequest(t *testing.T) {
 
 func TestWrongCredentialsLatch(t *testing.T) {
 	t.Parallel()
-	s := newStub(t)
-	var logs bytes.Buffer
-	const sentKey, sentPIN = "refusedrefusedrefused", "refused-pin-93aa10"
-	p := s.provider(t, sentKey, sentPIN, &logs)
-	_, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
-	if !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("TitlesFor() error = %v, want ErrUnauthorized", err)
+	cases := []struct{ name, key, pin string }{
+		{"wrong key", "refusedrefusedrefused", "refused-pin-93aa10"},
+		{"right key, wrong PIN", plantedKey, "refused-pin-93aa10"},
 	}
-	if !p.Failed() {
-		t.Fatal("Failed() = false after a refused login")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			var logs bytes.Buffer
+			p := s.provider(t, tc.key, tc.pin, &logs)
+			_, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+			if !errors.Is(err, ErrUnauthorized) {
+				t.Fatalf("TitlesFor() error = %v, want ErrUnauthorized", err)
+			}
+			if !p.Failed() {
+				t.Fatal("Failed() = false after a refused login")
+			}
+			first := s.total.Load()
+			_, err = p.TitlesFor(t.Context(), sonarrRef(), "de")
+			if !errors.Is(err, ErrUnauthorized) {
+				t.Fatalf("second TitlesFor() error = %v, want ErrUnauthorized", err)
+			}
+			if n := s.total.Load(); n != first {
+				t.Fatalf("second call made %d requests, want 0", n-first)
+			}
+			assertNoSecret(t, err.Error(), logs.String(), fmt.Sprintf("%+v", err))
+		})
 	}
-	first := s.total.Load()
-	_, err = p.TitlesFor(t.Context(), sonarrRef(), "de")
-	if !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("second TitlesFor() error = %v, want ErrUnauthorized", err)
-	}
-	if n := s.total.Load(); n != first {
-		t.Fatalf("second call made %d requests, want 0", n-first)
-	}
-	assertNoSecret(t, err.Error(), logs.String(), fmt.Sprintf("%+v", err))
 }
 
 func TestRateLimitedBoundedAttempts(t *testing.T) {
@@ -436,6 +445,26 @@ func TestAliasCapAndEmpty(t *testing.T) {
 	got, err = p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81190}, "de")
 	if err != nil || len(got) != 0 {
 		t.Fatalf("empty translation and aliases = %v, %v, want empty", got, err)
+	}
+}
+
+// TestMissingTranslationKeepsAliases covers a series that exists but has no translation in
+// the language: TVDB answers 404 for the translation, and the aliases still come back.
+func TestMissingTranslationKeepsAliases(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.noTr = map[int]bool{81189: true}
+	p := s.provider(t, plantedKey, "", nil)
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil {
+		t.Fatalf("TitlesFor() error = %v, want nil for a missing translation", err)
+	}
+	want := foreigntitle.LanguageTitle{Language: "de", Title: "Breaking Bad Alias", Source: Source}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("TitlesFor() = %+v, want only %+v", got, want)
+	}
+	if n, want := s.total.Load(), int64(3); n != want { // login, series, translation 404
+		t.Fatalf("requests = %d, want %d", n, want)
 	}
 }
 
