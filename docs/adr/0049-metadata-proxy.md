@@ -38,10 +38,18 @@ Two routes put an app's metadata traffic on the proxy. Both keep everything else
 
 The app proxy setting is the default for every app that has one: it carries per-app bypass syntax (wildcards, IP ranges, local-address bypass) and flips without a restart. The environment route is for apps without an app setting (Jellyfin, and Emby as a log-mode trial).
 
-App bypass lists and `NO_PROXY` are deny-lists: they say what stays direct. The proxy keeps the matching allow-list of metadata provider hosts, so a missing bypass entry shows up instead of silently sending an indexer through the proxy:
+App bypass lists and `NO_PROXY` are deny-lists: they say what stays direct. Before an app is pointed at the proxy, its bypass list is seeded with every indexer and download-client host from that app's own settings, plus its cluster-internal hosts. The proxy keeps the matching allow-list of metadata provider hosts, so a missing bypass entry shows up instead of silently sending an indexer through the proxy.
 
-- **Log mode** tunnels every CONNECT, counts it, and logs each host outside the allow-list with the app it came from. A host that appears there is a missing bypass entry to fix in that app.
-- **Enforce mode** refuses CONNECT to hosts outside the allow-list with `403 Forbidden` and counts the refusal. An app enters enforce mode only after its log-mode window shows no host outside the allow-list.
+Three refusals hold in both modes, so log mode never widens what the proxy carries:
+
+- The forward listener accepts CONNECT only (RFC 9110 section 9.3.6) and refuses plain-HTTP forward requests, so it never sees a request line, header or query string that could carry an indexer or download-client key.
+- CONNECT to a host that resolves to a private, loopback, link-local or cluster-service address is refused.
+- CONNECT to a host on the seeded indexer and download-client list is refused, so a missing bypass entry for one of them fails loudly instead of tunnelling.
+
+The two modes differ only for the remaining hosts outside the allow-list:
+
+- **Log mode** tunnels them, counts them, and logs each host with the app it came from. A host that appears there is a missing bypass entry to fix in that app.
+- **Enforce mode** refuses them with `403 Forbidden` and counts the refusal. An app enters enforce mode only after its log-mode window shows no host outside the allow-list.
 
 Reverse-proxy caching is allowed only for a provider whose base URL the app lets an operator change (Lidarr, Readarr and its forks, Whisparr, Jellyfin MusicBrainz, Stash StashBox). The proxy never rewrites provider URLs, and CONNECT mode never claims path-level cache hits.
 
@@ -84,8 +92,18 @@ Route per app (option c; option a is not built, see the decision record):
 | Seerr | App proxy, CONNECT | None (TVDB base URL is a source constant; Seerr already caches TVDB answers itself) | Host counts, bytes, latency |
 | Jellyfin | Environment proxy, CONNECT; MusicBrainz server pointed at the proxy | Reverse-proxy cache for MusicBrainz only | Host counts; path-level for MusicBrainz |
 | Emby | Environment proxy trial, CONNECT | None | Host counts if the trial shows Emby honours the variables |
-| Stash | App proxy, CONNECT; StashBox endpoint pointed at the proxy | Reverse-proxy candidate; StashBox is GraphQL over POST, so body-keyed cache rules wait for measurement | Path-level for StashBox; host counts for scrapers |
+| Stash | App proxy, CONNECT; StashBox endpoint pointed at the proxy | Reverse-proxy candidate; StashBox is GraphQL over POST and every request carries an `ApiKey` header, so only allow-listed read queries can be cached (see cache eligibility); `Me` and the mutations never are | Path-level for StashBox; host counts for scrapers |
 | Bazarr | App proxy, CONNECT | None (dynamic subtitle providers) | Host counts, bytes, latency |
+
+### Cache eligibility
+
+Every reverse-proxy route follows the same rules, and its cache stays off until they hold:
+
+- Only reads are cached: `GET` and `HEAD`, and GraphQL queries on a per-provider allow-list of read-only operations. GraphQL mutations are never cached; for StashBox these are `SubmitFingerprint`, `SubmitSceneDraft` and `SubmitPerformerDraft` (`stashapp/stash@9e9ad972643320e737c711884f10e4285f0f3a88:graphql/stash-box/query.graphql:192,202,208`).
+- Answers that depend on the caller are never cached: login and token answers, account and user operations such as the StashBox `Me` query (same file, :196), and responses marked `Cache-Control: private` or `no-store` or carrying `Set-Cookie`.
+- The cache key never holds a credential or a value derived from one (API key, PIN, bearer token, cookie), and the proxy does not partition its cache per credential. A request that carries a credential is cached only when its operation is on the read-only allow-list and its answer does not depend on the caller; every other such request bypasses the cache.
+- The StashBox allow-list is chosen from the read queries at :139-183 of the same file once the log-mode window has measured them.
+- The proxy logs host, path template, status and timing only, never request headers, query strings or bodies.
 
 ### Measurement plan
 
@@ -115,11 +133,11 @@ Proxy outage must not stop the media stack. The bypass lists keep indexers, down
 
 While its proxy is set, an \*arr app has no direct fallback: proxy and timeout errors surface from the dispatcher (`Sonarr/Sonarr@cab419ade8ac7fcab5bf80394ee492abd35d5f5a:src/NzbDrone.Common/Http/Dispatchers/ManagedHttpDispatcher.cs:130-144`). To keep the degraded window short:
 
-- Run at least two replicas behind a PodDisruptionBudget, with readiness tied to upstream reachability, so a single pod loss never empties the Service.
+- Run at least two replicas behind a PodDisruptionBudget. Readiness reflects the proxy's own ability to serve (listener up, configuration and allow-list loaded), never provider reachability, so neither a single pod loss nor one provider's outage empties the Service. Provider failures show in the metrics and feed the proxy-health alert.
 - Keep one kill switch per route:
   - App proxy route: `proxyEnabled=false` through `/api/v3/config/host` (Sonarr, Radarr, Whisparr) or `/api/v1/config/host` (Lidarr, Readarr), and the network settings write for Seerr.
   - Environment route (Jellyfin, Emby): drop the variables and restart.
-  - Reverse-proxy routes: reset the base URL (`MetadataSource`, `WhisparrMetadata`, the Jellyfin MusicBrainz server, the Stash StashBox endpoint) to the provider default.
+  - Reverse-proxy routes: before a base URL (`MetadataSource`, `WhisparrMetadata`, the Jellyfin MusicBrainz server, the Stash StashBox endpoint) is pointed at the proxy, the runbook records the app's current value, and the kill switch restores that recorded value rather than the provider default. The recorded value may be a replacement or mirror server, for example on a Readarr install that moved off the original metadata server.
   - Stash and Bazarr: their app configuration write; the exact API resource is unverified.
 - The runbook disables every app route before the proxy Deployment is removed.
 
@@ -130,7 +148,7 @@ The kill switch is manual for the first rollout: an alert on proxy health pages 
 Rollout is a cluster order, issued after this ADR lands and the image is published:
 
 1. Deploy the proxy in log mode, with the proxy-health alert and the kill-switch runbook in place.
-2. Configure one low-risk app (Bazarr or Seerr).
+2. Configure one low-risk app (Bazarr or Seerr), with its bypass list seeded first.
 3. Read its log-mode window: no host outside the allow-list, no indexer or download-client host.
 4. Expand app by app, then switch each app to enforce mode.
 5. Enable reverse-proxy caching per proven base-URL route.
@@ -186,7 +204,7 @@ The operator answered three decisions on 2026-11-13 (paraphrased; ledger ids in 
 
 ## Consequences
 
-The default path keeps provider TLS end to end and needs no new trust anchor. CONNECT mode alone gives host-level numbers only; caching and duplicate measurement come from the reverse-proxy routes (Lidarr, Readarr, Whisparr, Jellyfin MusicBrainz, Stash StashBox) or from app logs. Each app has its own route and kill switch, so failure handling is tested and documented per app; apps without a proven route stay direct and listed, never silently proxied.
+CONNECT keeps provider TLS end to end between the app and the provider; the proxy sees host, bytes and timing only. Reverse-proxy routes differ by design: the app sends its request to the proxy's own endpoint, and the proxy opens its own verified TLS connection to the provider. Neither route re-signs a provider certificate, so neither needs a fleet CA. The app-to-proxy hop of a reverse route carries whatever the app sends. A route whose requests carry a credential (the StashBox `ApiKey` header, or any route the log-mode window shows carrying one) uses TLS on that hop with a certificate the app trusts for the proxy's own name, or stays CONNECT-only until that trust is set up. A route without credentials may use plain HTTP inside the cluster, limited by the NetworkPolicy to the named app pods. CONNECT mode alone gives host-level numbers only; caching and duplicate measurement come from the reverse-proxy routes (Lidarr, Readarr, Whisparr, Jellyfin MusicBrainz, Stash StashBox) or from app logs. Each app has its own route and kill switch, so failure handling is tested and documented per app; apps without a proven route stay direct and listed, never silently proxied.
 
 The separate binary and deployment add an image, Service, readiness, PDB, metrics, NetworkPolicy and upgrade surface. Enforce mode turns a missing bypass entry into a visible refusal, which is why each app moves to enforce mode only after a clean log-mode window.
 
