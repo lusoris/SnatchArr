@@ -31,9 +31,16 @@ bounded() {
     return "$status"
 }
 
-# print_reasons prints reason lines (FAIL or <label>: <msg>) preceding container logs.
+# print_reasons prints reason lines preceding container logs: FAIL lines, "<label>: <msg>" lines
+# whose label may hold spaces (check.py exits "pushtitle check: <msg>"), and every Python
+# traceback from its header through the first unindented line (the exception).
 print_reasons() {
-    awk '/^FAIL |^[a-z0-9][a-z0-9-]*: /'
+    awk '
+        /^Traceback / { tb = 1; print; next }
+        tb && /^[ \t]/ { print; next }
+        tb { tb = 0; print; next }
+        /^FAIL |^[a-z0-9][a-z0-9 -]*: / { print }
+    '
 }
 
 for case in "$@"; do

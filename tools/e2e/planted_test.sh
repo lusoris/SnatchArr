@@ -14,13 +14,23 @@ failed=0
 
 # The script under test: PLANT=bad fails with "refused bad", PLANT=quiet passes, PLANT=hang and
 # HANG_CLEAN=1 sleep far past the bound, PLANT=labelled fails with a reason line followed by
-# container log noise; the clean run passes.
+# container log noise, PLANT=spaced does the same with a label holding a space (check.py's
+# "pushtitle check: <reason>"), PLANT=traceback fails with a Python traceback followed by noise;
+# PLANT=hanglabelled prints a reason line and noise, then hangs past the bound; the clean run
+# passes.
 cat >"$work/check.sh" <<'SCRIPT'
 case "${PLANT:-}" in
 bad) echo "refused bad" >&2; exit 1 ;;
 quiet) exit 0 ;;
 hang) sleep 120 ;;
+hanglabelled) echo "check: the hang reason" >&2; for i in $(seq 30); do echo "api-1 | noise $i"; done; sleep 120 ;;
 labelled) echo "check: the real reason" >&2; for i in $(seq 30); do echo "api-1 | noise $i"; done; exit 1 ;;
+spaced) echo "pushtitle check: the spaced reason" >&2; for i in $(seq 30); do echo "api-1 | noise $i"; done; exit 1 ;;
+traceback)
+    printf '%s\n' 'Traceback (most recent call last):' '  File "check.py", line 9, in <module>' '    main()' 'TimeoutError: the traceback reason' >&2
+    for i in $(seq 30); do echo "api-1 | noise $i"; done
+    exit 1
+    ;;
 esac
 [ "${HANG_CLEAN:-0}" = 1 ] && sleep 120
 exit 0
@@ -61,5 +71,14 @@ expect "a hung clean run ends at the bound" 1 "clean run of $work/check.sh did n
 # A script that reports through compose_lib.sh fail() prints "<label>: <reason>"; a wrong
 # message must still show that reason, though 30 container log lines push it out of the tail.
 expect "a label reason line survives the log tail" 1 "check: the real reason" -- "labelled:other text"
+# check.py exits with "pushtitle check: <reason>" (a space in the label) or, on an error it does
+# not catch, a Python traceback; both must show though the log tail pushes them out (main
+# 4b94304b CI run 43294646878 hid the reason of a failed v3 idonly run).
+expect "a spaced label reason line survives the log tail" 1 "pushtitle check: the spaced reason" -- "spaced:other text"
+expect "a traceback survives the log tail" 1 "TimeoutError: the traceback reason" -- "traceback:other text"
+expect "a traceback keeps its frames" 1 'File "check.py", line 9' -- "traceback:other text"
+expect "a traceback keeps its header" 1 "Traceback (most recent call last):" -- "traceback:other text"
+# A case that hangs after its reason line ends at the bound and still shows that reason.
+expect "a hung case keeps its reason line" 1 "check: the hang reason" -- "hanglabelled:never"
 expect "no planted case is refused" 1 "no planted case" --
 exit "$failed"
