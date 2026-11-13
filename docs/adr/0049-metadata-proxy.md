@@ -33,12 +33,12 @@ Caching uses the shared `golusoris/cache/twotier` package: an in-process L1 plus
 
 Two routes put an app's metadata traffic on the proxy. Both keep everything else direct.
 
-1. **App proxy setting.** The \*arr family (Settings > General > Proxy, host config API), Seerr (Settings > Network, `/api/v1/settings/network`), Stash (`proxy`, `no_proxy`) and Bazarr (proxy settings) have a built-in HTTP/SOCKS proxy with a bypass list. SnatchArr sets it declaratively through the app API where the matrix shows a writable resource. Kill switch: write `proxyEnabled=false` (or the app's equivalent) through the same API; no restart.
+1. **App proxy setting.** The \*arr family (Settings > General > Proxy, host config API), Seerr (Settings > Network, `/api/v1/settings/network`), Stash (`proxy`, `no_proxy`) and Bazarr (proxy settings) have a built-in HTTP/SOCKS proxy with a bypass list. The operator sets it through the app API where the matrix shows a writable resource, following the rollout runbook; SnatchArr never writes it (see Failure modes and kill switch). Kill switch: write `proxyEnabled=false` (or the app's equivalent) through the same API; no restart.
 2. **Container environment proxy.** .NET uses `HttpClient.DefaultProxy` when a handler sets no proxy of its own; on Linux that reads `http_proxy`/`HTTP_PROXY`, `https_proxy`/`HTTPS_PROXY`, `all_proxy`/`ALL_PROXY` and `no_proxy`/`NO_PROXY` (lowercase first). `NO_PROXY` has no `*` wildcard, and a leading dot matches subdomains ([Microsoft docs](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclient.defaultproxy), retrieved 2026-11-13). The shared \*arr dispatcher assigns `handler.Proxy` only when the app proxy is set and never sets `UseProxy = false` (`Sonarr/Sonarr@cab419ade8ac7fcab5bf80394ee492abd35d5f5a:src/NzbDrone.Common/Http/Dispatchers/ManagedHttpDispatcher.cs:159,174-176`; each \*arr row in Appendix A cites its own lines), so with the app proxy off the \*arr apps honour these variables. Jellyfin builds its `SocketsHttpHandler`s without a proxy (`jellyfin/jellyfin@83d0d0e7f76e23e2e085c8ff67d28b772d35967d:Jellyfin.Server/Startup.cs:88-99`) and so does its TVDB plugin (`jellyfin/jellyfin-plugin-tvdb@f1bcc9edf37d5ee65cf3683e89b76226c09a22eb:Jellyfin.Plugin.Tvdb/TvdbClientManager.cs:759-769`). The environment applies to the whole process, so `NO_PROXY` must name every internal host the app calls. Kill switch: remove the variables and restart the container.
 
 The app proxy setting is the default for every app that has one: it carries per-app bypass syntax (wildcards, IP ranges, local-address bypass) and flips without a restart. The environment route is for apps without an app setting (Jellyfin, and Emby as a log-mode trial).
 
-App bypass lists and `NO_PROXY` are deny-lists: they say what stays direct. Before an app is pointed at the proxy, its bypass list is seeded with every indexer and download-client host from that app's own settings, plus its cluster-internal hosts. The proxy keeps the matching allow-list of metadata provider hosts, so a missing bypass entry shows up instead of silently sending an indexer through the proxy.
+App bypass lists and `NO_PROXY` are deny-lists: they say what stays direct. Before an app is pointed at the proxy, its bypass list is seeded with every host from that app's own settings that is not a metadata provider: indexers, download clients, notification endpoints (public ones included), media servers and other \*arr apps, plus its cluster-internal hosts. The proxy keeps the matching allow-list of metadata provider hosts, so a missing bypass entry shows up instead of silently sending an indexer through the proxy.
 
 Three refusals hold in both modes, so log mode never widens what the proxy carries:
 
@@ -141,7 +141,7 @@ While its proxy is set, an \*arr app has no direct fallback: proxy and timeout e
   - Stash and Bazarr: their app configuration write; the exact API resource is unverified.
 - The runbook disables every app route before the proxy Deployment is removed.
 
-The kill switch is manual for the first rollout: an alert on proxy health pages the operator, who follows the runbook. SnatchArr never writes \*arr, Seerr or Jellyfin proxy settings, so ADR-0039's ownership split stays unchanged (see the decision record).
+The kill switch is manual for the first rollout: an alert on proxy health pages the operator, who follows the runbook. The operator owns every app proxy setting, base URL and container environment change, at rollout and at the kill switch; SnatchArr never writes \*arr, Seerr or Jellyfin proxy settings, so ADR-0039's ownership split stays unchanged. Moving that ownership to SnatchArr is the automatic kill switch decision and needs a new decision (see the decision record).
 
 ### Rollout
 
@@ -192,7 +192,7 @@ The operator answered three decisions on 2026-11-13 (paraphrased; ledger ids in 
 
 | Decision | Answer | Revisit trigger |
 | :--- | :--- | :--- |
-| TLS interception (option a) and CA custody, `snatcharr-metadata-proxy-tls-interception` | No TLS interception now. Build option c in log mode first and decide after its window, with measured host counts. | Log-mode host counts show a duplicate share for the CONNECT-only apps: a new decision with those numbers. |
+| TLS interception (option a) and CA custody, `snatcharr-metadata-proxy-tls-interception` | No TLS interception now. Build option c in log mode first and decide after its window, with measured host counts. | The log window's numbers: per-host CONNECT call counts for the CONNECT-only apps, beside the duplicate share measured where a path is visible (reverse-proxy routes, Jellyfin and Emby server logs). Those numbers go into a new decision; CONNECT alone never claims a duplicate share. |
 | Product name, `snatcharr-metadata-proxy-product-name` | No separate product name. Image `snatcharr-metadata-proxy`, chart values key `metadataProxy`, metrics `metadata_proxy_*`. | None. |
 | Automatic kill switch, `snatcharr-metadata-proxy-auto-killswitch` | Manual kill switch only for the first rollout: an alert plus the runbook. ADR-0039 stays unchanged. | The log-mode window shows the proxy outage rate: a new decision with those numbers. |
 
