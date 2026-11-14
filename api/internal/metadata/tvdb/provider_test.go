@@ -532,6 +532,146 @@ func TestConcurrentCallsShareOneLookup(t *testing.T) {
 	}
 }
 
+func startSeriesLookup(ctx context.Context, p *Provider) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		got, err := p.TitlesFor(ctx, sonarrRef(), "de")
+		if err == nil && len(got) != 2 {
+			err = fmt.Errorf("lookup got %d titles, want 2", len(got))
+		}
+		done <- err
+	}()
+	return done
+}
+
+func receiveLookup(t *testing.T, ctx context.Context, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		t.Fatal("lookup did not finish within the test bound")
+		return ctx.Err()
+	}
+}
+
+func TestEarlyWaiterLeavesSharedLookupRunning(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	release := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	s.started, s.release = make(chan struct{}, 1), release
+	p := s.provider(t, plantedKey, plantedPIN, nil)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	early, leave := context.WithCancel(ctx)
+	defer leave()
+	first := startSeriesLookup(early, p)
+	select {
+	case <-s.started:
+	case <-ctx.Done():
+		t.Fatal("first lookup did not reach the stub")
+	}
+	second := startSeriesLookup(ctx, p)
+	leave()
+	if err := receiveLookup(t, ctx, first); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("early waiter = %v, want ErrUnavailable", err)
+	}
+	unblock()
+	if err := receiveLookup(t, ctx, second); err != nil {
+		t.Fatalf("second waiter = %v, want both titles", err)
+	}
+	if n := s.total.Load(); n != 3 {
+		t.Fatalf("requests = %d, want 3 (one shared lookup)", n)
+	}
+}
+
+func TestEarlyWaiterLeavesSharedLookupCached(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	release := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	s.started, s.release = make(chan struct{}, 1), release
+	p := s.provider(t, plantedKey, plantedPIN, nil)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	early, leave := context.WithCancel(ctx)
+	defer leave()
+	first := startSeriesLookup(early, p)
+	select {
+	case <-s.started:
+	case <-ctx.Done():
+		t.Fatal("lookup did not reach the stub")
+	}
+	leave()
+	if err := receiveLookup(t, ctx, first); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("sole waiter = %v, want ErrUnavailable", err)
+	}
+	unblock()
+	// Join the detached flight, or read its cached result, without allowing a new load.
+	got, err := p.cached(ctx, "series:81189:deu", func(context.Context) (entry, error) {
+		return entry{}, errors.New("detached lookup did not fill the cache")
+	})
+	if err != nil || len(got.Titles) != 2 {
+		t.Fatalf("detached result = %v, %v, want both titles", got, err)
+	}
+	if err := receiveLookup(t, ctx, startSeriesLookup(ctx, p)); err != nil {
+		t.Fatal(err)
+	}
+	if n := s.total.Load(); n != 3 {
+		t.Fatalf("requests after cache hit = %d, want 3", n)
+	}
+}
+
+func TestEarlyWaiterLeavesSharedRefreshRunning(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	release := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	s.started, s.release = make(chan struct{}, 1), release
+	p := s.provider(t, plantedKey, plantedPIN, nil)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	const key = "series:81189:deu"
+	stale := entry{NotFound: true, At: p.clk.Now().Add(-NegativeTTL)}
+	if err := p.cache.Set(ctx, key, stale); err != nil {
+		t.Fatal(err)
+	}
+	early, leave := context.WithCancel(ctx)
+	defer leave()
+	first := startSeriesLookup(early, p)
+	select {
+	case <-s.started:
+	case <-ctx.Done():
+		t.Fatal("refresh did not reach the stub")
+	}
+	second := make(chan error, 1)
+	go func() {
+		// Enter the refresh flight even though the first refresher has evicted the sentinel.
+		got, err := p.refreshed(ctx, key, func(c context.Context) (entry, error) {
+			return p.load(c, sonarrRef(), "deu", "de")
+		})
+		if err == nil && (got.NotFound || len(got.Titles) != 2) {
+			err = fmt.Errorf("refresh got %+v, want both titles", got)
+		}
+		second <- err
+	}()
+	leave()
+	if err := receiveLookup(t, ctx, first); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("early refresher = %v, want ErrUnavailable", err)
+	}
+	unblock()
+	if err := receiveLookup(t, ctx, second); err != nil {
+		t.Fatalf("second refresher = %v, want both titles", err)
+	}
+	if n := s.total.Load(); n != 3 {
+		t.Fatalf("refresh requests = %d, want 3 (one shared refresh)", n)
+	}
+}
+
 func TestConcurrentDistinctItemsRace(t *testing.T) {
 	t.Parallel()
 	s := newStub(t)
@@ -676,10 +816,9 @@ func TestNewWithoutPool(t *testing.T) {
 	}
 }
 
-// TestWaitingLookupHonoursDeadline checks a lookup queued behind a held slot gives up with
-// ErrUnavailable and sends no request: at the caller's deadline, and at the provider's own
-// lookup bound when the caller's context has none (HISS-02). The test holds the slot itself
-// for the whole case, so no other lookup can free it first.
+// TestWaitingLookupHonoursDeadline checks a queued lookup returns ErrUnavailable at the
+// caller's deadline or, without one, the provider's bound (HISS-02). It holds the slot
+// through the zero-request assertion, then releases it and waits for the detached load.
 func TestWaitingLookupHonoursDeadline(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -702,15 +841,68 @@ func TestWaitingLookupHonoursDeadline(t *testing.T) {
 				defer cancel()
 			}
 			p.slot <- struct{}{} // another lookup holds the slot
-			_, err := p.TitlesFor(ctx, sonarrRef(), "de")
-			<-p.slot
+			finished := make(chan struct{})
+			_, err := p.cached(ctx, "series:81189:deu", func(c context.Context) (entry, error) {
+				defer close(finished)
+				return p.load(c, sonarrRef(), "deu", "de")
+			})
 			if !errors.Is(err, ErrUnavailable) {
-				t.Fatalf("waiting lookup: error = %v, want ErrUnavailable", err)
+				t.Errorf("waiting lookup: error = %v, want ErrUnavailable", err)
 			}
 			if n := s.total.Load(); n != 0 {
-				t.Fatalf("waiting lookup sent %d requests, want 0", n)
+				t.Errorf("waiting lookup sent %d requests, want 0", n)
+			}
+			<-p.slot
+			select {
+			case <-finished:
+			case <-time.After(time.Second):
+				t.Fatal("detached load did not finish after releasing the slot")
 			}
 		})
+	}
+}
+
+func TestWaitingLookupSharedWorkHonoursBound(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	early, leave := context.WithCancel(ctx)
+	defer leave()
+	work := make(chan context.Context, 1)
+	finished := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := waitEntry(early, 20*time.Millisecond, func(shared context.Context) (entry, error) {
+			defer close(finished)
+			work <- shared
+			if _, ok := shared.Deadline(); !ok {
+				return entry{}, errors.New("shared lookup has no deadline")
+			}
+			<-shared.Done()
+			return entry{}, fmt.Errorf("shared lookup: %w", shared.Err())
+		})
+		done <- err
+	}()
+	var shared context.Context
+	select {
+	case shared = <-work:
+	case <-ctx.Done():
+		t.Fatal("shared lookup did not start")
+	}
+	if _, ok := shared.Deadline(); !ok {
+		t.Fatal("shared lookup has no deadline")
+	}
+	leave()
+	if err := receiveLookup(t, ctx, done); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("early waiter = %v, want ErrUnavailable", err)
+	}
+	select {
+	case <-finished:
+	case <-ctx.Done():
+		t.Fatal("shared lookup did not stop at its bound")
+	}
+	if !errors.Is(shared.Err(), context.DeadlineExceeded) {
+		t.Fatalf("shared context = %v, want DeadlineExceeded", shared.Err())
 	}
 }
 

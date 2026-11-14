@@ -245,11 +245,11 @@ func (p *Provider) staleNegative(e entry) bool {
 }
 
 func (p *Provider) cached(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
-	return waitEntry(ctx, func(ctx context.Context) (entry, error) { return p.cache.Get(ctx, key, loader) })
+	return waitEntry(ctx, p.lookup, func(ctx context.Context) (entry, error) { return p.cache.Get(ctx, key, loader) })
 }
 
 func (p *Provider) refreshed(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
-	return waitEntry(ctx, func(ctx context.Context) (entry, error) {
+	return waitEntry(ctx, 2*p.lookup, func(ctx context.Context) (entry, error) {
 		e, _, err := p.refreshes.Do(ctx, key, func(ctx context.Context) (entry, error) {
 			return p.refreshNegative(ctx, key, loader)
 		})
@@ -284,16 +284,19 @@ func (p *Provider) refreshNegative(ctx context.Context, key string, loader func(
 // waitEntry lets a waiter stop at its own deadline. In golusoris v0.20.0,
 // cache/twotier/twotier.go:131-157 calls group.Do; cache/singleflight/singleflight.go:52-63
 // calls x/sync singleflight.Group.Do synchronously without checking a waiter's context.
-// The goroutine ends when the shared load ends, bounded by p.lookup; the buffered
-// result lets it finish even after this caller leaves. Both cache paths receive ctx unchanged.
-func waitEntry(ctx context.Context, fn func(context.Context) (entry, error)) (entry, error) {
+// The shared lookup is detached from any one waiter's cancellation and keeps its own
+// explicit bound: an early departure never fails the lookup for others, and its result
+// still reaches the cache. The buffered result lets it finish after this caller leaves.
+func waitEntry(ctx context.Context, bound time.Duration, fn func(context.Context) (entry, error)) (entry, error) {
 	type result struct {
 		value entry
 		err   error
 	}
 	done := make(chan result, 1)
 	go func() {
-		value, err := fn(ctx)
+		shared, cancel := context.WithTimeout(context.WithoutCancel(ctx), bound)
+		defer cancel()
+		value, err := fn(shared)
 		done <- result{value: value, err: err}
 	}()
 	select {

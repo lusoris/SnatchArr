@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -50,7 +51,8 @@ func TestStorableSecretsStayWriteOnly(t *testing.T) {
 		t.Run(setting.Key, func(t *testing.T) {
 			t.Parallel()
 			h := newTestHarness(t)
-			ctx := t.Context()
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
 			userID := uuid.New()
 			value := fmt.Sprintf("planted-%d-value", i)
 			if _, err := h.svc.Put(ctx, &userID, map[string]string{setting.Key: value}); err != nil {
