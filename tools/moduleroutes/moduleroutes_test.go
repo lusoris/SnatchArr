@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -169,6 +170,85 @@ paths:
 		if finding.Reason != "x-module must be a non-empty string" {
 			t.Errorf("unexpected finding for %s: %q", finding.Method, finding.Reason)
 		}
+	}
+}
+
+func TestGenerateCodeAllPathItemOperations(t *testing.T) {
+	t.Parallel()
+	specYAML := []byte(`openapi: 3.1.0
+info:
+  title: All Generated Operations API
+  version: 0.1.0
+paths:
+  /widgets:
+    get:
+      operationId: getWidget
+      x-module: get_module
+    put:
+      operationId: putWidget
+      x-module: put_module
+    post:
+      operationId: postWidget
+      x-module: post_module
+    delete:
+      operationId: deleteWidget
+      x-module: delete_module
+    options:
+      operationId: optionsWidget
+      x-module: options_module
+    head:
+      operationId: headWidget
+      x-module: head_module
+    patch:
+      operationId: patchWidget
+      x-module: patch_module
+    trace:
+      operationId: traceWidget
+      x-module: trace_module
+  /core:
+    get:
+      operationId: getCore
+`)
+	generated, err := GenerateCode(specYAML)
+	if err != nil {
+		t.Fatalf("GenerateCode unexpected error: %v", err)
+	}
+	for _, method := range []string{"get", "put", "post", "delete", "options", "head", "patch", "trace"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			pattern := `(?m)^\s*"` + method + `Widget":\s+"` + method + `_module",$`
+			matched, err := regexp.Match(pattern, generated)
+			if err != nil {
+				t.Fatalf("match generated mapping: %v", err)
+			}
+			if !matched {
+				t.Errorf("generated code missing mapping for %sWidget to %s_module:\n%s", method, method, generated)
+			}
+		})
+	}
+	t.Run("missing x-module is omitted", func(t *testing.T) {
+		t.Parallel()
+		if bytes.Contains(generated, []byte("getCore")) {
+			t.Errorf("generated code includes operation without x-module:\n%s", generated)
+		}
+	})
+}
+
+func TestGenerateCodeEmptyModule(t *testing.T) {
+	t.Parallel()
+	specYAML := []byte(`openapi: 3.1.0
+info:
+  title: Empty Generated Module API
+  version: 0.1.0
+paths:
+  /widgets:
+    get:
+      operationId: getWidget
+      x-module: ""
+`)
+	_, err := GenerateCode(specYAML)
+	if err == nil || err.Error() != "operation has invalid x-module: must be non-empty string" {
+		t.Fatalf("GenerateCode error = %v, want invalid x-module error", err)
 	}
 }
 
