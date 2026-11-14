@@ -253,7 +253,10 @@ func (p *Provider) refreshed(ctx context.Context, key string, loader func(contex
 		e, _, err := p.refreshes.Do(ctx, key, func(ctx context.Context) (entry, error) {
 			return p.refreshNegative(ctx, key, loader)
 		})
-		return e, err
+		if err != nil {
+			return e, fmt.Errorf("tvdb: refresh %s: %w", key, err)
+		}
+		return e, nil
 	})
 }
 
@@ -262,13 +265,20 @@ func (p *Provider) refreshed(ctx context.Context, key string, loader func(contex
 // so eviction and reload must share this separate per-key flight.
 func (p *Provider) refreshNegative(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
 	e, err := p.cache.Get(ctx, key, loader)
-	if err != nil || !p.staleNegative(e) {
-		return e, err
+	if err != nil {
+		return e, fmt.Errorf("tvdb: recheck %s: %w", key, err)
 	}
-	if err := p.cache.Delete(ctx, key); err != nil {
+	if !p.staleNegative(e) {
+		return e, nil
+	}
+	if deleteErr := p.cache.Delete(ctx, key); deleteErr != nil {
 		p.logger.WarnContext(ctx, "tvdb: drop stale negative entry", slog.String("key", key))
 	}
-	return p.cache.Get(ctx, key, loader)
+	e, err = p.cache.Get(ctx, key, loader)
+	if err != nil {
+		return e, fmt.Errorf("tvdb: reload %s: %w", key, err)
+	}
+	return e, nil
 }
 
 // waitEntry lets a waiter stop at its own deadline. In golusoris v0.20.0,

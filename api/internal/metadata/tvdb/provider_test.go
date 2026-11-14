@@ -366,6 +366,43 @@ func TestNegativeEntryExpires(t *testing.T) {
 	}
 }
 
+func TestNegativeRefreshPreservesSentinel(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		dataRC     int
+		wantErr    error
+		wantTitles int
+	}{
+		{"working stub", 0, nil, 1},
+		{"unauthorized data request", http.StatusUnauthorized, ErrUnauthorized, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			p := s.provider(t, plantedKey, "", nil)
+			clk := clock.NewFake()
+			p.clk = clk
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
+			if got, err := p.TitlesFor(ctx, ref, "de"); err != nil || len(got) != 0 {
+				t.Fatalf("first lookup = %v, %v, want empty, nil", got, err)
+			}
+			s.series[7] = "Sieben"
+			s.dataRC = tc.dataRC
+			clk.Advance(NegativeTTL + time.Second)
+			got, err := p.TitlesFor(ctx, ref, "de")
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("refresh error = %v, want %v", err, tc.wantErr)
+			}
+			if len(got) != tc.wantTitles {
+				t.Fatalf("refresh titles = %v, want %d titles", got, tc.wantTitles)
+			}
+		})
+	}
+}
+
 // staleReadClock holds callers after each has read the same stale cache entry.
 type staleReadClock struct {
 	clock.Clock
