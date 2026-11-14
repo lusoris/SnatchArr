@@ -516,6 +516,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/items/{itemId}/foreign-titles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+                /** @description Sonarr series ID or Radarr movie ID. */
+                itemId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * Foreign-language search titles of one Sonarr or Radarr item
+         * @description Admin only. Returns the titles SnatchArr would search for one item in one rule
+         *     language: the *arr instance's own cached aliases and, when the operator set a
+         *     TheTVDB API key, TheTVDB translations and aliases (ADR-0048). Each title names its
+         *     source. A TheTVDB failure never fails the request: `tvdb` reports it and the *arr
+         *     titles still return. Other instance kinds answer 422.
+         *     Data courtesy of TheTVDB.com.
+         */
+        get: operations["getForeignTitles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/queue-policy": {
         parameters: {
             query?: never;
@@ -2099,6 +2128,30 @@ export interface components {
             tags: components["schemas"]["PolicyFilterOption"][];
             /** @description Quality profiles of the instance, sorted by name. */
             quality_profiles: components["schemas"]["PolicyFilterOption"][];
+        };
+        /** @description Search titles of one item in one rule language. Data courtesy of TheTVDB.com. */
+        ForeignTitles: {
+            /** @description Rule language code the titles were selected for. */
+            language: string;
+            /** @description Season the titles were scoped to, when requested. */
+            season?: number;
+            /** @description Search titles in search order, at most 50. */
+            titles: components["schemas"]["ForeignTitle"][];
+            /**
+             * @description What the opt-in TheTVDB provider did; `disabled` when no API key is set.
+             * @enum {string}
+             */
+            tvdb: "disabled" | "ok" | "unauthorized" | "rate_limited" | "unavailable";
+            /** @description TheTVDB attribution; show it next to titles whose source is `tvdb`. */
+            attribution: string;
+        };
+        ForeignTitle: {
+            title: string;
+            /**
+             * @description Where the title came from.
+             * @enum {string}
+             */
+            source: "arr" | "tvdb";
         };
         /** @description Read-only foreign-title search preflight report for an instance. SnatchArr never changes the profile. */
         ForeignSearchPreflight: {
@@ -4143,6 +4196,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ForeignSearchPreflight"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getForeignTitles: {
+        parameters: {
+            query: {
+                /** @description Foreign-title rule language code, for example `de` or `fr`. */
+                language: string;
+                /** @description Season to scope season-specific aliases to; omitted = whole-item aliases only. */
+                season?: number;
+            };
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+                /** @description Sonarr series ID or Radarr movie ID. */
+                itemId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Foreign titles of the item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForeignTitles"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -38,6 +38,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
+	"github.com/lusoris/SnatchArr/api/internal/foreigntitles"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
@@ -345,6 +346,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		adult:           adultSvc,
 		runtimeSettings: runtimesettings.New(st, enc, clk, config.BaseOptions{Options: cfg}, logger),
 		logs:            logring.New(logring.MinSize),
+		foreignTitles:   &stubForeignTitles{res: foreigntitles.Result{Language: "de", TVDB: foreigntitles.StatusDisabled}},
 		logger:          logger,
 	}
 	return h, notifySvc, webhookStore, notifyEngine, rec, enc, prowlarrSvc

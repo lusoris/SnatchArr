@@ -49,6 +49,8 @@
 //	snatcharr.jellyfin.api_key   APP_SNATCHARR_JELLYFIN_API_KEY   Jellyfin service account API key
 //	snatcharr.jellyfin.timeout   APP_SNATCHARR_JELLYFIN_TIMEOUT   Jellyfin HTTP request timeout (default 10s)
 //	snatcharr.jellyfin.default_role APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE default role for new Jellyfin members (default requester)
+//	snatcharr.metadata.tvdb.api_key APP_SNATCHARR_METADATA_TVDB_API_KEY TheTVDB API key; empty = TVDB provider off (ADR-0048)
+//	snatcharr.metadata.tvdb.pin  APP_SNATCHARR_METADATA_TVDB_PIN  optional TheTVDB subscriber PIN (ADR-0048)
 //	snatcharr.item_search.cooldown_seconds APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS per-user item search cooldown in seconds (default 60, 0..3600, 0 = off)
 //	snatcharr.download_priority.interval_seconds APP_SNATCHARR_DOWNLOAD_PRIORITY_INTERVAL_SECONDS observe interval (default 60, 15..3600)
 //
@@ -96,6 +98,7 @@ type Options struct {
 	ProxyAuth        ProxyAuthOptions        `koanf:"proxy_auth"`
 	Prowlarr         ProwlarrOptions         `koanf:"prowlarr"`
 	Jellyfin         JellyfinOptions         `koanf:"jellyfin"`
+	Metadata         MetadataOptions         `koanf:"metadata"`
 	ItemSearch       ItemSearchOptions       `koanf:"item_search"`
 	Logs             LogsOptions             `koanf:"logs"`
 	DownloadPriority DownloadPriorityOptions `koanf:"download_priority"`
@@ -142,6 +145,19 @@ func (p ProwlarrOptions) Validate() error {
 		return fmt.Errorf("config: prowlarr.max_cached_releases must be between 1 and 10000 (inclusive), got %d", p.MaxCachedReleases)
 	}
 	return nil
+}
+
+// MetadataOptions groups opt-in external metadata providers (ADR-0048).
+type MetadataOptions struct {
+	TVDB TVDBOptions `koanf:"tvdb"`
+}
+
+// TVDBOptions configures the opt-in TheTVDB provider. Both fields are secrets:
+// encrypted at rest, write-only in the API, never logged. An empty APIKey turns
+// the provider off, so no TVDB request is ever made.
+type TVDBOptions struct {
+	APIKey string `koanf:"api_key"`
+	PIN    string `koanf:"pin"`
 }
 
 // JellyfinOptions configures Jellyfin authentication and membership settings.
@@ -567,6 +583,7 @@ func LoadWithSettings(cfg *config.Config, overrides map[string]string) (Options,
 	normalizeOIDC(&o.OIDC, o.Public.URL)
 	normalizeProxyAuth(&o.ProxyAuth)
 	normalizeJellyfin(&o.Jellyfin)
+	normalizeMetadata(&o.Metadata)
 	if err := o.Validate(); err != nil {
 		return Options{}, err
 	}
@@ -622,6 +639,12 @@ func normalizeJellyfin(j *JellyfinOptions) {
 	j.URL = strings.TrimSpace(j.URL)
 	j.APIKey = strings.TrimSpace(j.APIKey)
 	j.DefaultRole = domain.Role(strings.ToLower(strings.TrimSpace(string(j.DefaultRole))))
+}
+
+// normalizeMetadata trims the trailing newline secret files carry from the TVDB credentials.
+func normalizeMetadata(m *MetadataOptions) {
+	m.TVDB.APIKey = strings.TrimSpace(m.TVDB.APIKey)
+	m.TVDB.PIN = strings.TrimSpace(m.TVDB.PIN)
 }
 
 func cleanTrusted(raw []string) []string {
@@ -752,6 +775,7 @@ func CompoundKeys() []string {
 		"snatcharr.prowlarr.search_db_timeout",
 		"snatcharr.prowlarr.max_cached_releases",
 		"snatcharr.jellyfin.api_key",
+		"snatcharr.metadata.tvdb.api_key",
 		"snatcharr.jellyfin.default_role",
 		"snatcharr.item_search.cooldown_seconds",
 		"snatcharr.download_priority.interval_seconds",

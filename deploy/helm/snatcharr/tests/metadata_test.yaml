@@ -1,0 +1,111 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: metadata provider credentials (ADR-0048)
+templates:
+  - configmap.yaml
+  - api-deployment.yaml
+release:
+  name: snatcharr
+  namespace: snatcharr
+tests:
+  - it: default - no existingSecret renders no TVDB env (provider off)
+    template: api-deployment.yaml
+    asserts:
+      - notContains:
+          any: true
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_METADATA_TVDB_API_KEY
+      - notContains:
+          any: true
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_METADATA_TVDB_PIN
+
+  - it: positive - existingSecret renders key and optional PIN from the Secret
+    template: api-deployment.yaml
+    set:
+      metadata:
+        tvdb:
+          existingSecret: tvdb-credentials
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_METADATA_TVDB_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: tvdb-credentials
+                key: tvdb-api-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_METADATA_TVDB_PIN
+            valueFrom:
+              secretKeyRef:
+                name: tvdb-credentials
+                key: tvdb-pin
+                optional: true
+
+  - it: boundary - custom key names are honoured
+    template: api-deployment.yaml
+    set:
+      metadata:
+        tvdb:
+          existingSecret: shared
+          apiKeyKey: key
+          pinKey: pin
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_METADATA_TVDB_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: shared
+                key: key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_METADATA_TVDB_PIN
+            valueFrom:
+              secretKeyRef:
+                name: shared
+                key: pin
+                optional: true
+
+  - it: boundary - numeric-looking Secret names and keys remain strings
+    template: api-deployment.yaml
+    set:
+      metadata:
+        tvdb:
+          existingSecret: "789"
+          apiKeyKey: "123"
+          pinKey: "456"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_METADATA_TVDB_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: "789"
+                key: "123"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_METADATA_TVDB_PIN
+            valueFrom:
+              secretKeyRef:
+                name: "789"
+                key: "456"
+                optional: true
+
+  - it: negative - an inline credential key is refused by the schema
+    template: api-deployment.yaml
+    set:
+      metadata:
+        tvdb:
+          apiKey: plain-text-key
+    asserts:
+      - failedTemplate: {}

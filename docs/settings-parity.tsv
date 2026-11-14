@@ -44,6 +44,8 @@ APP_SNATCHARR_JELLYFIN_URL	snatcharr.jellyfin.url	runtime	restart	yes
 APP_SNATCHARR_JELLYFIN_API_KEY	snatcharr.jellyfin.api_key	secret	restart	yes
 APP_SNATCHARR_JELLYFIN_TIMEOUT	snatcharr.jellyfin.timeout	runtime	restart	yes
 APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE	snatcharr.jellyfin.default_role	runtime	restart	yes
+APP_SNATCHARR_METADATA_TVDB_API_KEY	snatcharr.metadata.tvdb.api_key	secret	restart	yes
+APP_SNATCHARR_METADATA_TVDB_PIN	snatcharr.metadata.tvdb.pin	secret	restart	yes
 APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS	snatcharr.item_search.cooldown_seconds	runtime	restart	yes
 APP_SNATCHARR_DOWNLOAD_PRIORITY_INTERVAL_SECONDS	snatcharr.download_priority.interval_seconds	runtime	restart	yes
 APP_SNATCHARR_LOGS_RING_SIZE	snatcharr.logs.ring_size	bootstrap	restart	yes
@@ -112,6 +114,8 @@ APP_LEADER_ENABLED	leader.enabled	bootstrap	restart	yes
 APP_LEADER_NAME	leader.name	bootstrap	restart	yes
 APP_LEADER_IDENTITY	leader.identity	bootstrap	restart	yes
 APP_LEADER_PG_RETRY	leader.pg.retry	bootstrap	restart	yes
+APP_CACHE_MEMORY_MAX_SIZE	cache.memory.max_size	bootstrap	restart	yes
+APP_CACHE_MEMORY_TTL	cache.memory.ttl	bootstrap	restart	yes
 APP_OTEL_ENABLED	otel.enabled	bootstrap	restart	yes
 APP_OTEL_ENDPOINT	otel.endpoint	bootstrap	restart	yes
 APP_OTEL_INSECURE	otel.insecure	bootstrap	restart	yes

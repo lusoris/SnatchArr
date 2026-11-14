@@ -523,6 +523,8 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	if ! helm plugin list 2>/dev/null | grep -E -q '^unittest[[:space:]]'; then \
 	  echo "deploy-verify: helm plugin 'unittest' is missing; install helm-unittest (https://github.com/helm-unittest/helm-unittest)" >&2; exit 1; \
 	fi
+	python3 -I tools/deploy/unittest_lint.py --self-test
+	python3 -I tools/deploy/unittest_lint.py
 	helm unittest deploy/helm/snatcharr
 	sh tools/deploy/render_test.sh
 	helm lint --strict deploy/helm/snatcharr

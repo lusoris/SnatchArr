@@ -78,6 +78,15 @@ auth:
     requesterGroups: []
     viewerGroups: []
 
+# Opt-in metadata providers (ADR-0048). Credentials are NEVER stored in values.yaml.
+metadata:
+  tvdb:
+    # Existing Secret with the TheTVDB API key and, for a user-supported key, the PIN
+    # (optional key). Empty keeps the provider off: SnatchArr makes no TVDB request.
+    existingSecret: ""
+    apiKeyKey: tvdb-api-key
+    pinKey: tvdb-pin
+
 # Secrets the control plane needs. Either point at an existing Secret with the keys
 # crypto-key (hex, 16/24/32 bytes), csrf-secret, apikey-secret, worker-token, and setup-secret
 # (optional in existingSecret), or set the values here. Empty values are generated once and

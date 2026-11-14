@@ -1015,6 +1015,32 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 			},
 		},
 		{
+			name: "tvdb key and pin from env, trimmed",
+			env: map[string]string{
+				"APP_SNATCHARR_METADATA_TVDB_API_KEY": "planted-key\n",
+				"APP_SNATCHARR_METADATA_TVDB_PIN":     " planted-pin ",
+			},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.Metadata.TVDB.APIKey != "planted-key" {
+					t.Fatalf("Metadata.TVDB.APIKey length = %d, want trimmed planted key", len(opts.Metadata.TVDB.APIKey))
+				}
+				if opts.Metadata.TVDB.PIN != "planted-pin" {
+					t.Fatalf("Metadata.TVDB.PIN length = %d, want trimmed planted pin", len(opts.Metadata.TVDB.PIN))
+				}
+			},
+		},
+		{
+			name: "tvdb default off",
+			env:  map[string]string{},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.Metadata.TVDB.APIKey != "" || opts.Metadata.TVDB.PIN != "" {
+					t.Fatal("tvdb credentials must default to empty")
+				}
+			},
+		},
+		{
 			name: "jellyfin full env",
 			env: map[string]string{
 				"APP_SNATCHARR_JELLYFIN_ENABLED":      "true",

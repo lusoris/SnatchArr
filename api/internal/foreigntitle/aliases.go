@@ -12,6 +12,18 @@ type AliasInput struct {
 	OriginalTitle    string
 	OriginalLanguage string
 	Aliases          []AliasEntry
+	// Translations are titles an external metadata provider (ADR-0048) holds per language.
+	// They are marked by construction: the provider returned them for a language, so they
+	// join the search without the Expansions/StripArticles cue test of plain aliases.
+	Translations []LanguageTitle
+}
+
+// LanguageTitle is one title of an item in one language. Language is the rule code
+// (for example "de"), Source names the provider that supplied it (for example "tvdb").
+type LanguageTitle struct {
+	Language string
+	Title    string
+	Source   string
 }
 
 // AliasEntry applies to the whole item unless SeasonNumber scopes it to one season.
@@ -22,6 +34,8 @@ type AliasEntry struct {
 
 // SearchTitles selects original and localized aliases in source order, within maxTitles.
 // Unmarked aliases are omitted because *arr searches them natively (ADR-0019 section 5).
+// Provider translations only fill the capacity the local titles leave (ADR-0048 section 2:
+// the *arr aliases stay the base), so enrichment never displaces a local alias.
 // Language names are compared case-insensitively; app-specific IDs are never shared.
 func SearchTitles(in AliasInput, r Rules, season *int, maxTitles int) []string {
 	if maxTitles <= 0 {
@@ -44,6 +58,7 @@ func SearchTitles(in AliasInput, r Rules, season *int, maxTitles int) []string {
 			c.add(alias.Title)
 		}
 	}
+	c.addTranslations(in.Translations, r)
 	return c.titles
 }
 
@@ -81,4 +96,13 @@ func (c *aliasCollector) add(title string) {
 		}
 	}
 	c.titles = append(c.titles, title)
+}
+
+// addTranslations collects provider titles whose language is the rule's own, in source order.
+func (c *aliasCollector) addTranslations(list []LanguageTitle, r Rules) {
+	for i := range list {
+		if strings.EqualFold(list[i].Language, r.Code) {
+			c.add(list[i].Title)
+		}
+	}
 }
