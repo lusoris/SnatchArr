@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -99,7 +100,10 @@ func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 func (s *stub) login(w http.ResponseWriter, r *http.Request) {
 	s.logins.Add(1)
 	var body struct{ APIKey, PIN string }
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	if s.loginRC != http.StatusOK || body.APIKey != plantedKey || (body.PIN != "" && body.PIN != plantedPIN) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"message":"Invalid credentials ` + plantedKey + `"}`))
@@ -359,6 +363,87 @@ func TestNegativeEntryExpires(t *testing.T) {
 	got, err := p.TitlesFor(t.Context(), ref, "de")
 	if err != nil || len(got) == 0 || got[0].Title != "Sieben" {
 		t.Fatalf("after expiry = %v, %v, want Sieben", got, err)
+	}
+}
+
+// staleReadClock holds callers after each has read the same stale cache entry.
+type staleReadClock struct {
+	clock.Clock
+	reads   chan struct{}
+	release <-chan struct{}
+}
+
+func (c *staleReadClock) Since(at time.Time) time.Duration {
+	age := c.Clock.Since(at)
+	if age >= NegativeTTL {
+		select {
+		case c.reads <- struct{}{}:
+		case <-c.release:
+		}
+		<-c.release
+	}
+	return age
+}
+
+func TestConcurrentNegativeRefresh(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, "", nil)
+	clk := clock.NewFake()
+	p.clk = clk
+	ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
+	if got, err := p.TitlesFor(t.Context(), ref, "de"); err != nil || len(got) != 0 {
+		t.Fatalf("first lookup = %v, %v, want empty, nil", got, err)
+	}
+	clk.Advance(NegativeTTL + time.Second)
+	release := make(chan struct{})
+	reads := make(chan struct{}, 16)
+	p.clk = &staleReadClock{Clock: clk, reads: reads, release: release}
+	negativeRefreshBurst(t, p, ref, reads, release)
+	if n := s.total.Load() - s.logins.Load(); n != 2 {
+		t.Fatalf("data requests = %d, want 2 (initial lookup + one refresh)", n)
+	}
+}
+
+func negativeRefreshBurst(t *testing.T, p *Provider, ref Ref, reads <-chan struct{}, release chan struct{}) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	p.slot <- struct{}{}
+	releaseReads := sync.OnceFunc(func() { close(release) })
+	releaseSlot := sync.OnceFunc(func() { <-p.slot })
+	var wg sync.WaitGroup
+	defer func() { releaseReads(); releaseSlot(); wg.Wait() }()
+	start := make(chan struct{})
+	errs := make(chan error, 16)
+	for range 16 {
+		wg.Go(func() {
+			<-start
+			got, err := p.TitlesFor(ctx, ref, "de")
+			if err == nil && len(got) != 0 {
+				err = fmt.Errorf("refresh got %v, want empty", got)
+			}
+			errs <- err
+		})
+	}
+	close(start)
+	for range 16 {
+		select {
+		case <-reads:
+		case <-ctx.Done():
+			t.Fatal("callers did not all read the stale entry")
+		}
+	}
+	releaseReads()
+	// Keep loads queued until every stale reader can enter the refresh path.
+	time.Sleep(100 * time.Millisecond)
+	releaseSlot()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Error(err)
+		}
 	}
 }
 

@@ -12,10 +12,12 @@ tests:
     template: api-deployment.yaml
     asserts:
       - notContains:
+          any: true
           path: spec.template.spec.containers[0].env
           content:
             name: APP_SNATCHARR_METADATA_TVDB_API_KEY
       - notContains:
+          any: true
           path: spec.template.spec.containers[0].env
           content:
             name: APP_SNATCHARR_METADATA_TVDB_PIN

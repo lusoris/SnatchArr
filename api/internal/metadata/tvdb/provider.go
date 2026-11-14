@@ -26,6 +26,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/golusoris/golusoris/cache/memory"
+	"github.com/golusoris/golusoris/cache/singleflight"
 	"github.com/golusoris/golusoris/cache/twotier"
 	"github.com/golusoris/golusoris/core/clock"
 	httpclient "github.com/golusoris/golusoris/httpx/client"
@@ -120,11 +121,12 @@ type entry struct {
 // Provider reads translated titles from TheTVDB. A nil or disabled Provider answers every
 // call with no titles and makes no network request.
 type Provider struct {
-	enabled bool
-	client  *tvdb.Client
-	clk     clock.Clock
-	logger  *slog.Logger
-	cache   *twotier.Typed[entry]
+	enabled   bool
+	client    *tvdb.Client
+	clk       clock.Clock
+	logger    *slog.Logger
+	cache     *twotier.Typed[entry]
+	refreshes *singleflight.Group[string, entry]
 	// slot is a one-request semaphore around goenvoy calls: the client rewrites its
 	// request auth in shared state on every call (https://github.com/golusoris/goenvoy/issues/321).
 	// A channel instead of a mutex lets a waiting lookup give up at its context deadline.
@@ -181,7 +183,8 @@ func New(apiKey, pin string, l1 *memory.Cache, clk clock.Clock, logger *slog.Log
 	return &Provider{
 		enabled: true, client: client, clk: clk, logger: logger,
 		cache: twotier.NewTyped[entry](tt, cachePrefix), slot: make(chan struct{}, 1),
-		lookup: lookupTimeout,
+		lookup:    lookupTimeout,
+		refreshes: singleflight.New[string, entry](),
 	}, nil
 }
 
@@ -228,13 +231,8 @@ func (p *Provider) TitlesFor(ctx context.Context, ref Ref, ruleCode string) ([]f
 	loader := func(ctx context.Context) (entry, error) { return p.load(ctx, ref, lang, rule) }
 	k := key + ":" + lang
 	e, err := p.cached(ctx, k, loader)
-	if err == nil && e.NotFound && p.clk.Since(e.At) >= NegativeTTL {
-		// The negative entry is stale: evict it from the local cache (no TVDB call) and ask once more.
-		evict := p.cache.Delete
-		if derr := evict(ctx, k); derr != nil {
-			p.logger.WarnContext(ctx, "tvdb: drop stale negative entry", slog.String("key", k))
-		}
-		e, err = p.cached(ctx, k, loader)
+	if err == nil && p.staleNegative(e) {
+		e, err = p.refreshed(ctx, k, loader)
 	}
 	if err != nil {
 		return nil, unwrapLoad(err)
@@ -242,19 +240,50 @@ func (p *Provider) TitlesFor(ctx context.Context, ref Ref, ruleCode string) ([]f
 	return append([]foreigntitle.LanguageTitle(nil), e.Titles...), nil
 }
 
-// cached lets a waiter stop at its own deadline. In golusoris v0.20.0,
+func (p *Provider) staleNegative(e entry) bool {
+	return e.NotFound && p.clk.Since(e.At) >= NegativeTTL
+}
+
+func (p *Provider) cached(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
+	return waitEntry(ctx, func(ctx context.Context) (entry, error) { return p.cache.Get(ctx, key, loader) })
+}
+
+func (p *Provider) refreshed(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
+	return waitEntry(ctx, func(ctx context.Context) (entry, error) {
+		e, _, err := p.refreshes.Do(ctx, key, func(ctx context.Context) (entry, error) {
+			return p.refreshNegative(ctx, key, loader)
+		})
+		return e, err
+	})
+}
+
+// refreshNegative rechecks inside the flight so a late stale reader cannot evict a
+// refreshed entry. twotier v0.20.0 Delete advances its flight epoch (twotier.go:278-295),
+// so eviction and reload must share this separate per-key flight.
+func (p *Provider) refreshNegative(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
+	e, err := p.cache.Get(ctx, key, loader)
+	if err != nil || !p.staleNegative(e) {
+		return e, err
+	}
+	if err := p.cache.Delete(ctx, key); err != nil {
+		p.logger.WarnContext(ctx, "tvdb: drop stale negative entry", slog.String("key", key))
+	}
+	return p.cache.Get(ctx, key, loader)
+}
+
+// waitEntry lets a waiter stop at its own deadline. In golusoris v0.20.0,
 // cache/twotier/twotier.go:131-157 calls group.Do; cache/singleflight/singleflight.go:52-63
 // calls x/sync singleflight.Group.Do synchronously without checking a waiter's context.
 // The goroutine ends when the shared load ends, bounded by p.lookup; the buffered
-// result lets it finish even after this caller leaves. Get receives ctx unchanged.
-func (p *Provider) cached(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
+// result lets it finish even after this caller leaves. Both cache paths receive ctx unchanged.
+func waitEntry(ctx context.Context, fn func(context.Context) (entry, error)) (entry, error) {
 	type result struct {
 		value entry
 		err   error
 	}
 	done := make(chan result, 1)
 	go func() {
-		value, err := p.cache.Get(ctx, key, loader)
+		value, err := fn(ctx)
 		done <- result{value: value, err: err}
 	}()
 	select {
