@@ -944,7 +944,7 @@ jobs:
           kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.3/cert-manager.yaml
           kubectl -n cert-manager wait deploy --all --for=condition=Available --timeout=180s
           curl -fsSL --max-time 60 -o "$RUNNER_TEMP/barman-cloud.yaml" \
-            https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.15.1/manifest.yaml
+            https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.16.0/manifest.yaml
           # The webhook answers a few seconds after it turns Available; its Certificates need it.
           for i in 1 2 3 4 5 6; do
             kubectl apply -f "$RUNNER_TEMP/barman-cloud.yaml" && break

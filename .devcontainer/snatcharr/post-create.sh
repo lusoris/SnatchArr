@@ -22,7 +22,7 @@ ln -sf "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
 
 # Rust toolchain: the release, components and targets pinned in rust-toolchain.toml
 rustup toolchain install
-cargo install --locked cargo-audit@0.22.2
+cargo install --locked cargo-audit@0.23.0
 cargo install --locked cargo-deny@0.20.2
 cargo install --locked cargo-watch@8.5.3
 
