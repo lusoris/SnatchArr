@@ -47,7 +47,9 @@ type stub struct {
 	movies   map[string]int   // remote id -> movie id
 	movieAli map[int][]string
 	delay    time.Duration
-	agent    atomic.Value // last User-Agent header seen
+	agent    atomic.Value  // last User-Agent header seen
+	started  chan struct{} // signals a held series request
+	release  <-chan struct{}
 }
 
 func newStub(t *testing.T) *stub {
@@ -82,6 +84,14 @@ func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(s.dataRC)
 		_, _ = w.Write([]byte(`{"message":"` + plantedKey + `"}`))
 		return
+	}
+	if s.release != nil && r.URL.Path == "/series/81189" {
+		s.started <- struct{}{}
+		select {
+		case <-s.release:
+		case <-r.Context().Done():
+			return
+		}
 	}
 	s.data(w, r.URL.Path)
 }
@@ -579,6 +589,57 @@ func TestWaitingLookupHonoursDeadline(t *testing.T) {
 				t.Fatalf("waiting lookup sent %d requests, want 0", n)
 			}
 		})
+	}
+}
+
+// TestSameKeyWaitingLookupHonoursDeadline keeps the shared load blocked until the
+// second caller returns, then releases it and waits for the first caller to finish.
+func TestSameKeyWaitingLookupHonoursDeadline(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	release := make(chan struct{})
+	s.started, s.release = make(chan struct{}, 1), release
+	p := s.provider(t, plantedKey, "", nil)
+	p.lookup = 10 * time.Second
+	first := make(chan error, 1)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+		if err == nil && len(got) != 2 {
+			err = fmt.Errorf("first lookup got %d titles, want 2", len(got))
+		}
+		first <- err
+	}()
+	defer func() {
+		close(release)
+		if err := <-first; err != nil {
+			t.Errorf("first lookup: %v", err)
+		}
+	}()
+	select {
+	case <-s.started:
+	case <-time.After(p.lookup):
+		t.Fatal("first lookup did not reach the stub")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	started := time.Now()
+	_, err := p.TitlesFor(ctx, sonarrRef(), "de")
+	elapsed := time.Since(started)
+	if !errors.Is(err, ErrUnavailable) {
+		t.Errorf("same-key waiting lookup: error = %v, want ErrUnavailable", err)
+	}
+	if elapsed >= p.lookup/2 {
+		t.Errorf("same-key waiting lookup took %v, want less than %v", elapsed, p.lookup/2)
+	}
+	select {
+	case <-finished:
+		t.Error("first lookup finished before the waiting caller returned")
+	default:
+	}
+	if n := s.total.Load(); n != 2 {
+		t.Errorf("requests = %d, want 2 (first lookup still blocked before translation)", n)
 	}
 }
 

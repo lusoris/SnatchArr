@@ -227,19 +227,42 @@ func (p *Provider) TitlesFor(ctx context.Context, ref Ref, ruleCode string) ([]f
 	rule := strings.ToLower(strings.TrimSpace(ruleCode))
 	loader := func(ctx context.Context) (entry, error) { return p.load(ctx, ref, lang, rule) }
 	k := key + ":" + lang
-	e, err := p.cache.Get(ctx, k, loader)
+	e, err := p.cached(ctx, k, loader)
 	if err == nil && e.NotFound && p.clk.Since(e.At) >= NegativeTTL {
 		// The negative entry is stale: evict it from the local cache (no TVDB call) and ask once more.
 		evict := p.cache.Delete
 		if derr := evict(ctx, k); derr != nil {
 			p.logger.WarnContext(ctx, "tvdb: drop stale negative entry", slog.String("key", k))
 		}
-		e, err = p.cache.Get(ctx, k, loader)
+		e, err = p.cached(ctx, k, loader)
 	}
 	if err != nil {
 		return nil, unwrapLoad(err)
 	}
 	return append([]foreigntitle.LanguageTitle(nil), e.Titles...), nil
+}
+
+// cached lets a waiter stop at its own deadline. In golusoris v0.20.0,
+// cache/twotier/twotier.go:131-157 calls group.Do; cache/singleflight/singleflight.go:52-63
+// calls x/sync singleflight.Group.Do synchronously without checking a waiter's context.
+// The goroutine ends when the shared load ends, bounded by p.lookup; the buffered
+// result lets it finish even after this caller leaves. Get receives ctx unchanged.
+func (p *Provider) cached(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
+	type result struct {
+		value entry
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		value, err := p.cache.Get(ctx, key, loader)
+		done <- result{value: value, err: err}
+	}()
+	select {
+	case r := <-done:
+		return r.value, r.err
+	case <-ctx.Done():
+		return entry{}, fmt.Errorf("%w: %w", ErrUnavailable, ctx.Err())
+	}
 }
 
 // unwrapLoad strips the cache layer's "loader:" prefix so callers match the sentinels.

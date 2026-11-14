@@ -130,13 +130,13 @@ spec:
             - name: APP_SNATCHARR_METADATA_TVDB_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .existingSecret }}
-                  key: {{ default "tvdb-api-key" .apiKeyKey }}
+                  name: {{ .existingSecret | quote }}
+                  key: {{ default "tvdb-api-key" .apiKeyKey | quote }}
             - name: APP_SNATCHARR_METADATA_TVDB_PIN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .existingSecret }}
-                  key: {{ default "tvdb-pin" .pinKey }}
+                  name: {{ .existingSecret | quote }}
+                  key: {{ default "tvdb-pin" .pinKey | quote }}
                   optional: true
             {{- end }}
             {{- end }}
