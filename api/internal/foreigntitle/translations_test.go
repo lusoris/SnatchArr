@@ -26,23 +26,29 @@ func TestSearchTitlesTranslations(t *testing.T) {
 	}
 	// A marked local alias (German article) that the provider list must never push out.
 	local := []AliasEntry{{Title: "Die Serie"}}
+	one, two := 1, 2
+	seasonal := []AliasEntry{{Title: "Der Arzt", SeasonNumber: &two}}
 	for _, tc := range []struct {
-		name string
-		in   AliasInput
-		max  int
-		want []string
+		name   string
+		in     AliasInput
+		season *int
+		max    int
+		want   []string
 	}{
-		{"positive_language_only", AliasInput{Translations: tr}, 10, []string{"Der Titel", "Zweiter Titel"}},
-		{"negative_other_language", AliasInput{Translations: tr[2:3]}, 10, nil},
-		{"boundary_empty", AliasInput{Translations: []LanguageTitle{}}, 10, nil},
-		{"boundary_max_one", AliasInput{Translations: tr}, 1, []string{"Der Titel"}},
-		{"dedupe_local_alias_wins", AliasInput{Translations: tr[:1], Aliases: []AliasEntry{{Title: "der titel"}}}, 10, []string{"der titel"}},
-		{"cap_keeps_local_alias", AliasInput{Translations: tr, Aliases: local}, 1, []string{"Die Serie"}},
-		{"translations_fill_after_alias", AliasInput{Translations: tr, Aliases: local}, 2, []string{"Die Serie", "Der Titel"}},
+		{"positive_language_only", AliasInput{Translations: tr}, nil, 10, []string{"Der Titel", "Zweiter Titel"}},
+		{"negative_other_language", AliasInput{Translations: tr[2:3]}, nil, 10, nil},
+		{"boundary_empty", AliasInput{Translations: []LanguageTitle{}}, nil, 10, nil},
+		{"boundary_max_one", AliasInput{Translations: tr}, nil, 1, []string{"Der Titel"}},
+		{"dedupe_local_alias_wins", AliasInput{Translations: tr[:1], Aliases: []AliasEntry{{Title: "der titel"}}}, nil, 10, []string{"der titel"}},
+		{"cap_keeps_local_alias", AliasInput{Translations: tr, Aliases: local}, nil, 1, []string{"Die Serie"}},
+		{"translations_fill_after_alias", AliasInput{Translations: tr, Aliases: local}, nil, 2, []string{"Die Serie", "Der Titel"}},
+		{"cap_keeps_season_alias", AliasInput{Translations: tr, Aliases: seasonal}, &two, 1, []string{"Der Arzt"}},
+		{"season_alias_then_translation", AliasInput{Translations: tr, Aliases: seasonal}, &two, 2, []string{"Der Arzt", "Der Titel"}},
+		{"season_mismatch_translations_fill", AliasInput{Translations: tr, Aliases: seasonal}, &one, 2, []string{"Der Titel", "Zweiter Titel"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := SearchTitles(tc.in, rules["de"], nil, tc.max)
+			got := SearchTitles(tc.in, rules["de"], tc.season, tc.max)
 			if !slices.Equal(got, tc.want) {
 				t.Fatalf("SearchTitles() = %q; want %q", got, tc.want)
 			}
