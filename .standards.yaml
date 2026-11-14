@@ -75,13 +75,6 @@ register:
         kind: message
         format: json
         selector: invariants.*
-exceptions:
-  - rule: HISS-18
-    path: .github/workflows/ci.yml
-    category: A
-    entered: "2026-10-09"
-    reason: "category A, until cordanaLLM/praetor#1108 ships (re-reviewed 2026-10-18, issue open, no fix in flight): every component job needs the changes job, which stops a draft in its first step, so GitHub skips them there; the CI success aggregate fails on the failed changes job (tools/ci/status.sh, planted cases in tools/ci/status_test.sh), but the engine has no accepted shape for dependents behind such a job yet"
-    expires: "2027-01-06"
 release:
   e2e:
     since: c861b394bc5bf520df75144d0c7a43925d44eaec

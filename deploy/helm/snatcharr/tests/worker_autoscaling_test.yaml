@@ -92,7 +92,7 @@ tests:
 
   - it: boundary - threshold follows worker.concurrency at its upper limit
     set:
-      worker.concurrency: 32
+      worker.concurrency: 16
       worker.autoscaling.keda.enabled: true
       worker.autoscaling.keda.serverAddress: http://prometheus.monitoring.svc:9090
       worker.autoscaling.minReplicas: 1
@@ -101,7 +101,7 @@ tests:
     asserts:
       - equal:
           path: spec.triggers[0].metadata.threshold
-          value: "32"
+          value: "16"
       - equal:
           path: spec.maxReplicaCount
           value: 1

@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -119,6 +120,136 @@ paths:
 			t.Fatal("expected GenerateCode error for missing operationId, got nil")
 		}
 	})
+}
+
+func TestCheckAllPathItemOperations(t *testing.T) {
+	t.Parallel()
+	specYAML := []byte(`openapi: 3.1.0
+info:
+  title: All Operations API
+  version: 0.1.0
+paths:
+  /widgets:
+    get:
+      operationId: getWidget
+      x-module: ""
+    put:
+      operationId: putWidget
+      x-module: ""
+    post:
+      operationId: postWidget
+      x-module: ""
+    delete:
+      operationId: deleteWidget
+      x-module: ""
+    options:
+      operationId: optionsWidget
+      x-module: ""
+    head:
+      operationId: headWidget
+      x-module: ""
+    patch:
+      operationId: patchWidget
+      x-module: ""
+    trace:
+      operationId: traceWidget
+      x-module: ""
+    parameters: []
+    summary: Widget operations
+    servers: []
+    $ref: "#/components/pathItems/Widget"
+`)
+	findings, err := CheckSpec(specYAML, map[string]struct{}{"llm": {}})
+	if err != nil {
+		t.Fatalf("CheckSpec unexpected error: %v", err)
+	}
+	if len(findings) != 8 {
+		t.Fatalf("visited %d operations, want 8: %v", len(findings), findings)
+	}
+	for _, finding := range findings {
+		if finding.Reason != "x-module must be a non-empty string" {
+			t.Errorf("unexpected finding for %s: %q", finding.Method, finding.Reason)
+		}
+	}
+}
+
+func TestGenerateCodeAllPathItemOperations(t *testing.T) {
+	t.Parallel()
+	specYAML := []byte(`openapi: 3.1.0
+info:
+  title: All Generated Operations API
+  version: 0.1.0
+paths:
+  /widgets:
+    get:
+      operationId: getWidget
+      x-module: get_module
+    put:
+      operationId: putWidget
+      x-module: put_module
+    post:
+      operationId: postWidget
+      x-module: post_module
+    delete:
+      operationId: deleteWidget
+      x-module: delete_module
+    options:
+      operationId: optionsWidget
+      x-module: options_module
+    head:
+      operationId: headWidget
+      x-module: head_module
+    patch:
+      operationId: patchWidget
+      x-module: patch_module
+    trace:
+      operationId: traceWidget
+      x-module: trace_module
+  /core:
+    get:
+      operationId: getCore
+`)
+	generated, err := GenerateCode(specYAML)
+	if err != nil {
+		t.Fatalf("GenerateCode unexpected error: %v", err)
+	}
+	for _, method := range []string{"get", "put", "post", "delete", "options", "head", "patch", "trace"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			pattern := `(?m)^\s*"` + method + `Widget":\s+"` + method + `_module",$`
+			matched, err := regexp.Match(pattern, generated)
+			if err != nil {
+				t.Fatalf("match generated mapping: %v", err)
+			}
+			if !matched {
+				t.Errorf("generated code missing mapping for %sWidget to %s_module:\n%s", method, method, generated)
+			}
+		})
+	}
+	t.Run("missing x-module is omitted", func(t *testing.T) {
+		t.Parallel()
+		if bytes.Contains(generated, []byte("getCore")) {
+			t.Errorf("generated code includes operation without x-module:\n%s", generated)
+		}
+	})
+}
+
+func TestGenerateCodeEmptyModule(t *testing.T) {
+	t.Parallel()
+	specYAML := []byte(`openapi: 3.1.0
+info:
+  title: Empty Generated Module API
+  version: 0.1.0
+paths:
+  /widgets:
+    get:
+      operationId: getWidget
+      x-module: ""
+`)
+	_, err := GenerateCode(specYAML)
+	if err == nil || err.Error() != "operation has invalid x-module: must be non-empty string" {
+		t.Fatalf("GenerateCode error = %v, want invalid x-module error", err)
+	}
 }
 
 func TestGenerateCode(t *testing.T) {
