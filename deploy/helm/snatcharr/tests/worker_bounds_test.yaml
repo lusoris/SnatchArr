@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: worker bounds
+templates:
+  - worker-deployment.yaml
+release:
+  name: snatcharr
+  namespace: media
+tests:
+  - it: negative - concurrency above the worker maximum fails the schema
+    set:
+      worker.concurrency: 17
+    asserts:
+      - failedTemplate: {}
+
+  - it: negative - lease wait above the worker maximum fails the schema
+    set:
+      worker.leaseWaitSecs: 31
+    asserts:
+      - failedTemplate: {}
+
+  - it: positive - worker values at their upper bounds render
+    set:
+      worker.concurrency: 16
+      worker.leaseWaitSecs: 30
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.template.spec.containers[0].env[3].value
+          value: "16"
+      - equal:
+          path: spec.template.spec.containers[0].env[5].value
+          value: "30"
