@@ -9,7 +9,6 @@ Exit 0 = accepted, 1 = refused or unreadable input, 2 = usage error.
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
@@ -57,21 +56,19 @@ def check_file(path: Path) -> int:
 
 
 def self_test() -> int:
-    """Replay both fixture CLI exit codes; never accept an unexpected failure."""
+    """Replay both fixtures in-process; never accept an unexpected failure."""
     status = 0
     for name, expected in (("good.yaml", 0), ("bad.yaml", 1)):
         try:
-            result = subprocess.run(
-                [sys.executable, "-I", str(Path(__file__).resolve()), str(FIXTURES / name)],
-                capture_output=True, text=True, check=False, timeout=30,
-            )
-        except (OSError, subprocess.SubprocessError) as error:
+            path = FIXTURES / name
+            path.read_text(encoding="utf-8")
+            result = check_file(path)
+        except (OSError, UnicodeError) as error:
             print(f"self-test {name}: {error}", file=sys.stderr)
             status = 1
             continue
-        print(f"self-test {name}: exit {result.returncode}, expected {expected}")
-        if result.returncode != expected:
-            sys.stderr.write(result.stdout + result.stderr)
+        print(f"self-test {name}: exit {result}, expected {expected}")
+        if result != expected:
             status = 1
     return status
 
