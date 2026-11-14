@@ -24,7 +24,7 @@
 		"@connectrpc/connect": "^2.2.0",
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "1.64.1",
-		"@sveltejs/adapter-static": "^4.0.0",
+		"@sveltejs/adapter-static": "^4.0.1",
 		"@sveltejs/kit": "^3.0.1",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@sveltesentio/testing": "0.4.2",
