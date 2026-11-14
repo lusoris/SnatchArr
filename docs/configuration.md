@@ -147,10 +147,16 @@ UI.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `SNATCH_API_GRPC` | `http://snatcharr:9090` | API gRPC endpoint |
+| `SNATCH_API_GRPC` | `http://127.0.0.1:9090` | API gRPC endpoint |
 | `SNATCH_WORKER_TOKEN` | | Bearer token (must match `APP_SNATCHARR_WORKER_TOKEN`) |
-| `SNATCH_CONCURRENCY` | `2` | Snatches executed in parallel |
+| `SNATCH_CONCURRENCY` | `2` | Snatches executed in parallel (1-16) |
+| `SNATCH_HEARTBEAT_SECS` | `30` | Heartbeat interval in seconds (5-60) |
+| `SNATCH_LEASE_WAIT_SECS` | `30` | Long-poll wait per lease request in seconds (1-30) |
+| `SNATCH_ARR_TIMEOUT_SECS` | `30` | Per-request *arr timeout in seconds (5-120) |
+| `SNATCH_STALE_SECS` | `180` | Age of the last successful API call after which `/livez` fails, in seconds (60-3600). Must be at least twice the longer of the heartbeat interval and the lease wait. |
 | `RUST_LOG` | `info` | Log filter |
+
+A value outside its range stops the worker at startup with an error naming the variable and its allowed range (see `worker/crates/snatch-worker/src/config.rs`). The chart schema in `deploy/helm/snatcharr/values.schema.json` holds the same ranges; the worker test `helm_worker_ranges_match_worker_ranges` in `config.rs` fails when they differ.
 
 The worker never holds state. It leases a snatch, heartbeats while working, reports events
 and completes; a restart loses nothing.
