@@ -22,18 +22,18 @@ MAX_ITEMS = 1024
 def check_test(path: Path, test: object) -> int:
     """Refuse mapping notContains without partial matching; bound each assertion list."""
     if not isinstance(test, dict) or not isinstance(test.get("asserts"), list):
-        raise ValueError("expected a test with an asserts list")
+        raise TypeError("expected a test with an asserts list")
     if len(test["asserts"]) > MAX_ITEMS:
         raise ValueError(f"expected at most {MAX_ITEMS} assertions per test")
     status = 0
     for assertion in test["asserts"]:
         if not isinstance(assertion, dict):
-            raise ValueError("expected an assertion mapping")
+            raise TypeError("expected an assertion mapping")
         if "notContains" not in assertion:
             continue
         spec = assertion["notContains"]
         if not isinstance(spec, dict):
-            raise ValueError("expected a notContains mapping")
+            raise TypeError("expected a notContains mapping")
         if isinstance(spec.get("content"), dict) and spec.get("any") is not True:
             print(f"{path}: {test.get('it', '<unnamed>')}: {spec.get('path', '<missing path>')}: "
                   "mapping notContains requires any: true")
@@ -46,11 +46,11 @@ def check_file(path: Path) -> int:
     try:
         suite = yaml.safe_load(path.read_text(encoding="utf-8"))
         if not isinstance(suite, dict) or not isinstance(suite.get("tests"), list):
-            raise ValueError("expected a suite with a tests list")
+            raise TypeError("expected a suite with a tests list")
         if len(suite["tests"]) > MAX_ITEMS:
             raise ValueError(f"expected at most {MAX_ITEMS} tests per suite")
         return max((check_test(path, test) for test in suite["tests"]), default=0)
-    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
+    except (OSError, UnicodeError, TypeError, ValueError, yaml.YAMLError) as error:
         print(f"{path}: refused: {error}", file=sys.stderr)
         return 1
 
