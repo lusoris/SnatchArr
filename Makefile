@@ -50,7 +50,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live arr-pushtitle-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint tools-opengrep release-e2e-check release-dogfood-check release-closes-check semgrep-scan secret-scan py-lint docs-verify licences licences-check logos logos-check \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live arr-pushtitle-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint tools-opengrep codacy-lizard release-e2e-check release-dogfood-check release-closes-check semgrep-scan secret-scan py-lint docs-verify licences licences-check logos logos-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check roadmap-check
 
@@ -239,6 +239,9 @@ tools-opengrep: ## Codacy Opengrep Python rules over tracked Python files, again
 	esac
 	(cd tools/ci/codacy_opengrep && npm ci --ignore-scripts --no-audit)
 	python3 -I tools/ci/codacy_opengrep_scan.py
+
+codacy-lizard: ## Codacy Lizard NLOC and parameter limits over tracked source, against tools/ci/codacy_lizard/baseline.json
+	sh tools/ci/codacy_lizard_check.sh .cache/lizard
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────
 worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
@@ -705,6 +708,9 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	sh tools/ci/codacy_opengrep_scan_test.sh
 	python3 -I tools/ci/codacy_opengrep_scan.py --self-test
 	python3 -I tools/ci/codacy_opengrep_scan.py --base-ref origin/main
+	sh tools/ci/codacy_lizard_check.sh .cache/lizard --self-test
+	sh tools/ci/codacy_lizard_check.sh .cache/lizard --base-ref origin/main
+	$(MAKE) codacy-lizard
 	bash tools/ci/generated_files_test.sh
 	bash tools/e2e/planted_test.sh
 	bash tools/e2e/schema_check_test.sh
