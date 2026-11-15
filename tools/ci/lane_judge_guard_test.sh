@@ -212,6 +212,14 @@ PY
     git add -- file-*
 }
 
+# setup_zulu: trailing Z UTC timestamps parse consistently across Python 3.10 and newer.
+setup_zulu() {
+    marker
+    field launched_at '"2026-11-13T20:00:00Z"'
+    printf '2026-11-13T21:00:00Z\t%s\texit\trc=0\tseconds=3600\n' "$label" > runs.tsv
+    staged 2026-11-13T22:02:00+01:00
+}
+
 expect case-1-no-marker 0 '' setup_none
 expect case-2-no-exit 1 "lane $label has no exit row after $launched; wait for it to end" setup_running
 expect case-3-old-exit 1 'has no exit row after' setup_old_exit
@@ -227,6 +235,7 @@ expect case-10-deletion 0 '' setup_delete
 expect wrong-type 2 'must be strings' setup_wrong_type
 expect bad-time 2 'bad time' setup_bad_time
 expect naive-time 2 'UTC offset required' setup_naive_time
+expect zulu-time 0 '' setup_zulu
 expect relative-runs 2 'must be an absolute path' setup_relative_runs
 expect missing-runs 2 'lane runs file missing' setup_missing_runs
 expect unreadable-marker 2 'lane judge guard:' setup_unreadable_marker
@@ -240,38 +249,158 @@ root=$(cd "$HERE/../.." && pwd)
 work_abs=$(cd "$work" && pwd)
 lefthook=${LANE_JUDGE_LEFTHOOK:-$root/lefthook.yml}
 
-# read_hook_run FILE: print the run command under lane-judge-guard: using plain-text matching.
+cat > "$work_abs/hook_yaml.py" <<'PY'
+"""Indentation-scoped stdlib reader for lefthook pre-commit wiring checks."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+CAP = 10000
+
+
+def fail(msg: str) -> None:
+    """Print a case-11-wiring failure diagnostic and exit 1."""
+    print(f"FAIL case-11-wiring: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def load_entries(path: Path) -> list[tuple[int, str]]:
+    """Read bounded non-comment YAML lines with their leading-space indentation."""
+    if not path.is_file():
+        fail(f"missing lefthook file {path}")
+    entries: list[tuple[int, str]] = []
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for _line_no in range(CAP):
+                raw = handle.readline()
+                if not raw:
+                    return entries
+                line = raw.rstrip("\r\n")
+                st = line.lstrip(" ")
+                if not st or st.startswith("#") or st == "---":
+                    continue
+                if "\t" in line[: len(line) - len(st)]:
+                    fail(f"tab indentation in {path}")
+                entries.append((len(line) - len(st), st))
+            if handle.read(1):
+                fail(f"{path} exceeds {CAP} lines")
+    except (OSError, UnicodeDecodeError) as error:
+        fail(f"{path}: {error}")
+    return entries
+
+
+def pmap(blk: list[tuple[int, str]]) -> dict[str, tuple[str, list[tuple[int, str]]]]:
+    """Parse one indentation level of YAML mapping keys into (scalar, child_lines)."""
+    out: dict[str, tuple[str, list[tuple[int, str]]]] = {}
+    idx = 0
+    for _step in range(CAP):
+        if idx >= len(blk):
+            return out
+        ind, txt = blk[idx]
+        if ind != blk[0][0] or ":" not in txt or txt.startswith("-"):
+            fail(f"expected mapping key at {txt!r}")
+        key, rest = txt.split(":", 1)
+        name = key.strip()
+        if name in out:
+            fail(f"duplicate key {name!r}")
+        idx, sub = idx + 1, []
+        for _sub in range(CAP):
+            if idx >= len(blk) or blk[idx][0] < ind or (blk[idx][0] == ind and not blk[idx][1].startswith("-")):
+                break
+            sub.append(blk[idx])
+            idx += 1
+        val = rest.split(" #", 1)[0].split("\t#", 1)[0].strip()
+        val = "" if val.startswith("#") else val
+        out[name] = (val[1:-1] if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"') else val, sub)
+    return out
+
+
+def pseq(blk: list[tuple[int, str]]) -> list[dict[str, tuple[str, list[tuple[int, str]]]]]:
+    """Split a YAML block sequence into parsed mapping dictionaries."""
+    items: list[list[tuple[int, str]]] = []
+    for ind, txt in blk[:CAP]:
+        if blk and ind == blk[0][0] and (txt == "-" or txt.startswith("- ")):
+            rem, body = txt[1:], txt[1:].lstrip(" ")
+            items.append([(ind + 1 + len(rem) - len(body), body)] if body and not body.startswith("#") else [])
+        elif items and ind > blk[0][0]:
+            items[-1].append((ind, txt))
+        else:
+            fail(f"expected sequence item at {txt!r}")
+    return [pmap(item) for item in items]
+PY
+
+# read_hook_run FILE: verify piped format-then-guard ordering and print lane-judge-guard run.
 read_hook_run() {
-    if [ ! -f "$1" ]; then
-        return 1
-    fi
-    awk '
-        { sub(/\r$/, "") }
-        /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
-        in_job {
-            match($0, /^[[:space:]]*/)
-            if (RLENGTH <= job_indent) {
-                in_job = 0
-            } else if ($0 ~ /^[[:space:]]*run:[[:space:]]*/) {
-                sub(/^[[:space:]]*run:[[:space:]]*/, "")
-                sub(/[[:space:]]*$/, "")
-                print
-                exit
-            }
-        }
-        !in_job && /^[[:space:]]*lane-judge-guard:[[:space:]]*(#.*)?$/ {
-            match($0, /^[[:space:]]*/)
-            job_indent = RLENGTH
-            in_job = 1
-        }
-    ' "$1"
+    "$python" -I - "$work_abs" "$1" <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+from hook_yaml import CAP, fail, load_entries, pmap, pseq  # noqa: E402
+
+
+def guard_run(path: Path) -> str:
+    """Validate pre-commit format-then-guard structure and return lane-judge-guard run."""
+    top = pmap(load_entries(path))
+    if "pre-commit" not in top:
+        fail(f"missing pre-commit section in {path}")
+    pc = pmap(top["pre-commit"][1])
+    if "commands" in pc:
+        cmds = pmap(pc["commands"][1])
+        for moved in ("gofmt", "lane-judge-guard"):
+            if moved in cmds:
+                fail(f"{moved} must not appear under pre-commit.commands in {path}")
+    if "jobs" not in pc or not pc["jobs"][1]:
+        fail(f"missing pre-commit.jobs in {path}")
+    top_jobs = pseq(pc["jobs"][1])
+    for job in top_jobs:
+        if job.get("name", ("", []))[0] in ("gofmt", "lane-judge-guard"):
+            fail(f"{job['name'][0]} must be inside format-then-guard in {path}")
+    groups = [job for job in top_jobs if job.get("name", ("", []))[0] == "format-then-guard"]
+    if len(groups) != 1:
+        fail(f"expected one format-then-guard job in pre-commit.jobs in {path}")
+    outer = groups[0]
+    if "glob" in outer:
+        fail(f"format-then-guard must not set glob in {path}")
+    if "group" not in outer or not outer["group"][1]:
+        fail(f"format-then-guard missing group in {path}")
+    grp = pmap(outer["group"][1])
+    if grp.get("piped", ("", []))[0] != "true":
+        fail(f"format-then-guard group must set piped: true in {path}")
+    if "jobs" not in grp or not grp["jobs"][1]:
+        fail(f"format-then-guard group missing jobs in {path}")
+    nested = pseq(grp["jobs"][1])
+    names = [job.get("name", ("", []))[0] for job in nested]
+    if names.count("lane-judge-guard") != 1:
+        fail(f"missing lane-judge-guard job in format-then-guard in {path}")
+    if names.count("gofmt") != 1:
+        fail(f"missing gofmt job in format-then-guard in {path}")
+    gofmt_idx, guard_idx = names.index("gofmt"), names.index("lane-judge-guard")
+    if guard_idx <= gofmt_idx:
+        fail(f"lane-judge-guard must come after gofmt in format-then-guard in {path}")
+    if nested[gofmt_idx].get("stage_fixed", ("", []))[0] != "true":
+        fail(f"gofmt job must set stage_fixed: true in {path}")
+    rval, rsub = nested[guard_idx].get("run", ("", []))
+    run_line = " ".join(t for _i, t in rsub[:CAP]) if rval in (">-", ">") else rval
+    if not run_line:
+        fail(f"missing lane-judge-guard run line in {path}")
+    return run_line
+
+
+print(guard_run(Path(sys.argv[2])))
+PY
 }
 
 # load_hook_args FILE: read lane-judge-guard arguments from FILE and resolve the guard path.
 load_hook_args() {
     local run_line rest arg saw_guard=0
     local -a raw_args=()
-    if ! run_line=$(read_hook_run "$1") || [ -z "$run_line" ]; then
+    if ! run_line=$(read_hook_run "$1"); then
+        exit 1
+    fi
+    if [ -z "$run_line" ]; then
         printf 'FAIL case-11-wiring: missing lane-judge-guard run line in %s\n' "$1" >&2
         exit 1
     fi
@@ -308,6 +437,12 @@ setup_tracked_late() {
     marker
     printf '%s\n' 'judge edited this' > "$path"
     stamp 2026-11-13T22:10:00+01:00
+}
+
+# index_no_marker INDEX: stage an ordinary path in a temporary index with no lane marker.
+index_no_marker() {
+    printf '%s\n' 'ordinary worktree edit' > "$path"
+    GIT_INDEX_FILE="$1" git --literal-pathspecs add -- "$path"
 }
 
 # index_all_tracked INDEX: stage tracked edits in a temporary index like commit -a.
@@ -351,9 +486,52 @@ expect_wired() {
     echo "ok   $name (rc=$status)"
 }
 
+# run_floor_python: exercise python.sh and the guard under LANE_JUDGE_FLOOR_PYTHON when set.
+run_floor_python() {
+    local floor_raw=${LANE_JUDGE_FLOOR_PYTHON-} floor_dir="$work_abs/floor-bin"
+    local floor_exec want_info got_info="" got_rc=0 py_dir
+    if [ -z "$floor_raw" ]; then
+        echo 'skip floor python: LANE_JUDGE_FLOOR_PYTHON unset'
+        return
+    fi
+    if ! floor_exec=$("$floor_raw" -I -c 'import sys; print(sys.executable)' 2>/dev/null) || [ -z "$floor_exec" ]; then
+        printf 'FAIL floor-python: cannot execute %s\n' "$floor_raw" >&2
+        exit 1
+    fi
+    want_info=$("$floor_exec" -I -c 'import os, sys; print(sys.version_info[:2], os.path.realpath(sys.executable))')
+    mkdir -p "$floor_dir"
+    ln -sf "$floor_exec" "$floor_dir/python3"
+    local python="$floor_dir/python3"
+    py_dir=$(dirname "$python")
+    got_info=$(
+        PATH="$py_dir:$PATH" sh "$root/.config/lefthook/python.sh" -I -c \
+            'import os, sys; print(sys.version_info[:2], os.path.realpath(sys.executable))' 2>&1
+    ) || got_rc=$?
+    if [ "$got_rc" -ne 0 ]; then
+        printf 'FAIL floor-python: python.sh exit %s: %s\n' "$got_rc" "$got_info" >&2
+        exit 1
+    fi
+    if [ "$got_info" != "$want_info" ]; then
+        printf 'FAIL floor-python: python.sh ran %s, want %s\n' "$got_info" "$want_info" >&2
+        exit 1
+    fi
+    expect_wired floor-no-marker 0 '' index_no_marker "${hook_args[@]}"
+    expect_wired floor-judge-edit 1 "path '$path' mtime" index_all_tracked "${hook_args[@]}"
+}
+
+# expect_wiring_mutant NAME FILE NEEDLE: assert malformed hook wiring fails case-11-wiring.
+expect_wiring_mutant() {
+    local name=$1 file=$2 needle=$3 out status=0
+    out=$(load_hook_args "$file" 2>&1) || status=$?
+    check_case "$name" 1 "$status" 'FAIL case-11-wiring:' "$out"
+    check_case "$name" 1 "$status" "$needle" "$out"
+    echo "ok   $name (rc=$status)"
+}
+
 load_hook_args "$lefthook"
 expect_wired case-11-wiring 1 "path '$path' mtime" index_all_tracked "${hook_args[@]}"
 expect_wired case-11b-path-limited 1 "path '$path' mtime" index_path_limited "${hook_args[@]}"
+run_floor_python
 
 # Disable only the mtime comparison; case 5 must now be wrongly permitted.
 sed 's/if mtime > ended.timestamp() + GRACE_SECONDS:/if False:/' "$check" > "$work/mutant.py"
@@ -370,3 +548,30 @@ for arg in "${hook_args[@]}"; do
 done
 expect_wired mutant-case-11 0 '' index_all_tracked "${mutant_args[@]}"
 echo 'mutant: case 11 passes without --keep-index -> wiring test bites'
+
+# Planted lefthook.yml wiring mutations: missing guard, guard before gofmt, unpiped group.
+grep -v 'piped: true' "$root/lefthook.yml" > "$work/unpiped.yml"
+expect_wiring_mutant mutant-wiring-unpiped "$work/unpiped.yml" 'piped: true'
+"$python" -I - "$root/lefthook.yml" "$work/no-guard.yml" "$work/swapped.yml" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+gofmt_block = (
+    "          - name: gofmt\n"
+    '            glob: "*.go"\n'
+    "            run: gofmt -w {staged_files}\n"
+    "            stage_fixed: true\n"
+)
+guard_block = (
+    "          - name: lane-judge-guard\n"
+    "            # The guard must read the index being recorded (option -a, path-limited), which git passes only in GIT_INDEX_FILE.\n"
+    "            run: sh .config/lefthook/python.sh --keep-index -I tools/ci/lane_judge_guard.py\n"
+)
+if gofmt_block + guard_block not in text:
+    sys.exit(2)
+Path(sys.argv[2]).write_text(text.replace(guard_block, "", 1), encoding="utf-8")
+Path(sys.argv[3]).write_text(text.replace(gofmt_block + guard_block, guard_block + gofmt_block, 1), encoding="utf-8")
+PY
+expect_wiring_mutant mutant-wiring-no-guard "$work/no-guard.yml" 'missing lane-judge-guard job'
+expect_wiring_mutant mutant-wiring-order "$work/swapped.yml" 'after gofmt'

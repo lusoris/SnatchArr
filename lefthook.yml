@@ -25,11 +25,19 @@ agent-checkpoint-stop:
         --event stop --json --marker
 pre-commit:
   parallel: true
+  jobs:
+    - name: format-then-guard
+      group:
+        piped: true
+        jobs:
+          - name: gofmt
+            glob: "*.go"
+            run: gofmt -w {staged_files}
+            stage_fixed: true
+          - name: lane-judge-guard
+            # The guard must read the index being recorded (option -a, path-limited), which git passes only in GIT_INDEX_FILE.
+            run: sh .config/lefthook/python.sh --keep-index -I tools/ci/lane_judge_guard.py
   commands:
-    gofmt:
-      glob: "*.go"
-      run: gofmt -w {staged_files}
-      stage_fixed: true
     govet:
       glob: "*.go"
       run: >-
@@ -63,9 +71,6 @@ pre-commit:
       run: sh .config/lefthook/python.sh --keep-index -I tools/ci/image_pin_check.py --index
     image-release-age:
       run: sh .config/lefthook/python.sh --keep-index -I tools/ci/image_release_age_check.py --index
-    lane-judge-guard:
-      # The guard must read the index being recorded (option -a, path-limited), which git passes only in GIT_INDEX_FILE.
-      run: sh .config/lefthook/python.sh --keep-index -I tools/ci/lane_judge_guard.py
 
 # Repository-owned, not rendered by praetor: the policy CI applies to every commit of a pull
 # request (job `commits`), run here before the commit exists.

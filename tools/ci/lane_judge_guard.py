@@ -16,7 +16,7 @@ import json
 import os
 import subprocess  # nosec B404  # fixed git argument lists, never a shell
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 MAX_RUN_ROWS = 200000
@@ -43,8 +43,9 @@ def git_output(args: list[str], root: Path | None = None) -> bytes:
 
 def parse_time(raw: str, where: str) -> datetime:
     """Require an ISO-8601 timestamp with an explicit UTC offset."""
+    normalized = f"{raw[:-1]}+00:00" if raw.endswith("Z") else raw
     try:
-        value = datetime.fromisoformat(raw)
+        value = datetime.fromisoformat(normalized)
     except ValueError as error:
         raise ValueError(f"{where}: bad time {raw!r}") from error
     if value.utcoffset() is None:
@@ -119,7 +120,7 @@ def check_path(root: Path, path: str, ended: datetime, label: str) -> bool:
         raise ValueError(f"git diff failed for {path!r} ({result.returncode}): {error}")
     mtime = (root / path).lstat().st_mtime
     if mtime > ended.timestamp() + GRACE_SECONDS:
-        modified = datetime.fromtimestamp(mtime, UTC).isoformat()
+        modified = datetime.fromtimestamp(mtime, timezone.utc).isoformat()  # noqa: UP017  # python.sh floor is Python 3.10
         print(
             f"refused: lane {label} path {path!r} mtime {modified} exceeds exit time {ended.isoformat()}"
             f" + {GRACE_SECONDS}s; {REFUSAL}",
