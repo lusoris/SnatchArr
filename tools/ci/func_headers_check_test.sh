@@ -182,6 +182,56 @@ edit_25() {
     sed -i "s/echo bare/echo changed/" "my script.sh"
 }
 
+# edit_26: function-shaped Python source inside a multiline double-quoted argument is ignored.
+edit_26() {
+    printf '%s\n' '#!/usr/bin/env bash' 'python3 -c "' 'bare_double() {' '    :' '}' '"' >quoted-double.sh
+}
+
+# edit_27: function-shaped text inside a multiline single-quoted argument is ignored.
+edit_27() {
+    printf '%s\n' '#!/usr/bin/env bash' "python3 -c '" 'bare_single() {' '    :' '}' "'" >quoted-single.sh
+}
+
+# edit_28: function-shaped heredoc content is ignored.
+edit_28() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<EOF' 'bare_here() {' '    :' '}' 'EOF' >heredoc.sh
+}
+
+# edit_29: function-shaped <<- heredoc content is ignored with tab stripping.
+edit_29() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<-EOF' $'\tbare_tabbed() {' $'\t    :' $'\t}' $'\tEOF' >heredoc-tabs.sh
+}
+
+# edit_30: real function after a multiline quoted argument is still checked.
+edit_30() {
+    printf '%s\n' '#!/usr/bin/env bash' 'python3 -c "' 'inside_string() {' '    :' '}' '"' \
+        'bare_after_string() {' '    :' '}' >after-string.sh
+}
+
+# edit_31: real function after a heredoc is still checked.
+edit_31() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<EOF' 'inside_heredoc() {' '    :' '}' 'EOF' \
+        'bare_after_heredoc() {' '    :' '}' >after-heredoc.sh
+}
+
+# edit_32: escaped quote does not close a multiline double-quoted argument.
+edit_32() {
+    printf '%s\n' '#!/usr/bin/env bash' 'python3 -c "' '  \" escaped quote' \
+        'inside_escaped() {' '    :' '}' '"' >escaped-quote.sh
+}
+
+# edit_33: quote characters in comments do not affect quote state.
+edit_33() {
+    printf '%s\n' '#!/usr/bin/env bash' '# "' "# '" '' 'bare_after_comments() {' '    :' '}' >comment-quotes.sh
+}
+
+# edit_34: a brace inside a multiline string does not end the real function early.
+edit_34() {
+    printf '%s\n' '' 'undoc_string() {' '    python3 -c "' '}' '"' '    echo changed' '}' >>lib.sh
+    git add lib.sh && git commit -q -m string
+    sed -i 's/echo changed/echo touched/' lib.sh
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -207,6 +257,15 @@ expect "closing brace inside heredoc body does not end function early" 1 "shell 
 expect "arithmetic shift is not a heredoc" 1 "shell function undoc_shift has no header comment" edit_23
 expect "untracked name with leading space checked" 1 "shell function bare_space has no header comment" edit_24
 expect "committed file with space in name in diff checked" 1 "my script.sh" edit_25
+expect "function text in double-quoted string ignored" 0 "ok (" edit_26
+expect "function text in single-quoted string ignored" 0 "ok (" edit_27
+expect "function text in heredoc ignored" 0 "ok (" edit_28
+expect "function text in tab-stripped heredoc ignored" 0 "ok (" edit_29
+expect "function after quoted string still checked" 1 "shell function bare_after_string has no header comment" edit_30
+expect "function after heredoc still checked" 1 "shell function bare_after_heredoc has no header comment" edit_31
+expect "escaped quote keeps string open" 0 "ok (" edit_32
+expect "quotes in comments do not open strings" 1 "shell function bare_after_comments has no header comment" edit_33
+expect "brace in string does not end function early" 1 "shell function undoc_string has no header comment" edit_34
 
 if [ "$failed" -ne 0 ]; then
     exit 1

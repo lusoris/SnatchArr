@@ -28,11 +28,19 @@ SHELL_DEF = re.compile(
     r"^(\s*)function\s+([A-Za-z_][A-Za-z0-9_:.-]*)\s*(?:(\{.*\})(?:\s*$|\s+#.*)|\{?(?:\s*$|\s+#.*))"
 )
 HEREDOC_START = re.compile(r"(?<!<)<<(?!<)(-?)\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
+HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)(-?)")
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 C_ESCAPE = re.compile(rb"\\([0-7]{1,3}|[abtnvfr\"\\])")
 ESCAPE_MAP = {
-    b"a": 7, b"b": 8, b"t": 9, b"n": 10, b"v": 11, b"f": 12, b"r": 13,
-    b"\"": 34, b"\\": 92,
+    b"a": 7,
+    b"b": 8,
+    b"t": 9,
+    b"n": 10,
+    b"v": 11,
+    b"f": 12,
+    b"r": 13,
+    b'"': 34,
+    b"\\": 92,
 }
 
 
@@ -43,8 +51,14 @@ class CheckError(Exception):
 def git(root: Path, *args: str) -> str:
     """Run git in root with a deadline and return stdout, raising CheckError on failure."""
     try:
-        res = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True,  # nosec B603  # fixed git argv list, no shell; option-like refs are refused before the call
-                             timeout=GIT_TIMEOUT_SECONDS, check=False)
+        res = subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,  # nosec B603  # fixed git argv list, no shell; option-like refs are refused before the call
+            timeout=GIT_TIMEOUT_SECONDS,
+            check=False,
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CheckError(f"git {' '.join(args)}: {exc}") from exc
     if res.returncode != 0:
@@ -58,7 +72,7 @@ def unquote_git_path(text: str) -> str:
     out = bytearray()
     last = 0
     for m in C_ESCAPE.finditer(raw):
-        out.extend(raw[last:m.start()])
+        out.extend(raw[last : m.start()])
         esc = m.group(1)
         if b"0" <= esc[0:1] <= b"7":
             out.append(int(esc, 8) & 0xFF)
@@ -102,27 +116,87 @@ def shell_header_ok(lines: list[str], def_idx: int) -> bool:
     i = def_idx - 1
     while i >= 0 and lines[i].strip().startswith("# shellcheck "):
         i -= 1
-    return i >= 0 and lines[i].lstrip().startswith("#") and not lines[i].startswith("#!")
+    return (
+        i >= 0 and lines[i].lstrip().startswith("#") and not lines[i].startswith("#!")
+    )
+
+
+def shell_line_state(line: str, quote: str | None) -> tuple[str | None, str]:
+    """Return the quote state and unquoted shell text, masking comments and literals."""
+    code = []
+    word_start = True
+    i = 0
+    while i < len(line):
+        char = line[i]
+        if quote == "'":
+            if char == "'":
+                quote = None
+            code.append(" ")
+        elif quote == '"':
+            if char == "\\" and i + 1 < len(line):
+                code.extend((" ", " "))
+                i += 1
+            elif char == '"':
+                quote = None
+                code.append(" ")
+            else:
+                code.append(" ")
+        elif char == "#" and word_start:
+            code.extend(" " * (len(line) - i))
+            break
+        elif char in ("'", '"'):
+            quote = char
+            code.append(" ")
+            word_start = False
+        elif char == "\\" and i + 1 < len(line):
+            code.extend((" ", " "))
+            i += 1
+            word_start = False
+        else:
+            code.append(char)
+            word_start = char.isspace()
+        i += 1
+    return quote, "".join(code)
+
+
+def heredoc_end(line: str, delimiter: str, strip_tabs: bool) -> bool:
+    """Return whether line closes a heredoc, applying <<- tab stripping."""
+    target = line.lstrip("\t") if strip_tabs else line
+    return target == delimiter
+
+
+def shell_heredoc(line: str, code: str) -> re.Match[str] | None:
+    """Find a heredoc opener in unquoted shell text, retaining quoted delimiters."""
+    operator = HEREDOC_OPERATOR.search(code)
+    if operator is None:
+        return None
+    return HEREDOC_START.match(line, operator.start())
 
 
 def shell_function_end(lines: list[str], idx: int, indent: str) -> int:
     """Find the closing line index (0-based) for a multiline shell function starting at idx."""
     heredoc: str | None = None
     heredoc_dash = False
+    quote: str | None = None
     for j in range(idx + 1, min(len(lines), idx + 1 + MAX_FILE_LINES)):
         line = lines[j]
         if heredoc is not None:
-            target = line.lstrip("\t") if heredoc_dash else line
-            if target == heredoc:
+            if heredoc_end(line, heredoc, heredoc_dash):
                 heredoc = None
             continue
-        m_hero = HEREDOC_START.search(line)
+        was_quoted = quote is not None
+        quote, code = shell_line_state(line, quote)
+        m_hero = None if was_quoted else shell_heredoc(line, code)
         if m_hero:
             heredoc_dash = bool(m_hero.group(1))
             heredoc = m_hero.group(2)
             continue
+        if was_quoted or quote is not None:
+            continue
         r = line.rstrip()
-        if r in (f"{indent}}}", f"{indent}}};") or line.startswith((f"{indent}}} ", f"{indent}}}; ")):
+        if r in (f"{indent}}}", f"{indent}}};") or line.startswith(
+            (f"{indent}}} ", f"{indent}}}; ")
+        ):
             return j
     return idx
 
@@ -130,32 +204,48 @@ def shell_function_end(lines: list[str], idx: int, indent: str) -> int:
 def shell_functions(lines: list[str]) -> list[tuple[str, int, int]]:
     """Return (name, first line, last line), 1-based, for each shell function definition."""
     funcs = []
+    heredoc: str | None = None
+    heredoc_dash = False
+    quote: str | None = None
     for idx, text in enumerate(lines):
-        m = SHELL_DEF.match(text)
-        if not m:
+        if heredoc is not None:
+            if heredoc_end(text, heredoc, heredoc_dash):
+                heredoc = None
             continue
-        indent = m.group(1) if m.group(1) is not None else m.group(4)
-        name = m.group(2) or m.group(5)
-        is_one_line = bool(m.group(3) or m.group(6))
-        end = idx if is_one_line else shell_function_end(lines, idx, indent)
-        funcs.append((name, idx + 1, end + 1))
+        was_quoted = quote is not None
+        quote, code = shell_line_state(text, quote)
+        if not was_quoted:
+            m = SHELL_DEF.match(text)
+            if m:
+                indent = m.group(1) if m.group(1) is not None else m.group(4)
+                name = m.group(2) or m.group(5)
+                is_one_line = bool(m.group(3) or m.group(6))
+                end = idx if is_one_line else shell_function_end(lines, idx, indent)
+                funcs.append((name, idx + 1, end + 1))
+        m_hero = None if was_quoted else shell_heredoc(text, code)
+        if m_hero:
+            heredoc_dash = bool(m_hero.group(1))
+            heredoc = m_hero.group(2)
     return funcs
 
 
-def shell_findings(path: str, lines: list[str], touched: set[int], gaps: set[int]) -> list[str]:
+def shell_findings(
+    path: str, lines: list[str], touched: set[int], gaps: set[int]
+) -> list[str]:
     """List touched shell functions in path that lack a header comment."""
     found = []
     for name, start, end in shell_functions(lines):
-        is_touched = (
-            bool(touched.intersection(range(start, end + 1)))
-            or any(start <= s < end for s in gaps)
+        is_touched = bool(touched.intersection(range(start, end + 1))) or any(
+            start <= s < end for s in gaps
         )
         if is_touched and not shell_header_ok(lines, start - 1):
             found.append(f"{path}:{start}: shell function {name} has no header comment")
     return found
 
 
-def python_findings(path: str, source: str, touched: set[int], gaps: set[int]) -> list[str]:
+def python_findings(
+    path: str, source: str, touched: set[int], gaps: set[int]
+) -> list[str]:
     """List touched Python functions in path that lack a docstring."""
     try:
         tree = ast.parse(source, filename=path)
@@ -167,16 +257,19 @@ def python_findings(path: str, source: str, touched: set[int], gaps: set[int]) -
             continue
         first = min([node.lineno, *(d.lineno for d in node.decorator_list)])
         last = node.end_lineno or node.lineno
-        is_touched = (
-            bool(touched.intersection(range(first, last + 1)))
-            or any(first <= s < last for s in gaps)
+        is_touched = bool(touched.intersection(range(first, last + 1))) or any(
+            first <= s < last for s in gaps
         )
         if is_touched and ast.get_docstring(node) is None:
-            found.append(f"{path}:{node.lineno}: Python function {node.name} has no docstring")
+            found.append(
+                f"{path}:{node.lineno}: Python function {node.name} has no docstring"
+            )
     return found
 
 
-def file_findings(root: Path, path: str, touched: set[int], gaps: set[int]) -> list[str]:
+def file_findings(
+    root: Path, path: str, touched: set[int], gaps: set[int]
+) -> list[str]:
     """Read one changed file from the working tree and check the functions the change touched."""
     full = root / path
     if not full.is_file() or not path.endswith((*SHELL_SUFFIXES, ".py")):
@@ -196,11 +289,30 @@ def run(root: Path, base: str) -> list[str]:
     if base.startswith("-"):
         raise CheckError(f"base ref {base} starts with '-'")
     merge_base = git(root, "merge-base", base, "HEAD").strip()
-    diff = git(root, "diff", "-U0", "--no-color", "--no-ext-diff", merge_base, "--",
-               "*.sh", "*.bash", "*.py")
+    diff = git(
+        root,
+        "diff",
+        "-U0",
+        "--no-color",
+        "--no-ext-diff",
+        merge_base,
+        "--",
+        "*.sh",
+        "*.bash",
+        "*.py",
+    )
     touched_by_file, gaps_by_file = changed_lines(diff)
-    untracked = git(root, "ls-files", "-z", "--others", "--exclude-standard", "--",
-                    "*.sh", "*.bash", "*.py")
+    untracked = git(
+        root,
+        "ls-files",
+        "-z",
+        "--others",
+        "--exclude-standard",
+        "--",
+        "*.sh",
+        "*.bash",
+        "*.py",
+    )
     for path in untracked.split("\0"):
         if not path:
             continue
@@ -208,23 +320,34 @@ def run(root: Path, base: str) -> list[str]:
         if not full.is_file():
             continue
         try:
-            line_count = len(full.read_text(encoding="utf-8").splitlines()[:MAX_FILE_LINES])
+            line_count = len(
+                full.read_text(encoding="utf-8").splitlines()[:MAX_FILE_LINES]
+            )
         except (OSError, UnicodeDecodeError) as exc:
             raise CheckError(f"{path}: {exc}") from exc
         touched_by_file.setdefault(path, set()).update(range(1, line_count + 1))
         gaps_by_file.setdefault(path, set())
     findings = []
     for path in sorted(touched_by_file.keys() | gaps_by_file.keys()):
-        findings.extend(file_findings(root, path, touched_by_file.get(path, set()),
-                                      gaps_by_file.get(path, set())))
+        findings.extend(
+            file_findings(
+                root,
+                path,
+                touched_by_file.get(path, set()),
+                gaps_by_file.get(path, set()),
+            )
+        )
     return findings
 
 
 def main() -> int:
     """Parse arguments, run the check and print findings."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--base", default=os.environ.get("FUNC_HEADERS_BASE", "origin/main"),
-                        help="ref whose merge base with HEAD the change is measured from")
+    parser.add_argument(
+        "--base",
+        default=os.environ.get("FUNC_HEADERS_BASE", "origin/main"),
+        help="ref whose merge base with HEAD the change is measured from",
+    )
     parser.add_argument("--root", default=".", help="repository root")
     args = parser.parse_args()
     try:
@@ -235,9 +358,14 @@ def main() -> int:
     for f in findings:
         print(f)
     if findings:
-        print(f"func_headers_check: {len(findings)} touched function(s) without a header", file=sys.stderr)
+        print(
+            f"func_headers_check: {len(findings)} touched function(s) without a header",
+            file=sys.stderr,
+        )
         return 1
-    print(f"func_headers_check: ok (touched shell and Python functions since {args.base} carry a header)")
+    print(
+        f"func_headers_check: ok (touched shell and Python functions since {args.base} carry a header)"
+    )
     return 0
 
 
