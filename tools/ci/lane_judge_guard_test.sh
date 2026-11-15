@@ -604,9 +604,14 @@ expect_wiring_mutant mutant-wiring-order "$work/swapped.yml" 'after gofmt'
 
 # no_make_guard FILE: refuse a Makefile recipe line that runs the live guard. The guard reads the
 # worktree's own lane marker and refuses while a lane runs even with nothing staged, so only the
-# lefthook pre-commit job may run it; the recipe keeps the fixture test (case 12).
+# lefthook pre-commit job may run it; the recipe keeps the fixture test (case 12). A line counts
+# when it is indented or continues a line ending in a backslash; make passes a continued recipe
+# to the shell as one command, and a `#` comment ends at the newline, so the next line still runs.
 no_make_guard() {
-    if grep -nE '^[[:space:]]+[^#[:space:]][^#]*tools/ci/lane_judge_guard\.py' "$1"; then
+    if awk '
+        { live = cont || /^[[:space:]]/; cont = /\\$/; code = $0; sub(/#.*/, "", code) }
+        live && code ~ /tools\/ci\/lane_judge_guard\.py/ { print FNR ":" $0; hit = 1 }
+        END { exit !hit }' "$1"; then
         echo "FAIL case-12-make-wiring: $1 runs the live guard; only the pre-commit hook may" >&2
         return 1
     fi
@@ -627,4 +632,10 @@ expect_make_wiring mutant-make-live-guard 1 'FAIL case-12-make-wiring:' "$work/l
 printf '%s\n' 'workflows-verify:' '	bash tools/ci/lane_judge_guard_test.sh' \
     '	# python3 -I tools/ci/lane_judge_guard.py' > "$work/commented-guard.mk"
 expect_make_wiring make-commented-guard 0 '' "$work/commented-guard.mk"
+printf 'workflows-verify:\n\tpython3 -I \\\n\t    tools/ci/lane_judge_guard.py\n' > "$work/continued-guard.mk"
+expect_make_wiring mutant-make-continued-guard 1 'FAIL case-12-make-wiring:' "$work/continued-guard.mk"
+printf 'workflows-verify:\n\tpython3 -I \\\ntools/ci/lane_judge_guard.py\n' > "$work/unindented-guard.mk"
+expect_make_wiring mutant-make-unindented-guard 1 'FAIL case-12-make-wiring:' "$work/unindented-guard.mk"
+printf 'workflows-verify:\n\t# python3 -I \\\n\ttools/ci/lane_judge_guard.py\n' > "$work/comment-continued-guard.mk"
+expect_make_wiring mutant-make-comment-continued-guard 1 'FAIL case-12-make-wiring:' "$work/comment-continued-guard.mk"
 echo 'mutant: live guard in a Makefile recipe fails case 12 -> wiring test bites'
