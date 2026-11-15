@@ -5,6 +5,8 @@
 // Package foreigntitles composes the foreign-language search titles of one *arr item:
 // the *arr's own cached aliases plus, when the operator opted in, TheTVDB translations
 // (ADR-0048). TVDB is enrich-only: its failure never fails the response.
+// No search consumes these titles yet; getForeignTitles is the only caller until issue #1150
+// wires Resolve into the budgeted Prowlarr search.
 package foreigntitles
 
 import (

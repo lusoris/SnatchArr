@@ -50,6 +50,9 @@ const (
 	// four calls (two remote-id searches, the movie, its translation) of callTimeout each.
 	lookupTimeout = 4*callTimeout + 10*time.Second
 	maxBodyBytes  = 4 << 20
+	// maxScan bounds scans without truncating a decodable response: an array of N smallest
+	// {} entries needs 3N+1 bytes ([{},{},…]), so maxBodyBytes cannot hold more than maxScan.
+	maxScan = maxBodyBytes / 3
 	// TVDB publishes no rate limit (api docs, checked 2026-11-13); this is a conservative
 	// ceiling on every real HTTP request, retries and logins included.
 	defaultRate  = rate.Limit(2)
@@ -421,13 +424,20 @@ func (p *Provider) findMovie(ctx context.Context, ref Ref) (int, error) {
 		if err != nil && !errors.Is(err, errNotFound) {
 			return 0, err
 		}
-		for j := range min(len(res), maxAliases) {
-			if m := res[j].Movie; m != nil && m.ID > 0 {
-				return m.ID, nil
-			}
+		if id, ok := firstMovieID(res); ok {
+			return id, nil
 		}
 	}
 	return 0, errNotFound
+}
+
+func firstMovieID(results []tvdb.SearchByRemoteIDResult) (int, bool) {
+	for i := range min(len(results), maxScan) {
+		if movie := results[i].Movie; movie != nil && movie.ID > 0 {
+			return movie.ID, true
+		}
+	}
+	return 0, false
 }
 
 // call runs one goenvoy call under a deadline and maps its error to this package's
@@ -485,7 +495,10 @@ func collect(rule, lang string, tr *tvdb.Translation, aliases []tvdb.Alias) []fo
 			add(tr.Aliases[i])
 		}
 	}
-	for i := range min(len(aliases), maxAliases) {
+	for i := range min(len(aliases), maxScan) {
+		if len(out) >= maxAliases {
+			break
+		}
 		if strings.EqualFold(aliases[i].Language, lang) {
 			add(aliases[i].Name)
 		}

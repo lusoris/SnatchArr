@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	tvdb "github.com/golusoris/goenvoy/metadata/video/tvdb"
 	"golang.org/x/time/rate"
 
 	"github.com/golusoris/golusoris/cache/memory"
@@ -710,6 +711,91 @@ func TestAliasCapAndEmpty(t *testing.T) {
 	got, err = p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81190}, "de")
 	if err != nil || len(got) != 0 {
 		t.Fatalf("empty translation and aliases = %v, %v, want empty", got, err)
+	}
+}
+
+func TestFirstMovieID(t *testing.T) {
+	t.Parallel()
+	results := func(count int) []tvdb.SearchByRemoteIDResult {
+		out := make([]tvdb.SearchByRemoteIDResult, 0, count)
+		for range count {
+			out = append(out, tvdb.SearchByRemoteIDResult{})
+		}
+		return out
+	}
+	tests := []struct {
+		name    string
+		results []tvdb.SearchByRemoteIDResult
+		wantID  int
+		wantOK  bool
+	}{
+		{
+			name:    "movie after output cap",
+			results: append(results(maxAliases+50), tvdb.SearchByRemoteIDResult{Movie: &tvdb.MovieBase{ID: 42}}),
+			wantID:  42,
+			wantOK:  true,
+		},
+		{
+			name:    "no movie",
+			results: results(maxAliases + 50),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotID, gotOK := firstMovieID(tt.results)
+			if gotID != tt.wantID || gotOK != tt.wantOK {
+				t.Fatalf("firstMovieID() = %d, %t, want %d, %t", gotID, gotOK, tt.wantID, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestCollectAliasScan(t *testing.T) {
+	t.Parallel()
+	aliases := func(language string, count int) []tvdb.Alias {
+		out := make([]tvdb.Alias, 0, count)
+		for i := range count {
+			out = append(out, tvdb.Alias{Language: language, Name: fmt.Sprintf("Alias %d", i)})
+		}
+		return out
+	}
+	tests := []struct {
+		name      string
+		aliases   []tvdb.Alias
+		wantLen   int
+		wantTitle string
+	}{
+		{
+			name:      "matching alias after output cap",
+			aliases:   append(aliases("eng", maxAliases+50), tvdb.Alias{Language: "deu", Name: "German title"}),
+			wantLen:   1,
+			wantTitle: "German title",
+		},
+		{
+			name:    "accepted titles remain capped",
+			aliases: aliases("deu", maxAliases+50),
+			wantLen: maxAliases,
+		},
+		{
+			name: "empty aliases",
+		},
+		{
+			name:    "no matching aliases",
+			aliases: aliases("eng", maxAliases+50),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := collect("de", "deu", nil, tt.aliases)
+			if len(got) != tt.wantLen {
+				t.Fatalf("len(collect()) = %d, want %d", len(got), tt.wantLen)
+			}
+			if tt.wantTitle != "" && got[0].Title != tt.wantTitle {
+				t.Fatalf("collect()[0].Title = %q, want %q", got[0].Title, tt.wantTitle)
+			}
+		})
 	}
 }
 
