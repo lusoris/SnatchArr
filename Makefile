@@ -50,14 +50,14 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live arr-pushtitle-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint tools-opengrep release-e2e-check release-dogfood-check release-closes-check semgrep-scan secret-scan py-lint docs-verify licences licences-check logos logos-check \
+.PHONY: help verify-all api-verify metadata-proxy-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live arr-pushtitle-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint tools-opengrep release-e2e-check release-dogfood-check release-closes-check semgrep-scan secret-scan py-lint docs-verify licences licences-check logos logos-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
-        api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check roadmap-check
+        api-gen api-gosec api-vuln metadata-proxy-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check roadmap-check
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
 
-verify-all: governance-verify hooks-verify workflows-verify semgrep-scan secret-scan py-lint docs-verify proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify licences-check logos-check roadmap-check ## Every gate (praetor universal verification)
+verify-all: governance-verify hooks-verify workflows-verify semgrep-scan secret-scan py-lint docs-verify proto-verify api-verify metadata-proxy-verify worker-verify web-verify deploy-verify contracts-verify licences-check logos-check roadmap-check ## Every gate (praetor universal verification)
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
@@ -239,6 +239,21 @@ tools-opengrep: ## Codacy Opengrep Python rules over tracked Python files, again
 	esac
 	(cd tools/ci/codacy_opengrep && npm ci --ignore-scripts --no-audit)
 	python3 -I tools/ci/codacy_opengrep_scan.py
+
+# ── metadata-proxy/ (Go, root module) ────────────────────────────────────────
+METADATA_PROXY_PKG ?= ./metadata-proxy/...
+metadata-proxy-verify: ## golangci-lint + go fix + go vet + go test -race + gosec + govulncheck over metadata-proxy/
+	$(GOLANGCI) run --config .golangci.yml $(METADATA_PROXY_PKG)
+	go fix -diff $(METADATA_PROXY_PKG)
+	go vet $(METADATA_PROXY_PKG)
+	go test -race -count=1 -timeout=120s $(METADATA_PROXY_PKG)
+	$(MAKE) api-gosec GOSEC_PKG=$(METADATA_PROXY_PKG) GOSEC_SARIF=api/tmp/gosec-metadata-proxy.sarif
+	$(MAKE) metadata-proxy-vuln
+
+metadata-proxy-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over metadata-proxy/ on the go.mod Go release, version printed first
+	sh tools/ci/tmpdir_abs_test.sh
+	sh tools/ci/govulncheck_pinned_test.sh
+	sh tools/ci/govulncheck_pinned.sh "$(GO_INSTALL_DIR)/govulncheck" $(METADATA_PROXY_PKG)
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────
 worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
@@ -630,7 +645,7 @@ contracts-verify: ## Hand-written clients against the pinned upstream OpenAPI sp
 	go run ./tools/upstreamspec receipts -cache "$(SPEC_CACHE)"
 
 # ── Third-party licences ─────────────────────────────────────────────────────
-# Shipped dependencies across Go (api), Rust (snatch-worker) and npm (web prod).
+# Shipped dependencies across Go (api, metadata-proxy), Rust (snatch-worker) and npm (web prod).
 # cargo-about 0.9.2 requires the cli feature: cargo install --locked cargo-about --version 0.9.2 --features cli
 licences: ## Generate web/static/licences.json for shipped dependencies
 	python3 tools/licences/generate.py

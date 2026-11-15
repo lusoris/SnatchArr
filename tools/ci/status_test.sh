@@ -19,16 +19,16 @@ trap 'rm -rf "$WORK"' EXIT
 
 # Every job ran and succeeded; the change filter selected every component.
 ALL="$(jq -n '
-  [ "workflows", "secret-scan", "semgrep", "trivy", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi",
+  [ "workflows", "secret-scan", "semgrep", "trivy", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi", "metadata-proxy",
     "worker", "e2e", "image-smoke", "dev-compose", "dlclients-live", "arr-forceimport-live", "arr-pushtitle-live", "integrations-live", "web", "web-e2e-api", "web-visual", "proto", "deploy", "contracts", "governance", "docs", "licences", "logos", "release-e2e-map" ]
   | map({key: ., value: {result: "success", outputs: {}}}) | from_entries
-  | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts", "docs", "licences", "logos" ]
+  | .changes.outputs = ( [ "api", "metadata_proxy", "worker", "web", "proto", "deploy", "governance", "contracts", "docs", "licences", "logos" ]
                          | map({key: ., value: "true"}) | from_entries )
 ')"
 # No component selected: every filtered job is skipped.
 NONE="$(printf '%s' "$ALL" | jq '
   .changes.outputs |= map_values("false")
-  | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .worker, .e2e, .["image-smoke"], .["dev-compose"], .["dlclients-live"], .["arr-forceimport-live"], .["arr-pushtitle-live"], .["integrations-live"], .web, .["web-e2e-api"], .["web-visual"],
+  | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .["metadata-proxy"], .worker, .e2e, .["image-smoke"], .["dev-compose"], .["dlclients-live"], .["arr-forceimport-live"], .["arr-pushtitle-live"], .["integrations-live"], .web, .["web-e2e-api"], .["web-visual"],
      .proto, .deploy, .contracts, .governance, .docs, .licences, .["release-e2e-map"]).result = "skipped"
 ')"
 
@@ -64,6 +64,8 @@ expect 1 "changes failed, the rest skipped" true "$NONE" \
   '.changes = {result: "failure", outputs: {}}' "job changes: failure, must succeed"
 expect 1 "api selected, api-test skipped" true "$ALL" \
   '.["api-test"].result = "skipped"' "job api-test: skipped, must succeed"
+expect 1 "metadata_proxy selected, metadata-proxy skipped" true "$ALL" \
+  '.["metadata-proxy"].result = "skipped"' "job metadata-proxy: skipped, must succeed"
 expect 1 "api selected, the live download clients skipped" true "$ALL" \
   '.["dlclients-live"].result = "skipped"' "job dlclients-live: skipped, must succeed"
 expect 1 "api selected, the live force import skipped" true "$ALL" \

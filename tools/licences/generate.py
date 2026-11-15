@@ -123,7 +123,8 @@ def run_go_licenses(repo_root, env):
     try:
         cmd = [
             "go", "tool", "-modfile=tools/go/go.mod", "go-licenses", "report",
-            "./api/cmd/snatcharr", "--ignore=github.com/lusoris/SnatchArr",
+            "./api/cmd/snatcharr", "./metadata-proxy/cmd/snatcharr-metadata-proxy",
+            "--ignore=github.com/lusoris/SnatchArr",
             f"--template={tpl_path}",
         ]
         return run_cmd(cmd, cwd=repo_root, env=env)
