@@ -21,7 +21,7 @@ func TestGeneralOptionsReachHandler(t *testing.T) {
 	t.Parallel()
 	svc := newDialControlTestService(t, WithBindHost("127.0.0.1"), WithEphemeralPorts())
 	startCtx, startCancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer startCancel()
+	t.Cleanup(startCancel)
 	if err := svc.Start(startCtx); err != nil {
 		t.Fatalf("svc.Start: %v", err)
 	}
@@ -46,20 +46,23 @@ func TestGeneralOptionsReachHandler(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			conn, err := (&net.Dialer{}).DialContext(startCtx, "tcp", mustProxyAddr(t, svc))
-			if err != nil {
-				t.Fatalf("dial proxy: %v", err)
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			conn, dialErr := (&net.Dialer{}).DialContext(ctx, "tcp", mustProxyAddr(t, svc))
+			if dialErr != nil {
+				t.Fatalf("dial proxy: %v", dialErr)
 			}
 			defer conn.Close()
-			if err := conn.SetDeadline(svc.clock.Now().Add(5 * time.Second)); err != nil {
-				t.Fatalf("SetDeadline: %v", err)
+			if deadlineErr := conn.SetDeadline(svc.clock.Now().Add(5 * time.Second)); deadlineErr != nil {
+				t.Fatalf("SetDeadline: %v", deadlineErr)
 			}
-			if _, err := io.WriteString(conn, tc.request); err != nil {
-				t.Fatalf("write request: %v", err)
+			if _, writeErr := io.WriteString(conn, tc.request); writeErr != nil {
+				t.Fatalf("write request: %v", writeErr)
 			}
-			resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: tc.method})
-			if err != nil {
-				t.Fatalf("http.ReadResponse: %v", err)
+			resp, responseErr := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: tc.method})
+			if responseErr != nil {
+				t.Fatalf("http.ReadResponse: %v", responseErr)
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != tc.wantStatus {
@@ -100,10 +103,11 @@ func TestServeFailurePermanentlyFailsReadiness(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			svc := newDialControlTestService(t)
 			al := svc.listeners[0]
 			svc.ready.Store(true)
-			if tc.serveErr == http.ErrServerClosed {
+			if errors.Is(tc.serveErr, http.ErrServerClosed) {
 				if err := al.srv.Close(); err != nil {
 					t.Fatalf("server Close: %v", err)
 				}
@@ -184,6 +188,7 @@ func TestBridgeTunnelShutdownDuringBufferedWrite(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runBridgeBufferedWriteCase(t, tc.stop)
 		})
 	}
