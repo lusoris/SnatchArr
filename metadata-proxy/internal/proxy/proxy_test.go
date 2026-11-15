@@ -102,7 +102,9 @@ func startHarness(t *testing.T, opts config.Options, proxyOpts ...proxy.Option) 
 	t.Cleanup(func() {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stopCancel()
-		_ = svc.Stop(stopCtx)
+		if err := svc.Stop(stopCtx); err != nil {
+			t.Errorf("svc.Stop cleanup: %v", err)
+		}
 	})
 
 	addr, ok := svc.Addr(opts.Listeners[0].App)
@@ -747,6 +749,11 @@ func TestReadinessBeforeAndAfterBind(t *testing.T) {
 	if err := svc.Start(ctx); err != nil {
 		t.Fatalf("svc.Start: %v", err)
 	}
+	t.Cleanup(func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		_ = svc.Stop(stopCtx)
+	})
 	assertReadyStatus(http.StatusOK)
 
 	if err := svc.Stop(ctx); err != nil {

@@ -95,6 +95,7 @@ type Service struct {
 	listen         func(ctx context.Context, network, addr string) (net.Listener, error)
 	listeners      []*appListener
 	ready          atomic.Bool
+	serveFailed    atomic.Bool
 	stopOnce       sync.Once
 	stopCh         chan struct{}
 	tunnelWG       sync.WaitGroup
@@ -149,12 +150,13 @@ func (s *Service) buildListeners() []*appListener {
 			sem:  make(chan struct{}, maxTunnels),
 		}
 		al.srv = &http.Server{
-			Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.handleRequest(al, w, r) }),
-			ReadHeaderTimeout: listenerReadHeaderTimeout,
-			ReadTimeout:       listenerReadTimeout,
-			WriteTimeout:      listenerWriteTimeout,
-			IdleTimeout:       listenerIdleTimeout,
-			MaxHeaderBytes:    listenerMaxHeaderBytes,
+			Handler:                      http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.handleRequest(al, w, r) }),
+			DisableGeneralOptionsHandler: true,
+			ReadHeaderTimeout:            listenerReadHeaderTimeout,
+			ReadTimeout:                  listenerReadTimeout,
+			WriteTimeout:                 listenerWriteTimeout,
+			IdleTimeout:                  listenerIdleTimeout,
+			MaxHeaderBytes:               listenerMaxHeaderBytes,
 		}
 		out = append(out, al)
 	}
@@ -167,7 +169,7 @@ func (s *Service) ReadinessCheck() statuspage.Check {
 		Name: "listeners",
 		Tags: []string{health.TagReadiness},
 		Fn: func(context.Context) error {
-			if !s.ready.Load() {
+			if s.serveFailed.Load() || !s.ready.Load() {
 				return ErrListenersNotBound
 			}
 			return nil
@@ -200,7 +202,9 @@ func (s *Service) Start(ctx context.Context) error {
 	for _, al := range s.listeners {
 		s.startServe(serveCtx, al)
 	}
-	s.ready.Store(true)
+	if !s.serveFailed.Load() {
+		s.ready.Store(true)
+	}
 	return nil
 }
 
@@ -264,6 +268,8 @@ func (s *Service) rollbackBound(ctx context.Context, count int) {
 
 func (s *Service) serveLoop(ctx context.Context, al *appListener, tcpLn net.Listener) {
 	if err := al.srv.Serve(tcpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		s.serveFailed.Store(true)
+		s.ready.Store(false)
 		s.logger.ErrorContext(ctx, "metadata-proxy: listener serve error",
 			slog.String("app", al.app),
 			slog.Any("err", err),

@@ -112,6 +112,10 @@ func (s *Service) bridgeTunnel(w http.ResponseWriter, upstream net.Conn) (int64,
 	}
 
 	opts := s.compiled.Options
+	done := make(chan struct{})
+	maxTimerStart := make(chan struct{})
+	go watchTunnel(done, maxTimerStart, s.clock, opts.MaxTunnel, s.stopCh, s.logger, clientConn, upstream)
+	defer close(done)
 	tunnelDeadline := s.clock.Now().Add(opts.MaxTunnel)
 	if err := writeEstablished(clientConn, s.clock, opts.IdleTimeout, tunnelDeadline); err != nil {
 		closeConn(s.logger, sideClient, clientConn)
@@ -124,7 +128,7 @@ func (s *Service) bridgeTunnel(w http.ResponseWriter, upstream net.Conn) (int64,
 		closeConn(s.logger, sideUpstream, upstream)
 		return initialUp, 0, true
 	}
-	up, down := s.copyBothWays(clientConn, upstream, initialUp, tunnelDeadline)
+	up, down := s.copyBothWays(clientConn, upstream, initialUp, tunnelDeadline, maxTimerStart)
 	return up, down, true
 }
 
@@ -168,10 +172,10 @@ func (s *Service) copyBothWays(
 	clientConn, upstream net.Conn,
 	initialUp int64,
 	tunnelDeadline time.Time,
+	maxTimerStart chan<- struct{},
 ) (int64, int64) {
 	opts := s.compiled.Options
-	done := make(chan struct{})
-	go watchTunnel(done, s.clock, opts.MaxTunnel, s.stopCh, s.logger, clientConn, upstream)
+	close(maxTimerStart)
 
 	upCh := make(chan int64, 1)
 	go func() {
@@ -185,18 +189,27 @@ func (s *Service) copyBothWays(
 	closeConn(s.logger, sideClient, clientConn)
 	closeConn(s.logger, sideUpstream, upstream)
 	up := <-upCh
-	close(done)
 	return up, down
 }
 
 func watchTunnel(
 	done <-chan struct{},
+	maxTimerStart <-chan struct{},
 	clk clock.Clock,
 	maxTunnel time.Duration,
 	stopCh <-chan struct{},
 	logger *slog.Logger,
 	clientConn, upstream net.Conn,
 ) {
+	select {
+	case <-done:
+		return
+	case <-stopCh:
+		closeConn(logger, sideClient, clientConn)
+		closeConn(logger, sideUpstream, upstream)
+		return
+	case <-maxTimerStart:
+	}
 	maxTimer := clk.NewTimer(maxTunnel)
 	defer maxTimer.Stop()
 	select {
