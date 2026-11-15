@@ -185,6 +185,7 @@ base="$(printf '%s\n\nBody.\n\nSigned-off-by: t <t@example.invalid>\n' "$SUBJECT
 main_check "signed human" 0 "passes the commit-msg policy" "$base"
 unsigned="$(printf '%s\n\nBody.\n' "$SUBJECT" | commit Kilian k@example.invalid)"
 main_check "unsigned maintainer squash on main" 1 "fails the commit-msg policy" "$unsigned"
+main_check "unsigned squash names local merge guard clause" 1 "a local merge guard may require its own judged landing path instead" "$unsigned"
 tip="$(printf '%s\n\nBody.\n\nSigned-off-by: t <t@example.invalid>\n' "$SUBJECT" | commit Kilian k@example.invalid)"
 main_check "range unsigned middle, signed tip" 1 "$unsigned fails the commit-msg policy" "$base..$tip"
 main_check "zero before checks tip only" 0 "checking only $tip" "0000000000000000000000000000000000000000..$tip"
