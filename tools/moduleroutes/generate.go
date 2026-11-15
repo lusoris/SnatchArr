@@ -15,6 +15,8 @@ import (
 	"slices"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/lusoris/SnatchArr/tools/internal/openapiops"
 )
 
 // GenerateCode parses OpenAPI YAML and emits Go source code defining moduleops.ByOperation.
@@ -58,7 +60,7 @@ func extractModuleOps(src []byte) (map[string]string, error) {
 }
 
 func processPathOps(pathItem map[string]any, opsMap map[string]string) error {
-	for _, method := range httpMethods {
+	for _, method := range openapiops.PathItemOperations {
 		rawOp, ok := pathItem[method]
 		if !ok {
 			continue

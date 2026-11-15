@@ -77,10 +77,10 @@
         { "$ref": "#/$defs/component" },
         {
           "properties": {
-            "concurrency": { "type": "integer", "minimum": 1, "maximum": 32 },
-            "heartbeatSecs": { "type": "integer", "minimum": 5 },
-            "leaseWaitSecs": { "type": "integer", "minimum": 1, "maximum": 60 },
-            "arrTimeoutSecs": { "type": "integer", "minimum": 5 },
+            "concurrency": { "type": "integer", "minimum": 1, "maximum": 16 },
+            "heartbeatSecs": { "type": "integer", "minimum": 5, "maximum": 60 },
+            "leaseWaitSecs": { "type": "integer", "minimum": 1, "maximum": 30 },
+            "arrTimeoutSecs": { "type": "integer", "minimum": 5, "maximum": 120 },
             "httpPort": { "type": "integer", "minimum": 1024, "maximum": 65535 },
             "staleSecs": { "type": "integer", "minimum": 60, "maximum": 3600 },
             "autoscaling": {

@@ -30,6 +30,17 @@ pub struct Config {
     pub stale: Duration,
 }
 
+const MIN_CONCURRENCY: usize = 1;
+const MAX_CONCURRENCY: usize = 16;
+const MIN_HEARTBEAT_SECS: u64 = 5;
+const MAX_HEARTBEAT_SECS: u64 = 60;
+const MIN_LEASE_WAIT_SECS: u32 = 1;
+const MAX_LEASE_WAIT_SECS: u32 = 30;
+const MIN_ARR_TIMEOUT_SECS: u64 = 5;
+const MAX_ARR_TIMEOUT_SECS: u64 = 120;
+const MIN_STALE_SECS: u64 = 60;
+const MAX_STALE_SECS: u64 = 3600;
+
 /// Configuration errors.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -43,12 +54,24 @@ pub enum ConfigError {
         /// Expected kind.
         kind: &'static str,
     },
+    /// A numeric variable was outside its supported range.
+    #[error("config: {name}={value} is outside allowed range {min}..={max}")]
+    OutOfRange {
+        /// Variable name.
+        name: &'static str,
+        /// Checked value.
+        value: u64,
+        /// Smallest accepted value.
+        min: u64,
+        /// Largest accepted value.
+        max: u64,
+    },
     /// The stale limit leaves no room for the calls that refresh it.
     #[error(
         "config: SNATCH_STALE_SECS={stale} must be at least {min}: twice the longer of the heartbeat interval and the lease wait"
     )]
     StaleTooShort {
-        /// Stale limit in seconds, after clamping.
+        /// Stale limit in seconds, after range validation.
         stale: u64,
         /// Smallest accepted limit in seconds.
         min: u64,
@@ -57,6 +80,12 @@ pub enum ConfigError {
 
 fn env(get: &impl Fn(&str) -> Option<String>, name: &'static str) -> Option<String> {
     get(name).filter(|v| !v.trim().is_empty())
+}
+
+fn worker_id(get: &impl Fn(&str) -> Option<String>) -> String {
+    env(get, "SNATCH_WORKER_ID")
+        .or_else(|| env(get, "HOSTNAME"))
+        .unwrap_or_else(|| format!("worker-{}", std::process::id()))
 }
 
 fn env_num<T: std::str::FromStr>(
@@ -75,6 +104,52 @@ fn env_num<T: std::str::FromStr>(
     }
 }
 
+fn checked_range(value: u64, name: &'static str, min: u64, max: u64) -> Result<u64, ConfigError> {
+    if !(min..=max).contains(&value) {
+        return Err(ConfigError::OutOfRange {
+            name,
+            value,
+            min,
+            max,
+        });
+    }
+    Ok(value)
+}
+
+fn checked_range_u32(
+    value: u32,
+    name: &'static str,
+    min: u32,
+    max: u32,
+) -> Result<u32, ConfigError> {
+    if !(min..=max).contains(&value) {
+        return Err(ConfigError::OutOfRange {
+            name,
+            value: u64::from(value),
+            min: u64::from(min),
+            max: u64::from(max),
+        });
+    }
+    Ok(value)
+}
+
+fn checked_range_usize(
+    value: usize,
+    name: &'static str,
+    min: usize,
+    max: usize,
+) -> Result<usize, ConfigError> {
+    if !(min..=max).contains(&value) {
+        return Err(ConfigError::OutOfRange {
+            name,
+            value: u64::try_from(value).unwrap_or(u64::MAX),
+            min: u64::try_from(min).unwrap_or(u64::MAX),
+            max: u64::try_from(max).unwrap_or(u64::MAX),
+        });
+    }
+    Ok(value)
+}
+
 impl Config {
     /// Reads `SNATCH_*` variables.
     pub fn from_env() -> Result<Self, ConfigError> {
@@ -82,25 +157,55 @@ impl Config {
     }
 
     fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
-        let worker_id = env(&get, "SNATCH_WORKER_ID")
-            .or_else(|| env(&get, "HOSTNAME"))
-            .unwrap_or_else(|| format!("worker-{}", std::process::id()));
+        let worker_id = worker_id(&get);
         let heartbeat_secs: u64 = env_num(&get, "SNATCH_HEARTBEAT_SECS", 30, "integer")?;
         let arr_timeout_secs: u64 = env_num(&get, "SNATCH_ARR_TIMEOUT_SECS", 30, "integer")?;
-        let lease_wait_secs =
-            env_num::<u32>(&get, "SNATCH_LEASE_WAIT_SECS", 30, "integer")?.clamp(1, 30);
-        let heartbeat = Duration::from_secs(heartbeat_secs.clamp(5, 60));
-        let stale_secs = env_num::<u64>(&get, "SNATCH_STALE_SECS", 180, "integer")?.clamp(60, 3600);
+        let lease_wait_secs = checked_range_u32(
+            env_num::<u32>(
+                &get,
+                "SNATCH_LEASE_WAIT_SECS",
+                MAX_LEASE_WAIT_SECS,
+                "integer",
+            )?,
+            "SNATCH_LEASE_WAIT_SECS",
+            MIN_LEASE_WAIT_SECS,
+            MAX_LEASE_WAIT_SECS,
+        )?;
+        let heartbeat_secs = checked_range(
+            heartbeat_secs,
+            "SNATCH_HEARTBEAT_SECS",
+            MIN_HEARTBEAT_SECS,
+            MAX_HEARTBEAT_SECS,
+        )?;
+        let heartbeat = Duration::from_secs(heartbeat_secs);
+        let stale_secs = checked_range(
+            env_num(&get, "SNATCH_STALE_SECS", 180, "integer")?,
+            "SNATCH_STALE_SECS",
+            MIN_STALE_SECS,
+            MAX_STALE_SECS,
+        )?;
+        let concurrency = checked_range_usize(
+            env_num::<usize>(&get, "SNATCH_CONCURRENCY", 2, "integer")?,
+            "SNATCH_CONCURRENCY",
+            MIN_CONCURRENCY,
+            MAX_CONCURRENCY,
+        )?;
+        let arr_timeout_secs = checked_range(
+            arr_timeout_secs,
+            "SNATCH_ARR_TIMEOUT_SECS",
+            MIN_ARR_TIMEOUT_SECS,
+            MAX_ARR_TIMEOUT_SECS,
+        )?;
         let stale = stale_limit(stale_secs, heartbeat, lease_wait_secs)?;
         Ok(Self {
             api_grpc: env(&get, "SNATCH_API_GRPC")
                 .unwrap_or_else(|| "http://127.0.0.1:9090".to_owned()),
             token: env(&get, "SNATCH_WORKER_TOKEN"),
             worker_id,
-            concurrency: env_num::<usize>(&get, "SNATCH_CONCURRENCY", 2, "integer")?.clamp(1, 16),
+            concurrency,
             lease_wait_secs,
             heartbeat,
-            arr_timeout: Duration::from_secs(arr_timeout_secs.clamp(5, 120)),
+            arr_timeout: Duration::from_secs(arr_timeout_secs),
             http_addr: env_num(
                 &get,
                 "SNATCH_HTTP_ADDR",
@@ -136,6 +241,8 @@ fn stale_limit(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use std::fs;
+    use std::path::Path;
 
     fn env_lookup(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
         let map: HashMap<String, String> = pairs
@@ -147,6 +254,11 @@ mod tests {
 
     fn from_vars(pairs: &[(&str, &str)]) -> Result<Config, ConfigError> {
         Config::from_lookup(env_lookup(pairs))
+    }
+
+    fn from_numeric_var(name: &'static str, value: u64) -> Result<Config, ConfigError> {
+        let value = value.to_string();
+        Config::from_lookup(|requested| (requested == name).then(|| value.clone()))
     }
 
     #[test]
@@ -255,34 +367,92 @@ mod tests {
     }
 
     #[test]
-    fn boundary_clamps() {
-        let c_low = from_vars(&[
-            ("SNATCH_CONCURRENCY", "0"),
-            ("SNATCH_HEARTBEAT_SECS", "4"),
-            ("SNATCH_LEASE_WAIT_SECS", "0"),
-            ("SNATCH_ARR_TIMEOUT_SECS", "4"),
-            ("SNATCH_STALE_SECS", "59"),
-        ])
-        .expect("low boundary clamps");
-        assert_eq!(c_low.concurrency, 1);
-        assert_eq!(c_low.heartbeat, Duration::from_secs(5));
-        assert_eq!(c_low.lease_wait_secs, 1);
-        assert_eq!(c_low.arr_timeout, Duration::from_secs(5));
-        assert_eq!(c_low.stale, Duration::from_secs(60));
+    fn numeric_ranges_accept_boundaries_and_reject_outside_values() {
+        let cases = [
+            (
+                "SNATCH_CONCURRENCY",
+                u64::try_from(MIN_CONCURRENCY).expect("concurrency minimum fits u64"),
+                u64::try_from(MAX_CONCURRENCY).expect("concurrency maximum fits u64"),
+            ),
+            (
+                "SNATCH_HEARTBEAT_SECS",
+                MIN_HEARTBEAT_SECS,
+                MAX_HEARTBEAT_SECS,
+            ),
+            (
+                "SNATCH_LEASE_WAIT_SECS",
+                u64::from(MIN_LEASE_WAIT_SECS),
+                u64::from(MAX_LEASE_WAIT_SECS),
+            ),
+            (
+                "SNATCH_ARR_TIMEOUT_SECS",
+                MIN_ARR_TIMEOUT_SECS,
+                MAX_ARR_TIMEOUT_SECS,
+            ),
+            ("SNATCH_STALE_SECS", MIN_STALE_SECS, MAX_STALE_SECS),
+        ];
+        for (name, min, max) in cases {
+            assert!(from_numeric_var(name, min).is_ok(), "{name} minimum");
+            assert!(from_numeric_var(name, max).is_ok(), "{name} maximum");
 
-        let c_high = from_vars(&[
-            ("SNATCH_CONCURRENCY", "17"),
-            ("SNATCH_HEARTBEAT_SECS", "61"),
-            ("SNATCH_LEASE_WAIT_SECS", "31"),
-            ("SNATCH_ARR_TIMEOUT_SECS", "121"),
-            ("SNATCH_STALE_SECS", "3601"),
-        ])
-        .expect("high boundary clamps");
-        assert_eq!(c_high.concurrency, 16);
-        assert_eq!(c_high.heartbeat, Duration::from_secs(60));
-        assert_eq!(c_high.lease_wait_secs, 30);
-        assert_eq!(c_high.arr_timeout, Duration::from_secs(120));
-        assert_eq!(c_high.stale, Duration::from_secs(3600));
+            for value in [min - 1, max + 1] {
+                let err = from_numeric_var(name, value).expect_err("out-of-range value");
+                assert!(matches!(
+                    err,
+                    ConfigError::OutOfRange {
+                        name: actual_name,
+                        value: actual_value,
+                        min: actual_min,
+                        max: actual_max,
+                    } if actual_name == name
+                        && actual_value == value
+                        && actual_min == min
+                        && actual_max == max
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn helm_worker_ranges_match_worker_ranges() {
+        let schema_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../deploy/helm/snatcharr/values.schema.json");
+        let schema: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(&schema_path).expect("read Helm values schema"),
+        )
+        .expect("parse Helm values schema");
+        let cases = [
+            (
+                "concurrency",
+                u64::try_from(MIN_CONCURRENCY).expect("concurrency minimum fits u64"),
+                u64::try_from(MAX_CONCURRENCY).expect("concurrency maximum fits u64"),
+            ),
+            ("heartbeatSecs", MIN_HEARTBEAT_SECS, MAX_HEARTBEAT_SECS),
+            (
+                "leaseWaitSecs",
+                u64::from(MIN_LEASE_WAIT_SECS),
+                u64::from(MAX_LEASE_WAIT_SECS),
+            ),
+            ("arrTimeoutSecs", MIN_ARR_TIMEOUT_SECS, MAX_ARR_TIMEOUT_SECS),
+            ("staleSecs", MIN_STALE_SECS, MAX_STALE_SECS),
+        ];
+        for (field, min, max) in cases {
+            let property = schema
+                .get("properties")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|properties| properties.get("worker"))
+                .and_then(serde_json::Value::as_object)
+                .and_then(|worker| worker.get("allOf"))
+                .and_then(serde_json::Value::as_array)
+                .and_then(|all_of| all_of.get(1))
+                .and_then(serde_json::Value::as_object)
+                .and_then(|schema| schema.get("properties"))
+                .and_then(serde_json::Value::as_object)
+                .and_then(|properties| properties.get(field))
+                .expect("worker field in Helm values schema");
+            assert_eq!(property["minimum"].as_u64(), Some(min), "{field} minimum");
+            assert_eq!(property["maximum"].as_u64(), Some(max), "{field} maximum");
+        }
     }
 
     #[test]

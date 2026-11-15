@@ -385,6 +385,99 @@ paths:
 	}
 }
 
+func TestGeneratePathItemOperations(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		yaml string
+		want []string
+	}{
+		{
+			name: "get remains the only operation",
+			yaml: `
+paths:
+  /widgets:
+    get:
+      operationId: getWidget
+`,
+			want: []string{"getWidget"},
+		},
+		{
+			name: "head and options are operations",
+			yaml: `
+paths:
+  /widgets:
+    options:
+      operationId: optionsWidget
+    head:
+      operationId: headWidget
+`,
+			want: []string{"optionsWidget", "headWidget"},
+		},
+		{
+			name: "all eight operations are emitted",
+			yaml: `
+paths:
+  /widgets:
+    get:
+      operationId: getWidget
+    put:
+      operationId: putWidget
+    post:
+      operationId: postWidget
+    delete:
+      operationId: deleteWidget
+    options:
+      operationId: optionsWidget
+    head:
+      operationId: headWidget
+    patch:
+      operationId: patchWidget
+    trace:
+      operationId: traceWidget
+`,
+			want: []string{
+				"getWidget", "putWidget", "postWidget", "deleteWidget",
+				"optionsWidget", "headWidget", "patchWidget", "traceWidget",
+			},
+		},
+		{
+			name: "path item metadata is not an operation",
+			yaml: `
+paths:
+  /widgets:
+    parameters: []
+    summary: Widget operations
+    servers: []
+    $ref: "#/components/pathItems/Widget"
+`,
+			want: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			out, err := Generate([]byte(tc.yaml))
+			if err != nil {
+				t.Fatalf("Generate: %v", err)
+			}
+			var generated map[string]json.RawMessage
+			if err := json.Unmarshal(out, &generated); err != nil {
+				t.Fatalf("unmarshal generated JSON: %v", err)
+			}
+			if len(generated) != len(tc.want) {
+				t.Fatalf("generated %d schemas, want %d: %v", len(generated), len(tc.want), generated)
+			}
+			for _, operationID := range tc.want {
+				if _, ok := generated[operationID]; !ok {
+					t.Errorf("missing operation %q", operationID)
+				}
+			}
+		})
+	}
+}
+
 func TestGenerateDeterministic(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join("..", "..", "api", "openapi", "openapi.yaml")
