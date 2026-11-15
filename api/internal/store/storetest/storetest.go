@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package storetest gives integration tests a migrated Postgres database each.
+// Each test binary runs its own testcontainers reaper session.
 //
 // One container serves a whole test binary: Main (called from the package's TestMain) starts
 // it via golusoris testutil/pg, applies every migration once to a template database and terminates
@@ -18,6 +19,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -50,6 +52,10 @@ const (
 //
 //	func TestMain(m *testing.M) { os.Exit(storetest.Main(m)) }
 func Main(m *testing.M) int {
+	if err := ownReaperSession(os.LookupEnv, os.Setenv, newReaperSessionID); err != nil {
+		fmt.Fprintf(os.Stderr, "storetest: %v\n", err)
+		return 1
+	}
 	migrate := func(_ context.Context, dsn string) error {
 		return migrateTemplate(dsn)
 	}
@@ -58,6 +64,23 @@ func Main(m *testing.M) int {
 		Database:    templateName,
 		Customizers: []testcontainers.ContainerCustomizer{QuickInit()},
 	})
+}
+
+const reaperSessionEnv = "TESTCONTAINERS_SESSION_ID"
+
+func newReaperSessionID() string { return uuid.NewString() }
+
+// ownReaperSession prevents test binaries from sharing a reaper name: one shared session means
+// one shared reaper container, so concurrent startup can hit a container-name conflict. Revisit
+// this workaround when a testcontainers-go release carries upstream PR 3868.
+func ownReaperSession(lookup func(string) (string, bool), set func(string, string) error, newID func() string) error {
+	if sessionID, ok := lookup(reaperSessionEnv); ok && sessionID != "" {
+		return nil
+	}
+	if err := set(reaperSessionEnv, newID()); err != nil {
+		return fmt.Errorf("set %s: %w", reaperSessionEnv, err)
+	}
+	return nil
 }
 
 // QuickInit makes initdb skip its final sync of the new data directory. A test database needs
