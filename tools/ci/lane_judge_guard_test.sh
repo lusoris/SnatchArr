@@ -601,3 +601,30 @@ Path(sys.argv[3]).write_text(text.replace(gofmt_block + guard_block, guard_block
 PY
 expect_wiring_mutant mutant-wiring-no-guard "$work/no-guard.yml" 'missing lane-judge-guard job'
 expect_wiring_mutant mutant-wiring-order "$work/swapped.yml" 'after gofmt'
+
+# no_make_guard FILE: refuse a Makefile recipe line that runs the live guard. The guard reads the
+# worktree's own lane marker and refuses while a lane runs even with nothing staged, so only the
+# lefthook pre-commit job may run it; the recipe keeps the fixture test (case 12).
+no_make_guard() {
+    if grep -nE '^[[:space:]]+[^#[:space:]][^#]*tools/ci/lane_judge_guard\.py' "$1"; then
+        echo "FAIL case-12-make-wiring: $1 runs the live guard; only the pre-commit hook may" >&2
+        return 1
+    fi
+}
+
+# expect_make_wiring NAME RC NEEDLE FILE: assert no_make_guard status and diagnostic for FILE.
+expect_make_wiring() {
+    local name=$1 want=$2 needle=$3 file=$4 out status=0
+    out=$(no_make_guard "$file" 2>&1) || status=$?
+    check_case "$name" "$want" "$status" "$needle" "$out"
+    echo "ok   $name (rc=$status)"
+}
+
+expect_make_wiring case-12-make-wiring 0 '' "${LANE_JUDGE_MAKEFILE:-$root/Makefile}"
+printf '%s\n' 'workflows-verify:' '	bash tools/ci/lane_judge_guard_test.sh' \
+    '	python3 -I tools/ci/lane_judge_guard.py' > "$work/live-guard.mk"
+expect_make_wiring mutant-make-live-guard 1 'FAIL case-12-make-wiring:' "$work/live-guard.mk"
+printf '%s\n' 'workflows-verify:' '	bash tools/ci/lane_judge_guard_test.sh' \
+    '	# python3 -I tools/ci/lane_judge_guard.py' > "$work/commented-guard.mk"
+expect_make_wiring make-commented-guard 0 '' "$work/commented-guard.mk"
+echo 'mutant: live guard in a Makefile recipe fails case 12 -> wiring test bites'
