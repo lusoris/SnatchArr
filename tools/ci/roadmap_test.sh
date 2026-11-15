@@ -19,9 +19,10 @@
 #   4. Pull request body: a new pull request renders .github/pull_request_template.md with the
 #      Description summary, the Conventional Commits item ticked and bot notes appended; an open
 #      pull request whose body lacks `## Description` is healed via `gh pr edit` while one that
-#      already carries `## Description` is not edited (and a failed view or edit fails the run);
-#      a missing template fails before any write, and a planted `pr create --body` mutant is
-#      caught by the body check.
+#      already carries `## Description` (LF or CRLF) is not edited (and a failed view or edit
+#      fails the run); a missing template fails before any write (including closing a stale open
+#      pull request, while an unchanged doc with no open pull request still exits 0), and planted
+#      `pr create --body`, close-without-template and CRLF-unstripped mutants are caught.
 #
 #   tools/ci/roadmap_test.sh
 #
@@ -198,6 +199,17 @@ else
   fail "planted stale count, pull request open with Description heading"; cat "$WORK/update_described.out"
 fi
 
+crlf_body="$(printf '%s\n' "$described_body" | awk '{ printf "%s\r\n", $0 }')"
+if refresh update_crlf 0 STUB_BRANCH=1 STUB_OPEN=42 STUB_PR_BODY="$crlf_body" \
+  && called update_crlf "-X PATCH ${bot_ref}-f sha=newsha" \
+  && ! called update_crlf "${bot_ref}-f sha=$base" \
+  && called update_crlf "^pr view 42 --repo o/r --json body --jq \.body" \
+  && ! called update_crlf "^pr edit" && ! called update_crlf "^pr create"; then
+  pass "planted stale count, open pull request with CRLF Description heading: bot branch moved, body left untouched (no pr edit)"
+else
+  fail "planted stale count, pull request open with CRLF Description heading"; cat "$WORK/update_crlf.out"
+fi
+
 if refresh viewfail 1 STUB_BRANCH=1 STUB_OPEN=42 STUB_FAIL_VIEW=1 \
   && ! called viewfail "^pr edit" \
   && refresh editfail 1 STUB_BRANCH=1 STUB_OPEN=42 STUB_PR_BODY="one line" STUB_FAIL_EDIT=1; then
@@ -245,6 +257,8 @@ mutant() {
   ! cmp -s "$HERE/roadmap_refresh_pr.sh" "$mutants/tools/ci/$1.sh"
 }
 no_template_copy='s|^# Proposes a refreshed|# Scratch copy without template: proposes a refreshed|'
+skip_close_template='/^    need_template$/d'
+keep_cr="s/tr -d '\\\\r' | //"
 # shellcheck disable=SC2016 # sed programs: literal $title, $root and $bodyfile text
 drop_trailer='s|^message=.*Signed-off-by.*$|message="$title"|'
 # shellcheck disable=SC2016 # same: literal sed program text
@@ -259,6 +273,34 @@ if mutant notemplate "$no_template_copy" \
 else
   fail "missing pull request template"; [ ! -f "$WORK/notemplate.out" ] || cat "$WORK/notemplate.out"
 fi
+
+git -C "$repo" checkout -q -- docs/roadmap.md
+
+if refresh_with "$mutants/tools/ci/notemplate.sh" notemplate_open 1 STUB_OPEN=42 \
+  && ! called notemplate_open "^pr close" && [ "$(writes notemplate_open)" -eq 0 ] \
+  && grep -q "roadmap_refresh:.*pull_request_template.md" "$WORK/notemplate_open.out"; then
+  pass "unchanged doc, bot pull request open, missing template: refused before closing"
+else
+  fail "unchanged doc, bot pull request open, missing template"; cat "$WORK/notemplate_open.out"
+fi
+
+if refresh_with "$mutants/tools/ci/notemplate.sh" notemplate_unchanged 0 \
+  && [ "$(writes notemplate_unchanged)" -eq 0 ]; then
+  pass "unchanged doc, no pull request, missing template: exits 0 without write"
+else
+  fail "unchanged doc, no pull request, missing template"; cat "$WORK/notemplate_unchanged.out"
+fi
+
+if mutant noclosecheck "$skip_close_template" \
+  && refresh_with "$mutants/tools/ci/noclosecheck.sh" noclosecheck 0 STUB_OPEN=42 \
+  && called noclosecheck "^pr close 42" && [ "$(writes noclosecheck)" -eq 1 ]; then
+  pass "planted stale close without need_template: closes the pull request when the template is missing, caught by the close check"
+else
+  fail "planted stale close without need_template went unnoticed"
+  if [ -f "$WORK/noclosecheck.out" ]; then cat "$WORK/noclosecheck.out"; fi
+fi
+
+cp "$WORK/stale" "$repo/docs/roadmap.md"
 
 mkdir -p "$mutants/.github"
 cp "$ROOT/.github/pull_request_template.md" "$mutants/.github/"
@@ -286,6 +328,16 @@ if mutant rawbody "$raw_body" \
 else
   fail "planted pr create with --body instead of --body-file went unnoticed"
   [ ! -f "$WORK/rawbody.out" ] || cat "$WORK/rawbody.out"
+fi
+
+if mutant keepcr "$keep_cr" \
+  && refresh_with "$mutants/tools/ci/keepcr.sh" keepcr 0 \
+    STUB_BRANCH=1 STUB_OPEN=42 STUB_PR_BODY="$crlf_body" \
+  && called keepcr "^pr edit 42 --repo o/r --body-file "; then
+  pass "planted open pull request check without CR strip: overwrites a CRLF body via pr edit, caught by the CRLF check"
+else
+  fail "planted open pull request check without CR strip went unnoticed"
+  if [ -f "$WORK/keepcr.out" ]; then cat "$WORK/keepcr.out"; fi
 fi
 
 if refresh foreign 1 STUB_AUTHOR=someone@example.invalid && called foreign "-X DELETE $tmp_ref" \

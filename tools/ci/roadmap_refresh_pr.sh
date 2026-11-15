@@ -63,13 +63,18 @@ send() {
   fi
 }
 
-# pr_body writes the pull request body for $doc from .github/pull_request_template.md to $1.
-pr_body() {
+# need_template sets template to .github/pull_request_template.md and exits 1 when it is missing.
+need_template() {
   template="$root/.github/pull_request_template.md"
   if [ ! -f "$template" ]; then
     echo "roadmap_refresh: pull request template $template is missing" >&2
     exit 1
   fi
+}
+
+# pr_body writes the pull request body for $doc from .github/pull_request_template.md to $1.
+pr_body() {
+  need_template
   DOC_PATH="$doc" awk '
     BEGIN { doc = ENVIRON["DOC_PATH"] }
     /^## / { in_desc = ($0 == "## Description") }
@@ -93,6 +98,7 @@ open="$(gh api "repos/$repo/pulls?head=${repo%%/*}:$branch&base=$base_branch&sta
 
 if git diff --quiet -- "$doc"; then
   if [ -n "$open" ]; then
+    need_template
     send pr close "$open" --repo "$repo" \
       --comment "The milestone table on $base_branch matches the open milestones again; this refresh is no longer needed." \
       >/dev/null || exit 1
@@ -158,7 +164,7 @@ drop_tmp || exit 1
 
 if [ -n "$open" ]; then
   open_body="$(gh pr view "$open" --repo "$repo" --json body --jq .body)" || exit 1
-  if ! printf '%s\n' "$open_body" | grep -qxF '## Description'; then
+  if ! printf '%s\n' "$open_body" | tr -d '\r' | grep -qxF '## Description'; then
     send pr edit "$open" --repo "$repo" --body-file "$bodyfile" >/dev/null || exit 1
   fi
   echo "roadmap_refresh: branch $branch updated, pull request #$open already open"
