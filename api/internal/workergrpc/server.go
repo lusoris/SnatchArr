@@ -21,6 +21,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
@@ -32,6 +33,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 // Bounds (HISS-02).
@@ -44,7 +46,6 @@ const (
 	maxEventsPerStream = 10_000
 	maxSearchedPerRun  = 5_000
 	maxBudgetItems     = 512
-	userAgent          = "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)"
 	// stoppingMessage goes out with Unavailable once the control plane shuts down.
 	stoppingMessage = "control plane is shutting down"
 )
@@ -54,32 +55,38 @@ type Pacer interface {
 	PaceFactor(ctx context.Context, instanceID uuid.UUID) (float64, error)
 }
 
-// Options are the optional collaborators.
+// Options are the dependencies supplied by the application graph.
 type Options struct {
 	fx.In
 	Pacer Pacer `optional:"true"`
 	// Logs takes the records workers send with ReportLogs; without it they are discarded.
 	Logs *logring.Ring `optional:"true"`
+	// UserAgent resolves the identity sent to workers for their outbound requests.
+	UserAgent useragent.Provider
+	// Info provides the build version used by the User-Agent fallback.
+	Info buildinfo.Info
 }
 
 // Server implements snatcharrv1.WorkerServiceServer.
 type Server struct {
 	snatcharrv1.UnimplementedWorkerServiceServer
-	runs      *snatch.Runs
-	workers   *snatch.Workers
-	budget    *snatch.Budget
-	memory    *snatch.Memory
-	rec       *snatch.Recorder
-	planner   *snatch.Planner
-	instances *instances.Service
-	policies  *policies.Service
-	settings  *settings.Service
-	seerr     *seerr.Service
-	pacer     Pacer
-	logs      *logring.Ring
-	clk       clock.Clock
-	logger    *slog.Logger
-	m         *metrics.Metrics
+	runs              *snatch.Runs
+	workers           *snatch.Workers
+	budget            *snatch.Budget
+	memory            *snatch.Memory
+	rec               *snatch.Recorder
+	planner           *snatch.Planner
+	instances         *instances.Service
+	policies          *policies.Service
+	settings          *settings.Service
+	seerr             *seerr.Service
+	pacer             Pacer
+	logs              *logring.Ring
+	userAgentProvider useragent.Provider
+	info              buildinfo.Info
+	clk               clock.Clock
+	logger            *slog.Logger
+	m                 *metrics.Metrics
 	// line orders the LeaseRun calls that wait for a run.
 	line leaseLine
 	// stopping is closed by Shutdown.
@@ -95,9 +102,17 @@ func New(runs *snatch.Runs, workers *snatch.Workers, budget *snatch.Budget, memo
 	m.WorkerEventTypes(events.EventTypes()...)
 	return &Server{
 		runs: runs, workers: workers, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
-		settings: cfg, seerr: requests, pacer: opts.Pacer, logs: opts.Logs, clk: clk, logger: logger, m: m,
+		settings: cfg, seerr: requests, pacer: opts.Pacer, logs: opts.Logs, userAgentProvider: opts.UserAgent, info: opts.Info,
+		clk: clk, logger: logger, m: m,
 		stopping: make(chan struct{}),
 	}
+}
+
+func (s *Server) userAgent(ctx context.Context) string {
+	if s.userAgentProvider != nil {
+		return s.userAgentProvider.Current(ctx)
+	}
+	return useragent.Default(s.info)
 }
 
 // Shutdown ends every waiting LeaseRun with Unavailable and has later ones answer the same,
@@ -246,7 +261,7 @@ func (s *Server) leaseResponse(ctx context.Context, run domain.Run) (*snatcharrv
 		ApiKey:           creds.APIKey,
 		Policy:           pol,
 		LeaseExpiresUnix: expires,
-		UserAgent:        userAgent,
+		UserAgent:        s.userAgent(ctx),
 		FocusEntityId:    deref64(run.FocusEntityID),
 		FocusGroupId:     deref64(run.FocusGroupID),
 		DryRun:           run.DryRun,
