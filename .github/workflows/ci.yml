@@ -167,10 +167,9 @@ jobs:
         run: sh tools/ci/semgrep_scan_test.sh
       - name: Replay the rule fixtures, then scan the tracked Go files
         # No rule pack is fetched from the registry; the fixtures sit in tools/ci/semgrep/testdata.
-        env:
-          SEMGREP_IMAGE: semgrep/semgrep:1.180.0@sha256:529ee8a277ec8adc5b534d7c74eea0a47e9de21d62852b6ba7ac6ba9566845c3
         run: |
           set -euo pipefail
+          . tools/ci/tool-versions.env
           docker pull --quiet "$SEMGREP_IMAGE"
           python3 -I tools/ci/semgrep_scan.py --image "$SEMGREP_IMAGE"
       - name: Install the pinned Codacy analysis CLI

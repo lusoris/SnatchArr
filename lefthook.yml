@@ -25,11 +25,19 @@ agent-checkpoint-stop:
         --event stop --json --marker
 pre-commit:
   parallel: true
+  jobs:
+    - name: format-then-guard
+      group:
+        piped: true
+        jobs:
+          - name: gofmt
+            glob: "*.go"
+            run: gofmt -w {staged_files}
+            stage_fixed: true
+          - name: lane-judge-guard
+            # The guard must read the index being recorded (option -a, path-limited), which git passes only in GIT_INDEX_FILE.
+            run: sh .config/lefthook/python.sh --keep-index -I tools/ci/lane_judge_guard.py
   commands:
-    gofmt:
-      glob: "*.go"
-      run: gofmt -w {staged_files}
-      stage_fixed: true
     govet:
       glob: "*.go"
       run: >-
@@ -106,3 +114,12 @@ pre-push:
         - "tools/ci/codacy_opengrep/*"
         - "tools/ci/tool-versions.env"
       run: make tools-opengrep
+    semgrep:
+      # Own Semgrep rules (.semgrep.yml), only when the push touches what they scan.
+      glob:
+        - "*.go"
+        - ".semgrep.yml"
+        - "tools/ci/semgrep/**"
+        - "tools/ci/semgrep_scan.py"
+        - "tools/ci/tool-versions.env"
+      run: make semgrep-scan

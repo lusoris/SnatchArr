@@ -50,14 +50,14 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live arr-pushtitle-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint tools-opengrep release-e2e-check release-dogfood-check release-closes-check secret-scan py-lint docs-verify licences licences-check logos logos-check \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live arr-pushtitle-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint tools-opengrep release-e2e-check release-dogfood-check release-closes-check semgrep-scan secret-scan py-lint docs-verify licences licences-check logos logos-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check roadmap-check
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
 
-verify-all: governance-verify hooks-verify workflows-verify secret-scan py-lint docs-verify proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify licences-check logos-check roadmap-check ## Every gate (praetor universal verification)
+verify-all: governance-verify hooks-verify workflows-verify semgrep-scan secret-scan py-lint docs-verify proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify licences-check logos-check roadmap-check ## Every gate (praetor universal verification)
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
@@ -660,6 +660,15 @@ hooks-verify: ## Commit-message policy and pushed-range scan against planted cas
 	sh .config/hooks/commit-msg_test.sh
 	sh tools/ci/prepush_secret_scan_test.sh
 
+semgrep-scan: ## Own Semgrep rules (.semgrep.yml) in the pinned image, rule fixtures replayed first
+	. tools/ci/tool-versions.env
+	if ! command -v docker >/dev/null 2>&1; then
+	  echo "semgrep-scan: skipped: docker is not on PATH"
+	  exit 0
+	fi
+	docker pull --quiet "$$SEMGREP_IMAGE"
+	python3 -I tools/ci/semgrep_scan.py --image "$$SEMGREP_IMAGE"
+
 secret-scan: ## gitleaks over every local ref, as CI job secret-scan (pinned release, cached in .cache/)
 	sh tools/ci/gitleaks_scan.sh .cache/gitleaks
 
@@ -688,7 +697,7 @@ roadmap-check: ## docs/roadmap.md milestone table shape (offline) and the schedu
 	python3 -I tools/ci/roadmap_render.py --check-shape
 	sh tools/ci/roadmap_test.sh
 
-workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons, the devcontainer engine pin, one digest per image tag, Renovate release-age and preset-closure coverage, and the release pull request body, against their cases
+workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons, the devcontainer engine pin, lane judge edits, one digest per image tag, Renovate release-age and preset-closure coverage, and the release pull request body, against their cases
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/squash_merge_test.sh
@@ -709,6 +718,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/download_retry_check.py
 	bash tools/ci/engine_pin_check_test.sh
 	python3 -I tools/ci/engine_pin_check.py
+	bash tools/ci/lane_judge_guard_test.sh
 	bash tools/ci/image_pin_check_test.sh
 	python3 -I tools/ci/image_pin_check.py
 	python3 -I tools/ci/image_pin_check.py --index

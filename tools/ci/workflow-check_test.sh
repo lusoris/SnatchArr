@@ -10,7 +10,7 @@
 # a zizmor requirements file without hashes, a go install at @latest, at @main or without a
 # package, and azure/setup-helm without a version, at latest, or with the version in the next
 # step, and a ${{ }} expression expanded into a run script (accepted: setup-helm pinned to a
-# release). Last: Renovate reads both workflow-gate image
+# release). Last: Renovate reads all three workflow-gate image
 # pins, zizmor-requirements.txt, every go install pin and every setup-helm version in the
 # workflows, and neither @latest, a variable nor a helm version of latest.
 # Adapted from github.com/golusoris/goenvoy.
@@ -262,9 +262,12 @@ renovate_reads() {
 . "$HERE/tool-versions.env"
 # Print the depName, version and digest a pinned image reference yields, tab separated.
 pin_capture() {
-  local image="$1" without_registry dep_name version digest
-  without_registry="${image#*/}"
-  dep_name="${without_registry%%:*}"
+  local image="$1" without_tag dep_name version digest
+  without_tag="${image%%:*}"
+  case "$without_tag" in
+    */*/*) dep_name="${without_tag#*/}" ;;
+    *) dep_name="$without_tag" ;;
+  esac
   version="${image#*:}"
   version="${version%%@*}"
   digest="${image##*@}"
@@ -273,6 +276,7 @@ pin_capture() {
 EXPECTED_CAPTURES="$(
   pin_capture "$ACTIONLINT_IMAGE"
   pin_capture "$RENOVATE_IMAGE"
+  pin_capture "$SEMGREP_IMAGE"
 )"
 EXPECTED_CAPTURES="$(printf '%s\n' "$EXPECTED_CAPTURES" | sort)"
 
@@ -282,19 +286,21 @@ renovate_captures_match() {
 }
 
 if ! renovate_captures_match "$HERE/tool-versions.env"; then
-  echo "FAIL renovate: renovate.json does not capture both image pins exactly" >&2
+  echo "FAIL renovate: renovate.json does not capture all three image pins exactly" >&2
   exit 1
 fi
-echo "ok   renovate: both image pins and all named captures are exact"
-if [ "$(renovate_reads "$WORK/copy/tools/ci/tool-versions.env" | wc -l)" != 1 ]; then
+echo "ok   renovate: all three image pins and all named captures are exact"
+if [ "$(renovate_reads "$WORK/copy/tools/ci/tool-versions.env" | wc -l)" != 2 ]; then
   echo "FAIL renovate: the pin without a digest is still read" >&2
   exit 1
 fi
-sed 's/^\(RENOVATE_IMAGE=.*\)@sha256:.*$/\1/' "$HERE/tool-versions.env" > "$WORK/copy-renovate-nodigest"
-if [ "$(renovate_reads "$WORK/copy-renovate-nodigest" | wc -l)" != 1 ]; then
-  echo "FAIL renovate: the renovate pin without a digest is still read" >&2
-  exit 1
-fi
+for pin_key in RENOVATE_IMAGE SEMGREP_IMAGE; do
+  sed "s/^\\(${pin_key}=.*\\)@sha256:.*$/\\1/" "$HERE/tool-versions.env" > "$WORK/copy-${pin_key}-nodigest"
+  if [ "$(renovate_reads "$WORK/copy-${pin_key}-nodigest" | wc -l)" != 2 ]; then
+    echo "FAIL renovate: the ${pin_key} pin without a digest is still read" >&2
+    exit 1
+  fi
+done
 echo "ok   renovate: a pin without a digest is not read"
 
 cp "$HERE/../../renovate.json" "$WORK/renovate-wrong-depname.json"
@@ -378,4 +384,4 @@ if jq -e -n --arg file "tools/ci/zizmor.txt" --arg pat "$PIP_PATTERN" '$file | t
 fi
 echo "ok   renovate: pip_requirements reads tools/ci/zizmor-requirements.txt and ignores zizmor.txt"
 
-echo "workflow check: 7 accepted, 19 refused; Renovate reads 2 image pins, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
+echo "workflow check: 7 accepted, 19 refused; Renovate reads 3 image pins, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
