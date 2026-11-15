@@ -16,10 +16,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 const (
@@ -44,9 +46,10 @@ type goenvoySeasonWriter struct {
 	opts arrclient.Options
 }
 
-// NewGoenvoySeasonWriter returns a SeasonWriter backed by goenvoy.
-func NewGoenvoySeasonWriter(inst *instances.Service) SeasonWriter {
-	return NewSeasonWriter(inst, arrclient.DefaultOptions())
+func newSeasonWriterWithSource(inst *instances.Service, info buildinfo.Info, ua *useragent.Source) SeasonWriter {
+	o := arrclient.DefaultOptionsFor(info)
+	o.UserAgentSource = ua
+	return NewSeasonWriter(inst, o)
 }
 
 // NewSeasonWriter constructs a SeasonWriter with custom options.

@@ -19,10 +19,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 const (
@@ -47,9 +49,10 @@ type goenvoySeriesReader struct {
 	opts arrclient.Options
 }
 
-// NewGoenvoySeriesReader returns a SeriesReader backed by goenvoy.
-func NewGoenvoySeriesReader(inst *instances.Service) SeriesReader {
-	return NewSeriesReader(inst, arrclient.DefaultOptions())
+func newSeriesReaderWithSource(inst *instances.Service, info buildinfo.Info, ua *useragent.Source) SeriesReader {
+	o := arrclient.DefaultOptionsFor(info)
+	o.UserAgentSource = ua
+	return NewSeriesReader(inst, o)
 }
 
 // NewSeriesReader constructs a SeriesReader with custom options.

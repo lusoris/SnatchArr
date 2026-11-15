@@ -13,8 +13,10 @@ import (
 	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 // SyncInterval is how often every enabled link is refreshed.
@@ -33,9 +35,9 @@ var Module = fx.Module("snatcharr.seerr",
 	fx.Provide(
 		New,
 		NewTicker,
-		func() seerrclient.Client {
-			o := arrclient.DefaultOptions()
-			return seerrclient.New(o.Timeout, o.UserAgent)
+		func(info buildinfo.Info, ua *useragent.Source) seerrclient.Client {
+			o := arrclient.DefaultOptionsFor(info)
+			return seerrclient.NewWithSource(o.Timeout, o.UserAgent, ua)
 		},
 		func(p *arrclient.GoenvoyProber) arrclient.Resolver { return p },
 	),

@@ -596,3 +596,40 @@ rules:
         - "*_test.go"
         - "api/internal/build/**"
     pattern: io.ReadAll($X.Body)
+
+  # ── HISS-19 · no empty buildinfo.Info literal ──────────────────────────────
+  # An empty buildinfo.Info{} resolves to version "dev", including in release
+  # builds. Take buildinfo.Info or useragent.Source from the fx graph instead.
+  - id: no-empty-buildinfo-literal
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Do not construct an empty buildinfo.Info{} outside tests: it resolves to
+      version "dev" in release builds. Take buildinfo.Info or useragent.Source
+      from fx instead.
+    paths:
+      include:
+        - "/api/**/*.go"
+      exclude:
+        - "*_test.go"
+    pattern: buildinfo.Info{}
+
+  # ── HISS-19 · no fixed SnatchArr/<version> User-Agent literal ──────────────
+  # Every built-in outbound User-Agent in non-test Go code comes from
+  # useragent.Default(info) so release builds never send a stale fixed version.
+  - id: no-fixed-user-agent-literal
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Do not hard-code a fixed "SnatchArr/<version>" User-Agent literal outside
+      tests. Derive the built-in identity from useragent.Default(info) instead.
+    paths:
+      include:
+        - "/api/**/*.go"
+      exclude:
+        - "*_test.go"
+    patterns:
+      - pattern: '"$STR"'
+      - metavariable-regex:
+          metavariable: $STR
+          regex: ^SnatchArr/[0-9]

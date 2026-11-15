@@ -18,6 +18,7 @@ import (
 	"github.com/golusoris/goenvoy/arr/v2"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -123,13 +124,42 @@ func TestDefaultOptions(t *testing.T) {
 	if opts.ImportTimeout != 120*time.Second {
 		t.Errorf("ImportTimeout = %v, want 120s", opts.ImportTimeout)
 	}
-	if opts.UserAgent != "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)" {
-		t.Errorf("UserAgent = %q, want SnatchArr default", opts.UserAgent)
+	if opts.UserAgent != "" {
+		t.Errorf("UserAgent = %q, want empty", opts.UserAgent)
+	}
+	if opts.DefaultUserAgent != "" {
+		t.Errorf("DefaultUserAgent = %q, want empty", opts.DefaultUserAgent)
+	}
+}
+
+func TestDefaultOptionsFor(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ version, want string }{
+		{"2.3.4", "SnatchArr/2.3.4 (+https://github.com/lusoris/SnatchArr)"},
+		{"", "SnatchArr/dev (+https://github.com/lusoris/SnatchArr)"},
+	} {
+		t.Run(tc.version, func(t *testing.T) {
+			t.Parallel()
+			opts := arrclient.DefaultOptionsFor(buildinfo.Info{Version: tc.version})
+			if opts.Timeout != 15*time.Second || opts.ImportTimeout != 120*time.Second {
+				t.Errorf("timeouts = %v / %v", opts.Timeout, opts.ImportTimeout)
+			}
+			if opts.UserAgent != tc.want {
+				t.Errorf("UserAgent = %q, want %q", opts.UserAgent, tc.want)
+			}
+			if opts.DefaultUserAgent != tc.want {
+				t.Errorf("DefaultUserAgent = %q, want %q", opts.DefaultUserAgent, tc.want)
+			}
+		})
 	}
 }
 
 func TestNewGoenvoyProberOptions(t *testing.T) {
 	t.Parallel()
+
+	forInfoCleared := arrclient.DefaultOptionsFor(buildinfo.Info{Version: "2.3.4"})
+	forInfoCleared.UserAgent = ""
 
 	tests := []struct {
 		name              string
@@ -146,18 +176,25 @@ func TestNewGoenvoyProberOptions(t *testing.T) {
 			wantUserAgent:     "CustomUA/1.0",
 		},
 		{
+			name:              "positive: empty user agent filled from DefaultOptionsFor",
+			in:                forInfoCleared,
+			wantTimeout:       15 * time.Second,
+			wantImportTimeout: 120 * time.Second,
+			wantUserAgent:     "SnatchArr/2.3.4 (+https://github.com/lusoris/SnatchArr)",
+		},
+		{
 			name:              "negative: zero values default",
 			in:                arrclient.Options{},
 			wantTimeout:       15 * time.Second,
 			wantImportTimeout: 120 * time.Second,
-			wantUserAgent:     "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)",
+			wantUserAgent:     "",
 		},
 		{
 			name:              "boundary: import timeout raised to timeout",
 			in:                arrclient.Options{Timeout: 30 * time.Second, ImportTimeout: 10 * time.Second},
 			wantTimeout:       30 * time.Second,
 			wantImportTimeout: 30 * time.Second,
-			wantUserAgent:     "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)",
+			wantUserAgent:     "",
 		},
 	}
 

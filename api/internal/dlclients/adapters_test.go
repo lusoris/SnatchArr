@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,13 +16,15 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 func observe(t *testing.T, kind domain.DownloadClientKind, baseURL, username, secret string) dlclients.Snapshot {
 	t.Helper()
-	g := dlclients.NewGoenvoy(clock.NewFake())
+	g := dlclients.NewGoenvoyWithSource(clock.NewFake(), buildinfo.Info{Version: "test"}, nil)
 	c := domain.DownloadClient{Kind: kind, Name: "c", BaseURL: baseURL, Username: username, Enabled: true}
 	return g.Snapshot(context.Background(), c, secret)
 }
@@ -291,6 +294,57 @@ func TestParseSABSpeed(t *testing.T) {
 	for in, want := range cases {
 		if got := dlclients.ParseSABSpeed(in); got != want {
 			t.Errorf("ParseSABSpeed(%q) = %d, want %d", in, got, want)
+		}
+	}
+}
+
+type settingsReader struct{ value string }
+
+func (r *settingsReader) Get(context.Context) (domain.Settings, error) {
+	return domain.Settings{UserAgent: r.value}, nil
+}
+
+func TestQbitUserAgentChange(t *testing.T) {
+	t.Parallel()
+	received := make(chan string, 8)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Get("User-Agent")
+		if r.URL.Path == "/api/v2/app/version" {
+			_, _ = w.Write([]byte("v5.2.1"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	r := &settingsReader{value: "first"}
+	clk := clock.NewFake()
+	info := buildinfo.Info{Version: "2.3.4"}
+	source := useragent.New(r, info, clk, slog.New(slog.DiscardHandler))
+	g := dlclients.NewGoenvoyWithSource(clk, info, source)
+	for _, value := range []string{"first", "changed"} {
+		r.value = value
+		source.Invalidate()
+		got := g.Snapshot(t.Context(), domain.DownloadClient{Kind: domain.ClientQBittorrent, BaseURL: srv.URL}, "")
+		if !got.Reachable {
+			t.Fatal(got.Error)
+		}
+		for range 2 {
+			if ua := <-received; ua != value {
+				t.Errorf("User-Agent = %q, want %q", ua, value)
+			}
+		}
+	}
+
+	staticOnly := dlclients.NewGoenvoyWithSource(clk, info, nil)
+	got := staticOnly.Snapshot(t.Context(), domain.DownloadClient{Kind: domain.ClientQBittorrent, BaseURL: srv.URL}, "")
+	if !got.Reachable {
+		t.Fatal(got.Error)
+	}
+	wantStatic := useragent.Default(info)
+	for range 2 {
+		if ua := <-received; ua != wantStatic {
+			t.Errorf("static User-Agent = %q, want %q", ua, wantStatic)
 		}
 	}
 }

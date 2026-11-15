@@ -145,7 +145,8 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	schedules := snatch.NewSchedules(st, clk, ids)
 	queueStore := queue.NewStore(st, clk)
 	queueSvc := queue.NewService(queueStore, queue.NewDBInstanceSource(st, enc), probe, clk, nil, nil, logger)
-	dlSnap := dlclients.NewGoenvoy(clk)
+	build := buildinfo.Info{Version: "0.1.0-test", Commit: "abc1234", Date: "2026-10-21"}
+	dlSnap := dlclients.NewGoenvoyWithSource(clk, build, nil)
 	dlSvc := dlclients.New(st, enc, clk, ids, dlSnap, probe, instSvc, logger)
 	seerrClient := seerrclient.New(5*time.Second, "SnatchArr-test")
 	seerrSvc := seerr.New(st, enc, clk, ids, seerrClient, probe, instSvc, runs, rec, logger)
@@ -154,7 +155,6 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	notifySvc := notify.NewService(st, notify.NewWebhookStore(st, enc), enc, clk, ids, logger)
 	cfg := config.Options{Profile: config.ProfileDev}
 	configarrSvc := configarr.New(cfg, instSvc, dlSvc, polSvc, queueStore, probe, clk, logger)
-	build := buildinfo.Info{Version: "0.1.0-test", Commit: "abc1234", Date: "2026-10-21"}
 	handlers := httpapi.NewHandlers(build, cfg, clk, authSvc, apiKeys, sessMgr, instSvc, polSvc, logger, httpapi.Deps{
 		Runs: runs, Rec: rec, Workers: snatch.NewWorkers(st, clk), Settings: settingsSvc,
 		Schedules: schedules, Memory: snatch.NewMemory(st, clk), Queue: queueStore, QueueSvc: queueSvc, Configarr: configarrSvc,

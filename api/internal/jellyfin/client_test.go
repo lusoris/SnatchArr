@@ -18,9 +18,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 func TestAdultAllowed(t *testing.T) {
@@ -484,9 +486,9 @@ func TestProvideAuthenticator_Disabled(t *testing.T) {
 	cfg := config.Default()
 	cfg.Jellyfin.Enabled = false
 
-	auth, err := jellyfin.ProvideAuthenticator(cfg, nil)
+	auth, err := jellyfin.ProvideAuthenticatorWithSource(cfg, buildinfo.Info{Version: "test"}, nil, nil)
 	if err != nil {
-		t.Fatalf("ProvideAuthenticator returned error: %v", err)
+		t.Fatalf("ProvideAuthenticatorWithSource returned error: %v", err)
 	}
 
 	ctx := t.Context()
@@ -528,13 +530,13 @@ func TestProvideAuthenticator_TokenTransportPolicy(t *testing.T) {
 			cfg.Jellyfin.APIKey = "svc-key"
 			cfg.Jellyfin.Timeout = 2 * time.Second
 
-			auth, err := jellyfin.ProvideAuthenticator(cfg, logger)
+			auth, err := jellyfin.ProvideAuthenticatorWithSource(cfg, buildinfo.Info{Version: "test"}, logger, nil)
 			if err != nil {
-				t.Fatalf("ProvideAuthenticator() error = %v", err)
+				t.Fatalf("ProvideAuthenticatorWithSource() error = %v", err)
 			}
 			cl, ok := auth.(*jellyfin.Client)
 			if !ok {
-				t.Fatalf("ProvideAuthenticator() = %T, want *jellyfin.Client", auth)
+				t.Fatalf("ProvideAuthenticatorWithSource() = %T, want *jellyfin.Client", auth)
 			}
 			if got := cl.AllowPlainHTTPToken(); got != tc.wantAllowPlain {
 				t.Fatalf("AllowPlainHTTPToken() = %v, want %v", got, tc.wantAllowPlain)
@@ -868,5 +870,61 @@ func testTokenRedirectHop(t *testing.T, token string, tc tokenRedirectHopCase) {
 	}
 	if err != nil || m.Name != tc.wantName || !strings.Contains(finalAuth, `Token="`+token+`"`) {
 		t.Fatalf("ByToken() = (%+v, %v), want %q with token authorization", m, err, tc.wantName)
+	}
+}
+
+type stubUAProvider struct {
+	ua atomic.Value
+}
+
+func (p *stubUAProvider) Current(context.Context) string {
+	v, _ := p.ua.Load().(string)
+	return v
+}
+
+func TestProvideAuthenticatorWithSource_UserAgent(t *testing.T) {
+	t.Parallel()
+
+	received := make(chan string, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("true"))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := config.Default()
+	cfg.Profile = config.ProfileDev
+	cfg.Jellyfin.Enabled = true
+	cfg.Jellyfin.URL = srv.URL
+	cfg.Jellyfin.APIKey = "svc-key"
+	cfg.Jellyfin.Timeout = 2 * time.Second
+	info := buildinfo.Info{Version: "2.3.4"}
+
+	staticAuth, err := jellyfin.ProvideAuthenticatorWithSource(cfg, info, nil, nil)
+	if err != nil {
+		t.Fatalf("ProvideAuthenticatorWithSource(nil source) error = %v", err)
+	}
+	if _, err = staticAuth.QuickConnectEnabled(t.Context()); err != nil {
+		t.Fatalf("QuickConnectEnabled(static) error = %v", err)
+	}
+	if got, want := <-received, useragent.Default(info); got != want {
+		t.Fatalf("static User-Agent = %q, want %q", got, want)
+	}
+
+	provider := &stubUAProvider{}
+	provider.ua.Store("CustomJF/1.0")
+	dynAuth, err := jellyfin.ProvideAuthenticatorWithSource(cfg, info, nil, provider)
+	if err != nil {
+		t.Fatalf("ProvideAuthenticatorWithSource(source) error = %v", err)
+	}
+	for _, want := range []string{"CustomJF/1.0", "CustomJF/2.0"} {
+		provider.ua.Store(want)
+		if _, err = dynAuth.QuickConnectEnabled(t.Context()); err != nil {
+			t.Fatalf("QuickConnectEnabled(%s) error = %v", want, err)
+		}
+		if got := <-received; got != want {
+			t.Fatalf("dynamic User-Agent = %q, want %q", got, want)
+		}
 	}
 }

@@ -19,12 +19,14 @@ import (
 	"github.com/golusoris/golusoris/core/crypto"
 	"github.com/golusoris/golusoris/core/id"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/modules"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 const (
@@ -123,6 +125,8 @@ type Service struct {
 	rec      EventRecorder
 	mu       sync.Mutex
 	lastPass time.Time
+	info     buildinfo.Info
+	source   useragent.Provider
 }
 
 // NewService wires a new Service.
@@ -158,6 +162,28 @@ func NewService(
 		writer: writer,
 		rec:    er,
 	}
+}
+
+func newServiceWithSource(
+	st *store.Store,
+	enc *crypto.Encryptor,
+	clk clock.Clock,
+	ids id.Generator,
+	logger *slog.Logger,
+	mod *modules.Service,
+	inst *instances.Service,
+	reader SeriesReader,
+	writer SeasonWriter,
+	rec *snatch.Recorder,
+	info buildinfo.Info,
+	ua *useragent.Source,
+) *Service {
+	svc := NewService(st, enc, clk, ids, logger, mod, inst, reader, writer, rec)
+	svc.info = info
+	if ua != nil {
+		svc.source = ua
+	}
+	return svc
 }
 
 // SetSeriesReader sets the SeriesReader, primarily for testing.
