@@ -6,6 +6,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -29,7 +30,6 @@ func TestSettingsValidate(t *testing.T) {
 	bad := []domain.Settings{
 		{HistoryRetentionDays: 0, UserAgent: "x", SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
 		{HistoryRetentionDays: 4000, UserAgent: "x", SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
-		{HistoryRetentionDays: 1, UserAgent: " ", SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
 		{HistoryRetentionDays: 1, UserAgent: "a\nb", SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
 		{HistoryRetentionDays: 1, UserAgent: "x", GlobalHourlyCap: -1, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
 		{HistoryRetentionDays: 1, UserAgent: "x", GlobalHourlyCap: domain.GlobalHourlyCapLimit + 1, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
@@ -174,6 +174,29 @@ func TestUserPreferencesValidate(t *testing.T) {
 			err := tc.in.Validate()
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("Validate() = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestSettingsUserAgent(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, value string
+		invalid     bool
+	}{
+		{"empty", "", false},
+		{"boundary", strings.Repeat("a", 200), false},
+		{"boundary after trim", " " + strings.Repeat("a", 200) + "\n", false},
+		{"too long", strings.Repeat("a", 201), true},
+		{"newline", "a\nb", true},
+		{"trailing newline", "Foo/1\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := domain.Settings{HistoryRetentionDays: 90, UserAgent: tc.value, SearchPriorityPreset: domain.MediaFirstPreset(), DownloadPriorityPreset: domain.MediaFirstPreset()}
+			if err := s.Validate(); (err != nil) != tc.invalid {
+				t.Errorf("Validate = %v, invalid=%v", err, tc.invalid)
 			}
 		})
 	}

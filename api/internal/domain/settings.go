@@ -213,8 +213,8 @@ func (s Settings) Validate() error {
 		return fmt.Errorf("%w: history_retention_days must be between 1 and 3650", ErrInvalid)
 	}
 	ua := strings.TrimSpace(s.UserAgent)
-	if ua == "" || len(ua) > 200 || strings.ContainsAny(ua, "\r\n") {
-		return fmt.Errorf("%w: user_agent must be 1-200 characters on one line", ErrInvalid)
+	if len(ua) > 200 || strings.ContainsAny(ua, "\r\n") {
+		return fmt.Errorf("%w: user_agent must be 0-200 characters on one line", ErrInvalid)
 	}
 	if s.GlobalHourlyCap < 0 || s.GlobalHourlyCap > GlobalHourlyCapLimit {
 		return fmt.Errorf("%w: global_hourly_cap must be between 0 and %d", ErrInvalid, GlobalHourlyCapLimit)

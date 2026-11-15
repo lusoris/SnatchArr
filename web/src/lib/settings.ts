@@ -42,7 +42,7 @@ export type CapsSettingsDraft = {
 
 export const generalSettingsSchema = z.object({
 	history_retention_days: z.number().int().min(1).max(3650),
-	user_agent: z.string().min(1).max(200),
+	user_agent: z.string().max(200),
 	llm_enabled: z.boolean(),
 	llm_write_tools: z.array(z.string() as z.ZodType<LlmWriteTool>).optional(),
 	brand_mark: z.enum(['vulva', 'penis', 'hand']).optional(),

@@ -10402,8 +10402,9 @@ func (s *SessionHeaders) SetResponse(val Session) {
 
 // Ref: #/components/schemas/Settings
 type Settings struct {
-	HistoryRetentionDays int    `json:"history_retention_days"`
-	UserAgent            string `json:"user_agent"`
+	HistoryRetentionDays int `json:"history_retention_days"`
+	// Empty sends the built-in default SnatchArr/<version>.
+	UserAgent string `json:"user_agent"`
 	// Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 =
 	// off).
 	GlobalHourlyCap        int               `json:"global_hourly_cap"`

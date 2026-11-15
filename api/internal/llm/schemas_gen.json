@@ -4131,8 +4131,9 @@
             "type": "string"
           },
           "user_agent": {
+            "description": "Empty sends the built-in default SnatchArr/\u003cversion\u003e.",
             "maxLength": 200,
-            "minLength": 1,
+            "minLength": 0,
             "type": "string"
           }
         },

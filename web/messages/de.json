@@ -354,7 +354,7 @@
 	"settings_retention": "Verlauf aufbewahren (Tage)",
 	"settings_retention_hint": "Anzahl der Tage, die der Durchlaufverlauf gespeichert bleibt, bevor er bereinigt wird.",
 	"settings_user_agent": "HTTP-User-Agent",
-	"settings_user_agent_hint": "Benutzerdefinierter User-Agent für Anfragen an Indexer und *arr-Anwendungen.",
+	"settings_user_agent_hint": "Eigener User-Agent-Header für ausgehende Anfragen. Leer sendet den integrierten Standard SnatchArr/<version>.",
 	"settings_global_cap": "Globales stündliches Suchlimit (Stamina)",
 	"settings_global_cap_hint": "Gemeinsames Limit über alle Instanzen hinweg; 0 deaktiviert das globale Limit.",
 	"settings_saved": "Einstellungen gespeichert",

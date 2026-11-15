@@ -3947,7 +3947,8 @@ components:
           maximum: 3650
         user_agent:
           type: string
-          minLength: 1
+          description: "Empty sends the built-in default SnatchArr/<version>."
+          minLength: 0
           maxLength: 200
         global_hourly_cap:
           type: integer

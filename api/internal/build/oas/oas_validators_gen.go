@@ -4610,7 +4610,7 @@ func (s *Settings) Validate() error {
 	}
 	if err := func() error {
 		if err := (validate.String{
-			MinLength:     1,
+			MinLength:     0,
 			MinLengthSet:  true,
 			MaxLength:     200,
 			MaxLengthSet:  true,

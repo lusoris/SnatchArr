@@ -354,7 +354,7 @@
 	"settings_retention": "History retention (days)",
 	"settings_retention_hint": "Number of days to keep historical snatch run records before purging.",
 	"settings_user_agent": "HTTP User-Agent",
-	"settings_user_agent_hint": "Custom User-Agent header sent with outbound requests to indexers and *arr apps.",
+	"settings_user_agent_hint": "Custom User-Agent header sent with outbound requests. Empty sends the built-in default SnatchArr/<version>.",
 	"settings_global_cap": "Global hourly search cap (stamina)",
 	"settings_global_cap_hint": "Shared search stamina limit across all instances; 0 disables the global limit.",
 	"settings_saved": "Settings saved",

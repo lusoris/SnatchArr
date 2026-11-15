@@ -52,6 +52,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/sso"
 	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 	"github.com/lusoris/SnatchArr/api/internal/watchaware"
 	"github.com/lusoris/SnatchArr/api/internal/webui"
 	"github.com/lusoris/SnatchArr/api/internal/workergrpc"
@@ -87,6 +88,7 @@ var Module = fx.Options(
 	policies.Module,
 	modules.Module,
 	settings.Module,
+	useragent.Module,
 	requests.Module,
 	runtimesettings.Module,
 	auth.Module,

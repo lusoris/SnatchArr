@@ -1853,3 +1853,54 @@ func TestMigration000058SonarrMissingDefaultDynamic(t *testing.T) {
 		t.Fatalf("v58 row mutated by down: sonarr_missing_mode = %q, want 'dynamic' (down must not UPDATE)", missMode)
 	}
 }
+
+func TestUserAgentDefaultMigration(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, before, after string }{
+		{"legacy", "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)", ""},
+		{"custom", "Custom/2", "Custom/2"},
+		{"empty", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			st := storetest.New(t)
+			m := storetest.Migrator(t, st)
+			if err := m.Steps(-1); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			if _, err := st.Q().EnsureSettings(ctx, clock.NewFake().Now()); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.Pool().Exec(ctx, "UPDATE settings SET user_agent = $1", tc.before); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.Steps(1); err != nil {
+				t.Fatal(err)
+			}
+			assertUserAgentValue(t, st, tc.after)
+			if err := m.Steps(-1); err != nil {
+				t.Fatal(err)
+			}
+			want := tc.after
+			if want == "" {
+				want = "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)"
+			}
+			assertUserAgentValue(t, st, want)
+		})
+	}
+}
+
+func assertUserAgentValue(t *testing.T, st *store.Store, want string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	row, err := st.Q().EnsureSettings(ctx, clock.NewFake().Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.UserAgent != want {
+		t.Errorf("user_agent = %q, want %q", row.UserAgent, want)
+	}
+}
