@@ -8,8 +8,9 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck disable=SC2034 # read by fail() in live_lib.sh
 label="test-runner"
-# shellcheck source=tools/e2e/live_lib.sh
+# shellcheck source=tools/e2e/live_lib.sh disable=SC1091
 . "$script_dir/live_lib.sh"
 
 work=$(mktemp -d)
@@ -31,6 +32,28 @@ expect() {
         echo "FAIL $name: status $got_status (want $want_status), output '$got_output' (pattern '$want_pattern')" >&2
         failed=1
     fi
+}
+
+# wait_port_file PATH CASE_NAME STUB_PID: polls until PATH is non-empty within PORT_FILE_TIMEOUT s.
+wait_port_file() {
+    local path=$1 case_name=$2 stub_pid=$3
+    local timeout=${PORT_FILE_TIMEOUT:-30}
+    local max_tries=$((timeout * 10)) i=0
+    while [ "$i" -lt "$max_tries" ]; do
+        if [ -s "$path" ]; then
+            cat "$path"
+            return 0
+        fi
+        sleep 0.1
+        i=$((i + 1))
+    done
+    if [ -s "$path" ]; then
+        cat "$path"
+        return 0
+    fi
+    kill "$stub_pid" 2>/dev/null || echo "live_lib_test: stub $stub_pid already gone" >&2
+    expect "$case_name" 0 '^$' 1 "port file not written within ${timeout} s"
+    return 1
 }
 
 # 1. fail() caller prefix, exit code, and boundary
@@ -76,20 +99,22 @@ python3 -c "
 import http.server, sys, os
 sys.stderr = open(os.devnull, 'w')
 server = http.server.HTTPServer(('127.0.0.1', 0), http.server.SimpleHTTPRequestHandler)
-with open('$work/open_port', 'w') as f:
+with open('$work/open_port.tmp', 'w') as f:
     f.write(str(server.server_port))
+os.replace('$work/open_port.tmp', '$work/open_port')
+# Serve exactly one request, then exit.
 server.handle_request()
 " &
 py_http_pid=$!
-for _ in $(seq 1 50); do
-    [ -f "$work/open_port" ] && break
-    sleep 0.1
-done
-open_port=$(cat "$work/open_port")
-status=0
-out=$(answers "http://127.0.0.1:$open_port" 5 2>&1) || status=$?
-wait "$py_http_pid" 2>/dev/null || echo "live_lib_test: HTTP stub already gone" >&2
-expect "answers() succeeds against open HTTP endpoint" 0 '^$' "$status" "$out"
+if open_port=$(wait_port_file "$work/open_port" "answers() succeeds against open HTTP endpoint" "$py_http_pid"); then
+    status=0
+    out=$(answers "http://127.0.0.1:$open_port" 5 2>&1) || status=$?
+    wait "$py_http_pid" 2>/dev/null || echo "live_lib_test: HTTP stub already gone" >&2
+    expect "answers() succeeds against open HTTP endpoint" 0 '^$' "$status" "$out"
+else
+    wait "$py_http_pid" 2>/dev/null || echo "live_lib_test: HTTP stub ended by the kill" >&2
+    failed=1
+fi
 
 out=$(label="answers-zero" bash -c '
     # shellcheck source=tools/e2e/live_lib.sh
@@ -105,37 +130,39 @@ status=0
 expect "free_port() finds an open port" 0 '.*' "$status" "$free_p"
 
 python3 -c "
-import socket, time
+import os, socket, time
 s = socket.socket()
 s.bind(('127.0.0.1', 0))
 s.listen(1)
-with open('$work/bound_port', 'w') as f:
+with open('$work/bound_port.tmp', 'w') as f:
     f.write(str(s.getsockname()[1]))
-time.sleep(5)
+os.replace('$work/bound_port.tmp', '$work/bound_port')
+time.sleep(120)
 " &
 py_sock_pid=$!
-for _ in $(seq 1 50); do
-    [ -f "$work/bound_port" ] && break
-    sleep 0.1
-done
-bound_p=$(cat "$work/bound_port")
-out=$(label="port-exhaust" bash -c '
-    # shellcheck source=tools/e2e/live_lib.sh
-    . "'"$script_dir"'/live_lib.sh"
-    free_port '"$bound_p"' 1
-' 2>&1) && status=0 || status=$?
-expect "free_port() fails when bound is exceeded" 1 '^port-exhaust: no free port from '"$bound_p"'$' "$status" "$out"
+if bound_p=$(wait_port_file "$work/bound_port" "free_port() fails when bound is exceeded" "$py_sock_pid"); then
+    out=$(label="port-exhaust" bash -c '
+        # shellcheck source=tools/e2e/live_lib.sh
+        . "'"$script_dir"'/live_lib.sh"
+        free_port '"$bound_p"' 1
+    ' 2>&1) && status=0 || status=$?
+    expect "free_port() fails when bound is exceeded" 1 '^port-exhaust: no free port from '"$bound_p"'$' "$status" "$out"
 
-out=$(label="port-zero" bash -c '
-    # shellcheck source=tools/e2e/live_lib.sh
-    . "'"$script_dir"'/live_lib.sh"
-    free_port '"$bound_p"' 0
-' 2>&1) && status=0 || status=$?
-kill "$py_sock_pid" 2>/dev/null || echo "live_lib_test: socket stub already gone" >&2
-wait "$py_sock_pid" 2>/dev/null || echo "live_lib_test: socket stub ended by the kill" >&2
-expect "free_port() with max_tries=0 fails immediately" 1 '^port-zero: no free port from '"$bound_p"'$' "$status" "$out"
+    out=$(label="port-zero" bash -c '
+        # shellcheck source=tools/e2e/live_lib.sh
+        . "'"$script_dir"'/live_lib.sh"
+        free_port '"$bound_p"' 0
+    ' 2>&1) && status=0 || status=$?
+    kill "$py_sock_pid" 2>/dev/null || echo "live_lib_test: socket stub already gone" >&2
+    wait "$py_sock_pid" 2>/dev/null || echo "live_lib_test: socket stub ended by the kill" >&2
+    expect "free_port() with max_tries=0 fails immediately" 1 '^port-zero: no free port from '"$bound_p"'$' "$status" "$out"
+else
+    wait "$py_sock_pid" 2>/dev/null || echo "live_lib_test: socket stub ended by the kill" >&2
+    failed=1
+fi
 
 # 4. qbit_password() positive, timeout negative, and boundary
+# shellcheck disable=SC2329 # invoked by qbit_password in live_lib.sh
 dc() {
     echo "2026-10-23 05:00:00.000000+00:00 [NOTICE] A temporary password is provided for this session: secretPass456"
 }
