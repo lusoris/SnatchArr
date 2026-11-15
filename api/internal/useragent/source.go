@@ -86,11 +86,28 @@ func (s *Source) Current(ctx context.Context) string {
 	if val, ok := s.cached(); ok {
 		return val
 	}
-	val, _, err := s.flight.Do(ctx, struct{}{}, s.load)
-	if err != nil {
+	if ctx.Err() != nil {
 		return s.fallback
 	}
-	return val
+	type result struct {
+		value string
+		err   error
+	}
+	resultCh := make(chan result, 1)
+	// One waiter per caller; the shared read timeout bounds each waiter goroutine.
+	go func() {
+		val, _, err := s.flight.Do(ctx, struct{}{}, s.load)
+		resultCh <- result{value: val, err: err}
+	}()
+	select {
+	case res := <-resultCh:
+		if res.err != nil {
+			return s.fallback
+		}
+		return res.value
+	case <-ctx.Done():
+		return s.fallback
+	}
 }
 
 func (s *Source) cached() (string, bool) {
@@ -112,7 +129,7 @@ func (s *Source) load(ctx context.Context) (string, error) {
 	gen := s.gen
 	s.mu.Unlock()
 
-	readCtx, cancel := context.WithTimeout(ctx, readTimeout)
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), readTimeout)
 	defer cancel()
 	cfg, err := s.reader.Get(readCtx)
 	if err != nil {

@@ -52,11 +52,12 @@ func (r *reader) count() int {
 }
 
 type blockingReader struct {
-	calls   atomic.Int32
-	entered chan struct{}
-	release chan struct{}
-	first   string
-	later   string
+	calls       atomic.Int32
+	ctxCanceled atomic.Bool
+	entered     chan struct{}
+	release     chan struct{}
+	first       string
+	later       string
 }
 
 func (r *blockingReader) Get(ctx context.Context) (domain.Settings, error) {
@@ -66,6 +67,7 @@ func (r *blockingReader) Get(ctx context.Context) (domain.Settings, error) {
 		select {
 		case <-r.release:
 		case <-ctx.Done():
+			r.ctxCanceled.Store(true)
 			return domain.Settings{}, ctx.Err()
 		}
 		return domain.Settings{UserAgent: r.first}, nil
@@ -173,8 +175,8 @@ func TestSourceCancelledCallerDoesNotPoisonCache(t *testing.T) {
 			if got := s.Current(t.Context()); got != "custom/override" {
 				t.Fatalf("Current(liveCtx) = %q, want %q", got, "custom/override")
 			}
-			if r.count() != 2 {
-				t.Errorf("reader calls = %d, want 2", r.count())
+			if r.count() != 1 {
+				t.Errorf("reader calls = %d, want 1", r.count())
 			}
 		})
 	}
@@ -251,6 +253,171 @@ func TestSourceConcurrentSingleflight(t *testing.T) {
 		if got != "coalesced/override" {
 			t.Errorf("caller %d got %q, want %q", i, got, "coalesced/override")
 		}
+	}
+}
+
+func TestSourceConcurrentColdCallersShareRead(t *testing.T) {
+	t.Parallel()
+	r := &blockingReader{
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}),
+		first:   "shared/override",
+	}
+	s := New(r, buildinfo.Info{Version: "2"}, clock.NewFake(), slog.New(slog.DiscardHandler))
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	results := make(chan string, 2)
+	go func() { results <- s.Current(ctx) }()
+	select {
+	case <-r.entered:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for reader entry: %v", ctx.Err())
+	}
+	go func() { results <- s.Current(ctx) }()
+	close(r.release)
+	for range 2 {
+		select {
+		case got := <-results:
+			if got != "shared/override" {
+				t.Errorf("Current = %q, want %q", got, "shared/override")
+			}
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for callers: %v", ctx.Err())
+		}
+	}
+	if calls := r.calls.Load(); calls != 1 {
+		t.Errorf("reader calls = %d, want 1", calls)
+	}
+}
+
+func TestSourceJoinerDeadlineDoesNotWaitForSharedRead(t *testing.T) {
+	t.Parallel()
+	r := &blockingReader{
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}),
+		first:   "shared/override",
+	}
+	s := New(r, buildinfo.Info{Version: "2"}, clock.NewFake(), slog.New(slog.DiscardHandler))
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	firstDone := make(chan string, 1)
+	go func() { firstDone <- s.Current(ctx) }()
+	select {
+	case <-r.entered:
+	case <-ctx.Done():
+		close(r.release)
+		t.Fatalf("timed out waiting for reader entry: %v", ctx.Err())
+	}
+	joinerCtx, cancelJoiner := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancelJoiner()
+	start := time.Now()
+	joinerDone := make(chan string, 1)
+	go func() { joinerDone <- s.Current(joinerCtx) }()
+	select {
+	case got := <-joinerDone:
+		if got != s.fallback {
+			t.Errorf("joiner Current = %q, want fallback %q", got, s.fallback)
+		}
+		if elapsed := time.Since(start); elapsed >= 2*time.Second {
+			t.Errorf("joiner returned after %s, want under 2s", elapsed)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("joiner did not return within 2s")
+	}
+	if calls := r.calls.Load(); calls != 1 {
+		t.Fatalf("reader calls while held = %d, want 1", calls)
+	}
+	close(r.release)
+	select {
+	case got := <-firstDone:
+		if got != "shared/override" {
+			t.Errorf("first Current = %q, want %q", got, "shared/override")
+		}
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for first caller: %v", ctx.Err())
+	}
+}
+
+func TestSourceFirstCallerCancelDoesNotCancelSharedRead(t *testing.T) {
+	t.Parallel()
+	r := &blockingReader{
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}),
+		first:   "shared/override",
+	}
+	s := New(r, buildinfo.Info{Version: "2"}, clock.NewFake(), slog.New(slog.DiscardHandler))
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	firstCtx, cancelFirst := context.WithCancel(ctx)
+	firstDone := make(chan string, 1)
+	go func() { firstDone <- s.Current(firstCtx) }()
+	select {
+	case <-r.entered:
+	case <-ctx.Done():
+		close(r.release)
+		t.Fatalf("timed out waiting for reader entry: %v", ctx.Err())
+	}
+	joinerStarted := make(chan struct{})
+	joinerDone := make(chan string, 1)
+	go func() {
+		close(joinerStarted)
+		joinerDone <- s.Current(ctx)
+	}()
+	select {
+	case <-joinerStarted:
+	case <-ctx.Done():
+		close(r.release)
+		t.Fatalf("timed out starting joiner: %v", ctx.Err())
+	}
+	cancelFirst()
+	select {
+	case got := <-firstDone:
+		if got != s.fallback {
+			t.Errorf("cancelled caller = %q, want fallback %q", got, s.fallback)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelled caller did not return within 2s")
+	}
+	close(r.release)
+	select {
+	case got := <-joinerDone:
+		if got != "shared/override" {
+			t.Errorf("live joiner = %q, want %q", got, "shared/override")
+		}
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for live joiner: %v", ctx.Err())
+	}
+	if r.ctxCanceled.Load() {
+		t.Error("shared reader context was cancelled by first caller")
+	}
+	if calls := r.calls.Load(); calls != 1 {
+		t.Errorf("reader calls = %d, want 1", calls)
+	}
+}
+
+func TestSourceDoneContextCacheBoundary(t *testing.T) {
+	t.Parallel()
+	info := buildinfo.Info{Version: "2"}
+	r := &reader{value: "cached/override"}
+	s := New(r, info, clock.NewFake(), slog.New(slog.DiscardHandler))
+	if got := s.Current(t.Context()); got != "cached/override" {
+		t.Fatalf("initial Current = %q, want cached value", got)
+	}
+	doneCtx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if got := s.Current(doneCtx); got != "cached/override" {
+		t.Errorf("warm Current(doneCtx) = %q, want cached value", got)
+	}
+	if calls := r.count(); calls != 1 {
+		t.Fatalf("warm reader calls = %d, want 1", calls)
+	}
+	coldReader := &reader{value: "unused/override"}
+	cold := New(coldReader, info, clock.NewFake(), slog.New(slog.DiscardHandler))
+	if got := cold.Current(doneCtx); got != Default(info) {
+		t.Errorf("cold Current(doneCtx) = %q, want fallback %q", got, Default(info))
+	}
+	if calls := coldReader.count(); calls != 0 {
+		t.Errorf("cold reader calls = %d, want 0", calls)
 	}
 }
 
