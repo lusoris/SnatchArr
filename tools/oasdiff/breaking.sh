@@ -4,9 +4,10 @@
 #
 # OpenAPI breaking change detector against a base revision (HISS-14). An ERR-level breaking
 # change fails the check unless SUBJECT declares a breaking change via conventional-commit
-# syntax (e.g. "feat(api)!: ..."). make api-openapi-breaking and CI job api-openapi both call
-# this script, so the version and flags live here only; breaking_test.sh plants the cases it
-# must accept and refuse.
+# syntax (e.g. "feat(api)!: ..."). SUBJECT may contain several subjects, one per line; a
+# declaration on any line counts. make api-openapi-breaking and CI job api-openapi both call this
+# script, so the version and flags live here only; breaking_test.sh plants the cases it must accept
+# and refuse.
 #
 #   tools/oasdiff/breaking.sh BASE_SPEC REVISION_SPEC SUBJECT
 #

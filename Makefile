@@ -109,7 +109,7 @@ api-openapi-breaking: ## OpenAPI breaking change check vs origin/main (HISS-14 a
 	trap 'rm -f "$$base"' EXIT
 	git show origin/main:api/openapi/openapi.yaml >"$$base"
 	sh tools/oasdiff/breaking_test.sh
-	sh tools/oasdiff/breaking.sh "$$base" api/openapi/openapi.yaml "$$(git log -1 --format=%s)"
+	sh tools/oasdiff/breaking.sh "$$base" api/openapi/openapi.yaml "$$(sh tools/oasdiff/branch_subjects.sh origin/main)"
 
 settings-parity: ## Generate docs/settings-parity.tsv from config registry
 	go run ./api/cmd/settingsparity
