@@ -83,12 +83,21 @@ func Check(ctx context.Context, client *http.Client, url string) (err error) {
 	return nil
 }
 
+// newClient builds the HTTP client for one probe per process: its own transport keeps other code
+// from closing its connection, and the loopback target needs neither keep-alives nor a proxy.
+func newClient() *http.Client {
+	return &http.Client{
+		Timeout:   Timeout,
+		Transport: &http.Transport{DisableKeepAlives: true},
+	}
+}
+
 // Run is the subcommand: it reads APP_HTTP_ADDR through getenv, probes, reports a failure on
 // stderr and returns the process exit code.
 func Run(ctx context.Context, getenv func(string) string, stderr io.Writer) int {
 	url, err := URL(getenv("APP_HTTP_ADDR"))
 	if err == nil {
-		err = Check(ctx, &http.Client{Timeout: Timeout}, url)
+		err = Check(ctx, newClient(), url)
 	}
 	if err != nil {
 		if _, werr := fmt.Fprintln(stderr, err); werr != nil {

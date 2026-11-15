@@ -8,9 +8,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -88,12 +90,43 @@ func TestCheck(t *testing.T) {
 
 func TestCheckUnreachable(t *testing.T) {
 	t.Parallel()
-	srv := server(t, http.StatusOK)
-	url := srv.URL + "/readyz"
-	srv.Close()
-	err := Check(t.Context(), srv.Client(), url)
-	if err == nil || errors.Is(err, ErrNotReady) {
-		t.Fatalf("Check() on a closed port = %v, want a connection error", err)
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(context.Context, string, string) (net.Conn, error) {
+				return nil, &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}
+			},
+		},
+	}
+	err := Check(t.Context(), client, "http://127.0.0.1:1/readyz")
+	if err == nil {
+		t.Fatal("Check() on a refused dial = nil, want a connection error")
+	}
+	if errors.Is(err, ErrNotReady) {
+		t.Fatalf("Check() on a refused dial = %v, want a connection error, not ErrNotReady", err)
+	}
+	if !errors.Is(err, syscall.ECONNREFUSED) {
+		t.Fatalf("Check() on a refused dial = %v, want syscall.ECONNREFUSED", err)
+	}
+}
+
+func TestNewClient(t *testing.T) {
+	t.Parallel()
+	client := newClient()
+	tr, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("newClient().Transport = %T, want *http.Transport", client.Transport)
+	}
+	if tr == nil {
+		t.Fatal("newClient().Transport = nil, want non-nil *http.Transport")
+	}
+	if client.Transport == http.DefaultTransport {
+		t.Fatal("newClient().Transport = http.DefaultTransport, want an isolated transport")
+	}
+	if !tr.DisableKeepAlives {
+		t.Fatal("newClient().Transport.DisableKeepAlives = false, want true")
+	}
+	if client.Timeout != Timeout {
+		t.Fatalf("newClient().Timeout = %v, want %v", client.Timeout, Timeout)
 	}
 }
 
