@@ -96,6 +96,32 @@ func TestRecorderFoldsUnlistedLabelsToOther(t *testing.T) {
 	if count != 4 {
 		t.Fatalf("CollectAndCount(%s) = %d, want 4 series", metrics.MetricTunnelsTotal, count)
 	}
+
+	foundFoldedUnlisted := false
+	for _, fam := range families {
+		for _, m := range fam.GetMetric() {
+			var hostVal, resultVal string
+			for _, lp := range m.GetLabel() {
+				if lp.GetValue() == "unlisted.example.org" {
+					t.Fatalf("family %s leaked raw unlisted label %s=%q", fam.GetName(), lp.GetName(), lp.GetValue())
+				}
+				switch lp.GetName() {
+				case "host":
+					hostVal = lp.GetValue()
+				case "result":
+					resultVal = lp.GetValue()
+				}
+			}
+			if fam.GetName() == metrics.MetricTunnelsTotal &&
+				hostVal == metricdef.OtherValue &&
+				resultVal == metrics.ResultOK {
+				foundFoldedUnlisted = true
+			}
+		}
+	}
+	if !foundFoldedUnlisted {
+		t.Fatalf("%s missing folded series host=%q result=%q", metrics.MetricTunnelsTotal, metricdef.OtherValue, metrics.ResultOK)
+	}
 }
 
 type mismatchRegisterer struct{}

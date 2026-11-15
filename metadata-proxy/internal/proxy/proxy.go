@@ -87,6 +87,7 @@ type Service struct {
 	ephemeralPorts bool
 	dialControl    DialControl
 	customDialCtrl bool
+	listen         func(ctx context.Context, network, addr string) (net.Listener, error)
 	listeners      []*appListener
 	ready          atomic.Bool
 	stopOnce       sync.Once
@@ -119,6 +120,7 @@ func New(
 		metrics:  rec,
 		clock:    clk,
 		logger:   logger,
+		listen:   (&net.ListenConfig{}).Listen,
 		stopCh:   make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -184,22 +186,30 @@ func (s *Service) Addr(app string) (string, bool) {
 // Start binds every configured CONNECT listener and marks readiness up.
 func (s *Service) Start(ctx context.Context) error {
 	for i, al := range s.listeners {
-		if err := s.startOne(ctx, al); err != nil {
-			s.closeRange(ctx, i)
+		if err := s.bindOne(ctx, al); err != nil {
+			s.rollbackBound(ctx, i)
 			return err
 		}
+	}
+	serveCtx := context.WithoutCancel(ctx)
+	for _, al := range s.listeners {
+		s.startServe(serveCtx, al)
 	}
 	s.ready.Store(true)
 	return nil
 }
 
-func (s *Service) startOne(ctx context.Context, al *appListener) error {
+func (s *Service) bindOne(ctx context.Context, al *appListener) error {
 	bindPort := al.port
 	if s.ephemeralPorts {
 		bindPort = 0
 	}
 	listenAddr := net.JoinHostPort(s.bindHost, strconv.Itoa(bindPort))
-	tcpLn, err := (&net.ListenConfig{}).Listen(ctx, "tcp", listenAddr)
+	listenFn := s.listen
+	if listenFn == nil {
+		listenFn = (&net.ListenConfig{}).Listen
+	}
+	tcpLn, err := listenFn(ctx, "tcp", listenAddr)
 	if err != nil {
 		return fmt.Errorf("proxy: listen %s (%s): %w", al.app, listenAddr, err)
 	}
@@ -214,9 +224,37 @@ func (s *Service) startOne(ctx context.Context, al *appListener) error {
 		slog.String("addr", bound),
 		slog.String("mode", string(s.compiled.Options.Mode)),
 	)
-	serveCtx := context.WithoutCancel(ctx)
-	go s.serveLoop(serveCtx, al, tcpLn)
 	return nil
+}
+
+func (s *Service) startServe(serveCtx context.Context, al *appListener) {
+	al.mu.RLock()
+	tcpLn := al.ln
+	al.mu.RUnlock()
+	if tcpLn == nil {
+		return
+	}
+	go s.serveLoop(serveCtx, al, tcpLn)
+}
+
+func (s *Service) rollbackBound(ctx context.Context, count int) {
+	for i := range count {
+		al := s.listeners[i]
+		al.mu.Lock()
+		ln := al.ln
+		al.ln = nil
+		al.addr = ""
+		al.mu.Unlock()
+		if ln == nil {
+			continue
+		}
+		if err := ln.Close(); err != nil {
+			s.logger.WarnContext(ctx, "metadata-proxy: listener rollback close error",
+				slog.String("app", al.app),
+				slog.Any("err", err),
+			)
+		}
+	}
 }
 
 func (s *Service) serveLoop(ctx context.Context, al *appListener, tcpLn net.Listener) {
@@ -249,18 +287,6 @@ func (s *Service) Stop(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("proxy: drain tunnels: %w", ctx.Err()))
 	}
 	return errors.Join(errs...)
-}
-
-func (s *Service) closeRange(ctx context.Context, count int) {
-	for i := range count {
-		al := s.listeners[i]
-		if err := al.srv.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
-			s.logger.WarnContext(ctx, "metadata-proxy: listener rollback shutdown error",
-				slog.String("app", al.app),
-				slog.Any("err", err),
-			)
-		}
-	}
 }
 
 func (s *Service) logMetricError(ctx context.Context, app, result string, err error) {
@@ -393,6 +419,14 @@ func (s *Service) refuseConnect(
 	s.logOutcome(ctx, slog.LevelWarn, app, t, result, 0, 0, dur)
 }
 
+type tunnelOutcome struct {
+	status      int
+	result      string
+	up          int64
+	down        int64
+	established bool
+}
+
 func (s *Service) runTunnel(
 	ctx context.Context,
 	al *appListener,
@@ -402,7 +436,6 @@ func (s *Service) runTunnel(
 ) {
 	select {
 	case al.sem <- struct{}{}:
-		defer func() { <-al.sem }()
 	default:
 		s.refuseConnect(ctx, al.app, t, http.StatusServiceUnavailable, metrics.ResultRefusedLimit, w, start)
 		return
@@ -410,30 +443,56 @@ func (s *Service) runTunnel(
 	s.tunnelWG.Add(1)
 	defer s.tunnelWG.Done()
 
+	out := s.runSlot(ctx, al, t, w)
+	s.finishTunnel(ctx, al.app, t, out, w, start)
+}
+
+func (s *Service) runSlot(
+	ctx context.Context,
+	al *appListener,
+	t parsedTarget,
+	w http.ResponseWriter,
+) tunnelOutcome {
+	defer func() { <-al.sem }()
 	upstream, status, result, err := s.dialUpstream(ctx, t.addr)
 	if err != nil {
-		if status == http.StatusForbidden {
-			s.refuseConnect(ctx, al.app, t, status, result, w, start)
-			return
-		}
-		mode := s.compiled.Options.Mode
-		http.Error(w, http.StatusText(status), status)
-		dur := s.clock.Since(start)
-		s.logMetricError(ctx, al.app, result, s.metrics.RecordDialFailure(ctx, al.app, t.metricHost, result, mode, dur))
-		s.logOutcome(ctx, slog.LevelWarn, al.app, t, result, 0, 0, dur)
-		return
+		return tunnelOutcome{status: status, result: result}
 	}
-
 	up, down, established := s.bridgeTunnel(w, upstream)
-	dur := s.clock.Since(start)
-	mode := s.compiled.Options.Mode
 	if !established {
-		s.logMetricError(ctx, al.app, metrics.ResultDialError, s.metrics.RecordDialFailure(ctx, al.app, t.metricHost, metrics.ResultDialError, mode, dur))
-		s.logOutcome(ctx, slog.LevelWarn, al.app, t, metrics.ResultDialError, 0, 0, dur)
+		return tunnelOutcome{result: metrics.ResultDialError}
+	}
+	return tunnelOutcome{result: metrics.ResultOK, up: up, down: down, established: true}
+}
+
+func (s *Service) finishTunnel(
+	ctx context.Context,
+	app string,
+	t parsedTarget,
+	out tunnelOutcome,
+	w http.ResponseWriter,
+	start time.Time,
+) {
+	if out.status == http.StatusForbidden {
+		s.refuseConnect(ctx, app, t, out.status, out.result, w, start)
 		return
 	}
-	s.logMetricError(ctx, al.app, metrics.ResultOK, s.metrics.RecordTunnel(ctx, al.app, t.metricHost, mode, up, down, dur))
-	s.logOutcome(ctx, slog.LevelInfo, al.app, t, metrics.ResultOK, up, down, dur)
+	mode := s.compiled.Options.Mode
+	if out.status != 0 {
+		http.Error(w, http.StatusText(out.status), out.status)
+		dur := s.clock.Since(start)
+		s.logMetricError(ctx, app, out.result, s.metrics.RecordDialFailure(ctx, app, t.metricHost, out.result, mode, dur))
+		s.logOutcome(ctx, slog.LevelWarn, app, t, out.result, 0, 0, dur)
+		return
+	}
+	dur := s.clock.Since(start)
+	if !out.established {
+		s.logMetricError(ctx, app, out.result, s.metrics.RecordDialFailure(ctx, app, t.metricHost, out.result, mode, dur))
+		s.logOutcome(ctx, slog.LevelWarn, app, t, out.result, 0, 0, dur)
+		return
+	}
+	s.logMetricError(ctx, app, metrics.ResultOK, s.metrics.RecordTunnel(ctx, app, t.metricHost, mode, out.up, out.down, dur))
+	s.logOutcome(ctx, slog.LevelInfo, app, t, metrics.ResultOK, out.up, out.down, dur)
 }
 
 func (s *Service) logOutcome(

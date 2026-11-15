@@ -44,6 +44,7 @@ import (
 
 const (
 	maxTestConns     = 1024
+	echoConnDeadline = 5 * time.Second
 	metricPollWait   = 5 * time.Second
 	metricPollTick   = 5 * time.Millisecond
 	metricPollChecks = int(metricPollWait / metricPollTick)
@@ -204,35 +205,70 @@ func TestPlainHTTPMethodNotAllowed(t *testing.T) {
 	}
 }
 
-func startEchoListener(t *testing.T) (int, func()) {
-	t.Helper()
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen echo: %v", err)
-	}
-	var wg sync.WaitGroup
+func serveEcho(ln net.Listener) func() {
+	var (
+		mu     sync.Mutex
+		closed bool
+		conns  = make(map[net.Conn]struct{})
+		wg     sync.WaitGroup
+		once   sync.Once
+	)
 	wg.Go(func() {
 		for range maxTestConns {
 			conn, acceptErr := ln.Accept()
 			if acceptErr != nil {
 				return
 			}
+			_ = conn.SetDeadline(time.Now().Add(echoConnDeadline))
+			mu.Lock()
+			if closed {
+				mu.Unlock()
+				_ = conn.Close()
+				return
+			}
+			conns[conn] = struct{}{}
+			mu.Unlock()
 			wg.Go(func() {
-				defer conn.Close()
+				defer func() {
+					mu.Lock()
+					delete(conns, conn)
+					mu.Unlock()
+					_ = conn.Close()
+				}()
 				_, _ = io.Copy(conn, conn)
 			})
 		}
 	})
+	return func() {
+		once.Do(func() {
+			_ = ln.Close()
+			mu.Lock()
+			closed = true
+			active := make([]net.Conn, 0, len(conns))
+			for c := range conns {
+				active = append(active, c)
+			}
+			mu.Unlock()
+			for _, c := range active {
+				_ = c.Close()
+			}
+			wg.Wait()
+		})
+	}
+}
+
+func startEchoListener(t *testing.T) (int, func()) {
+	t.Helper()
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen echo: %v", err)
+	}
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		_ = ln.Close()
 		t.Fatalf("unexpected listener addr %T", ln.Addr())
 	}
-	cleanup := func() {
-		_ = ln.Close()
-		wg.Wait()
-	}
-	return tcpAddr.Port, cleanup
+	return tcpAddr.Port, serveEcho(ln)
 }
 
 func TestPolicyRefusals(t *testing.T) {
@@ -356,7 +392,7 @@ func TestDefaultGuardRefusals(t *testing.T) {
 	opts.Mode = config.ModeLog
 	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
 	opts.Ports = []int{443, port}
-	opts.DeniedPrefixes = []string{"10.96.0.0/12", "198.51.100.0/24"}
+	opts.DeniedPrefixes = []string{"10.96.0.0/12", "100.128.0.0/16", "2c0f:fff0::/32"}
 	opts.DialTimeout = 50 * time.Millisecond
 	h := startHarness(t, opts)
 
@@ -368,7 +404,8 @@ func TestDefaultGuardRefusals(t *testing.T) {
 		{"negative: IPv6 loopback ::1", "[::1]:" + portStr},
 		{"negative: link-local metadata 169.254.169.254", "169.254.169.254:443"},
 		{"negative: cluster Service IP 10.96.0.1", "10.96.0.1:443"},
-		{"negative: extra denied_prefixes 198.51.100.7", "198.51.100.7:443"},
+		{"negative: extra IPv4 denied_prefixes 100.128.0.7", "100.128.0.7:443"},
+		{"negative: extra IPv6 denied_prefixes 2c0f:fff0::7", "[2c0f:fff0::7]:443"},
 		{"negative: hostname resolving to loopback (localhost)", "localhost:" + portStr},
 	}
 
@@ -472,24 +509,8 @@ func startTLSEchoServer(t *testing.T) (int, *x509.CertPool, func()) {
 		t.Fatalf("listen tls echo: %v", err)
 	}
 	tlsLn := tls.NewListener(rawLn, tlsCfg)
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		for range maxTestConns {
-			conn, acceptErr := tlsLn.Accept()
-			if acceptErr != nil {
-				return
-			}
-			wg.Go(func() {
-				defer conn.Close()
-				_, _ = io.Copy(conn, conn)
-			})
-		}
-	})
 	port := rawLn.Addr().(*net.TCPAddr).Port
-	return port, pool, func() {
-		_ = tlsLn.Close()
-		wg.Wait()
-	}
+	return port, pool, serveEcho(tlsLn)
 }
 
 func TestTLSEchoTunnelAndMetrics(t *testing.T) {
@@ -650,14 +671,38 @@ func TestMaxTunnelsBoundary(t *testing.T) {
 	}
 
 	_ = openConns[0].Close()
-	waitForTunnelCount(t, h.reg, 2) // 1 refused_limit + 1 ok series
 
-	respAfter, connAfter, _ := dialRawProxy(t, h.addr, rawReq)
-	_ = respAfter.Body.Close()
-	_ = connAfter.Close()
-	if respAfter.StatusCode != http.StatusOK {
-		t.Fatalf("tunnel after slot release status = %d, want 200", respAfter.StatusCode)
+	const (
+		maxAdmitAttempts = 100
+		admitRetryTick   = 20 * time.Millisecond
+	)
+	admitTicker := time.NewTicker(admitRetryTick)
+	defer admitTicker.Stop()
+
+	admitted := false
+	lastStatus := 0
+	for attempt := range maxAdmitAttempts {
+		lastStatus = sendConnectStatus(t, h.addr, target)
+		if lastStatus == http.StatusOK {
+			admitted = true
+			break
+		}
+		if lastStatus != http.StatusServiceUnavailable {
+			t.Fatalf("attempt %d: tunnel status after slot release = %d, want 200 or 503", attempt+1, lastStatus)
+		}
+		if attempt+1 < maxAdmitAttempts {
+			select {
+			case <-t.Context().Done():
+				t.Fatalf("context done at attempt %d (last status = %d): %v", attempt+1, lastStatus, t.Context().Err())
+			case <-admitTicker.C:
+			}
+		}
 	}
+	if !admitted {
+		t.Fatalf("exhausted %d attempts waiting for slot release; last status = %d", maxAdmitAttempts, lastStatus)
+	}
+
+	waitForTunnelCount(t, h.reg, 2) // 1 refused_limit + 1 ok series
 }
 
 func TestReadinessBeforeAndAfterBind(t *testing.T) {
