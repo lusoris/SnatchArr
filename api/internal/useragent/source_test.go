@@ -411,13 +411,20 @@ func TestSourceDoneContextCacheBoundary(t *testing.T) {
 	if calls := r.count(); calls != 1 {
 		t.Fatalf("warm reader calls = %d, want 1", calls)
 	}
-	coldReader := &reader{value: "unused/override"}
+	coldReader := &blockingReader{
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}),
+		first:   "unused/override",
+	}
+	defer close(coldReader.release)
 	cold := New(coldReader, info, clock.NewFake(), slog.New(slog.DiscardHandler))
 	if got := cold.Current(doneCtx); got != Default(info) {
 		t.Errorf("cold Current(doneCtx) = %q, want fallback %q", got, Default(info))
 	}
-	if calls := coldReader.count(); calls != 0 {
-		t.Errorf("cold reader calls = %d, want 0", calls)
+	select {
+	case <-coldReader.entered:
+		t.Error("cold Current(doneCtx) started a read")
+	case <-time.After(200 * time.Millisecond):
 	}
 }
 
