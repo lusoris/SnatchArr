@@ -236,8 +236,137 @@ expect row-bound 0 '' setup_row_bound
 expect over-row-bound 2 'exceeds 200000 rows' setup_over_row_bound
 expect over-path-bound 2 'staged paths exceed 5000' setup_over_path_bound
 
+root=$(cd "$HERE/../.." && pwd)
+work_abs=$(cd "$work" && pwd)
+lefthook=${LANE_JUDGE_LEFTHOOK:-$root/lefthook.yml}
+
+# read_hook_run FILE: print the run command under lane-judge-guard: using plain-text matching.
+read_hook_run() {
+    if [ ! -f "$1" ]; then
+        return 1
+    fi
+    awk '
+        { sub(/\r$/, "") }
+        /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+        in_job {
+            match($0, /^[[:space:]]*/)
+            if (RLENGTH <= job_indent) {
+                in_job = 0
+            } else if ($0 ~ /^[[:space:]]*run:[[:space:]]*/) {
+                sub(/^[[:space:]]*run:[[:space:]]*/, "")
+                sub(/[[:space:]]*$/, "")
+                print
+                exit
+            }
+        }
+        !in_job && /^[[:space:]]*lane-judge-guard:[[:space:]]*(#.*)?$/ {
+            match($0, /^[[:space:]]*/)
+            job_indent = RLENGTH
+            in_job = 1
+        }
+    ' "$1"
+}
+
+# load_hook_args FILE: read lane-judge-guard arguments from FILE and resolve the guard path.
+load_hook_args() {
+    local run_line rest arg saw_guard=0
+    local -a raw_args=()
+    if ! run_line=$(read_hook_run "$1") || [ -z "$run_line" ]; then
+        printf 'FAIL case-11-wiring: missing lane-judge-guard run line in %s\n' "$1" >&2
+        exit 1
+    fi
+    case "$run_line" in
+        'sh .config/lefthook/python.sh '*)
+            rest=${run_line#'sh .config/lefthook/python.sh '}
+            ;;
+        *)
+            printf 'FAIL case-11-wiring: unexpected lane-judge-guard run line: %s\n' "$run_line" >&2
+            exit 1
+            ;;
+    esac
+    IFS=$' \t' read -r -a raw_args <<< "$rest"
+    hook_args=()
+    for arg in "${raw_args[@]}"; do
+        if [ "$arg" = tools/ci/lane_judge_guard.py ]; then
+            hook_args+=("$root/$arg")
+            saw_guard=1
+        else
+            hook_args+=("$arg")
+        fi
+    done
+    if [ "$saw_guard" -ne 1 ]; then
+        printf 'FAIL case-11-wiring: run line does not name tools/ci/lane_judge_guard.py: %s\n' \
+            "$run_line" >&2
+        exit 1
+    fi
+}
+
+# setup_tracked_late: commit an initial revision, write exit state, then edit after exit.
+setup_tracked_late() {
+    staged 2026-11-13T21:50:00+01:00
+    git commit -qm fixture
+    marker
+    printf '%s\n' 'judge edited this' > "$path"
+    stamp 2026-11-13T22:10:00+01:00
+}
+
+# index_all_tracked INDEX: stage tracked edits in a temporary index like commit -a.
+index_all_tracked() {
+    setup_tracked_late
+    cp .git/index "$1"
+    GIT_INDEX_FILE="$1" git add -u
+    git diff --cached --quiet
+}
+
+# index_path_limited INDEX: stage one path in a temporary index built from HEAD.
+index_path_limited() {
+    setup_tracked_late
+    GIT_INDEX_FILE="$1" git read-tree HEAD
+    GIT_INDEX_FILE="$1" git --literal-pathspecs add -- "$path"
+    git diff --cached --quiet
+}
+
+# expect_wired NAME RC NEEDLE SETUP ARGS...: run python.sh against a temporary index.
+expect_wired() {
+    local name=$1 want=$2 needle=$3 setup=$4 idx="$work_abs/$1.index" py_dir out status=0
+    py_dir=$(dirname "$python")
+    shift 4
+    new_repo "$work/$name"
+    (cd "$work/$name" && "$setup" "$idx")
+    out=$(
+        cd "$work/$name" &&
+            PATH="$py_dir:$PATH" GIT_INDEX_FILE="$idx" sh "$root/.config/lefthook/python.sh" "$@" 2>&1
+    ) || status=$?
+    check_case "$name" "$want" "$status" "$needle" "$out"
+    if [ "$want" -eq 1 ]; then
+        case "$out" in
+            *'send the change back to a lane fix round; the judge does not edit lane output') ;;
+            *) printf 'FAIL %s: missing refusal instruction\n%s\n' "$name" "$out" >&2; exit 1 ;;
+        esac
+    fi
+    if [ "$want" -eq 0 ] && [ -z "$needle" ] && [ -n "$out" ]; then
+        printf 'FAIL %s: expected silence, got %s\n' "$name" "$out" >&2
+        exit 1
+    fi
+    echo "ok   $name (rc=$status)"
+}
+
+load_hook_args "$lefthook"
+expect_wired case-11-wiring 1 "path '$path' mtime" index_all_tracked "${hook_args[@]}"
+expect_wired case-11b-path-limited 1 "path '$path' mtime" index_path_limited "${hook_args[@]}"
+
 # Disable only the mtime comparison; case 5 must now be wrongly permitted.
 sed 's/if mtime > ended.timestamp() + GRACE_SECONDS:/if False:/' "$check" > "$work/mutant.py"
 check=$work/mutant.py
 expect mutant-case-5 0 '' setup_late
 echo 'mutant: case 5 passes under mutant -> test bites'
+
+# Remove --keep-index from the wired arguments; case 11 must now be wrongly permitted.
+mutant_args=()
+for arg in "${hook_args[@]}"; do
+    if [ "$arg" != --keep-index ]; then
+        mutant_args+=("$arg")
+    fi
+done
+expect_wired mutant-case-11 0 '' index_all_tracked "${mutant_args[@]}"
+echo 'mutant: case 11 passes without --keep-index -> wiring test bites'

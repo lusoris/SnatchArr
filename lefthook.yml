@@ -64,7 +64,8 @@ pre-commit:
     image-release-age:
       run: sh .config/lefthook/python.sh --keep-index -I tools/ci/image_release_age_check.py --index
     lane-judge-guard:
-      run: sh .config/lefthook/python.sh -I tools/ci/lane_judge_guard.py
+      # The guard must read the index being recorded (option -a, path-limited), which git passes only in GIT_INDEX_FILE.
+      run: sh .config/lefthook/python.sh --keep-index -I tools/ci/lane_judge_guard.py
 
 # Repository-owned, not rendered by praetor: the policy CI applies to every commit of a pull
 # request (job `commits`), run here before the commit exists.

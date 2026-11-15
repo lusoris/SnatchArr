@@ -4,8 +4,10 @@
 
 The launcher owns <git-dir>/lane-judge.json; this check only reads it. A missing
 marker permits ordinary worktrees, and MERGE_HEAD permits judge conflict resolution.
-Staged deletions (D) pass: they have no worktree file whose mtime can be checked.
-Exit 0 = permitted, 1 = refused, 2 = invalid input or failed inspection.
+The staged set is read from the index git records (GIT_INDEX_FILE when git sets it),
+so the hook wiring keeps it. Staged deletions (D) pass: they have no worktree file
+whose mtime can be checked. Exit 0 = permitted, 1 = refused, 2 = invalid input or
+failed inspection.
 """
 
 from __future__ import annotations
