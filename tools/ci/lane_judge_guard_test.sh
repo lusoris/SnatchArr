@@ -161,6 +161,12 @@ setup_bad_time() { marker; field launched_at '"bad time"'; }
 # setup_naive_time: local timestamps cannot be compared with offset timestamps.
 setup_naive_time() { marker; field launched_at '"2026-11-13T21:00:00"'; }
 
+# setup_naive_exit_time: exit timestamps without an offset fail closed.
+setup_naive_exit_time() {
+    marker
+    printf '2026-11-13T21:00:00\t%s\texit\trc=0\tseconds=3600\n' "$label" > runs.tsv
+}
+
 # setup_relative_runs: the launcher must name an absolute runs file.
 setup_relative_runs() { marker; field runs '"runs.tsv"'; }
 
@@ -220,6 +226,14 @@ setup_zulu() {
     staged 2026-11-13T22:02:00+01:00
 }
 
+# setup_zulu_late: reject a judge edit after the same UTC exit instant in Z form.
+setup_zulu_late() {
+    marker
+    field launched_at '"2026-11-13T20:00:00Z"'
+    printf '2026-11-13T21:00:00Z\t%s\texit\trc=0\tseconds=3600\n' "$label" > runs.tsv
+    staged 2026-11-13T22:10:00+01:00
+}
+
 expect case-1-no-marker 0 '' setup_none
 expect case-2-no-exit 1 "lane $label has no exit row after $launched; wait for it to end" setup_running
 expect case-3-old-exit 1 'has no exit row after' setup_old_exit
@@ -235,7 +249,9 @@ expect case-10-deletion 0 '' setup_delete
 expect wrong-type 2 'must be strings' setup_wrong_type
 expect bad-time 2 'bad time' setup_bad_time
 expect naive-time 2 'UTC offset required' setup_naive_time
+expect naive-exit-time 2 'UTC offset required' setup_naive_exit_time
 expect zulu-time 0 '' setup_zulu
+expect zulu-judge-edit 1 "path '$path' mtime" setup_zulu_late
 expect relative-runs 2 'must be an absolute path' setup_relative_runs
 expect missing-runs 2 'lane runs file missing' setup_missing_runs
 expect unreadable-marker 2 'lane judge guard:' setup_unreadable_marker
@@ -486,13 +502,21 @@ expect_wired() {
     echo "ok   $name (rc=$status)"
 }
 
-# run_floor_python: exercise python.sh and the guard under LANE_JUDGE_FLOOR_PYTHON when set.
+# run_floor_python: exercise python.sh and the guard under the available floor Python.
 run_floor_python() {
     local floor_raw=${LANE_JUDGE_FLOOR_PYTHON-} floor_dir="$work_abs/floor-bin"
     local floor_exec want_info got_info="" got_rc=0 py_dir
-    if [ -z "$floor_raw" ]; then
-        echo 'skip floor python: LANE_JUDGE_FLOOR_PYTHON unset'
-        return
+    if [ "${LANE_JUDGE_FLOOR_PYTHON+x}" = x ]; then
+        if [ -z "$floor_raw" ]; then
+            echo 'skip floor python: LANE_JUDGE_FLOOR_PYTHON empty'
+            return
+        fi
+    else
+        if ! floor_raw=$(command -v python3.10); then
+            echo 'skip floor python: no python3.10 on PATH and LANE_JUDGE_FLOOR_PYTHON unset'
+            return
+        fi
+        printf 'floor python: %s\n' "$floor_raw"
     fi
     if ! floor_exec=$("$floor_raw" -I -c 'import sys; print(sys.executable)' 2>/dev/null) || [ -z "$floor_exec" ]; then
         printf 'FAIL floor-python: cannot execute %s\n' "$floor_raw" >&2
@@ -517,6 +541,8 @@ run_floor_python() {
     fi
     expect_wired floor-no-marker 0 '' index_no_marker "${hook_args[@]}"
     expect_wired floor-judge-edit 1 "path '$path' mtime" index_all_tracked "${hook_args[@]}"
+    expect floor-zulu-time 0 '' setup_zulu
+    expect floor-zulu-judge-edit 1 "path '$path' mtime" setup_zulu_late
 }
 
 # expect_wiring_mutant NAME FILE NEEDLE: assert malformed hook wiring fails case-11-wiring.
