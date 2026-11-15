@@ -6,7 +6,8 @@
 # job checks the commits of a pull request, never the squash commit GitHub writes from the body
 # the maintainer gives, so a squash that dropped the Signed-off-by trailer (main c2c711e6, #1007)
 # reached main green. CI runs this on every push to main; the landing helper squash_merge.sh is
-# the barrier before the merge, this one turns main red when it was bypassed.
+# the barrier before the merge (a local merge guard may require its own judged landing path
+# instead), this one turns main red when it was bypassed.
 #
 #   tools/ci/main_commit_check.sh <commit>|<before>..<after>
 #
@@ -43,7 +44,7 @@ check_commit() {
       ;;
   esac
   cat "$work/policy" >&2
-  echo "main_commit_check: $1 fails the commit-msg policy; land through tools/ci/squash_merge.sh, never rewrite main" >&2
+  echo "main_commit_check: $1 fails the commit-msg policy; land through tools/ci/squash_merge.sh (a local merge guard may require its own judged landing path instead), never rewrite main" >&2
   return 1
 }
 
