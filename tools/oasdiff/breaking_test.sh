@@ -166,4 +166,35 @@ else
   failed=1
 fi
 
+expected_head_subject="$(git_fixture -C "$repo" log -1 --format=%s HEAD)"
+git_fixture clone -q --depth 1 "file://$repo" "$WORK/shallow"
+
+got=0
+(
+  cd "$WORK/shallow"
+  sh "$HERE/branch_subjects.sh" HEAD
+) >"$WORK/shallow-subjects" 2>"$WORK/shallow-subjects.err" || got=$?
+if [ "$got" -ne 0 ] && grep -qF shallow "$WORK/shallow-subjects.err" && \
+    grep -qF "git fetch --unshallow" "$WORK/shallow-subjects.err"; then
+  echo "ok   branch_subjects refuses a shallow repository"
+else
+  echo "FAIL branch_subjects: shallow repository was not refused as expected (exit $got)" >&2
+  sed 's/^/  /' "$WORK/shallow-subjects.err" >&2
+  failed=1
+fi
+
+git_fixture -C "$WORK/shallow" fetch -q --unshallow
+got=0
+(
+  cd "$WORK/shallow"
+  sh "$HERE/branch_subjects.sh" HEAD
+) >"$WORK/unshallowed-subjects" 2>"$WORK/unshallowed-subjects.err" || got=$?
+if [ "$got" -eq 0 ] && [ "$(tail -n 1 "$WORK/unshallowed-subjects")" = "$expected_head_subject" ]; then
+  echo "ok   branch_subjects accepts an unshallowed repository"
+else
+  echo "FAIL branch_subjects: unshallowed repository did not print the HEAD subject (exit $got)" >&2
+  sed 's/^/  /' "$WORK/unshallowed-subjects.err" >&2
+  failed=1
+fi
+
 exit "$failed"

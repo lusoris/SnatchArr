@@ -18,5 +18,11 @@ if ! git rev-parse --verify -q "$base_ref^{commit}" >/dev/null; then
   exit 1
 fi
 
+is_shallow="$(git rev-parse --is-shallow-repository)"
+if [ "$is_shallow" = true ]; then
+  echo "${0##*/}: repository is shallow; run git fetch --unshallow" >&2
+  exit 1
+fi
+
 git log --no-merges --format=%s "$base_ref..HEAD"
 git log -1 --format=%s HEAD
