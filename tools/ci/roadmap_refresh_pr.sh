@@ -19,6 +19,10 @@
 # the author GitHub recorded must be the identity that signed off, else the run fails (#1036
 # carried no trailer and the fleet merge train refused it).
 #
+# The pull request body is rendered from .github/pull_request_template.md with the commit-msg
+# item ticked and bot notes appended; when the bot's open pull request lacks the `## Description`
+# heading, the run updates its body from the rendered template.
+#
 #   REPO=owner/name BASE_SHA=<sha> BASE_BRANCH=<default branch> APP_SLUG=<app slug> \
 #     [RUN_ID=<id>] [DOC=docs/roadmap.md] [BRANCH=bot/roadmap-refresh] [DRY_RUN=1] \
 #     tools/ci/roadmap_refresh_pr.sh
@@ -59,6 +63,29 @@ send() {
   fi
 }
 
+# pr_body writes the pull request body for $doc from .github/pull_request_template.md to $1.
+pr_body() {
+  template="$root/.github/pull_request_template.md"
+  if [ ! -f "$template" ]; then
+    echo "roadmap_refresh: pull request template $template is missing" >&2
+    exit 1
+  fi
+  DOC_PATH="$doc" awk '
+    BEGIN { doc = ENVIRON["DOC_PATH"] }
+    /^## / { in_desc = ($0 == "## Description") }
+    in_desc && /^<!-- Provide/ {
+      print "The scheduled Roadmap refresh workflow re-rendered the milestone table in " doc " from the open GitHub milestones (tools/ci/roadmap_render.py --write). The table mirrors the forge milestones, so a moved open count or scope arrives here instead of as a hand edit."
+      next
+    }
+    /^- \[ \].*Conventional Commits/ { sub(/^- \[ \]/, "- [x]") }
+    { print }
+    END {
+      print ""
+      print "Bot notes: the bot ran only the commit-msg policy. The pull request CI runs make verify-all. The HISS, 3D test and agent context items do not apply: this change edits the generated milestone table in " doc " only."
+    }
+  ' <"$template" >"$1" || exit 1
+}
+
 # Only the bot's own pull request: head in this repository, into the base branch. A fork pull
 # request from a branch of the same name does not match.
 open="$(gh api "repos/$repo/pulls?head=${repo%%/*}:$branch&base=$base_branch&state=open" \
@@ -90,11 +117,14 @@ message="$(printf '%s\n\nSigned-off-by: %s <%s>' "$title" "$login" "$email")"
 umask 077
 msgfile="$(mktemp)"
 trap 'rm -f "$msgfile"' 0
+bodyfile="$(mktemp)"
+trap 'rm -f "$msgfile" "$bodyfile"' 0
 printf '%s\n' "$message" >"$msgfile"
 sh "$root/.config/hooks/commit-msg.sh" "$msgfile" || {
   echo "roadmap_refresh: the commit message fails the commit-msg policy; nothing written" >&2
   exit 1
 }
+pr_body "$bodyfile"
 
 # drop_tmp deletes the temporary branch the file was written on.
 drop_tmp() {
@@ -127,10 +157,12 @@ fi
 drop_tmp || exit 1
 
 if [ -n "$open" ]; then
+  open_body="$(gh pr view "$open" --repo "$repo" --json body --jq .body)" || exit 1
+  if ! printf '%s\n' "$open_body" | grep -qxF '## Description'; then
+    send pr edit "$open" --repo "$repo" --body-file "$bodyfile" >/dev/null || exit 1
+  fi
   echo "roadmap_refresh: branch $branch updated, pull request #$open already open"
   exit 0
 fi
-send pr create --repo "$repo" --base "$base_branch" --head "$branch" --title "$title" \
-  --body "The scheduled Roadmap refresh workflow re-rendered the milestone table in $doc from the open GitHub milestones (tools/ci/roadmap_render.py --write)." \
-  >/dev/null || exit 1
+send pr create --repo "$repo" --base "$base_branch" --head "$branch" --title "$title" --body-file "$bodyfile" >/dev/null || exit 1
 echo "roadmap_refresh: pull request proposed from $branch"
