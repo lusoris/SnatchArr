@@ -398,10 +398,12 @@ check_readback_item() {
 # only when the entry applies to this upgrade.
 migration_effects=(
     '55|queue_policies|queue-policy.json|["rules","import_fixable","blocklist"]|false|true|migration 000055 turns the hidden-toggle false on'
+    '59|settings|settings.json|["user_agent"]|"SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)"|""|migration 000059 clears the stored old default User-Agent'
 )
 
 declare -A migration_effect_sql=(
     [55]="rules=CASE WHEN rules->'import_fixable'->'blocklist' = 'false'::jsonb THEN jsonb_set(rules, '{import_fixable,blocklist}', 'true'::jsonb) ELSE rules END"
+    [59]="user_agent=CASE WHEN user_agent = 'SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)' THEN '' ELSE user_agent END"
 )
 
 # migration_effect_applies VERSION succeeds when the old release is below VERSION and the
