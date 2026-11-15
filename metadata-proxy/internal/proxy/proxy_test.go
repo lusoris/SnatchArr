@@ -431,7 +431,7 @@ func TestLogModeOutsideAllowHostsTunnelsAndWarns(t *testing.T) {
 	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
 	opts.AllowHosts = []string{"skyhook.sonarr.tv"}
 	opts.Ports = []int{echoPort}
-	h := startHarness(t, opts, proxy.WithDialControl(nil))
+	h := startHarness(t, opts, proxy.WithDialControl(proxy.AllowAllDialControl))
 
 	target := fmt.Sprintf("localhost:%d", echoPort)
 	rawReq := fmt.Sprintf(
@@ -524,7 +524,7 @@ func TestTLSEchoTunnelAndMetrics(t *testing.T) {
 	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
 	opts.AllowHosts = []string{"localhost"}
 	opts.Ports = []int{tlsPort}
-	h := startHarness(t, opts, proxy.WithDialControl(nil))
+	h := startHarness(t, opts, proxy.WithDialControl(proxy.AllowAllDialControl))
 
 	target := fmt.Sprintf("localhost:%d", tlsPort)
 	rawReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
@@ -645,7 +645,7 @@ func TestMaxTunnelsBoundary(t *testing.T) {
 	opts.AllowHosts = []string{"localhost"}
 	opts.Ports = []int{echoPort}
 	opts.MaxTunnels = capTunnels
-	h := startHarness(t, opts, proxy.WithDialControl(nil))
+	h := startHarness(t, opts, proxy.WithDialControl(proxy.AllowAllDialControl))
 
 	target := fmt.Sprintf("localhost:%d", echoPort)
 	rawReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
@@ -815,7 +815,7 @@ func runIdleTimeoutCase(t *testing.T, echoPort int, tc idleTimeoutCase) {
 	opts.Ports = []int{echoPort}
 	opts.IdleTimeout = tc.idleTimeout
 	opts.MaxTunnel = tc.maxTunnel
-	h := startHarness(t, opts, proxy.WithDialControl(nil))
+	h := startHarness(t, opts, proxy.WithDialControl(proxy.AllowAllDialControl))
 
 	target := fmt.Sprintf("localhost:%d", echoPort)
 	rawReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
@@ -954,7 +954,7 @@ func runStopTunnelCase(t *testing.T, echoPort int, tc stopTunnelCase) {
 	opts.IdleTimeout = 30 * time.Second
 	opts.MaxTunnel = 60 * time.Second
 	opts.MaxTunnels = 4
-	h := startHarness(t, opts, proxy.WithDialControl(nil))
+	h := startHarness(t, opts, proxy.WithDialControl(proxy.AllowAllDialControl))
 
 	clients := openTestTunnels(t, h.addr, echoPort, tc.tunnelCount)
 

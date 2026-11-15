@@ -138,7 +138,7 @@ func newTwoListenerService(t *testing.T, echoPort int) (*Service, *lockedLogBuf)
 		logger,
 		WithBindHost("127.0.0.1"),
 		WithEphemeralPorts(),
-		WithDialControl(nil),
+		WithDialControl(AllowAllDialControl),
 	)
 	if err != nil {
 		t.Fatalf("proxy.New: %v", err)

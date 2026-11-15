@@ -59,9 +59,14 @@ func WithEphemeralPorts() Option {
 	}
 }
 
-// WithDialControl overrides the outbound net.Dialer.Control hook (for loopback tests).
+// WithDialControl overrides the outbound net.Dialer.Control hook. A nil control
+// is a no-op and keeps the default SSRF guard; tests needing unguarded loopback
+// dials must pass an explicit allow-all function.
 func WithDialControl(ctrl DialControl) Option {
 	return func(s *Service) {
+		if ctrl == nil {
+			return
+		}
 		s.dialControl = ctrl
 		s.customDialCtrl = true
 	}
