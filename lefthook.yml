@@ -106,3 +106,12 @@ pre-push:
         - "tools/ci/codacy_opengrep/*"
         - "tools/ci/tool-versions.env"
       run: make tools-opengrep
+    semgrep:
+      # Own Semgrep rules (.semgrep.yml), only when the push touches what they scan.
+      glob:
+        - "*.go"
+        - ".semgrep.yml"
+        - "tools/ci/semgrep/**"
+        - "tools/ci/semgrep_scan.py"
+        - "tools/ci/tool-versions.env"
+      run: make semgrep-scan
