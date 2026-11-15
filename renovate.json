@@ -55,14 +55,15 @@
       "datasourceTemplate": "github-digest"
     },
     {
-      "description": "Images of the workflow gate, each pinned by version and digest on one line (tools/ci/workflow-check.sh, tools/ci/renovate_presets.py)",
+      "description": "Images of the workflow gate, each pinned by version and digest on one line (tools/ci/workflow-check.sh, tools/ci/renovate_presets.py, tools/ci/semgrep_scan.py)",
       "customType": "regex",
       "managerFilePatterns": [
         "tools/ci/tool-versions.env"
       ],
       "matchStrings": [
         "ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n",
-        "RENOVATE_IMAGE=mirror\\.gcr\\.io/(?<depName>renovate/renovate):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
+        "RENOVATE_IMAGE=mirror\\.gcr\\.io/(?<depName>renovate/renovate):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n",
+        "SEMGREP_IMAGE=(?<depName>semgrep/semgrep):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
@@ -387,7 +388,7 @@
       "automerge": false
     },
     {
-      "description": "The two images of the workflow gate move in a pull request of their own",
+      "description": "The three images of the workflow gate move in a pull request of their own",
       "matchManagers": [
         "custom.regex"
       ],
