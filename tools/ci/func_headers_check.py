@@ -22,12 +22,12 @@ from pathlib import Path
 
 GIT_TIMEOUT_SECONDS = 30
 MAX_FILE_LINES = 20000
+MAX_SHELL_CONTEXTS = 32
 SHELL_SUFFIXES = (".sh", ".bash")
 SHELL_DEF = re.compile(
     r"^(\s*)(?:function\s+)?([A-Za-z_][A-Za-z0-9_:.-]*)\s*\(\)\s*(?:(\{.*\})(?:\s*$|\s+#.*)|\{?(?:\s*$|\s+#.*))|"
     r"^(\s*)function\s+([A-Za-z_][A-Za-z0-9_:.-]*)\s*(?:(\{.*\})(?:\s*$|\s+#.*)|\{?(?:\s*$|\s+#.*))"
 )
-HEREDOC_START = re.compile(r"(?<!<)<<(?!<)(-?)\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
 HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)(-?)")
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 C_ESCAPE = re.compile(rb"\\([0-7]{1,3}|[abtnvfr\"\\])")
@@ -106,42 +106,81 @@ def shell_header_ok(lines: list[str], def_idx: int) -> bool:
     return i >= 0 and lines[i].lstrip().startswith("#") and not lines[i].startswith("#!")
 
 
-def shell_line_state(line: str, quote: str | None) -> tuple[str | None, str]:
-    """Return the quote state and unquoted shell text, masking comments and literals."""
+def push_shell_context(contexts: list[str], kind: str, path: str, line_no: int) -> None:
+    """Push one bounded shell context or report the source location."""
+    if len(contexts) >= MAX_SHELL_CONTEXTS:
+        raise CheckError(f"{path}:{line_no}: shell context depth exceeds {MAX_SHELL_CONTEXTS}")
+    contexts.append(kind)
+
+
+def shell_quote_step(line: str, i: int, contexts: list[str], path: str, line_no: int) -> int:
+    """Consume one quoted span character, opening shell code inside double quotes."""
+    kind = contexts[-1]
+    char = line[i]
+    if kind in ("ansi", '"') and char == "\\" and i + 1 < len(line):
+        return 2
+    if (char == "'" and kind in ("'", "ansi")) or (char == '"' and kind == '"'):
+        contexts.pop()
+    elif kind == '"' and line.startswith("$(", i):
+        width = 3 if line.startswith("$((", i) else 2
+        push_shell_context(contexts, "arith" if width == 3 else "sub", path, line_no)
+        return width
+    elif kind == '"' and char == "`":
+        push_shell_context(contexts, "backtick", path, line_no)
+    return 1
+
+
+def shell_code_step(line: str, i: int, contexts: list[str], path: str, line_no: int,
+                    word_start: bool) -> tuple[int, bool, str]:
+    """Consume shell code, returning width, next word boundary, and visible code."""
+    char = line[i]
+    masked = "arith" in contexts
+    if char == "\\" and i + 1 < len(line):
+        return 2, False, "  "
+    if contexts and contexts[-1] == "arith" and line.startswith("))", i):
+        contexts.pop()
+        return 2, True, "  "
+    if line.startswith("$((", i) or (word_start and not masked and line.startswith("((", i)):
+        width = 3 if char == "$" else 2
+        push_shell_context(contexts, "arith", path, line_no)
+        return width, False, " " * width
+    if line.startswith("$(", i):
+        push_shell_context(contexts, "sub", path, line_no)
+        return 2, True, "  "
+    if line.startswith(("$'", '$"'), i):
+        push_shell_context(contexts, "ansi" if line[i + 1] == "'" else '"', path, line_no)
+        return 2, False, "  "
+    if char in ("'", '"', "`"):
+        push_shell_context(contexts, "backtick" if char == "`" else char, path, line_no)
+        return 1, False, " "
+    if char == "(":
+        push_shell_context(contexts, "group", path, line_no)
+    elif char == ")" and contexts and contexts[-1] in ("group", "sub"):
+        contexts.pop()
+    return 1, char.isspace() or char in ";&|()", " " if masked else char
+
+
+def shell_line_state(line: str, contexts: list[str], path: str, line_no: int) -> str:
+    """Return unquoted shell code while updating bounded contexts across lines."""
     code = []
     word_start = True
     i = 0
     while i < len(line):
-        char = line[i]
-        if quote == "'":
-            if char == "'":
-                quote = None
+        if contexts and contexts[-1] in ("'", "ansi", '"'):
+            width = shell_quote_step(line, i, contexts, path, line_no)
+            code.append(" " * width)
+        elif contexts and contexts[-1] == "backtick" and line[i] == "`":
+            contexts.pop()
+            width = 1
             code.append(" ")
-        elif quote == '"':
-            if char == "\\" and i + 1 < len(line):
-                code.extend((" ", " "))
-                i += 1
-            elif char == '"':
-                quote = None
-                code.append(" ")
-            else:
-                code.append(" ")
-        elif char == "#" and word_start:
-            code.extend(" " * (len(line) - i))
+        elif line[i] == "#" and word_start:
+            code.append(" " * (len(line) - i))
             break
-        elif char in ("'", '"'):
-            quote = char
-            code.append(" ")
-            word_start = False
-        elif char == "\\" and i + 1 < len(line):
-            code.extend((" ", " "))
-            i += 1
-            word_start = False
         else:
-            code.append(char)
-            word_start = char.isspace()
-        i += 1
-    return quote, "".join(code)
+            width, word_start, visible = shell_code_step(line, i, contexts, path, line_no, word_start)
+            code.append(visible)
+        i += width
+    return "".join(code)
 
 
 def heredoc_end(line: str, delimiter: str, strip_tabs: bool) -> bool:
@@ -150,33 +189,59 @@ def heredoc_end(line: str, delimiter: str, strip_tabs: bool) -> bool:
     return target == delimiter
 
 
-def shell_heredoc(line: str, code: str) -> re.Match[str] | None:
-    """Find a heredoc opener in unquoted shell text, retaining quoted delimiters."""
+def heredoc_word(line: str, start: int) -> str | None:
+    """Read the complete shell heredoc word after an operator with quote removal."""
+    delimiter = []
+    quote = None
+    seen = False
+    i = start
+    while i < len(line) and line[i].isspace():
+        i += 1
+    while i < len(line):
+        char = line[i]
+        if quote is None and (char.isspace() or char in ";&|()<>"):
+            break
+        seen = True
+        if char == quote:
+            quote = None
+        elif char in ("'", '"') and quote is None:
+            quote = char
+        elif char == "\\" and quote != "'" and i + 1 < len(line):
+            i += 1
+            delimiter.append(line[i])
+        else:
+            delimiter.append(char)
+        i += 1
+    return "".join(delimiter) if seen and quote is None else None
+
+
+def shell_heredoc(line: str, code: str) -> tuple[bool, str] | None:
+    """Find a heredoc opener in visible shell code and read its full delimiter."""
     operator = HEREDOC_OPERATOR.search(code)
     if operator is None:
         return None
-    return HEREDOC_START.match(line, operator.start())
+    delimiter = heredoc_word(line, operator.end())
+    return (bool(operator.group(1)), delimiter) if delimiter is not None else None
 
 
-def shell_function_end(lines: list[str], idx: int, indent: str) -> int:
+def shell_function_end(lines: list[str], idx: int, indent: str, path: str) -> int:
     """Find the closing line index (0-based) for a multiline shell function starting at idx."""
     heredoc: str | None = None
     heredoc_dash = False
-    quote: str | None = None
+    contexts: list[str] = []
     for j in range(idx + 1, min(len(lines), idx + 1 + MAX_FILE_LINES)):
         line = lines[j]
         if heredoc is not None:
             if heredoc_end(line, heredoc, heredoc_dash):
                 heredoc = None
             continue
-        was_quoted = quote is not None
-        quote, code = shell_line_state(line, quote)
-        m_hero = None if was_quoted else shell_heredoc(line, code)
+        was_quoted = bool(contexts and contexts[-1] in ("'", "ansi", '"'))
+        code = shell_line_state(line, contexts, path, j + 1)
+        m_hero = shell_heredoc(line, code)
         if m_hero:
-            heredoc_dash = bool(m_hero.group(1))
-            heredoc = m_hero.group(2)
+            heredoc_dash, heredoc = m_hero
             continue
-        if was_quoted or quote is not None:
+        if was_quoted or (contexts and contexts[-1] in ("'", "ansi", '"')):
             continue
         r = line.rstrip()
         if r in (f"{indent}}}", f"{indent}}};") or line.startswith((f"{indent}}} ", f"{indent}}}; ")):
@@ -184,38 +249,37 @@ def shell_function_end(lines: list[str], idx: int, indent: str) -> int:
     return idx
 
 
-def shell_functions(lines: list[str]) -> list[tuple[str, int, int]]:
+def shell_functions(lines: list[str], path: str) -> list[tuple[str, int, int]]:
     """Return (name, first line, last line), 1-based, for each shell function definition."""
     funcs = []
     heredoc: str | None = None
     heredoc_dash = False
-    quote: str | None = None
+    contexts: list[str] = []
     for idx, text in enumerate(lines):
         if heredoc is not None:
             if heredoc_end(text, heredoc, heredoc_dash):
                 heredoc = None
             continue
-        was_quoted = quote is not None
-        quote, code = shell_line_state(text, quote)
+        was_quoted = bool(contexts and contexts[-1] in ("'", "ansi", '"'))
+        code = shell_line_state(text, contexts, path, idx + 1)
         if not was_quoted:
             m = SHELL_DEF.match(text)
             if m:
                 indent = m.group(1) if m.group(1) is not None else m.group(4)
                 name = m.group(2) or m.group(5)
                 is_one_line = bool(m.group(3) or m.group(6))
-                end = idx if is_one_line else shell_function_end(lines, idx, indent)
+                end = idx if is_one_line else shell_function_end(lines, idx, indent, path)
                 funcs.append((name, idx + 1, end + 1))
-        m_hero = None if was_quoted else shell_heredoc(text, code)
+        m_hero = shell_heredoc(text, code)
         if m_hero:
-            heredoc_dash = bool(m_hero.group(1))
-            heredoc = m_hero.group(2)
+            heredoc_dash, heredoc = m_hero
     return funcs
 
 
 def shell_findings(path: str, lines: list[str], touched: set[int], gaps: set[int]) -> list[str]:
     """List touched shell functions in path that lack a header comment."""
     found = []
-    for name, start, end in shell_functions(lines):
+    for name, start, end in shell_functions(lines, path):
         is_touched = (
             bool(touched.intersection(range(start, end + 1)))
             or any(start <= s < end for s in gaps)

@@ -13,6 +13,7 @@ trap 'rm -rf "$work"' EXIT
 failed=0
 
 # shellcheck source=tools/ci/test_lib.sh
+# shellcheck disable=SC1091 # standalone shellcheck does not follow sourced files
 . "$HERE/test_lib.sh"
 
 # seed_repo DIR: a repository whose base commit holds lib.sh and lib.py, both with headers.
@@ -232,6 +233,119 @@ edit_34() {
     sed -i 's/echo changed/echo touched/' lib.sh
 }
 
+# edit_35: ANSI-C escaped apostrophe closes only at the final quote.
+edit_35() {
+    printf '%s\n' '#!/usr/bin/env bash' "printf '%s\\n' \$'it\\'s'" 'bare_ansi() { :; }' >ansi.sh
+}
+
+# edit_36: an escaped backslash leaves the next apostrophe unescaped.
+edit_36() {
+    printf '%s\n' '#!/usr/bin/env bash' "printf '%s\\n' \$'a\\\\'" 'bare_ansi_boundary() { :; }' >ansi-boundary.sh
+}
+
+# edit_37: command substitution inside double quotes parses its own quotes.
+# shellcheck disable=SC2016 # literal command substitution is the fixture text
+edit_37() {
+    printf '%s\n' '#!/usr/bin/env bash' 'value="$(printf '\''%s'\'' "can'\''t")"' \
+        'bare_subst() { :; }' >subst.sh
+}
+
+# edit_38: a multiline string inside command substitution masks function text.
+# shellcheck disable=SC2016 # literal command substitution is the fixture text
+edit_38() {
+    printf '%s\n' '#!/usr/bin/env bash' 'x="$(printf '\''%s\n'\'' "' 'fake_sub() { :; }' '")"' >subst-multiline.sh
+}
+
+# edit_39: backtick substitution inside double quotes parses its own quotes.
+edit_39() {
+    printf '%s\n' '#!/usr/bin/env bash' 'value="`printf '\''%s'\'' "can'\''t"`"' \
+        'bare_backtick() { :; }' >backtick.sh
+}
+
+# edit_40: operator-adjacent hash starts a comment.
+edit_40() {
+    printf '%s\n' '#!/usr/bin/env bash' "echo a;#'" 'bare_semi() { :; }' >semi-comment.sh
+}
+
+# edit_41: hash within a word is literal and the following quote opens.
+edit_41() {
+    printf '%s\n' '#!/usr/bin/env bash' 'echo a#"' 'fake_hash() { :; }' '"' >literal-hash.sh
+}
+
+# edit_42: dollar arithmetic left shift does not start a heredoc.
+# shellcheck disable=SC2016 # literal arithmetic expansion is the fixture text
+edit_42() {
+    printf '%s\n' '#!/usr/bin/env bash' 'echo $((1 << BITS))' 'bare_bits() { :; }' >dollar-shift.sh
+}
+
+# edit_43: command arithmetic left shift does not start a heredoc.
+edit_43() {
+    printf '%s\n' '#!/usr/bin/env bash' '(( y = 1 << BITS ))' 'bare_plain_shift() { :; }' >plain-shift.sh
+}
+
+# edit_44: unquoted hyphen belongs to the whole heredoc delimiter.
+edit_44() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<END-TEXT' 'END' 'fake_early() { :; }' 'END-TEXT' >hyphen-here.sh
+}
+
+# edit_45: quoted hyphen belongs to the whole heredoc delimiter.
+edit_45() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<'END-TEXT'" 'END' 'fake_quoted() { :; }' 'END-TEXT' >quoted-hyphen.sh
+}
+
+# edit_46: mixed quoting yields EOF and does not consume the next function.
+edit_46() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<E"O"F' 'EOF' 'bare_after_mixed() { :; }' >mixed-here.sh
+}
+
+# edit_47: a heredoc after a multiline quote masks top-level function text.
+edit_47() {
+    printf '%s\n' '#!/usr/bin/env bash' 'printf '\''%s\n'\'' "prefix' \
+        'suffix"; cat <<EOF' 'fake_tail() { :; }' 'EOF' >tail-here.sh
+}
+
+# edit_48: a heredoc after a multiline quote does not close its enclosing function early.
+edit_48() {
+    printf '%s\n' '' 'undoc_tail() {' '    printf '\''%s\n'\'' "prefix' \
+        'suffix"; cat <<EOF' '}' 'EOF' '    echo a' '}' >>lib.sh
+    git add lib.sh && git commit -q -m tail
+    sed -i 's/echo a$/echo touched/' lib.sh
+}
+
+# edit_49: context nesting above the fixed cap reports a file and line error.
+# shellcheck disable=SC2016 # literal command substitution openers are the fixture text
+edit_49() {
+    printf '%s\n' '#!/usr/bin/env bash' "$(printf '\$(%.0s' {1..33})" >deep-context.sh
+}
+
+# edit_50: a double-quoted hyphen delimiter is one word.
+edit_50() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<"END-TEXT"' 'END' 'fake_double_here() { :; }' \
+        'END-TEXT' >double-hyphen.sh
+}
+
+# edit_51: a backslash-quoted delimiter closes at EOF.
+edit_51() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<\EOF' 'EOF' 'bare_after_backslash() { :; }' >backslash-here.sh
+}
+
+# edit_52: nested ordinary parentheses leave arithmetic before a real heredoc.
+# shellcheck disable=SC2016 # literal arithmetic expansion is the fixture text
+edit_52() {
+    printf '%s\n' '#!/usr/bin/env bash' 'echo $(( ((1 << BITS) + 1) ))' \
+        'cat <<EOF' 'fake_nested() { :; }' 'EOF' >nested-shift.sh
+}
+
+# edit_53: a quoted empty word is a valid heredoc delimiter.
+edit_53() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<''" 'fake_empty() { :; }' '' >empty-here.sh
+}
+
+# edit_54: a closing parenthesis starts a new word before a comment.
+edit_54() {
+    printf '%s\n' '#!/usr/bin/env bash' "(echo p)#'" 'bare_paren() { :; }' >paren-comment.sh
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -266,6 +380,26 @@ expect "function after heredoc still checked" 1 "shell function bare_after_hered
 expect "escaped quote keeps string open" 0 "ok (" edit_32
 expect "quotes in comments do not open strings" 1 "shell function bare_after_comments has no header comment" edit_33
 expect "brace in string does not end function early" 1 "shell function undoc_string has no header comment" edit_34
+expect "ANSI-C escaped quote closes correctly" 1 "shell function bare_ansi has no header comment" edit_35
+expect "ANSI-C escaped backslash boundary" 1 "shell function bare_ansi_boundary has no header comment" edit_36
+expect "substitution inside double quotes parses shell quotes" 1 "shell function bare_subst has no header comment" edit_37
+expect "multiline substitution quote masks function" 0 "ok (" edit_38
+expect "backtick substitution parses shell quotes" 1 "shell function bare_backtick has no header comment" edit_39
+expect "operator-adjacent hash starts comment" 1 "shell function bare_semi has no header comment" edit_40
+expect "hash within a word stays literal" 0 "ok (" edit_41
+expect "dollar arithmetic shift is not heredoc" 1 "shell function bare_bits has no header comment" edit_42
+expect "command arithmetic shift is not heredoc" 1 "shell function bare_plain_shift has no header comment" edit_43
+expect "unquoted hyphen heredoc delimiter stays whole" 0 "ok (" edit_44
+expect "quoted hyphen heredoc delimiter stays whole" 0 "ok (" edit_45
+expect "mixed quote heredoc delimiter ends at EOF" 1 "shell function bare_after_mixed has no header comment" edit_46
+expect "heredoc after closing quote masks function" 0 "ok (" edit_47
+expect "heredoc after closing quote in function finds end" 1 "shell function undoc_tail has no header comment" edit_48
+expect "context depth cap names file and line" 2 "deep-context.sh:2" edit_49
+expect "double-quoted hyphen heredoc delimiter stays whole" 0 "ok (" edit_50
+expect "backslash-quoted heredoc delimiter ends at EOF" 1 "shell function bare_after_backslash has no header comment" edit_51
+expect "nested arithmetic ends before real heredoc" 0 "ok (" edit_52
+expect "quoted empty heredoc word closes on blank line" 0 "ok (" edit_53
+expect "closing parenthesis starts comment word" 1 "shell function bare_paren has no header comment" edit_54
 
 if [ "$failed" -ne 0 ]; then
     exit 1
