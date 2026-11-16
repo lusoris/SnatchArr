@@ -10,6 +10,64 @@
 #
 # Every rule gives zero findings on the tree; a finding is a regression.
 rules:
+  # ── Test isolation · a closed server's port may be reused ─────────────────
+  - id: test-closed-server-address-reuse
+    languages: [go]
+    severity: ERROR
+    paths:
+      include:
+        - "*_test.go"
+    message: >-
+      Do not use an httptest server address after Close: another parallel test
+      server can bind the freed port. Keep a refusing listener open until cleanup.
+    pattern-either:
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.URL
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $ADDR, ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.Listener.Addr().String()
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $ADDR, ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.Listener.Addr()
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $ADDR, ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.URL
+          ...
+          $SRV.Close()
+          ...
+          $VAR := $TYPE{..., $FIELD: $ADDR, ...}
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.URL
+          ...
+          $SRV.Close()
+          ...
+          $VAR := []$TYPE{..., {..., $FIELD: $ADDR, ...}, ...}
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $SRV.URL, ...)
+
   # ── HISS-02 · an HTTP client carries a timeout ─────────────────────────────
   # A client without Timeout has no deadline of its own, so a request sent
   # without a context deadline can hang on a slow peer. Tests are exempt: they
