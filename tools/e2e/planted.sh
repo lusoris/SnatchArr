@@ -34,9 +34,9 @@ bounded() {
 # print_reasons prints each Python traceback from its Traceback header through its first
 # unindented exception line; FAIL followed by space or tab and standalone FAIL;
 # Go --- FAIL lines at any indentation and indented _test.go log lines; unindented .go:line:column
-# errors and # package headers; and lowercase labels starting with a lowercase letter or digit,
-# followed by lowercase letters, digits, spaces, hyphens, slashes, dots, or underscores. Issue
-# 1198 adds the Go failure shapes hidden by the planted log tail.
+# errors, # package headers, and go.mod or go.work path diagnostics; and lowercase labels starting
+# with a lowercase letter or digit, followed by lowercase letters, digits, spaces, hyphens, slashes,
+# dots, or underscores. Issue 1198 adds the Go failure shapes hidden by the planted log tail.
 print_reasons() {
     awk '
         /^Traceback / { tb = 1; print; next }
@@ -46,6 +46,7 @@ print_reasons() {
         /^FAIL([ \t]|$)/ { print; next }
         /^[ \t]+[^[:space:]]+_test\.go:[0-9]+:[ \t]/ { print; next }
         /^[^[:space:]]+\.go:[0-9]+:[0-9]+:[ \t]/ { print; next }
+        /^([^[:space:]]*\/)?go\.(mod|work):[0-9]+:[ \t]/ { print; next }
         /^# [^ ]/ { print; next }
         /^[a-z0-9][a-z0-9 ._\/-]*: / { print }
     '

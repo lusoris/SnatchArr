@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 #
 # Cases for planted.sh: refusal and timeout handling, labelled and traceback reasons, and Go
-# test, build, setup, and slash-label reasons that must survive container-log noise.
+# test, build, setup, slash-label, and gomod reasons that must survive container-log noise.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -13,7 +13,7 @@ failed=0
 
 # The script under test: PLANT=bad fails with "refused bad", PLANT=quiet passes, PLANT=hang and
 # HANG_CLEAN=1 sleep past the bound, PLANT=labelled, spaced, traceback, gotest, gobuild, gosetup,
-# and slashlabel print reasons followed by container noise, and PLANT=hanglabelled prints a
+# slashlabel, and gomod print reasons followed by container noise, and PLANT=hanglabelled prints a
 # reason before hanging. The clean run passes.
 cat >"$work/check.sh" <<'SCRIPT'
 case "${PLANT:-}" in
@@ -36,6 +36,9 @@ gosetup)
     printf 'FAIL\texample.com/setupshape [setup failed]\nFAIL\n' >&2
     ;;
 slashlabel) echo 'testutil/pg: start shared container: the slash reason' >&2 ;;
+gomod)
+    printf '%s\n' 'go: errors parsing go.mod:' 'go.mod:3: the go.mod reason' '/work/m/go.mod:5: the absolute reason' 'go: errors parsing go.work:' '../go.work:3: the go.work reason' 'vendor/notgo.mod:4: the lookalike line' >&2
+    ;;
 traceback)
     printf '%s\n' 'Traceback (most recent call last):' '  File "check.py", line 9, in <module>' '    main()' 'TimeoutError: the traceback reason' >&2
     for i in $(seq 30); do echo "api-1 | noise $i"; done
@@ -43,7 +46,7 @@ traceback)
     ;;
 esac
 case "${PLANT:-}" in
-gotest|gobuild|gosetup|slashlabel)
+gotest|gobuild|gosetup|slashlabel|gomod)
     for i in $(seq 30); do
         if [ "$i" -eq 1 ]; then
             echo '2026/11/16 15:52:47 Creating container for image x: y'
@@ -135,6 +138,11 @@ expect "Go build failure survives the log tail" 1 "[build failed]" -- "gobuild:o
 expect "Go setup reason survives the log tail" 1 "the setup reason" -- "gosetup:other text"
 expect "Go setup failure survives the log tail" 1 "[setup failed]" -- "gosetup:other text"
 expect "slash label reason survives the log tail" 1 "testutil/pg: start shared container: the slash reason" -- "slashlabel:other text"
+# Go module and workspace parse reasons include a module-file path and line number.
+expect "Go module reason survives the log tail" 1 "go.mod:3: the go.mod reason" -- "gomod:other text"
+expect "absolute Go module reason survives the log tail" 1 "/work/m/go.mod:5: the absolute reason" -- "gomod:other text"
+expect "Go workspace reason survives the log tail" 1 "../go.work:3: the go.work reason" -- "gomod:other text"
+expect_absent "Go module lookalike stays filtered" "notgo.mod:4" -- "gomod:other text"
 # Container noise stays filtered from the reason prelude and falls outside the final log tail.
 expect_absent "label noise stays outside the log tail" "api-1 | noise 5" -- "labelled:other text"
 expect_absent "Go test noise stays outside the log tail" "api-1 | noise 5" -- "gotest:other text"
