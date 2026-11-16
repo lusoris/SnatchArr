@@ -75,7 +75,7 @@ var Module = fx.Options(
 	fx.Provide(httpapi.CrossOrigin),
 	grpcx.Module,
 	grpcConfig,
-	fx.Decorate(embedMigrationsAfterPool),
+	fx.Decorate(embedMigrations),
 	// The dev profile may start without APP_CRYPTO_KEY (crypto.go).
 	fx.Decorate(newEncryptor),
 	config.Module,
@@ -120,13 +120,6 @@ var Module = fx.Options(
 	// spread across modules.
 	fx.Invoke(mountHTTP),
 )
-
-// embedMigrationsAfterPool makes the retrying pool connect before golusoris v0.22.1
-// opens its auto migrator during fx.New. Remove this stopgap in the golusoris bump
-// that fixes the migrator open.
-func embedMigrationsAfterPool(o dbmigrate.Options, _ *pgxpool.Pool) (dbmigrate.Options, error) {
-	return embedMigrations(o)
-}
 
 // defaultLeaderName keeps the Postgres advisory-lock name "snatcharr" when APP_LEADER_NAME is
 // empty: golusoris leader/gate has no default name, the former leaderx package had this one.
