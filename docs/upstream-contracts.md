@@ -186,7 +186,7 @@ Real clients behave in ways a fake did not show:
 | --- | --- | --- |
 | qBittorrent 5 | Answers HTTP 401 when the port in the `Host` header is not the port the WebUI listens on. | The compose file publishes the WebUI on the port it listens on. |
 | Deluge 2 | The web UI starts without a daemon connection and answers every daemon call with "Unknown method". | The snapshot reports `ErrDelugeNoDaemon`; the user connects a daemon in the web UI's connection manager. |
-| Deluge 2 | Serves no `daemon.info`, which goenvoy asks for the version ([golusoris/goenvoy#101](https://github.com/golusoris/goenvoy/issues/101)). | The version stays empty; `unknownVersion` in `live_test.go` fails once a fixed release reports it. |
+| Deluge 2 | Serves no `daemon.info`, which goenvoy asks for the version ([golusoris/goenvoy#101](https://github.com/golusoris/goenvoy/issues/101)). | goenvoy `deluge/v2` v2.0.6 asks `daemon.get_version` first and falls back to `daemon.info` for Deluge 1, so the snapshot reports the version; `TestDelugeSnapshot` expects it. |
 | NZBGet | Starts with downloads paused. | `tools/e2e/dlclients_live.sh` resumes it before the first run. |
 
 
