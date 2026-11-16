@@ -5,6 +5,14 @@
 # Plant stale and incomplete Lizard cache entries; the wrapper must replace both.
 set -euo pipefail
 
+# Keep the Windows POSIX patterns in sync with codacy_lizard_check.sh.
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*)
+    echo "codacy-lizard: skipped: this POSIX wrapper cannot use Windows venv Scripts" >&2
+    exit 0
+    ;;
+esac
+
 HERE=$(cd "$(dirname "$0")" && pwd)
 wrapper=$HERE/codacy_lizard_check.sh
 requirements=$HERE/../lizard/requirements.txt

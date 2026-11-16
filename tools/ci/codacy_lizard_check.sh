@@ -8,6 +8,7 @@ set -eu
 
 cache="${1:?usage: codacy_lizard_check.sh CACHE_DIR [check arguments]}"
 shift
+# Keep the Windows POSIX patterns in sync with codacy_lizard_check_test.sh.
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*)
     echo "codacy-lizard: skipped: this POSIX wrapper cannot use Windows venv Scripts" >&2
