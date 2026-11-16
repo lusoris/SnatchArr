@@ -4,43 +4,33 @@
 """Refuse shell and Python functions touched by a change that carry no header comment.
 
 The local form of CodeRabbit's docstring coverage check (#960): every function whose body a
-change touches, measured against the merge base with the base ref, must carry a header. A shell
-function needs a comment line directly above its definition (shellcheck directives do not
-count); a Python function needs a docstring. The working tree is compared, so uncommitted edits
-count. Exit 0 = no finding, 1 = findings, 2 = the check could not run.
+change touches, measured against the merge base with the base ref, must carry a header. Shell
+functions come from the shfmt syntax tree (mvdan/sh, pinned in tools/go/go.mod); a file shfmt
+cannot parse stops the check with exit 2 naming the file and line. A shell function needs a
+comment directly above its definition (shellcheck directives do not count); a Python function
+needs a docstring. The working tree is compared, so uncommitted edits count. Exit 0 = no finding,
+1 = findings, 2 = the check could not run.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import json
 import os
 import re
-import subprocess  # nosec B404  # runs only git with a fixed argument list, never a shell
+import subprocess  # nosec B404  # fixed argv lists, never a shell
 import sys
 from pathlib import Path
 
 GIT_TIMEOUT_SECONDS = 30
+SHFMT_RESOLVE_TIMEOUT_SECONDS = 300
+SHELL_PARSE_TIMEOUT_SECONDS = 60
 MAX_FILE_LINES = 20000
-MAX_SHELL_CONTEXTS = 32
+MAX_SHELL_NODES = 500000
 SHELL_SUFFIXES = (".sh", ".bash")
-SHELL_DEF = re.compile(
-    r"^(\s*)(?:function\s+)?([A-Za-z_][A-Za-z0-9_:.-]*)\s*\(\)\s*(?:(\{.*\})(?:\s*$|\s+#.*)|\{?(?:\s*$|\s+#.*))|"
-    r"^(\s*)function\s+([A-Za-z_][A-Za-z0-9_:.-]*)\s*(?:(\{.*\})(?:\s*$|\s+#.*)|\{?(?:\s*$|\s+#.*))"
-)
-HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)(-?)")
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 C_ESCAPE = re.compile(rb"\\([0-7]{1,3}|[abtnvfr\"\\])")
-ANSI_C_ESCAPES = {
-    "a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
-    "t": "\t", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?",
-}
-HEX_DIGITS = "0123456789abcdefABCDEF"
-OCTAL_DIGITS = "01234567"
-MAX_ANSI_C_OCTAL_DIGITS = 3
-MAX_ANSI_C_HEX_DIGITS = 2
-MAX_ANSI_C_UNICODE_DIGITS = 4
-MAX_ANSI_C_UNICODE_WIDE_DIGITS = 8
 ESCAPE_MAP = {
     b"a": 7, b"b": 8, b"t": 9, b"n": 10, b"v": 11, b"f": 12, b"r": 13,
     b"\"": 34, b"\\": 92,
@@ -48,7 +38,7 @@ ESCAPE_MAP = {
 
 
 class CheckError(Exception):
-    """Raised when git cannot answer or a file cannot be read."""
+    """Raised when git, shfmt, or a source file cannot be read."""
 
 
 def git(root: Path, *args: str) -> str:
@@ -108,261 +98,87 @@ def changed_lines(diff: str) -> tuple[dict[str, set[int]], dict[str, set[int]]]:
     return touched, gaps
 
 
-def shell_header_ok(lines: list[str], def_idx: int) -> bool:
-    """Report whether a comment other than a shellcheck directive sits directly above def_idx."""
-    i = def_idx - 1
-    while i >= 0 and lines[i].strip().startswith("# shellcheck "):
-        i -= 1
-    return i >= 0 and lines[i].lstrip().startswith("#") and not lines[i].startswith("#!")
+def resolve_shfmt() -> str:
+    """Resolve the pinned shfmt tool from this checker's repository once per run."""
+    root = Path(__file__).resolve().parents[2]
+    command = ["go", "tool", f"-modfile={root / 'tools/go/go.mod'}", "-n", "shfmt"]
+    try:
+        res = subprocess.run(command, cwd=root, capture_output=True, text=True,  # nosec B603
+                             timeout=SHFMT_RESOLVE_TIMEOUT_SECONDS, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CheckError(f"go tool -modfile=tools/go/go.mod -n shfmt: {exc}") from exc
+    binary = res.stdout.strip()
+    if res.returncode != 0 or not binary:
+        detail = res.stderr.strip() or res.stdout.strip() or "empty tool path"
+        raise CheckError(f"go tool -modfile=tools/go/go.mod -n shfmt: {detail}")
+    return binary
 
 
-def push_shell_context(contexts: list[str], kind: str, path: str, line_no: int) -> None:
-    """Push one bounded shell context or report the source location."""
-    if len(contexts) >= MAX_SHELL_CONTEXTS:
-        raise CheckError(f"{path}:{line_no}: shell context depth exceeds {MAX_SHELL_CONTEXTS}")
-    contexts.append(kind)
+def parse_shell(path: str, source: str, binary: str) -> dict:
+    """Parse full Bash source with shfmt and fail closed on parser errors."""
+    command = [binary, "--to-json", "--language-dialect", "bash", "--filename", path]
+    try:
+        res = subprocess.run(command, input=source, capture_output=True, text=True,  # nosec B603
+                             timeout=SHELL_PARSE_TIMEOUT_SECONDS, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CheckError(f"{path}: shfmt: {exc}") from exc
+    if res.returncode != 0:
+        raise CheckError(f"{path}: shfmt: {res.stderr.strip() or f'exit {res.returncode}'}")
+    try:
+        tree = json.loads(res.stdout)
+    except (ValueError, RecursionError) as exc:
+        raise CheckError(f"{path}: shfmt JSON: {exc}") from exc
+    if not isinstance(tree, dict) or tree.get("Type") != "File":
+        raise CheckError(f"{path}: shfmt JSON: expected File node")
+    return tree
 
 
-def shell_quote_step(line: str, i: int, contexts: list[str], path: str, line_no: int) -> int:
-    """Consume one quoted span character, opening shell code inside double quotes."""
-    kind = contexts[-1]
-    char = line[i]
-    if kind in ("ansi", '"') and char == "\\" and i + 1 < len(line):
-        return 2
-    if (char == "'" and kind in ("'", "ansi")) or (char == '"' and kind == '"'):
-        contexts.pop()
-    elif kind == '"' and line.startswith("$(", i):
-        width = 3 if line.startswith("$((", i) else 2
-        push_shell_context(contexts, "arith" if width == 3 else "sub", path, line_no)
-        return width
-    elif kind == '"' and char == "`":
-        push_shell_context(contexts, "backtick", path, line_no)
-    return 1
-
-
-def shell_code_step(line: str, i: int, contexts: list[str], path: str, line_no: int,
-                    word_start: bool) -> tuple[int, bool, str]:
-    """Consume shell code, returning width, next word boundary, and visible code."""
-    char = line[i]
-    masked = "arith" in contexts
-    if char == "\\" and i + 1 < len(line):
-        return 2, False, "  "
-    if contexts and contexts[-1] == "arith" and line.startswith("))", i):
-        contexts.pop()
-        return 2, True, "  "
-    if line.startswith("$((", i) or (word_start and not masked and line.startswith("((", i)):
-        width = 3 if char == "$" else 2
-        push_shell_context(contexts, "arith", path, line_no)
-        return width, False, " " * width
-    if line.startswith("$(", i):
-        push_shell_context(contexts, "sub", path, line_no)
-        return 2, True, "  "
-    if line.startswith(("$'", '$"'), i):
-        push_shell_context(contexts, "ansi" if line[i + 1] == "'" else '"', path, line_no)
-        return 2, False, "  "
-    if char in ("'", '"', "`"):
-        push_shell_context(contexts, "backtick" if char == "`" else char, path, line_no)
-        return 1, False, " "
-    if char == "(":
-        push_shell_context(contexts, "group", path, line_no)
-    elif char == ")" and contexts and contexts[-1] in ("group", "sub"):
-        contexts.pop()
-    return 1, char.isspace() or char in ";&|()", " " if masked else char
-
-
-def shell_line_state(line: str, contexts: list[str], path: str, line_no: int) -> str:
-    """Return unquoted shell code while updating bounded contexts across lines."""
-    code = []
-    word_start = True
-    i = 0
-    while i < len(line):
-        if contexts and contexts[-1] in ("'", "ansi", '"'):
-            width = shell_quote_step(line, i, contexts, path, line_no)
-            code.append(" " * width)
-        elif contexts and contexts[-1] == "backtick" and line[i] == "`":
-            contexts.pop()
-            width = 1
-            code.append(" ")
-        elif line[i] == "#" and word_start:
-            code.append(" " * (len(line) - i))
-            break
-        else:
-            width, word_start, visible = shell_code_step(line, i, contexts, path, line_no, word_start)
-            code.append(visible)
-        i += width
-    return "".join(code)
-
-
-def heredoc_end(line: str, delimiter: str, strip_tabs: bool) -> bool:
-    """Return whether line closes a heredoc, applying <<- tab stripping."""
-    target = line.lstrip("\t") if strip_tabs else line
-    return target == delimiter
-
-
-def ansi_c_digits(line: str, start: int, limit: int, alphabet: str) -> str:
-    """Return up to limit consecutive characters from alphabet starting at start."""
-    end = min(len(line), start + limit)
-    i = start
-    while i < end and line[i] in alphabet:
-        i += 1
-    return line[start:i]
-
-
-def ansi_c_escape(line: str, start: int) -> tuple[str, int]:
-    """Decode one ANSI-C quoted backslash escape or leave an unknown escape intact."""
-    if start + 1 >= len(line):
-        return "\\", 1
-    char = line[start + 1]
-    if char in ANSI_C_ESCAPES:
-        return ANSI_C_ESCAPES[char], 2
-    if char in OCTAL_DIGITS:
-        digits = ansi_c_digits(line, start + 1, MAX_ANSI_C_OCTAL_DIGITS, OCTAL_DIGITS)
-        return chr(int(digits, 8)), len(digits) + 1
-    if char in ("x", "u", "U"):
-        limit = {"x": MAX_ANSI_C_HEX_DIGITS, "u": MAX_ANSI_C_UNICODE_DIGITS,
-                 "U": MAX_ANSI_C_UNICODE_WIDE_DIGITS}[char]
-        digits = ansi_c_digits(line, start + 2, limit, HEX_DIGITS)
-        if digits:
-            try:
-                return chr(int(digits, 16)), len(digits) + 2
-            except ValueError:
-                return "\\", 1
-    if char == "c" and start + 2 < len(line):
-        control = ord(line[start + 2])
-        return chr(127 if control == ord("?") else control & 31), 3
-    return "\\", 1
-
-
-def double_quoted_heredoc_char(line: str, start: int) -> tuple[str, int]:
-    """Read one double-quoted heredoc character with Bash's limited backslash removal."""
-    char = line[start]
-    if char == "\\" and start + 1 < len(line) and line[start + 1] in "$\x60\"\\":
-        return line[start + 1], 2
-    return char, 1
-
-
-def heredoc_quoted_step(line: str, start: int, quote: str) -> tuple[str | None, int, str | None]:
-    """Read one character in a quoted heredoc word, returning text, width, and next quote."""
-    char = line[start]
-    if quote == "single":
-        return (None, 1, None) if char == "'" else (char, 1, quote)
-    if quote == "ansi":
-        if char == "'":
-            return None, 1, None
-        if char == "\\":
-            decoded, width = ansi_c_escape(line, start)
-            return decoded, width, quote
-        return char, 1, quote
-    if char == '"':
-        return None, 1, None
-    decoded, width = double_quoted_heredoc_char(line, start)
-    return decoded, width, quote
-
-
-def heredoc_word(line: str, start: int) -> str | None:
-    """Read the complete shell heredoc word after an operator with quote removal."""
-    delimiter = []
-    quote: str | None = None
-    seen = False
-    i = start
-    while i < len(line) and line[i].isspace():
-        i += 1
-    while i < len(line):
-        char = line[i]
-        if quote is None and (char.isspace() or char in ";&|()<>"):
-            break
-        seen = True
-        if quote is not None:
-            decoded, width, quote = heredoc_quoted_step(line, i, quote)
-            if decoded is not None:
-                delimiter.append(decoded)
-            i += width
-            continue
-        if char == "$" and i + 1 < len(line) and line[i + 1] in "'\"":
-            quote = "ansi" if line[i + 1] == "'" else "double"
-            i += 2
-            continue
-        if char in ("'", '"'):
-            quote = "single" if char == "'" else "double"
-        elif char == "\\" and i + 1 < len(line):
-            i += 1
-            delimiter.append(line[i])
-        else:
-            delimiter.append(char)
-        i += 1
-    return "".join(delimiter) if seen and quote is None else None
-
-
-def shell_heredoc(line: str, code: str) -> tuple[bool, str] | None:
-    """Find a heredoc opener in visible shell code and read its full delimiter."""
-    operator = HEREDOC_OPERATOR.search(code)
-    if operator is None:
-        return None
-    delimiter = heredoc_word(line, operator.end())
-    return (bool(operator.group(1)), delimiter) if delimiter is not None else None
-
-
-def shell_function_end(lines: list[str], idx: int, indent: str, path: str) -> int:
-    """Find the closing line index (0-based) for a multiline shell function starting at idx."""
-    heredoc: str | None = None
-    heredoc_dash = False
-    contexts: list[str] = []
-    for j in range(idx + 1, min(len(lines), idx + 1 + MAX_FILE_LINES)):
-        line = lines[j]
-        if heredoc is not None:
-            if heredoc_end(line, heredoc, heredoc_dash):
-                heredoc = None
-            continue
-        was_quoted = bool(contexts and contexts[-1] in ("'", "ansi", '"'))
-        code = shell_line_state(line, contexts, path, j + 1)
-        m_hero = shell_heredoc(line, code)
-        if m_hero:
-            heredoc_dash, heredoc = m_hero
-            continue
-        if was_quoted or (contexts and contexts[-1] in ("'", "ansi", '"')):
-            continue
-        r = line.rstrip()
-        if r in (f"{indent}}}", f"{indent}}};") or line.startswith((f"{indent}}} ", f"{indent}}}; ")):
-            return j
-    return idx
-
-
-def shell_functions(lines: list[str], path: str) -> list[tuple[str, int, int]]:
-    """Return (name, first line, last line), 1-based, for each shell function definition."""
-    funcs = []
-    heredoc: str | None = None
-    heredoc_dash = False
-    contexts: list[str] = []
-    for idx, text in enumerate(lines):
-        if heredoc is not None:
-            if heredoc_end(text, heredoc, heredoc_dash):
-                heredoc = None
-            continue
-        was_quoted = bool(contexts and contexts[-1] in ("'", "ansi", '"'))
-        code = shell_line_state(text, contexts, path, idx + 1)
-        if not was_quoted:
-            m = SHELL_DEF.match(text)
-            if m:
-                indent = m.group(1) if m.group(1) is not None else m.group(4)
-                name = m.group(2) or m.group(5)
-                is_one_line = bool(m.group(3) or m.group(6))
-                end = idx if is_one_line else shell_function_end(lines, idx, indent, path)
-                funcs.append((name, idx + 1, end + 1))
-        m_hero = shell_heredoc(text, code)
-        if m_hero:
-            heredoc_dash, heredoc = m_hero
-    return funcs
-
-
-def shell_findings(path: str, lines: list[str], touched: set[int], gaps: set[int]) -> list[str]:
-    """List touched shell functions in path that lack a header comment."""
+def shell_functions(tree: dict, path: str) -> list[tuple[str, int, int, list[dict]]]:
+    """Find every shell FuncDecl, including nested declarations, with statement comments."""
     found = []
-    for name, start, end in shell_functions(lines, path):
+    stack = [tree]
+    visited = 0
+    while stack:
+        visited += 1
+        if visited > MAX_SHELL_NODES:
+            raise CheckError(f"{path}: shfmt syntax tree exceeds {MAX_SHELL_NODES} nodes")
+        node = stack.pop()
+        if isinstance(node, list):
+            stack.extend(node)
+        elif isinstance(node, dict):
+            cmd = node.get("Cmd")
+            if isinstance(cmd, dict) and cmd.get("Type") == "FuncDecl":
+                found.append((cmd["Name"]["Value"], cmd["Pos"]["Line"],
+                              cmd["End"]["Line"], node.get("Comments", [])))
+            stack.extend(node.values())
+    return found
+
+
+def shell_header_ok(comments: list[dict], first: int) -> bool:
+    """Check attached comments immediately above a function, skipping shellcheck directives."""
+    by_line = {comment["Hash"]["Line"]: comment["Text"] for comment in comments}
+    line = first - 1
+    for _ in range(len(comments) + 1):
+        text = by_line.get(line)
+        if text is None:
+            return False
+        if text.lstrip().startswith("shellcheck "):
+            line -= 1
+            continue
+        return not text.startswith("!")
+    return False
+
+
+def shell_findings(path: str, source: str, binary: str,
+                   touched: set[int], gaps: set[int]) -> list[str]:
+    """List touched shell functions in path that lack an attached header comment."""
+    found = []
+    for name, start, end, comments in shell_functions(parse_shell(path, source, binary), path):
         is_touched = (
             bool(touched.intersection(range(start, end + 1)))
             or any(start <= s < end for s in gaps)
         )
-        if is_touched and not shell_header_ok(lines, start - 1):
+        if is_touched and not shell_header_ok(comments, start):
             found.append(f"{path}:{start}: shell function {name} has no header comment")
     return found
 
@@ -388,7 +204,8 @@ def python_findings(path: str, source: str, touched: set[int], gaps: set[int]) -
     return found
 
 
-def file_findings(root: Path, path: str, touched: set[int], gaps: set[int]) -> list[str]:
+def file_findings(root: Path, path: str, touched: set[int], gaps: set[int],
+                  shell_binary: str | None) -> list[str]:
     """Read one changed file from the working tree and check the functions the change touched."""
     full = root / path
     if not full.is_file() or not path.endswith((*SHELL_SUFFIXES, ".py")):
@@ -397,10 +214,11 @@ def file_findings(root: Path, path: str, touched: set[int], gaps: set[int]) -> l
         source = full.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise CheckError(f"{path}: {exc}") from exc
-    lines = source.splitlines()[:MAX_FILE_LINES]
     if path.endswith(".py"):
         return python_findings(path, source, touched, gaps)
-    return shell_findings(path, lines, touched, gaps)
+    if shell_binary is None:
+        raise CheckError(f"{path}: shfmt tool was not resolved")
+    return shell_findings(path, source, shell_binary, touched, gaps)
 
 
 def run(root: Path, base: str) -> list[str]:
@@ -426,9 +244,12 @@ def run(root: Path, base: str) -> list[str]:
         touched_by_file.setdefault(path, set()).update(range(1, line_count + 1))
         gaps_by_file.setdefault(path, set())
     findings = []
-    for path in sorted(touched_by_file.keys() | gaps_by_file.keys()):
+    paths = sorted(touched_by_file.keys() | gaps_by_file.keys())
+    shell_paths = [path for path in paths if path.endswith(SHELL_SUFFIXES) and (root / path).is_file()]
+    shell_binary = resolve_shfmt() if shell_paths else None
+    for path in paths:
         findings.extend(file_findings(root, path, touched_by_file.get(path, set()),
-                                      gaps_by_file.get(path, set())))
+                                      gaps_by_file.get(path, set()), shell_binary))
     return findings
 
 
