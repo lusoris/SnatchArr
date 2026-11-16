@@ -1,5 +1,15 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Codacy analysis adapter 0.29.0 uses this Lizard version.
-lizard==1.24.0
+# Read by tools/ci/codacy_lizard_check.sh; pinned by version and hashes.
+# @codacy/tools-lizard-1 0.29.0 installs lizard==1.24.0 (PIP_PACKAGE).
+# Renovate pip_requirements refreshes hashes with hashin.
+lizard==1.24.0 \
+    --hash=sha256:2e88a7af9d23a98d3f4a30767134361bd4b7dde02c410209c6c72732a43bbb65 \
+    --hash=sha256:a688bc607a891ff4a7836826f25742dc9c1bf648da3075dbd495e199e8848602
+pathspec==1.1.1 \
+    --hash=sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a \
+    --hash=sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189
+pygments==2.21.0 \
+    --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9 \
+    --hash=sha256:610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c

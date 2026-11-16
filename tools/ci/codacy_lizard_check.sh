@@ -25,7 +25,7 @@ if [ ! -x "$venv/bin/python" ]; then
   python3 -m venv "$venv"
 fi
 if [ ! -f "$venv/.installed" ]; then
-  "$venv/bin/pip" install --quiet --disable-pip-version-check -r "$requirements"
+  "$venv/bin/pip" install --quiet --disable-pip-version-check --require-hashes -r "$requirements"
   touch "$venv/.installed"
 fi
 cd "$root"

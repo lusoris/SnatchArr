@@ -5,7 +5,7 @@
 
 The baseline is a dated, shrink-only record. A missing or larger measured finding,
 expired exception, or stale record fails. --base-ref compares the baseline with a
-commit's baseline; --self-test replays inclusive threshold boundaries offline.
+commit's baseline; --self-test replays strict threshold boundaries offline.
 """
 
 from __future__ import annotations
@@ -28,6 +28,8 @@ BASELINE = "tools/ci/codacy_lizard/baseline.json"
 FILE_PATTERN = "Lizard_file-nloc-medium"
 PARAM_PATTERN = "Lizard_parameter-count-medium"
 LIMITS = {FILE_PATTERN: 1000, PARAM_PATTERN: 12}
+# Measured on Codacy cloud: these generated lockfiles use Lizard's C-like fallback reader.
+CODACY_FALLBACK_NAMES = {"Cargo.lock", "package-lock.json", "pnpm-lock.yaml"}
 DAYS = {"B": 3, "C": 10, "D": 120}
 FIELDS = {"patternId", "filePath", "functionName", "value", "entered", "expires", "category", "issue", "reason"}
 REF_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/~^-]{0,199}")
@@ -48,9 +50,8 @@ def git(*args: str) -> bytes:
     return result.stdout
 
 
-def exclusions() -> list[str]:
-    """Read the two exact exclude_paths lists from the checked-in Codacy YAML subset."""
-    text = (ROOT / ".codacy.yml").read_text(encoding="utf-8")
+def parse_exclusions(text: str) -> list[str]:
+    """Parse the two exact exclude_paths lists from the Codacy YAML subset."""
     patterns = []
     for heading, indent in ((r"^exclude_paths:$", 2), (r"^  lizard:\n    exclude_paths:$", 6)):
         block = re.search(heading + rf"\n((?: {{{indent}}}- \"[^\"\n]+\"\n)+)", text, re.MULTILINE)
@@ -64,32 +65,44 @@ def exclusions() -> list[str]:
     return patterns
 
 
-def selected_files() -> list[str]:
-    """Select every tracked regular source file supported by this Lizard version."""
-    patterns = exclusions()
-    names = [name.decode("utf-8") for name in git("ls-files", "-z").split(b"\0") if name]
+def exclusions() -> list[str]:
+    """Read Lizard's global and engine exclusions from the checked-in config."""
+    return parse_exclusions((ROOT / ".codacy.yml").read_text(encoding="utf-8"))
+
+
+def select_names(names: list[str], patterns: list[str]) -> list[str]:
+    """Select Lizard-readable and Codacy-fallback names outside exclusions."""
     selected = []
     for name in names:
         if name.startswith("/") or ".." in name.split("/"):
             raise CheckError(f"unsafe tracked path: {name!r}")
-        if get_reader_for(name) is None or any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns):
+        supported = get_reader_for(name) is not None or Path(name).name in CODACY_FALLBACK_NAMES
+        if not supported or any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns):
             continue
-        if not (ROOT / name).is_file():
-            raise CheckError(f"tracked source missing: {name}")
         selected.append(name)
-    if not selected:
-        raise CheckError("no tracked Lizard source files selected")
     return sorted(selected)
 
 
+def selected_files() -> list[str]:
+    """Select every tracked regular file Codacy sends to Lizard."""
+    names = [name.decode("utf-8") for name in git("ls-files", "-z").split(b"\0") if name]
+    selected = select_names(names, exclusions())
+    for name in selected:
+        if not (ROOT / name).is_file():
+            raise CheckError(f"tracked source missing: {name}")
+    if not selected:
+        raise CheckError("no tracked Lizard source files selected")
+    return selected
+
+
 def source_findings(name: str, source: str) -> list[dict[str, object]]:
-    """Read file NLOC and function parameter counts from Lizard, inclusively."""
+    """Read file NLOC and function parameter counts above Codacy's limits."""
     info = lizard.analyze_file.analyze_source_code(name, source)
     findings = []
-    if info.nloc >= LIMITS[FILE_PATTERN]:
+    if info.nloc > LIMITS[FILE_PATTERN]:
         findings.append({"patternId": FILE_PATTERN, "filePath": name, "functionName": "", "value": info.nloc})
     for function in info.function_list:
-        if function.parameter_count >= LIMITS[PARAM_PATTERN]:
+        if function.parameter_count > LIMITS[PARAM_PATTERN]:
             findings.append({"patternId": PARAM_PATTERN, "filePath": name, "functionName": function.name, "value": function.parameter_count})
     return findings
 
@@ -117,38 +130,55 @@ def measure() -> tuple[dict[tuple[str, str, str], dict[str, object]], int]:
     return found, len(files)
 
 
-def parse_baseline(raw: object, today: date | None) -> dict[tuple[str, str, str], dict[str, object]]:
-    """Validate dated MEL entries, their keys, and their expiry."""
+def baseline_items(raw: object) -> list[object]:
+    """Return the findings list after validating the baseline envelope."""
     if not isinstance(raw, dict) or set(raw) != {"version", "findings"} or raw["version"] != 1 or not isinstance(raw["findings"], list):
         raise CheckError('baseline must be {"version": 1, "findings": [...]}')
+    return raw["findings"]
+
+
+def validate_identity(item: dict[str, object]) -> tuple[str, str, str]:
+    """Validate one baseline identity and measured value."""
+    if not all(isinstance(item[field], str) for field in ("patternId", "filePath", "functionName")):
+        raise CheckError(f"baseline entry has invalid identity: {item!r}")
+    pattern, path, function = key(item)
+    value = item["value"]
+    if pattern not in LIMITS or not isinstance(value, int) or isinstance(value, bool) or value <= LIMITS[pattern]:
+        raise CheckError(f"baseline entry has invalid pattern or value: {pattern} {value!r}")
+    if not path or path.startswith("/") or ".." in path.split("/"):
+        raise CheckError(f"baseline entry has invalid path or function: {path!r} {function!r}")
+    if (pattern == FILE_PATTERN and function) or (pattern == PARAM_PATTERN and not function):
+        raise CheckError(f"baseline entry has invalid function for {pattern}: {function!r}")
+    return pattern, path, function
+
+
+def validate_metadata(item: dict[str, object], path: str, today: date | None) -> None:
+    """Validate one baseline entry's MEL metadata and dates."""
+    if item["category"] not in ("A", "B", "C", "D") or not all(isinstance(item[field], str) and item[field] for field in ("issue", "reason")):
+        raise CheckError(f"baseline entry lacks MEL category, issue or reason: {path}")
+    try:
+        entered, expires = date.fromisoformat(item["entered"]), date.fromisoformat(item["expires"])
+    except (TypeError, ValueError) as err:
+        raise CheckError(f"baseline entry has invalid dates: {path}") from err
+    days = DAYS.get(str(item["category"]))
+    if expires <= entered or (days is not None and expires != entered + timedelta(days=days)):
+        raise CheckError(f"baseline entry has invalid {item['category']} expiry: {path}")
+    if today is not None and expires < today:
+        raise CheckError(f"baseline entry expired {expires}: {path} ({item['issue']})")
+
+
+def parse_baseline(raw: object, today: date | None) -> dict[tuple[str, str, str], dict[str, object]]:
+    """Validate dated MEL entries, their keys, and their expiry."""
     entries = {}
-    for item in raw["findings"]:
-        if not isinstance(item, dict) or set(item) != FIELDS:
-            raise CheckError(f"baseline entry has invalid fields: {item!r}")
-        if not all(isinstance(item[field], str) for field in ("patternId", "filePath", "functionName")):
-            raise CheckError(f"baseline entry has invalid identity: {item!r}")
-        pattern, path, function = key(item)
-        value = item["value"]
-        if pattern not in LIMITS or not isinstance(value, int) or isinstance(value, bool) or value < LIMITS[pattern]:
-            raise CheckError(f"baseline entry has invalid pattern or value: {pattern} {value!r}")
-        if not isinstance(path, str) or not path or path.startswith("/") or ".." in path.split("/") or not isinstance(function, str):
-            raise CheckError(f"baseline entry has invalid path or function: {path!r} {function!r}")
-        if (pattern == FILE_PATTERN and function) or (pattern == PARAM_PATTERN and not function):
-            raise CheckError(f"baseline entry has invalid function for {pattern}: {function!r}")
-        if item["category"] not in ("A", "B", "C", "D") or not all(isinstance(item[field], str) and item[field] for field in ("issue", "reason")):
-            raise CheckError(f"baseline entry lacks MEL category, issue or reason: {path}")
-        try:
-            entered, expires = date.fromisoformat(item["entered"]), date.fromisoformat(item["expires"])
-        except (TypeError, ValueError) as err:
-            raise CheckError(f"baseline entry has invalid dates: {path}") from err
-        days = DAYS.get(item["category"])
-        if expires <= entered or (days is not None and expires != entered + timedelta(days=days)):
-            raise CheckError(f"baseline entry has invalid {item['category']} expiry: {path}")
-        if today is not None and expires < today:
-            raise CheckError(f"baseline entry expired {expires}: {path} ({item['issue']})")
-        if key(item) in entries:
-            raise CheckError(f"duplicate baseline entry: {key(item)}")
-        entries[key(item)] = item
+    for candidate in baseline_items(raw):
+        if not isinstance(candidate, dict) or set(candidate) != FIELDS:
+            raise CheckError(f"baseline entry has invalid fields: {candidate!r}")
+        item = candidate
+        identity = validate_identity(item)
+        validate_metadata(item, identity[1], today)
+        if identity in entries:
+            raise CheckError(f"duplicate baseline entry: {identity}")
+        entries[identity] = item
     return entries
 
 
@@ -212,12 +242,12 @@ def base_ref_problems(ref: str, current: dict) -> list[str]:
 
 
 def self_test() -> None:
-    """Replay inclusive boundaries and a planted unbaselined failure."""
+    """Replay strict boundaries, lockfile selection, and baseline failures."""
     cases = (
         ("1001 lines", "package planted\n" + "var x = 1\n" * 1000, FILE_PATTERN, 1),
-        ("999 lines", "package planted\n" + "var x = 1\n" * 998, FILE_PATTERN, 0),
-        ("12 parameters", "package planted\nfunc f(" + ", ".join(f"p{i} int" for i in range(12)) + ") {}\n", PARAM_PATTERN, 1),
-        ("11 parameters", "package planted\nfunc f(" + ", ".join(f"p{i} int" for i in range(11)) + ") {}\n", PARAM_PATTERN, 0),
+        ("1000 lines", "package planted\n" + "var x = 1\n" * 999, FILE_PATTERN, 0),
+        ("13 parameters", "package planted\nfunc f(" + ", ".join(f"p{i} int" for i in range(13)) + ") {}\n", PARAM_PATTERN, 1),
+        ("12 parameters", "package planted\nfunc f(" + ", ".join(f"p{i} int" for i in range(12)) + ") {}\n", PARAM_PATTERN, 0),
     )
     for label, source, pattern, want in cases:
         measured = {key(item): item for item in source_findings("planted.go", source)}
@@ -226,9 +256,23 @@ def self_test() -> None:
         if actual != want or new != want or len(measured) != want:
             raise CheckError(f"self-test {label}: want {want} new {pattern}, got {measured}")
         print(f"ok   {label}: {want} new finding")
-    planted = {"patternId": FILE_PATTERN, "filePath": "planted.go", "functionName": "", "value": 1001}
+    lock_name = "planted/Cargo.lock"
+    lock_source = "package = planted\n" + "version = 1\n" * 1000
+    lock_exclusions = parse_exclusions(
+        'exclude_paths:\n  - "generated/**"\nengines:\n  lizard:\n    exclude_paths:\n      - "planted/Cargo.lock"\n'
+    )
+    for patterns, want in (([], 1), (lock_exclusions, 0)):
+        measured = {
+            key(item): item
+            for name in select_names([lock_name], patterns)
+            for item in source_findings(name, lock_source)
+        }
+        if len(measured) != want:
+            raise CheckError(f"self-test Cargo.lock exclusions {patterns}: want {want} finding, got {measured}")
+        print(f"ok   Cargo.lock exclusions {patterns}: {want} finding")
+    planted = {"patternId": FILE_PATTERN, "filePath": "planted.go", "functionName": "", "value": 1002}
     identity = key(planted)
-    recorded = {**planted, "value": 1000, "entered": "2026-11-15", "expires": "2027-03-15", "category": "D", "issue": "planted", "reason": "self-test"}
+    recorded = {**planted, "value": 1001, "entered": "2026-11-15", "expires": "2027-03-15", "category": "D", "issue": "planted", "reason": "self-test"}
     baseline = parse_baseline({"version": 1, "findings": [recorded]}, date(2026, 11, 15))
     if not compare_scan({identity: planted}, baseline)[0].startswith("grew "):
         raise CheckError("self-test: measured growth was accepted")
