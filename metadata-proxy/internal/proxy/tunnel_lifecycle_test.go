@@ -44,6 +44,8 @@ type oneWayIdleCase struct {
 const (
 	idleDirectionDown = "upstream to client"
 	idleDirectionUp   = "client to upstream"
+
+	singleConnListenerDeadline = 30 * time.Second
 )
 
 func TestTunnelIdleTimeout(t *testing.T) {
@@ -148,7 +150,7 @@ func runOneWayUpload(t *testing.T) {
 	chunk := []byte("upload-chunk\n")
 	want := bytes.Repeat(chunk, chunkCount)
 	received := make(chan []byte, 1)
-	port, cleanup := startSingleConnListener(t, func(conn net.Conn) {
+	port, cleanup := startSingleConnListener(t, singleConnListenerDeadline, func(conn net.Conn) {
 		got := make([]byte, len(want))
 		_, _ = io.ReadFull(conn, got)
 		received <- got
@@ -221,7 +223,7 @@ func assertTunnelClosesAfterIdle(t *testing.T, conn net.Conn, br *bufio.Reader, 
 func startStreamingListener(t *testing.T, chunk []byte, count int, interval time.Duration) (int, <-chan time.Time, func()) {
 	t.Helper()
 	lastWrite := make(chan time.Time, 1)
-	port, cleanup := startSingleConnListener(t, func(conn net.Conn) {
+	port, cleanup := startSingleConnListener(t, singleConnListenerDeadline, func(conn net.Conn) {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for i := range count {
@@ -238,7 +240,7 @@ func startStreamingListener(t *testing.T, chunk []byte, count int, interval time
 	return port, lastWrite, cleanup
 }
 
-func startSingleConnListener(t *testing.T, handle func(net.Conn)) (int, func()) {
+func startSingleConnListener(t *testing.T, deadline time.Duration, handle func(net.Conn)) (int, func()) {
 	t.Helper()
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
@@ -249,18 +251,102 @@ func startSingleConnListener(t *testing.T, handle func(net.Conn)) (int, func()) 
 		_ = ln.Close()
 		t.Fatalf("unexpected listener addr %T", ln.Addr())
 	}
-	var wg sync.WaitGroup
+	var (
+		wg          sync.WaitGroup
+		connMu      sync.Mutex
+		conn        net.Conn
+		closed      bool
+		cleanupOnce sync.Once
+	)
 	wg.Go(func() {
-		conn, acceptErr := ln.Accept()
+		accepted, acceptErr := ln.Accept()
 		if acceptErr != nil {
 			return
 		}
-		defer conn.Close()
-		handle(conn)
+		connMu.Lock()
+		if closed {
+			connMu.Unlock()
+			_ = accepted.Close()
+			return
+		}
+		conn = accepted
+		connMu.Unlock()
+		defer accepted.Close()
+		if err := accepted.SetDeadline(time.Now().Add(deadline)); err != nil {
+			return
+		}
+		handle(accepted)
 	})
 	return tcpAddr.Port, func() {
-		_ = ln.Close()
-		wg.Wait()
+		cleanupOnce.Do(func() {
+			_ = ln.Close()
+			connMu.Lock()
+			closed = true
+			accepted := conn
+			connMu.Unlock()
+			if accepted != nil {
+				_ = accepted.Close()
+			}
+			wg.Wait()
+		})
+	}
+}
+
+func TestSingleConnListenerCleanupInterruptsHandler(t *testing.T) {
+	t.Parallel()
+
+	handlerStarted := make(chan struct{})
+	port, cleanup := startSingleConnListener(t, singleConnListenerDeadline, func(conn net.Conn) {
+		close(handlerStarted)
+		_, _ = io.Copy(io.Discard, conn)
+	})
+	t.Cleanup(cleanup)
+	client, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		t.Fatalf("dial single-connection listener: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	select {
+	case <-handlerStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not start within bound")
+	}
+
+	cleanupDone := make(chan struct{})
+	go func() {
+		cleanup()
+		close(cleanupDone)
+	}()
+	select {
+	case <-cleanupDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("listener cleanup did not return within bound")
+	}
+}
+
+func TestSingleConnListenerDeadlineEndsHandler(t *testing.T) {
+	t.Parallel()
+
+	const deadline = 200 * time.Millisecond
+	handlerReturned := make(chan error, 1)
+	port, cleanup := startSingleConnListener(t, deadline, func(conn net.Conn) {
+		_, err := io.Copy(io.Discard, conn)
+		handlerReturned <- err
+	})
+	t.Cleanup(cleanup)
+	client, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		t.Fatalf("dial single-connection listener: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	select {
+	case err := <-handlerReturned:
+		if !isNetTimeout(err) {
+			t.Fatalf("handler error = %v, want timeout", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not return within deadline bound")
 	}
 }
 
