@@ -424,9 +424,8 @@ func (g *Goenvoy) deluge(ctx context.Context, c domain.DownloadClient, secret st
 	if err != nil {
 		return observation{}, fmt.Errorf("deluge torrents: %w", err)
 	}
-	// goenvoy asks for the version with daemon.info, which Deluge 2 does not serve
-	// (golusoris/goenvoy#101). The version is informational, so a daemon that answers the
-	// torrent list is reachable and its version stays unknown.
+	// The version is informational: a daemon that answers the torrent list is reachable
+	// even when neither daemon.get_version nor daemon.info reports a version.
 	version, err := cl.GetVersion(ctx)
 	if err != nil {
 		version = ""
