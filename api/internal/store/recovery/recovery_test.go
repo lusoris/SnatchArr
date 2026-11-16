@@ -256,8 +256,10 @@ func restoreTables(t *testing.T, ctx context.Context, pool *pgxpool.Pool, dumps 
 	}
 }
 
-// createFreshDB creates an empty database on the source server with
-// statement and lock timeouts, drops it on cleanup and returns a pool on it.
+// createFreshDB creates an empty database with statement and lock timeouts and returns a pool on it.
+// The database is not dropped: PostgreSQL 18 dbcommands.c dropdb forces a server-wide checkpoint and
+// waits for every backend, which outlasted the cleanup bound under host I/O stall and failed issue 1192.
+// The shared test container removes the database when the package ends.
 func createFreshDB(t *testing.T, srcPool *pgxpool.Pool) *pgxpool.Pool {
 	t.Helper()
 
@@ -288,7 +290,6 @@ func createFreshDB(t *testing.T, srcPool *pgxpool.Pool) *pgxpool.Pool {
 	if err != nil {
 		t.Fatalf("create recovery db: %v", err)
 	}
-	t.Cleanup(func() { dropRecoveryDB(t, adminDSN, dbName) })
 	// Database defaults reach the migrator's new sessions; bound SQL, not connection setup or total runtime.
 	// https://www.postgresql.org/docs/18/sql-alterdatabase.html
 	if _, statementErr := adminConn.Exec(ctx, "ALTER DATABASE "+pgx.Identifier{dbName}.Sanitize()+" SET statement_timeout = '10s'"); statementErr != nil {
@@ -312,25 +313,6 @@ func createFreshDB(t *testing.T, srcPool *pgxpool.Pool) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 	return pool
-}
-
-// dropRecoveryDB force-drops a recovery database from the admin database,
-// reporting rather than failing on cleanup errors.
-func dropRecoveryDB(t *testing.T, adminDSN, dbName string) {
-	t.Helper()
-	dropCtx, dropCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer dropCancel()
-	dc, err := pgx.Connect(dropCtx, adminDSN)
-	if err != nil {
-		t.Errorf("cleanup recovery db %s: connect admin: %v", dbName, err)
-		return
-	}
-	if _, err := dc.Exec(dropCtx, "DROP DATABASE IF EXISTS "+pgx.Identifier{dbName}.Sanitize()+" WITH (FORCE)"); err != nil {
-		t.Errorf("cleanup recovery db %s: drop: %v", dbName, err)
-	}
-	if err := dc.Close(dropCtx); err != nil {
-		t.Errorf("cleanup recovery db %s: close admin: %v", dbName, err)
-	}
 }
 
 // applyMigrations runs every store migration up on pool.
