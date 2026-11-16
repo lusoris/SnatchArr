@@ -52,6 +52,7 @@ type stub struct {
 	agent    atomic.Value  // last User-Agent header seen
 	started  chan struct{} // signals a held series request
 	release  <-chan struct{}
+	redirect func(http.ResponseWriter, *http.Request) bool
 }
 
 func newStub(t *testing.T) *stub {
@@ -71,6 +72,9 @@ func newStub(t *testing.T) *stub {
 func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 	s.total.Add(1)
 	s.agent.Store(r.Header.Get("User-Agent"))
+	if s.redirect != nil && s.redirect(w, r) {
+		return
+	}
 	if s.delay > 0 {
 		time.Sleep(s.delay)
 	}

@@ -79,6 +79,8 @@ var (
 	ErrLanguage = errors.New("tvdb: unsupported language")
 	// errNoCache means an enabled provider was built without the shared L1 pool.
 	errNoCache = errors.New("tvdb: no cache pool")
+	// errRedirect keeps redirect destinations and credentials out of error text.
+	errRedirect = errors.New("tvdb: redirect refused")
 )
 
 // Ref identifies one item by the IDs its *arr app holds.
@@ -170,6 +172,7 @@ func New(apiKey, pin string, l1 *memory.Cache, clk clock.Clock, logger *slog.Log
 			limiter: rate.NewLimiter(cfg.limit, cfg.burst),
 		},
 	})
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirect }
 	mopts := []metadata.Option{metadata.WithHTTPClient(hc)}
 	if cfg.userAgent != "" {
 		mopts = append(mopts, metadata.WithUserAgent(cfg.userAgent))
