@@ -277,6 +277,24 @@ else
   failed=1
 fi
 
+oasdiff_stub="$WORK/oasdiff-stub"
+oasdiff_marker="$WORK/oasdiff-ran"
+printf '%s\n' '#!/bin/sh' ": >\"$oasdiff_marker\"" 'exit 0' >"$oasdiff_stub"
+chmod +x "$oasdiff_stub"
+got=0
+(
+  cd "$WORK/local-check-full"
+  OASDIFF="sh $oasdiff_stub" sh "$HERE/local_check.sh" origin/main feature.txt
+) >"$WORK/local-check-missing-base" 2>"$WORK/local-check-missing-base.err" || got=$?
+if [ "$got" -ne 0 ] && [ ! -e "$oasdiff_marker" ] && \
+    grep -qF "feature.txt" "$WORK/local-check-missing-base.err"; then
+  echo "ok   local_check refuses a spec path missing at the base ref"
+else
+  echo "FAIL local_check: missing base spec path was not refused (exit $got)" >&2
+  sed 's/^/  /' "$WORK/local-check-missing-base.err" >&2
+  failed=1
+fi
+
 makefile="$HERE/../../Makefile"
 expected_recipe_line="$(printf '\tsh tools/oasdiff/local_check.sh origin/main api/openapi/openapi.yaml')"
 if awk -v expected="$expected_recipe_line" '
