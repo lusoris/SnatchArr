@@ -19,10 +19,9 @@ import (
 const liveEnv = "SNATCHARR_DLCLIENTS_LIVE"
 
 // unknownVersion lists the clients whose version the adapter cannot read yet, with the reason.
-// A release that fixes one turns the live run red until its entry goes.
-var unknownVersion = map[domain.DownloadClientKind]string{
-	domain.ClientDeluge: "goenvoy asks Deluge 2 with daemon.info: golusoris/goenvoy#101",
-}
+// A release that fixes one turns the live run red until its entry goes. Empty: every adapter
+// reads the version since golusoris/goenvoy#101 was fixed.
+var unknownVersion = map[domain.DownloadClientKind]string{}
 
 // liveClient is one running download client. Auth says whether the client refuses a wrong
 // secret (rTorrent's XML-RPC endpoint has no login of its own).

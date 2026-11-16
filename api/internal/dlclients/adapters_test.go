@@ -119,10 +119,9 @@ func TestDelugeSnapshot(t *testing.T) {
 	srv := delugeServer(t, true)
 	defer srv.Close()
 
-	// The version stays unknown until goenvoy asks Deluge 2 for it (golusoris/goenvoy#101); a
-	// fixed release turns this red, and the expectation becomes "2.2.0".
+	// goenvoy asks Deluge 2 with daemon.get_version since golusoris/goenvoy#101 was fixed.
 	s := observe(t, domain.ClientDeluge, srv.URL, "", "pw")
-	if !s.Reachable || s.Active != 1 || s.Queued != 1 || s.DownloadRate != 300 || s.UploadRate != 50 || s.Version != "" {
+	if !s.Reachable || s.Active != 1 || s.Queued != 1 || s.DownloadRate != 300 || s.UploadRate != 50 || s.Version != "2.2.0" {
 		t.Fatalf("got %+v", s)
 	}
 }
