@@ -33,6 +33,8 @@ CODACY_FALLBACK_NAMES = {"Cargo.lock", "package-lock.json", "pnpm-lock.yaml"}
 DAYS = {"B": 3, "C": 10, "D": 120}
 FIELDS = {"patternId", "filePath", "functionName", "value", "entered", "expires", "category", "issue", "reason"}
 REF_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/~^-]{0,199}")
+ISSUE_RE = re.compile(r"[1-9][0-9]{0,5}")
+REASON_CHARS = (20, 300)
 
 
 class CheckError(Exception):
@@ -156,6 +158,10 @@ def validate_metadata(item: dict[str, object], path: str, today: date | None) ->
     """Validate one baseline entry's MEL metadata and dates."""
     if item["category"] not in ("A", "B", "C", "D") or not all(isinstance(item[field], str) and item[field] for field in ("issue", "reason")):
         raise CheckError(f"baseline entry lacks MEL category, issue or reason: {path}")
+    if ISSUE_RE.fullmatch(item["issue"]) is None:
+        raise CheckError(f"baseline entry issue is not an issue number: {path}")
+    if not REASON_CHARS[0] <= len(item["reason"]) <= REASON_CHARS[1] or "\n" in item["reason"]:
+        raise CheckError(f"baseline entry reason needs 20 to 300 characters on one line: {path}")
     try:
         entered, expires = date.fromisoformat(item["entered"]), date.fromisoformat(item["expires"])
     except (TypeError, ValueError) as err:
@@ -241,6 +247,27 @@ def base_ref_problems(ref: str, current: dict) -> list[str]:
     return compare_base(current, previous)
 
 
+def self_test_metadata(recorded: dict[str, object]) -> None:
+    """Replay accepted and refused issue and reason metadata boundaries."""
+    cases = (
+        ("issue planted", "issue", "planted", False),
+        ("issue zero", "issue", "0", False),
+        ("issue 1179", "issue", "1179", True),
+        ("19-character reason", "reason", "x" * 19, False),
+        ("20-character reason", "reason", "x" * 20, True),
+        ("multiline reason", "reason", "valid baseline reason\ncontinued", False),
+    )
+    for label, field, value, want_accepted in cases:
+        try:
+            parse_baseline({"version": 1, "findings": [{**recorded, field: value}]}, date(2026, 11, 15))
+            accepted = True
+        except CheckError:
+            accepted = False
+        if accepted != want_accepted:
+            raise CheckError(f"self-test {label}: accepted={accepted}, want {want_accepted}")
+        print(f"ok   {label}: accepted={accepted}")
+
+
 def self_test() -> None:
     """Replay strict boundaries, lockfile selection, and baseline failures."""
     cases = (
@@ -272,8 +299,17 @@ def self_test() -> None:
         print(f"ok   Cargo.lock exclusions {patterns}: {want} finding")
     planted = {"patternId": FILE_PATTERN, "filePath": "planted.go", "functionName": "", "value": 1002}
     identity = key(planted)
-    recorded = {**planted, "value": 1001, "entered": "2026-11-15", "expires": "2027-03-15", "category": "D", "issue": "planted", "reason": "self-test"}
+    recorded = {
+        **planted,
+        "value": 1001,
+        "entered": "2026-11-15",
+        "expires": "2027-03-15",
+        "category": "D",
+        "issue": "1179",
+        "reason": "valid self-test baseline reason",
+    }
     baseline = parse_baseline({"version": 1, "findings": [recorded]}, date(2026, 11, 15))
+    self_test_metadata(recorded)
     if not compare_scan({identity: planted}, baseline)[0].startswith("grew "):
         raise CheckError("self-test: measured growth was accepted")
     if not compare_scan({}, baseline)[0].startswith("stale "):

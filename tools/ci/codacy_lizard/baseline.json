@@ -9,8 +9,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1243 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -20,8 +20,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1374 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -31,8 +31,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1084 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -42,8 +42,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 2481 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -53,8 +53,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1125 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -64,8 +64,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1003 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -75,8 +75,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 3345 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -86,8 +86,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1259 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -97,8 +97,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1372 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -108,8 +108,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1576 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -119,8 +119,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1025 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -130,8 +130,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 2162 lines of code over Codacy's 1000 limit; this locked engine asset is not edited here, and issue 1179 closes it upstream before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -141,8 +141,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1008 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -152,8 +152,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1474 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -163,8 +163,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1346 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_file-nloc-medium",
@@ -174,8 +174,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1456 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_parameter-count-medium",
@@ -185,8 +185,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 14 parameters over Codacy's 12 limit; issue 1179 reduces it before expiry."
     },
     {
       "patternId": "Lizard_parameter-count-medium",
@@ -196,8 +196,8 @@
       "entered": "2026-11-16",
       "expires": "2027-03-16",
       "category": "D",
-      "issue": "finding-external-comm-10333d0f12-20261115-1710",
-      "reason": "Measured in this worktree with Lizard 1.24.0; reduce this finding before the MEL category D expiry."
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 14 parameters over Codacy's 12 limit; issue 1179 reduces it before expiry."
     }
   ]
 }
