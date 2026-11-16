@@ -8,13 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lusoris/SnatchArr/api/internal/testkit/refuse"
 	"github.com/lusoris/SnatchArr/api/internal/watchaware"
 )
 
@@ -63,59 +62,25 @@ func (s *staticSource) Watches(_ context.Context) ([]watchaware.Watch, error) {
 	return s.watches, nil
 }
 
-// refusingWatchawareServer keeps its port reserved while closing each request.
-// A freed port could otherwise be rebound by a parallel test server.
-func refusingWatchawareServer(t *testing.T) string {
-	t.Helper()
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		hijacker, ok := w.(http.Hijacker)
-		if !ok {
-			t.Error("response writer cannot close the connection")
-			return
-		}
-		conn, _, err := hijacker.Hijack()
-		if err != nil {
-			t.Errorf("hijack refused request: %v", err)
-			return
-		}
-		if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
-			t.Errorf("set refused request deadline: %v", err)
-		}
-		if err := conn.Close(); err != nil {
-			t.Errorf("close refused request: %v", err)
-		}
-	}))
-	srv.Config.ReadHeaderTimeout = 5 * time.Second
-	srv.Config.WriteTimeout = 5 * time.Second
-	srv.Start()
-	t.Cleanup(srv.Close)
-	return srv.URL
-}
-
-// storedEmbySource returns the successful source used after a failed fetch.
-func storedEmbySource() *staticSource {
-	return &staticSource{
-		kind: watchaware.KindEmby,
-		watches: []watchaware.Watch{{
-			UserID: "user-2", UserName: "Bob", ItemID: "item-42",
-			ItemType: "Movie", Played: true, PositionTicks: 123456,
-		}},
-	}
-}
-
 // TestSyncAll_FirstSourceFailsSecondStored checks that a failed source does not
 // prevent the next source from storing its watches.
 func TestSyncAll_FirstSourceFailsSecondStored(t *testing.T) {
 	t.Parallel()
 
-	src1, err := watchaware.NewJellyfin(refusingWatchawareServer(t), "token", 100*time.Millisecond, "SnatchArr-test")
+	src1, err := watchaware.NewJellyfin(refuse.Listener(t), "token", 100*time.Millisecond, "SnatchArr-test")
 	if err != nil {
 		t.Fatalf("NewJellyfin src1: %v", err)
 	}
 
 	sources := []watchaware.Named{
 		{ID: "src-1", Source: src1},
-		{ID: "src-2", Source: storedEmbySource()},
+		{ID: "src-2", Source: &staticSource{
+			kind: watchaware.KindEmby,
+			watches: []watchaware.Watch{{
+				UserID: "user-2", UserName: "Bob", ItemID: "item-42",
+				ItemType: "Movie", Played: true, PositionTicks: 123456,
+			}},
+		}},
 	}
 
 	sink := &mockSink{}
