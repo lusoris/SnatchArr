@@ -197,4 +197,98 @@ else
   failed=1
 fi
 
+check_repo="$WORK/check-repo"
+mkdir -p "$check_repo/api/openapi"
+git_fixture -C "$check_repo" init -q -b main
+git_fixture -C "$check_repo" config user.name "OASDiff Test"
+git_fixture -C "$check_repo" config user.email "oasdiff-test@example.invalid"
+printf 'openapi: placeholder\n' >"$check_repo/api/openapi/openapi.yaml"
+git_fixture -C "$check_repo" add api/openapi/openapi.yaml
+git_fixture -C "$check_repo" -c commit.gpgsign=false commit -q -m "chore: base"
+
+git_fixture clone -q --depth 1 "file://$check_repo" "$WORK/local-check-shallow"
+got=0
+(
+  cd "$WORK/local-check-shallow"
+  OASDIFF=true sh "$HERE/local_check.sh" origin/main api/openapi/openapi.yaml
+) >"$WORK/local-check-shallow-no-break" 2>"$WORK/local-check-shallow-no-break.err" || got=$?
+if [ "$got" -ne 0 ] && grep -qF "git fetch --unshallow" "$WORK/local-check-shallow-no-break.err"; then
+  echo "ok   local_check refuses shallow no-break repository"
+else
+  echo "FAIL local_check: shallow no-break repository was not refused (exit $got)" >&2
+  sed 's/^/  /' "$WORK/local-check-shallow-no-break.err" >&2
+  failed=1
+fi
+
+got=0
+(
+  cd "$WORK/local-check-shallow"
+  OASDIFF=false sh "$HERE/local_check.sh" origin/main api/openapi/openapi.yaml
+) >"$WORK/local-check-shallow-break" 2>"$WORK/local-check-shallow-break.err" || got=$?
+if [ "$got" -ne 0 ]; then
+  echo "ok   local_check refuses shallow break repository"
+else
+  echo "FAIL local_check: shallow break repository exited zero" >&2
+  failed=1
+fi
+
+git_fixture clone -q "file://$check_repo" "$WORK/local-check-full"
+got=0
+(
+  cd "$WORK/local-check-full"
+  OASDIFF=true sh "$HERE/local_check.sh" origin/main api/openapi/openapi.yaml
+) >"$WORK/local-check-full-no-break" 2>"$WORK/local-check-full-no-break.err" || got=$?
+if [ "$got" -eq 0 ]; then
+  echo "ok   local_check accepts full no-break repository"
+else
+  echo "FAIL local_check: full no-break repository exited $got" >&2
+  sed 's/^/  /' "$WORK/local-check-full-no-break.err" >&2
+  failed=1
+fi
+
+printf 'feature\n' >"$WORK/local-check-full/feature.txt"
+git_fixture -C "$WORK/local-check-full" config user.name "OASDiff Test"
+git_fixture -C "$WORK/local-check-full" config user.email "oasdiff-test@example.invalid"
+git_fixture -C "$WORK/local-check-full" add feature.txt
+git_fixture -C "$WORK/local-check-full" -c commit.gpgsign=false commit -q -m "feat(api)!: drop x"
+got=0
+(
+  cd "$WORK/local-check-full"
+  OASDIFF=false sh "$HERE/local_check.sh" origin/main api/openapi/openapi.yaml
+) >"$WORK/local-check-full-break" 2>"$WORK/local-check-full-break.err" || got=$?
+if [ "$got" -eq 0 ] && grep -qF "breaking change declared in subject" "$WORK/local-check-full-break"; then
+  echo "ok   local_check accepts declared full break repository"
+else
+  echo "FAIL local_check: declared full break repository was not accepted (exit $got)" >&2
+  sed 's/^/  /' "$WORK/local-check-full-break.err" >&2
+  failed=1
+fi
+
+got=0
+(
+  cd "$WORK/local-check-full"
+  OASDIFF=true sh "$HERE/local_check.sh" no/such/ref api/openapi/openapi.yaml
+) >"$WORK/local-check-unknown" 2>"$WORK/local-check-unknown.err" || got=$?
+if [ "$got" -ne 0 ] && grep -qF "base ref does not resolve" "$WORK/local-check-unknown.err"; then
+  echo "ok   local_check rejects an unknown base ref"
+else
+  echo "FAIL local_check: unknown base ref was not rejected clearly (exit $got)" >&2
+  sed 's/^/  /' "$WORK/local-check-unknown.err" >&2
+  failed=1
+fi
+
+makefile="$HERE/../../Makefile"
+expected_recipe_line="$(printf '\tsh tools/oasdiff/local_check.sh origin/main api/openapi/openapi.yaml')"
+if awk -v expected="$expected_recipe_line" '
+  /^api-openapi-breaking:/ { in_target=1; next }
+  in_target && /^[^[:space:]]/ { exit }
+  in_target && $0 == expected { found=1 }
+  END { exit !found }
+' "$makefile"; then
+  echo "ok   api-openapi-breaking runs local_check"
+else
+  echo "FAIL api-openapi-breaking: recipe does not run local_check" >&2
+  failed=1
+fi
+
 exit "$failed"
