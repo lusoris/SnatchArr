@@ -103,7 +103,7 @@ def resolve_shfmt() -> str:
     root = Path(__file__).resolve().parents[2]
     command = ["go", "tool", f"-modfile={root / 'tools/go/go.mod'}", "-n", "shfmt"]
     try:
-        res = subprocess.run(command, cwd=root, capture_output=True, text=True,  # nosec B603
+        res = subprocess.run(command, cwd=root, capture_output=True, text=True,  # nosec B603  # fixed argv list, no shell
                              timeout=SHFMT_RESOLVE_TIMEOUT_SECONDS, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CheckError(f"go tool -modfile=tools/go/go.mod -n shfmt: {exc}") from exc
@@ -118,7 +118,7 @@ def parse_shell(path: str, source: str, binary: str) -> dict:
     """Parse full Bash source with shfmt and fail closed on parser errors."""
     command = [binary, "--to-json", "--language-dialect", "bash", "--filename", path]
     try:
-        res = subprocess.run(command, input=source, capture_output=True, text=True,  # nosec B603
+        res = subprocess.run(command, input=source, capture_output=True, text=True,  # nosec B603  # fixed argv list, no shell
                              timeout=SHELL_PARSE_TIMEOUT_SECONDS, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CheckError(f"{path}: shfmt: {exc}") from exc
