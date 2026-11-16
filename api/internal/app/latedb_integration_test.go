@@ -100,16 +100,22 @@ func startLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListen
 	return stats
 }
 
-// serveLateDatabaseProxy resets early connections, forwards later ones, and waits for
-// every bounded forwarder after closing active connections on context cancellation.
+// serveLateDatabaseProxy resets early connections, forwards later ones after the delay
+// window opens at the first rejected connection, and waits for every bounded forwarder
+// after closing active connections on context cancellation.
 func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListener, realAddr string, stats *lateDatabaseProxyStats) error {
 	t.Helper()
-	timer := time.NewTimer(lateDBDelay)
-	defer timer.Stop()
+	var delay <-chan time.Time
+	var timer *time.Timer
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
 	var active sync.WaitGroup
 	defer active.Wait()
 	accepted := 0
-	ready := false
+	delayElapsed := false
 	for range maxProxyPolls {
 		if ctx.Err() != nil {
 			return nil
@@ -121,7 +127,7 @@ func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListen
 		if acceptErr != nil {
 			var netErr net.Error
 			if errors.As(acceptErr, &netErr) && netErr.Timeout() {
-				ready = lateDatabaseProxyReady(timer, ready)
+				delayElapsed = lateDatabaseDelayElapsed(delay, delayElapsed)
 				continue
 			}
 			if ctx.Err() != nil && errors.Is(acceptErr, net.ErrClosed) {
@@ -134,24 +140,85 @@ func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListen
 			closeProxyConnection(t, conn)
 			return fmt.Errorf("accepted %d database connections: bound reached", accepted)
 		}
-		ready = lateDatabaseProxyReady(timer, ready)
+		delayElapsed = lateDatabaseDelayElapsed(delay, delayElapsed)
+		ready := lateDatabaseProxyForwards(delayElapsed, stats.rejected.Load())
 		if err := handleLateDatabaseConnection(t, ctx, conn, ready, realAddr, stats, &active); err != nil {
 			return err
+		}
+		if timer == nil && stats.rejected.Load() > 0 {
+			timer = time.NewTimer(lateDBDelay)
+			delay = timer.C
 		}
 	}
 	return fmt.Errorf("proxy accept loop reached %d polls", maxProxyPolls)
 }
 
-// lateDatabaseProxyReady reports whether the delay elapsed, consuming its timer once.
-func lateDatabaseProxyReady(timer *time.Timer, ready bool) bool {
-	if ready {
+// lateDatabaseDelayElapsed reports whether the delay window opened at the first
+// rejected connection has elapsed, consuming its timer once.
+func lateDatabaseDelayElapsed(delay <-chan time.Time, elapsed bool) bool {
+	if elapsed {
 		return true
 	}
 	select {
-	case <-timer.C:
+	case <-delay:
 		return true
 	default:
 		return false
+	}
+}
+
+// lateDatabaseProxyForwards reports whether the delay window opened at the first
+// rejected connection and at least one connection was rejected.
+func lateDatabaseProxyForwards(delayElapsed bool, rejected int32) bool {
+	return delayElapsed && rejected > 0
+}
+
+func TestLateDatabaseProxyForwards(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		delayElapsed bool
+		rejected     int32
+		want         bool
+	}{
+		{name: "delay pending, none rejected", want: false},
+		{name: "delay elapsed, none rejected", delayElapsed: true, want: false},
+		{name: "delay pending, one rejected", rejected: 1, want: false},
+		{name: "delay elapsed, one rejected", delayElapsed: true, rejected: 1, want: true},
+		{name: "delay elapsed, maxProxyAccepts rejected", delayElapsed: true, rejected: maxProxyAccepts, want: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := lateDatabaseProxyForwards(test.delayElapsed, test.rejected); got != test.want {
+				t.Errorf("lateDatabaseProxyForwards(%v, %d) = %v, want %v", test.delayElapsed, test.rejected, got, test.want)
+			}
+		})
+	}
+}
+
+func TestLateDatabaseDelayElapsed(t *testing.T) {
+	t.Parallel()
+	elapsed := make(chan time.Time, 1)
+	elapsed <- time.Time{}
+	cases := []struct {
+		name    string
+		delay   <-chan time.Time
+		elapsed bool
+		want    bool
+	}{
+		{name: "nil channel, not elapsed", want: false},
+		{name: "empty buffered channel, not elapsed", delay: make(chan time.Time, 1), want: false},
+		{name: "buffered channel holding one value", delay: elapsed, want: true},
+		{name: "nil channel, already elapsed", elapsed: true, want: true},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := lateDatabaseDelayElapsed(test.delay, test.elapsed); got != test.want {
+				t.Errorf("lateDatabaseDelayElapsed(%v, %v) = %v, want %v", test.delay != nil, test.elapsed, got, test.want)
+			}
+		})
 	}
 }
 
