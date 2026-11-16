@@ -16,14 +16,20 @@ import json
 import re
 import subprocess  # nosec B404  # fixed git argv, no shell or network
 import sys
+from contextlib import redirect_stderr
 from datetime import UTC, date, datetime, timedelta
 from importlib.metadata import version
+from io import StringIO
 from pathlib import Path
 
 import lizard
+import yaml
 from lizard_languages import get_reader_for
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from codacy_config import load_unique
+
 BASELINE = "tools/ci/codacy_lizard/baseline.json"
 FILE_PATTERN = "Lizard_file-nloc-medium"
 PARAM_PATTERN = "Lizard_parameter-count-medium"
@@ -31,7 +37,17 @@ LIMITS = {FILE_PATTERN: 1000, PARAM_PATTERN: 12}
 # Measured on Codacy cloud: these generated lockfiles use Lizard's C-like fallback reader.
 CODACY_FALLBACK_NAMES = {"Cargo.lock", "package-lock.json", "pnpm-lock.yaml"}
 DAYS = {"B": 3, "C": 10, "D": 120}
-FIELDS = {"patternId", "filePath", "functionName", "value", "entered", "expires", "category", "issue", "reason"}
+FIELDS = {
+    "patternId",
+    "filePath",
+    "functionName",
+    "value",
+    "entered",
+    "expires",
+    "category",
+    "issue",
+    "reason",
+}
 REF_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/~^-]{0,199}")
 ISSUE_RE = re.compile(r"[1-9][0-9]{0,5}")
 REASON_CHARS = (20, 300)
@@ -44,24 +60,47 @@ class CheckError(Exception):
 def git(*args: str) -> bytes:
     """Run bounded, local-only git commands at the repository root."""
     try:
-        result = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, timeout=30, check=False)  # nosec B603  # fixed git subcommands; no shell
+        result = subprocess.run(
+            ["git", *args], cwd=ROOT, capture_output=True, timeout=30, check=False
+        )  # nosec B603  # fixed git subcommands; no shell
     except (OSError, subprocess.TimeoutExpired) as err:
         raise CheckError(f"git {args[0]} failed: {err}") from err
     if result.returncode:
-        raise CheckError(f"git {args[0]} failed: {result.stderr.decode(errors='replace').strip()}")
+        raise CheckError(
+            f"git {args[0]} failed: {result.stderr.decode(errors='replace').strip()}"
+        )
     return result.stdout
 
 
 def parse_exclusions(text: str) -> list[str]:
-    """Parse the two exact exclude_paths lists from the Codacy YAML subset."""
+    """Parse and validate both Codacy exclude_paths lists with duplicate-key refusal."""
+    try:
+        config = load_unique(text)
+    except yaml.YAMLError as err:
+        raise CheckError(f".codacy.yml: cannot parse exclusions: {err}") from err
+    if not isinstance(config, dict) or "exclude_paths" not in config:
+        raise CheckError(".codacy.yml: missing top-level exclude_paths")
+    engines = config.get("engines")
+    if not isinstance(engines, dict) or "lizard" not in engines:
+        raise CheckError(".codacy.yml: missing engines.lizard.exclude_paths")
+    lizard_config = engines["lizard"]
+    if not isinstance(lizard_config, dict) or "exclude_paths" not in lizard_config:
+        raise CheckError(".codacy.yml: missing engines.lizard.exclude_paths")
+
     patterns = []
-    for heading, indent in ((r"^exclude_paths:$", 2), (r"^  lizard:\n    exclude_paths:$", 6)):
-        block = re.search(heading + rf"\n((?: {{{indent}}}- \"[^\"\n]+\"\n)+)", text, re.MULTILINE)
-        if block is None:
-            raise CheckError(".codacy.yml: expected global and Lizard exclude_paths as quoted lists")
-        for line in block.group(1).splitlines():
-            value = json.loads(line.strip()[2:])
-            if not isinstance(value, str) or not value or value.startswith("/") or ".." in value.split("/"):
+    for label, values in (
+        ("exclude_paths", config["exclude_paths"]),
+        ("engines.lizard.exclude_paths", lizard_config["exclude_paths"]),
+    ):
+        if not isinstance(values, list):
+            raise CheckError(f".codacy.yml: {label} must be a list")
+        for value in values:
+            if (
+                not isinstance(value, str)
+                or not value
+                or value.startswith("/")
+                or ".." in value.split("/")
+            ):
                 raise CheckError(f".codacy.yml: invalid exclude path {value!r}")
             patterns.append(value)
     return patterns
@@ -78,8 +117,12 @@ def select_names(names: list[str], patterns: list[str]) -> list[str]:
     for name in names:
         if name.startswith("/") or ".." in name.split("/"):
             raise CheckError(f"unsafe tracked path: {name!r}")
-        supported = get_reader_for(name) is not None or Path(name).name in CODACY_FALLBACK_NAMES
-        if not supported or any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns):
+        supported = (
+            get_reader_for(name) is not None or Path(name).name in CODACY_FALLBACK_NAMES
+        )
+        if not supported or any(
+            fnmatch.fnmatchcase(name, pattern) for pattern in patterns
+        ):
             continue
         selected.append(name)
     return sorted(selected)
@@ -87,7 +130,9 @@ def select_names(names: list[str], patterns: list[str]) -> list[str]:
 
 def selected_files() -> list[str]:
     """Select every tracked regular file Codacy sends to Lizard."""
-    names = [name.decode("utf-8") for name in git("ls-files", "-z").split(b"\0") if name]
+    names = [
+        name.decode("utf-8") for name in git("ls-files", "-z").split(b"\0") if name
+    ]
     selected = select_names(names, exclusions())
     for name in selected:
         if not (ROOT / name).is_file():
@@ -99,13 +144,31 @@ def selected_files() -> list[str]:
 
 def source_findings(name: str, source: str) -> list[dict[str, object]]:
     """Read file NLOC and function parameter counts above Codacy's limits."""
-    info = lizard.analyze_file.analyze_source_code(name, source)
+    diagnostic = StringIO()
+    with redirect_stderr(diagnostic):
+        info = lizard.analyze_file.analyze_source_code(name, source)
+    if message := diagnostic.getvalue():
+        raise CheckError(f"cannot analyze {name}: {message.splitlines()[0]}")
     findings = []
     if info.nloc > LIMITS[FILE_PATTERN]:
-        findings.append({"patternId": FILE_PATTERN, "filePath": name, "functionName": "", "value": info.nloc})
+        findings.append(
+            {
+                "patternId": FILE_PATTERN,
+                "filePath": name,
+                "functionName": "",
+                "value": info.nloc,
+            }
+        )
     for function in info.function_list:
         if function.parameter_count > LIMITS[PARAM_PATTERN]:
-            findings.append({"patternId": PARAM_PATTERN, "filePath": name, "functionName": function.name, "value": function.parameter_count})
+            findings.append(
+                {
+                    "patternId": PARAM_PATTERN,
+                    "filePath": name,
+                    "functionName": function.name,
+                    "value": function.parameter_count,
+                }
+            )
     return findings
 
 
@@ -134,46 +197,83 @@ def measure() -> tuple[dict[tuple[str, str, str], dict[str, object]], int]:
 
 def baseline_items(raw: object) -> list[object]:
     """Return the findings list after validating the baseline envelope."""
-    if not isinstance(raw, dict) or set(raw) != {"version", "findings"} or raw["version"] != 1 or not isinstance(raw["findings"], list):
+    if (
+        not isinstance(raw, dict)
+        or set(raw) != {"version", "findings"}
+        or raw["version"] != 1
+        or not isinstance(raw["findings"], list)
+    ):
         raise CheckError('baseline must be {"version": 1, "findings": [...]}')
     return raw["findings"]
 
 
 def validate_identity(item: dict[str, object]) -> tuple[str, str, str]:
     """Validate one baseline identity and measured value."""
-    if not all(isinstance(item[field], str) for field in ("patternId", "filePath", "functionName")):
+    if not all(
+        isinstance(item[field], str)
+        for field in ("patternId", "filePath", "functionName")
+    ):
         raise CheckError(f"baseline entry has invalid identity: {item!r}")
     pattern, path, function = key(item)
     value = item["value"]
-    if pattern not in LIMITS or not isinstance(value, int) or isinstance(value, bool) or value <= LIMITS[pattern]:
-        raise CheckError(f"baseline entry has invalid pattern or value: {pattern} {value!r}")
+    if (
+        pattern not in LIMITS
+        or not isinstance(value, int)
+        or isinstance(value, bool)
+        or value <= LIMITS[pattern]
+    ):
+        raise CheckError(
+            f"baseline entry has invalid pattern or value: {pattern} {value!r}"
+        )
     if not path or path.startswith("/") or ".." in path.split("/"):
-        raise CheckError(f"baseline entry has invalid path or function: {path!r} {function!r}")
-    if (pattern == FILE_PATTERN and function) or (pattern == PARAM_PATTERN and not function):
-        raise CheckError(f"baseline entry has invalid function for {pattern}: {function!r}")
+        raise CheckError(
+            f"baseline entry has invalid path or function: {path!r} {function!r}"
+        )
+    if (pattern == FILE_PATTERN and function) or (
+        pattern == PARAM_PATTERN and not function
+    ):
+        raise CheckError(
+            f"baseline entry has invalid function for {pattern}: {function!r}"
+        )
     return pattern, path, function
 
 
 def validate_metadata(item: dict[str, object], path: str, today: date | None) -> None:
     """Validate one baseline entry's MEL metadata and dates."""
-    if item["category"] not in ("A", "B", "C", "D") or not all(isinstance(item[field], str) and item[field] for field in ("issue", "reason")):
+    if item["category"] not in ("A", "B", "C", "D") or not all(
+        isinstance(item[field], str) and item[field] for field in ("issue", "reason")
+    ):
         raise CheckError(f"baseline entry lacks MEL category, issue or reason: {path}")
     if ISSUE_RE.fullmatch(item["issue"]) is None:
         raise CheckError(f"baseline entry issue is not an issue number: {path}")
-    if not REASON_CHARS[0] <= len(item["reason"]) <= REASON_CHARS[1] or "\n" in item["reason"]:
-        raise CheckError(f"baseline entry reason needs 20 to 300 characters on one line: {path}")
+    if (
+        not REASON_CHARS[0] <= len(item["reason"]) <= REASON_CHARS[1]
+        or "\n" in item["reason"]
+    ):
+        raise CheckError(
+            f"baseline entry reason needs 20 to 300 characters on one line: {path}"
+        )
     try:
-        entered, expires = date.fromisoformat(item["entered"]), date.fromisoformat(item["expires"])
+        entered, expires = (
+            date.fromisoformat(item["entered"]),
+            date.fromisoformat(item["expires"]),
+        )
     except (TypeError, ValueError) as err:
         raise CheckError(f"baseline entry has invalid dates: {path}") from err
     days = DAYS.get(str(item["category"]))
-    if expires <= entered or (days is not None and expires != entered + timedelta(days=days)):
-        raise CheckError(f"baseline entry has invalid {item['category']} expiry: {path}")
+    if expires <= entered or (
+        days is not None and expires != entered + timedelta(days=days)
+    ):
+        raise CheckError(
+            f"baseline entry has invalid {item['category']} expiry: {path}"
+        )
     if today is not None and expires < today:
         raise CheckError(f"baseline entry expired {expires}: {path} ({item['issue']})")
 
 
-def parse_baseline(raw: object, today: date | None) -> dict[tuple[str, str, str], dict[str, object]]:
+def parse_baseline(
+    raw: object, today: date | None
+) -> dict[tuple[str, str, str], dict[str, object]]:
     """Validate dated MEL entries, their keys, and their expiry."""
     entries = {}
     for candidate in baseline_items(raw):
@@ -188,7 +288,9 @@ def parse_baseline(raw: object, today: date | None) -> dict[tuple[str, str, str]
     return entries
 
 
-def load_baseline(path: Path, today: date | None) -> dict[tuple[str, str, str], dict[str, object]]:
+def load_baseline(
+    path: Path, today: date | None
+) -> dict[tuple[str, str, str], dict[str, object]]:
     """Load a JSON baseline with a clear path diagnostic."""
     try:
         return parse_baseline(json.loads(path.read_text(encoding="utf-8")), today)
@@ -202,11 +304,17 @@ def compare_scan(measured: dict, baseline: dict) -> list[str]:
     for identity, item in sorted(measured.items()):
         recorded = baseline.get(identity)
         if recorded is None:
-            problems.append(f"new {identity[0]}: {identity[1]}{':' + identity[2] if identity[2] else ''} = {item['value']}")
+            problems.append(
+                f"new {identity[0]}: {identity[1]}{':' + identity[2] if identity[2] else ''} = {item['value']}"
+            )
         elif item["value"] > recorded["value"]:
-            problems.append(f"grew {identity[0]}: {identity[1]}{':' + identity[2] if identity[2] else ''} {recorded['value']} -> {item['value']}")
+            problems.append(
+                f"grew {identity[0]}: {identity[1]}{':' + identity[2] if identity[2] else ''} {recorded['value']} -> {item['value']}"
+            )
     for identity in sorted(baseline.keys() - measured.keys()):
-        problems.append(f"stale {identity[0]}: {identity[1]}{':' + identity[2] if identity[2] else ''}")
+        problems.append(
+            f"stale {identity[0]}: {identity[1]}{':' + identity[2] if identity[2] else ''}"
+        )
     return problems
 
 
@@ -219,7 +327,9 @@ def compare_base(current: dict, previous: dict) -> list[str]:
             problems.append(f"baseline grew: new {identity}")
             continue
         if item["value"] > old["value"]:
-            problems.append(f"baseline grew: {identity} {old['value']} -> {item['value']}")
+            problems.append(
+                f"baseline grew: {identity} {old['value']} -> {item['value']}"
+            )
         if item["expires"] > old["expires"]:
             problems.append(f"baseline expiry moved: {identity}")
         for field in ("entered", "category", "issue", "reason"):
@@ -259,35 +369,36 @@ def self_test_metadata(recorded: dict[str, object]) -> None:
     )
     for label, field, value, want_accepted in cases:
         try:
-            parse_baseline({"version": 1, "findings": [{**recorded, field: value}]}, date(2026, 11, 15))
+            parse_baseline(
+                {"version": 1, "findings": [{**recorded, field: value}]},
+                date(2026, 11, 15),
+            )
             accepted = True
         except CheckError:
             accepted = False
         if accepted != want_accepted:
-            raise CheckError(f"self-test {label}: accepted={accepted}, want {want_accepted}")
+            raise CheckError(
+                f"self-test {label}: accepted={accepted}, want {want_accepted}"
+            )
         print(f"ok   {label}: accepted={accepted}")
 
 
-def self_test() -> None:
-    """Replay strict boundaries, lockfile selection, and baseline failures."""
-    cases = (
-        ("1001 lines", "package planted\n" + "var x = 1\n" * 1000, FILE_PATTERN, 1),
-        ("1000 lines", "package planted\n" + "var x = 1\n" * 999, FILE_PATTERN, 0),
-        ("13 parameters", "package planted\nfunc f(" + ", ".join(f"p{i} int" for i in range(13)) + ") {}\n", PARAM_PATTERN, 1),
-        ("12 parameters", "package planted\nfunc f(" + ", ".join(f"p{i} int" for i in range(12)) + ") {}\n", PARAM_PATTERN, 0),
-    )
-    for label, source, pattern, want in cases:
-        measured = {key(item): item for item in source_findings("planted.go", source)}
-        actual = sum(identity[0] == pattern for identity in measured)
-        new = sum(problem.startswith("new ") for problem in compare_scan(measured, {}))
-        if actual != want or new != want or len(measured) != want:
-            raise CheckError(f"self-test {label}: want {want} new {pattern}, got {measured}")
-        print(f"ok   {label}: {want} new finding")
+def self_test_exclusions() -> None:
+    """Replay accepted and refused Codacy exclusion configurations."""
     lock_name = "planted/Cargo.lock"
     lock_source = "package = planted\n" + "version = 1\n" * 1000
-    lock_exclusions = parse_exclusions(
-        'exclude_paths:\n  - "generated/**"\nengines:\n  lizard:\n    exclude_paths:\n      - "planted/Cargo.lock"\n'
+    commented_config = (
+        'exclude_paths:\n  - "generated/**"\nengines:\n  lizard:\n'
+        '    exclude_paths:\n      - "planted/first.lock"\n'
+        "      # Full-line comments must not end the YAML list.\n"
+        '      - "planted/Cargo.lock"\n'
     )
+    lock_exclusions = parse_exclusions(commented_config)
+    expected_exclusions = ["generated/**", "planted/first.lock", "planted/Cargo.lock"]
+    if lock_exclusions != expected_exclusions:
+        raise CheckError(
+            f"self-test commented exclusions: want {expected_exclusions}, got {lock_exclusions}"
+        )
     for patterns, want in (([], 1), (lock_exclusions, 0)):
         measured = {
             key(item): item
@@ -295,9 +406,84 @@ def self_test() -> None:
             for item in source_findings(name, lock_source)
         }
         if len(measured) != want:
-            raise CheckError(f"self-test Cargo.lock exclusions {patterns}: want {want} finding, got {measured}")
-        print(f"ok   Cargo.lock exclusions {patterns}: {want} finding")
-    planted = {"patternId": FILE_PATTERN, "filePath": "planted.go", "functionName": "", "value": 1002}
+            raise CheckError(
+                f"self-test Cargo.lock exclusions {patterns}: want {want} finding, got {measured}"
+            )
+        print(f"ok   commented Cargo.lock exclusions {patterns}: {want} finding")
+    for label, invalid in (
+        (
+            "duplicate exclusion key",
+            "exclude_paths: []\nexclude_paths: []\nengines:\n  lizard:\n    exclude_paths: []\n",
+        ),
+        (
+            "non-string exclusion",
+            "exclude_paths: [4]\nengines:\n  lizard:\n    exclude_paths: []\n",
+        ),
+        ("missing Lizard exclusion", "exclude_paths: []\nengines:\n  lizard: {}\n"),
+    ):
+        try:
+            parse_exclusions(invalid)
+        except CheckError:
+            print(f"ok   {label}: refused")
+        else:
+            raise CheckError(f"self-test {label}: invalid configuration accepted")
+
+
+def self_test_skipped_source() -> None:
+    """Refuse Lizard sources whose analysis emits a skip diagnostic."""
+    deep_source = "package planted\n" + "{" * 2500 + "}" * 2500 + "\n"
+    try:
+        source_findings("planted/deep.go", deep_source)
+    except CheckError as err:
+        print(f"ok   Lizard skipped source: refused ({err})")
+    else:
+        raise CheckError("self-test Lizard skipped source: partial analysis accepted")
+
+
+def self_test_thresholds() -> None:
+    """Replay Lizard's strict file and parameter threshold boundaries."""
+    cases = (
+        ("1001 lines", "package planted\n" + "var x = 1\n" * 1000, FILE_PATTERN, 1),
+        ("1000 lines", "package planted\n" + "var x = 1\n" * 999, FILE_PATTERN, 0),
+        (
+            "13 parameters",
+            "package planted\nfunc f("
+            + ", ".join(f"p{i} int" for i in range(13))
+            + ") {}\n",
+            PARAM_PATTERN,
+            1,
+        ),
+        (
+            "12 parameters",
+            "package planted\nfunc f("
+            + ", ".join(f"p{i} int" for i in range(12))
+            + ") {}\n",
+            PARAM_PATTERN,
+            0,
+        ),
+    )
+    for label, source, pattern, want in cases:
+        measured = {key(item): item for item in source_findings("planted.go", source)}
+        actual = sum(identity[0] == pattern for identity in measured)
+        new = sum(problem.startswith("new ") for problem in compare_scan(measured, {}))
+        if actual != want or new != want or len(measured) != want:
+            raise CheckError(
+                f"self-test {label}: want {want} new {pattern}, got {measured}"
+            )
+        print(f"ok   {label}: {want} new finding")
+
+
+def self_test() -> None:
+    """Replay strict boundaries, lockfile selection, and baseline failures."""
+    self_test_thresholds()
+    self_test_exclusions()
+    self_test_skipped_source()
+    planted = {
+        "patternId": FILE_PATTERN,
+        "filePath": "planted.go",
+        "functionName": "",
+        "value": 1002,
+    }
     identity = key(planted)
     recorded = {
         **planted,
@@ -308,7 +494,9 @@ def self_test() -> None:
         "issue": "1179",
         "reason": "valid self-test baseline reason",
     }
-    baseline = parse_baseline({"version": 1, "findings": [recorded]}, date(2026, 11, 15))
+    baseline = parse_baseline(
+        {"version": 1, "findings": [recorded]}, date(2026, 11, 15)
+    )
     self_test_metadata(recorded)
     if not compare_scan({identity: planted}, baseline)[0].startswith("grew "):
         raise CheckError("self-test: measured growth was accepted")
@@ -345,7 +533,9 @@ def main() -> int:
             measured, count = measure()
             problems = compare_scan(measured, baseline)
             if not problems:
-                print(f"codacy-lizard: {count} tracked source files, {len(measured)} recorded findings, 0 new/grown/stale")
+                print(
+                    f"codacy-lizard: {count} tracked source files, {len(measured)} recorded findings, 0 new/grown/stale"
+                )
         for problem in problems:
             print(f"codacy-lizard: {problem}", file=sys.stderr)
         return 1 if problems else 0

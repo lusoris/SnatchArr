@@ -181,6 +181,7 @@ jobs:
           python3 -I tools/ci/codacy_opengrep_scan.py --self-test
       - name: The Codacy Lizard limits refuse their planted cases and scan tracked source
         run: |
+          bash tools/ci/codacy_lizard_check_test.sh
           sh tools/ci/codacy_lizard_check.sh "$RUNNER_TEMP/lizard" --self-test
           sh tools/ci/codacy_lizard_check.sh "$RUNNER_TEMP/lizard"
       - name: The scan script refuses its planted cases

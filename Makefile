@@ -708,6 +708,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	sh tools/ci/codacy_opengrep_scan_test.sh
 	python3 -I tools/ci/codacy_opengrep_scan.py --self-test
 	python3 -I tools/ci/codacy_opengrep_scan.py --base-ref origin/main
+	bash tools/ci/codacy_lizard_check_test.sh
 	sh tools/ci/codacy_lizard_check.sh .cache/lizard --self-test
 	sh tools/ci/codacy_lizard_check.sh .cache/lizard --base-ref origin/main
 	$(MAKE) codacy-lizard

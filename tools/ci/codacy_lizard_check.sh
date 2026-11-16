@@ -19,9 +19,10 @@ root="$(cd "$here/../.." && pwd)"
 requirements="$root/tools/lizard/requirements.txt"
 mkdir -p "$cache"
 cache="$(cd "$cache" && pwd)"
-req_hash="$(python3 -I -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()[:12])' "$requirements")"
-venv="$cache/lizard-$req_hash"
+venv_key="$(python3 -I -c 'import hashlib, sys; digest = hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()[:12]; print(digest + "-" + sys.implementation.name + "-" + str(sys.version_info.major) + "." + str(sys.version_info.minor))' "$requirements")"
+venv="$cache/lizard-$venv_key"
 if [ ! -x "$venv/bin/python" ]; then
+  rm -f "$venv/.installed"
   python3 -m venv "$venv"
 fi
 if [ ! -f "$venv/.installed" ]; then
