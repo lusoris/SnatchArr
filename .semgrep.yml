@@ -68,6 +68,34 @@ rules:
           ...
           $CALL(..., $SRV.URL, ...)
 
+  # ── Test isolation · fatal helpers stay in the test goroutine ─────────────
+  - id: test-fatal-helper-in-goroutine
+    languages: [go]
+    severity: ERROR
+    paths:
+      include:
+        - "*_test.go"
+    message: >-
+      This helper can call Fatal from a goroutine other than the test's. Go
+      allows test fatal methods only in the test goroutine. Report with
+      t.Errorf and return, or signal a channel that the test goroutine awaits.
+    patterns:
+      - pattern-inside: |
+          go func(...) {
+            ...
+          }(...)
+      - pattern-either:
+          - pattern: await.Await(...)
+          - pattern: refuse.Listener(...)
+          - pattern: Listener($TB)
+          - pattern: listener($TB, ...)
+          - pattern: $T.Fatal(...)
+          - pattern: $T.Fatalf(...)
+          - pattern: $T.FailNow()
+          - pattern: $T.Skip(...)
+          - pattern: $T.Skipf(...)
+          - pattern: $T.SkipNow()
+
   # ── HISS-02 · an HTTP client carries a timeout ─────────────────────────────
   # A client without Timeout has no deadline of its own, so a request sent
   # without a context deadline can hang on a slow peer. Tests are exempt: they

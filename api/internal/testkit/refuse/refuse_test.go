@@ -18,6 +18,9 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/testkit/await"
 )
 
+// errEndpointSentData identifies a refusal check that received endpoint data.
+var errEndpointSentData = errors.New("endpoint sent data")
+
 // TestListener_RequestFails checks that the issue 1193 listener refuses a request.
 func TestListener_RequestFails(t *testing.T) {
 	t.Parallel()
@@ -73,7 +76,8 @@ func TestRefusal_HeldConnectionFails(t *testing.T) {
 			}
 		}()
 		close(accepted)
-		await.Await(t, release, "held refusal connection release")
+		// Cleanup closes release, so this wait ends with the test.
+		<-release
 	}()
 	t.Cleanup(func() {
 		close(release)
@@ -128,8 +132,8 @@ func TestRefusal_DataSentFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	err := refusal(ctx, ln.Addr().String())
-	if err == nil || errors.Is(err, context.Canceled) {
-		t.Fatalf("data refusal error = %v, want non-context error", err)
+	if !errors.Is(err, errEndpointSentData) {
+		t.Fatalf("data refusal error = %v, want errEndpointSentData", err)
 	}
 }
 
@@ -183,7 +187,7 @@ func refusal(ctx context.Context, addr string) (result error) {
 	var buf [1]byte
 	n, readErr := conn.Read(buf[:])
 	if n > 0 {
-		return fmt.Errorf("endpoint sent data: received %d byte(s)", n)
+		return fmt.Errorf("%w: received %d byte(s)", errEndpointSentData, n)
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return fmt.Errorf("refusal check canceled: %w", ctxErr)
