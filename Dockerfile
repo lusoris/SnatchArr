@@ -6,7 +6,7 @@
 # idmatchparity target: docker build --target idmatchparity .
 
 # ── web build ─────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS web
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS web
 WORKDIR /src/web
 RUN corepack enable
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
@@ -50,13 +50,13 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -p 4 -trimpath 
       -o /out/idmatchparity ./tools/idmatchparity
 
 # ── idmatchparity runtime ─────────────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3 AS idmatchparity
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931 AS idmatchparity
 COPY --from=idmatchparity-build /out/idmatchparity /idmatchparity
 USER 65532:65532
 ENTRYPOINT ["/idmatchparity"]
 
 # ── runtime ───────────────────────────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931
 COPY --from=build /out/snatcharr-api /snatcharr-api
 USER 65532:65532
 EXPOSE 8080 9090
