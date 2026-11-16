@@ -862,7 +862,7 @@ func runOneWayDownload(t *testing.T, expectIdleClose bool) {
 		chunkCount  = 8
 	)
 	chunk := []byte("stream-chunk\n")
-	port, cleanup := startStreamingListener(t, chunk, chunkCount, idleTimeout/3)
+	port, lastWrite, cleanup := startStreamingListener(t, chunk, chunkCount, idleTimeout/3)
 	t.Cleanup(cleanup)
 	conn, br := dialIdleTestTunnel(t, port, idleTimeout)
 
@@ -877,7 +877,7 @@ func runOneWayDownload(t *testing.T, expectIdleClose bool) {
 	if !expectIdleClose {
 		return
 	}
-	assertTunnelClosesAfterIdle(t, conn, br, idleTimeout)
+	assertTunnelClosesAfterIdle(t, conn, br, idleTimeout, <-lastWrite)
 }
 
 func runOneWayUpload(t *testing.T) {
@@ -939,38 +939,44 @@ func dialIdleTestTunnel(t *testing.T, upstreamPort int, idleTimeout time.Duratio
 	return conn, br
 }
 
-func assertTunnelClosesAfterIdle(t *testing.T, conn net.Conn, br *bufio.Reader, idleTimeout time.Duration) {
+func assertTunnelClosesAfterIdle(t *testing.T, conn net.Conn, br *bufio.Reader, idleTimeout time.Duration, lastWrite time.Time) {
 	t.Helper()
 	idleStart := time.Now()
 	if err := conn.SetReadDeadline(idleStart.Add(2 * idleTimeout)); err != nil {
 		t.Fatalf("SetReadDeadline: %v", err)
 	}
 	_, readErr := br.ReadByte()
-	elapsed := time.Since(idleStart)
+	closedAt := time.Now()
+	elapsed := closedAt.Sub(idleStart)
 	if readErr == nil {
 		t.Fatal("expected stopped stream tunnel to close")
 	}
 	if isNetTimeout(readErr) {
 		t.Fatalf("stopped stream stayed open for %v: %v", elapsed, readErr)
 	}
-	if elapsed < idleTimeout-50*time.Millisecond {
-		t.Fatalf("stopped stream closed after %v, want at least idle_timeout %v", elapsed, idleTimeout)
+	if closedAt.Sub(lastWrite) < idleTimeout-50*time.Millisecond {
+		t.Fatalf("stopped stream closed %v after last upstream write, want at least idle_timeout %v", closedAt.Sub(lastWrite), idleTimeout)
 	}
 }
 
-func startStreamingListener(t *testing.T, chunk []byte, count int, interval time.Duration) (int, func()) {
+func startStreamingListener(t *testing.T, chunk []byte, count int, interval time.Duration) (int, <-chan time.Time, func()) {
 	t.Helper()
-	return startSingleConnListener(t, func(conn net.Conn) {
+	lastWrite := make(chan time.Time, 1)
+	port, cleanup := startSingleConnListener(t, func(conn net.Conn) {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		for range count {
+		for i := range count {
 			<-ticker.C
+			if i == count-1 {
+				lastWrite <- time.Now()
+			}
 			if _, err := conn.Write(chunk); err != nil {
 				return
 			}
 		}
 		_, _ = io.Copy(io.Discard, conn)
 	})
+	return port, lastWrite, cleanup
 }
 
 func startSingleConnListener(t *testing.T, handle func(net.Conn)) (int, func()) {
