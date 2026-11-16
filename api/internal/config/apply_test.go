@@ -32,127 +32,130 @@ func stringsHasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
 
+type applySettingCase struct {
+	name    string
+	key     string
+	val     string
+	wantErr bool
+	errIs   error
+	check   func(t *testing.T, o Options)
+}
+
+var applySettingCases = []applySettingCase{
+	{
+		name: "positive boolean",
+		key:  "snatcharr.oidc.enabled",
+		val:  "true",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if !o.OIDC.Enabled {
+				t.Errorf("expected oidc.enabled to be true")
+			}
+		},
+	},
+	{
+		name: "positive duration",
+		key:  "snatcharr.session.ttl",
+		val:  "48h",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if o.Session.TTL != 48*time.Hour {
+				t.Errorf("expected session.ttl to be 48h, got %v", o.Session.TTL)
+			}
+		},
+	},
+	{
+		name: "positive list",
+		key:  "snatcharr.proxy.trusted",
+		val:  "127.0.0.1, 10.0.0.0/8",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if len(o.Proxy.Trusted) != 2 || o.Proxy.Trusted[0] != "127.0.0.1" {
+				t.Errorf("unexpected proxy.trusted: %v", o.Proxy.Trusted)
+			}
+		},
+	},
+	{
+		name:    "negative unknown key",
+		key:     "snatcharr.invalid.unknown",
+		val:     "something",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+	},
+	{
+		name:    "negative invalid bool",
+		key:     "snatcharr.web.dev",
+		val:     "not-a-bool",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+	},
+	{
+		name:    "negative invalid duration",
+		key:     "snatcharr.session.ttl",
+		val:     "invalid-duration",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+	},
+	{
+		name:    "negative invalid int",
+		key:     "snatcharr.logs.ring_size",
+		val:     "not-an-int",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+	},
+	{
+		name:    "negative invalid float",
+		key:     "snatcharr.prowlarr.limit_threshold",
+		val:     "not-a-float",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+	},
+	{
+		name: "positive tvdb api key",
+		key:  "snatcharr.metadata.tvdb.api_key",
+		val:  "planted-tvdb-key",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if o.Metadata.TVDB.APIKey != "planted-tvdb-key" {
+				t.Errorf("unexpected tvdb api key length %d", len(o.Metadata.TVDB.APIKey))
+			}
+		},
+	},
+	{
+		name: "positive tvdb pin",
+		key:  "snatcharr.metadata.tvdb.pin",
+		val:  "planted-tvdb-pin",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if o.Metadata.TVDB.PIN != "planted-tvdb-pin" {
+				t.Errorf("unexpected tvdb pin length %d", len(o.Metadata.TVDB.PIN))
+			}
+		},
+	},
+	{
+		name:    "negative unknown tvdb option",
+		key:     "snatcharr.metadata.tvdb.unknown",
+		val:     "x",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+	},
+	{
+		name: "boundary empty string",
+		key:  "snatcharr.jellyfin.api_key",
+		val:  "test-jellyfin-api-token",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if o.Jellyfin.APIKey != "test-jellyfin-api-token" {
+				t.Errorf("unexpected api key: %s", o.Jellyfin.APIKey)
+			}
+		},
+	},
+}
+
 func TestApplySettingTableDriven(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name    string
-		key     string
-		val     string
-		wantErr bool
-		errIs   error
-		check   func(t *testing.T, o Options)
-	}{
-		{
-			name: "positive boolean",
-			key:  "snatcharr.oidc.enabled",
-			val:  "true",
-			check: func(t *testing.T, o Options) {
-				t.Helper()
-				if !o.OIDC.Enabled {
-					t.Errorf("expected oidc.enabled to be true")
-				}
-			},
-		},
-		{
-			name: "positive duration",
-			key:  "snatcharr.session.ttl",
-			val:  "48h",
-			check: func(t *testing.T, o Options) {
-				t.Helper()
-				if o.Session.TTL != 48*time.Hour {
-					t.Errorf("expected session.ttl to be 48h, got %v", o.Session.TTL)
-				}
-			},
-		},
-		{
-			name: "positive list",
-			key:  "snatcharr.proxy.trusted",
-			val:  "127.0.0.1, 10.0.0.0/8",
-			check: func(t *testing.T, o Options) {
-				t.Helper()
-				if len(o.Proxy.Trusted) != 2 || o.Proxy.Trusted[0] != "127.0.0.1" {
-					t.Errorf("unexpected proxy.trusted: %v", o.Proxy.Trusted)
-				}
-			},
-		},
-		{
-			name:    "negative unknown key",
-			key:     "snatcharr.invalid.unknown",
-			val:     "something",
-			wantErr: true,
-			errIs:   domain.ErrInvalid,
-		},
-		{
-			name:    "negative invalid bool",
-			key:     "snatcharr.web.dev",
-			val:     "not-a-bool",
-			wantErr: true,
-			errIs:   domain.ErrInvalid,
-		},
-		{
-			name:    "negative invalid duration",
-			key:     "snatcharr.session.ttl",
-			val:     "invalid-duration",
-			wantErr: true,
-			errIs:   domain.ErrInvalid,
-		},
-		{
-			name:    "negative invalid int",
-			key:     "snatcharr.logs.ring_size",
-			val:     "not-an-int",
-			wantErr: true,
-			errIs:   domain.ErrInvalid,
-		},
-		{
-			name:    "negative invalid float",
-			key:     "snatcharr.prowlarr.limit_threshold",
-			val:     "not-a-float",
-			wantErr: true,
-			errIs:   domain.ErrInvalid,
-		},
-		{
-			name: "positive tvdb api key",
-			key:  "snatcharr.metadata.tvdb.api_key",
-			val:  "planted-tvdb-key",
-			check: func(t *testing.T, o Options) {
-				t.Helper()
-				if o.Metadata.TVDB.APIKey != "planted-tvdb-key" {
-					t.Errorf("unexpected tvdb api key length %d", len(o.Metadata.TVDB.APIKey))
-				}
-			},
-		},
-		{
-			name: "positive tvdb pin",
-			key:  "snatcharr.metadata.tvdb.pin",
-			val:  "planted-tvdb-pin",
-			check: func(t *testing.T, o Options) {
-				t.Helper()
-				if o.Metadata.TVDB.PIN != "planted-tvdb-pin" {
-					t.Errorf("unexpected tvdb pin length %d", len(o.Metadata.TVDB.PIN))
-				}
-			},
-		},
-		{
-			name:    "negative unknown tvdb option",
-			key:     "snatcharr.metadata.tvdb.unknown",
-			val:     "x",
-			wantErr: true,
-			errIs:   domain.ErrInvalid,
-		},
-		{
-			name: "boundary empty string",
-			key:  "snatcharr.jellyfin.api_key",
-			val:  "test-jellyfin-api-token",
-			check: func(t *testing.T, o Options) {
-				t.Helper()
-				if o.Jellyfin.APIKey != "test-jellyfin-api-token" {
-					t.Errorf("unexpected api key: %s", o.Jellyfin.APIKey)
-				}
-			},
-		},
-	}
 
-	for _, tc := range cases {
+	for _, tc := range applySettingCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			o := Default()

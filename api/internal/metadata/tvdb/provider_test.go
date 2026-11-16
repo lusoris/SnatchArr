@@ -582,82 +582,88 @@ func TestFirstMovieID(t *testing.T) {
 	}
 }
 
+type collectAliasScanCase struct {
+	name           string
+	translation    *tvdb.Translation
+	aliases        []tvdb.Alias
+	wantLen        int
+	wantTitle      string
+	wantTitleIndex int
+}
+
+var collectAliasScanCases = []collectAliasScanCase{
+	{
+		name:      "matching alias after output cap",
+		aliases:   append(aliasScanAliases("eng", maxAliases+50), tvdb.Alias{Language: "deu", Name: "German title"}),
+		wantLen:   1,
+		wantTitle: "German title",
+	},
+	{
+		name:    "accepted titles remain capped",
+		aliases: aliasScanAliases("deu", maxAliases+50),
+		wantLen: maxAliases,
+	},
+	{
+		name: "empty aliases",
+	},
+	{
+		name:    "no matching aliases",
+		aliases: aliasScanAliases("eng", maxAliases+50),
+	},
+	{
+		name: "translation duplicate aliases do not consume output cap",
+		translation: &tvdb.Translation{
+			Name:    "Titel",
+			Aliases: append(aliasScanDuplicateAliases("  tItEl  ", maxAliases+50), "Anderer Titel"),
+		},
+		wantLen:        2,
+		wantTitle:      "Anderer Titel",
+		wantTitleIndex: 1,
+	},
+	{
+		name: "translation aliases remain capped",
+		translation: &tvdb.Translation{
+			Aliases: aliasScanTranslationAliases("Titel", maxAliases+50),
+		},
+		wantLen: maxAliases,
+	},
+	{
+		name: "translation name duplicates add no titles",
+		translation: &tvdb.Translation{
+			Name:    "Titel",
+			Aliases: []string{"Titel", " titel ", "TITEL"},
+		},
+		wantLen: 1,
+	},
+}
+
+func aliasScanAliases(language string, count int) []tvdb.Alias {
+	out := make([]tvdb.Alias, 0, count)
+	for i := range count {
+		out = append(out, tvdb.Alias{Language: language, Name: fmt.Sprintf("Alias %d", i)})
+	}
+	return out
+}
+
+func aliasScanTranslationAliases(name string, count int) []string {
+	out := make([]string, 0, count)
+	for i := range count {
+		out = append(out, fmt.Sprintf("%s %d", name, i))
+	}
+	return out
+}
+
+func aliasScanDuplicateAliases(title string, count int) []string {
+	out := make([]string, 0, count)
+	for range count {
+		out = append(out, title)
+	}
+	return out
+}
+
 func TestCollectAliasScan(t *testing.T) {
 	t.Parallel()
-	aliases := func(language string, count int) []tvdb.Alias {
-		out := make([]tvdb.Alias, 0, count)
-		for i := range count {
-			out = append(out, tvdb.Alias{Language: language, Name: fmt.Sprintf("Alias %d", i)})
-		}
-		return out
-	}
-	translationAliases := func(name string, count int) []string {
-		out := make([]string, 0, count)
-		for i := range count {
-			out = append(out, fmt.Sprintf("%s %d", name, i))
-		}
-		return out
-	}
-	duplicateAliases := func(title string, count int) []string {
-		out := make([]string, 0, count)
-		for range count {
-			out = append(out, title)
-		}
-		return out
-	}
-	tests := []struct {
-		name           string
-		translation    *tvdb.Translation
-		aliases        []tvdb.Alias
-		wantLen        int
-		wantTitle      string
-		wantTitleIndex int
-	}{
-		{
-			name:      "matching alias after output cap",
-			aliases:   append(aliases("eng", maxAliases+50), tvdb.Alias{Language: "deu", Name: "German title"}),
-			wantLen:   1,
-			wantTitle: "German title",
-		},
-		{
-			name:    "accepted titles remain capped",
-			aliases: aliases("deu", maxAliases+50),
-			wantLen: maxAliases,
-		},
-		{
-			name: "empty aliases",
-		},
-		{
-			name:    "no matching aliases",
-			aliases: aliases("eng", maxAliases+50),
-		},
-		{
-			name: "translation duplicate aliases do not consume output cap",
-			translation: &tvdb.Translation{
-				Name:    "Titel",
-				Aliases: append(duplicateAliases("  tItEl  ", maxAliases+50), "Anderer Titel"),
-			},
-			wantLen:        2,
-			wantTitle:      "Anderer Titel",
-			wantTitleIndex: 1,
-		},
-		{
-			name: "translation aliases remain capped",
-			translation: &tvdb.Translation{
-				Aliases: translationAliases("Titel", maxAliases+50),
-			},
-			wantLen: maxAliases,
-		},
-		{
-			name: "translation name duplicates add no titles",
-			translation: &tvdb.Translation{
-				Name:    "Titel",
-				Aliases: []string{"Titel", " titel ", "TITEL"},
-			},
-			wantLen: 1,
-		},
-	}
-	for _, tt := range tests {
+	for _, tt := range collectAliasScanCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := collect("de", "deu", tt.translation, tt.aliases)

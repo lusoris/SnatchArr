@@ -722,354 +722,357 @@ func TestLoadSetupSecret(t *testing.T) {
 	}
 }
 
+type loadCompoundKeysFromEnvCase struct {
+	name     string
+	env      map[string]string
+	assertFn func(t *testing.T, opts config.Options)
+}
+
+var loadCompoundKeysFromEnvCases = []loadCompoundKeysFromEnvCase{
+	{
+		name: "oidc issuer_url",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_ISSUER_URL": "https://auth.example.com"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.OIDC.IssuerURL != "https://auth.example.com" {
+				t.Fatalf("OIDC.IssuerURL = %q, want %q", opts.OIDC.IssuerURL, "https://auth.example.com")
+			}
+		},
+	},
+	{
+		name: "oidc client_id",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_CLIENT_ID": "snatcharr-client"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.OIDC.ClientID != "snatcharr-client" {
+				t.Fatalf("OIDC.ClientID = %q, want %q", opts.OIDC.ClientID, "snatcharr-client")
+			}
+		},
+	},
+	{
+		name: "oidc client_secret",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_CLIENT_SECRET": "secret-xyz"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.OIDC.ClientSecret != "secret-xyz" {
+				t.Fatalf("OIDC.ClientSecret = %q, want %q", opts.OIDC.ClientSecret, "secret-xyz")
+			}
+		},
+	},
+	{
+		name: "oidc redirect_url",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_REDIRECT_URL": "https://snatcharr.example.com/callback"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.OIDC.RedirectURL != "https://snatcharr.example.com/callback" {
+				t.Fatalf("OIDC.RedirectURL = %q, want %q", opts.OIDC.RedirectURL, "https://snatcharr.example.com/callback")
+			}
+		},
+	},
+	{
+		name: "oidc allowed_subjects comma-split",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS": "sub1, sub2"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"sub1", "sub2"}
+			if !slices.Equal(opts.OIDC.AllowedSubjects, want) {
+				t.Fatalf("OIDC.AllowedSubjects = %v, want %v", opts.OIDC.AllowedSubjects, want)
+			}
+		},
+	},
+	{
+		name: "oidc allowed_emails comma-split",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_ALLOWED_EMAILS": "admin@example.com, test@example.com"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"admin@example.com", "test@example.com"}
+			if !slices.Equal(opts.OIDC.AllowedEmails, want) {
+				t.Fatalf("OIDC.AllowedEmails = %v, want %v", opts.OIDC.AllowedEmails, want)
+			}
+		},
+	},
+	{
+		name: "oidc discovery_timeout parsed duration",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_DISCOVERY_TIMEOUT": "15s"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.OIDC.DiscoveryTimeout != 15*time.Second {
+				t.Fatalf("OIDC.DiscoveryTimeout = %v, want 15s", opts.OIDC.DiscoveryTimeout)
+			}
+		},
+	},
+	{
+		name: "oidc admin_groups comma-split",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_ADMIN_GROUPS": "admin, ops"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"admin", "ops"}
+			if !slices.Equal(opts.OIDC.AdminGroups, want) {
+				t.Fatalf("OIDC.AdminGroups = %v, want %v", opts.OIDC.AdminGroups, want)
+			}
+		},
+	},
+	{
+		name: "oidc requester_groups comma-split",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_REQUESTER_GROUPS": "requester, family"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"requester", "family"}
+			if !slices.Equal(opts.OIDC.RequesterGroups, want) {
+				t.Fatalf("OIDC.RequesterGroups = %v, want %v", opts.OIDC.RequesterGroups, want)
+			}
+		},
+	},
+	{
+		name: "oidc viewer_groups comma-split",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_VIEWER_GROUPS": "viewer, guest"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"viewer", "guest"}
+			if !slices.Equal(opts.OIDC.ViewerGroups, want) {
+				t.Fatalf("OIDC.ViewerGroups = %v, want %v", opts.OIDC.ViewerGroups, want)
+			}
+		},
+	},
+	{
+		name: "boundary group name with inner space kept whole",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_VIEWER_GROUPS": " SnatchArr Viewers ,Admins"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"SnatchArr Viewers", "Admins"}
+			if !slices.Equal(opts.OIDC.ViewerGroups, want) {
+				t.Fatalf("OIDC.ViewerGroups = %v, want %v", opts.OIDC.ViewerGroups, want)
+			}
+		},
+	},
+	{
+		name: "oidc groups_claim custom",
+		env:  map[string]string{"APP_SNATCHARR_OIDC_GROUPS_CLAIM": "roles"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.OIDC.GroupsClaim != "roles" {
+				t.Fatalf("OIDC.GroupsClaim = %q, want roles", opts.OIDC.GroupsClaim)
+			}
+		},
+	},
+	{
+		name: "proxy_auth enabled",
+		env: map[string]string{
+			"APP_SNATCHARR_PROXY_AUTH_ENABLED":       "true",
+			"APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS": "10.0.0.0/8",
+			"APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS":  "admin",
+			"APP_SNATCHARR_PROXY_AUTH_SECRET":        strings.Repeat("s", 32),
+		},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if !opts.ProxyAuth.Enabled {
+				t.Fatalf("ProxyAuth.Enabled = false, want true")
+			}
+		},
+	},
+	{
+		name: "proxy_auth secret_header custom",
+		env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER": "X-Custom-Secret"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.ProxyAuth.SecretHeader != "X-Custom-Secret" {
+				t.Fatalf("ProxyAuth.SecretHeader = %q, want X-Custom-Secret", opts.ProxyAuth.SecretHeader)
+			}
+		},
+	},
+	{
+		name: "proxy_auth secret",
+		env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_SECRET": strings.Repeat("s", 32)},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.ProxyAuth.Secret != strings.Repeat("s", 32) {
+				t.Fatalf("ProxyAuth.Secret = %q, want 32 's'", opts.ProxyAuth.Secret)
+			}
+		},
+	},
+	{
+		name: "proxy_auth groups_header custom",
+		env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER": "X-Custom-Groups"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.ProxyAuth.GroupsHeader != "X-Custom-Groups" {
+				t.Fatalf("ProxyAuth.GroupsHeader = %q, want X-Custom-Groups", opts.ProxyAuth.GroupsHeader)
+			}
+		},
+	},
+	{
+		name: "proxy_auth admin_groups comma-split",
+		env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS": "admin, ops"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"admin", "ops"}
+			if !slices.Equal(opts.ProxyAuth.AdminGroups, want) {
+				t.Fatalf("ProxyAuth.AdminGroups = %v, want %v", opts.ProxyAuth.AdminGroups, want)
+			}
+		},
+	},
+	{
+		name: "proxy_auth requester_groups comma-split",
+		env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS": "requester, family"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"requester", "family"}
+			if !slices.Equal(opts.ProxyAuth.RequesterGroups, want) {
+				t.Fatalf("ProxyAuth.RequesterGroups = %v, want %v", opts.ProxyAuth.RequesterGroups, want)
+			}
+		},
+	},
+	{
+		name: "proxy_auth viewer_groups comma-split",
+		env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS": "viewer, guest"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"viewer", "guest"}
+			if !slices.Equal(opts.ProxyAuth.ViewerGroups, want) {
+				t.Fatalf("ProxyAuth.ViewerGroups = %v, want %v", opts.ProxyAuth.ViewerGroups, want)
+			}
+		},
+	},
+	{
+		name: "proxy_auth header",
+		env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_HEADER": "X-Forwarded-User"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.ProxyAuth.Header != "X-Forwarded-User" {
+				t.Fatalf("ProxyAuth.Header = %q, want %q", opts.ProxyAuth.Header, "X-Forwarded-User")
+			}
+		},
+	},
+	{
+		name: "proxy_auth trusted_cidrs comma-split",
+		env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS": "10.0.0.0/8, 172.16.0.0/12"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"10.0.0.0/8", "172.16.0.0/12"}
+			if !slices.Equal(opts.ProxyAuth.TrustedCIDRs, want) {
+				t.Fatalf("ProxyAuth.TrustedCIDRs = %v, want %v", opts.ProxyAuth.TrustedCIDRs, want)
+			}
+		},
+	},
+	{
+		name: "proxy_auth allowed_users comma-split",
+		env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS": "admin, operator"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			want := []string{"admin", "operator"}
+			if !slices.Equal(opts.ProxyAuth.AllowedUsers, want) {
+				t.Fatalf("ProxyAuth.AllowedUsers = %v, want %v", opts.ProxyAuth.AllowedUsers, want)
+			}
+		},
+	},
+	{
+		name: "configarr download_clients",
+		env:  map[string]string{"APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS": "/etc/snatcharr/download-clients.yml"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.Configarr.DownloadClients != "/etc/snatcharr/download-clients.yml" {
+				t.Fatalf("Configarr.DownloadClients = %q, want %q", opts.Configarr.DownloadClients, "/etc/snatcharr/download-clients.yml")
+			}
+		},
+	},
+	{
+		name: "configarr policies",
+		env:  map[string]string{"APP_SNATCHARR_CONFIGARR_POLICIES": "/etc/snatcharr/policies.yml"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.Configarr.Policies != "/etc/snatcharr/policies.yml" {
+				t.Fatalf("Configarr.Policies = %q, want %q", opts.Configarr.Policies, "/etc/snatcharr/policies.yml")
+			}
+		},
+	},
+	{
+		name: "prowlarr search_db_timeout",
+		env:  map[string]string{"APP_SNATCHARR_PROWLARR_SEARCH_DB_TIMEOUT": "2s"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.Prowlarr.SearchDBTimeout != 2*time.Second {
+				t.Fatalf("Prowlarr.SearchDBTimeout = %v, want 2s", opts.Prowlarr.SearchDBTimeout)
+			}
+		},
+	},
+	{
+		name: "prowlarr max_cached_releases",
+		env:  map[string]string{"APP_SNATCHARR_PROWLARR_MAX_CACHED_RELEASES": "3"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.Prowlarr.MaxCachedReleases != 3 {
+				t.Fatalf("Prowlarr.MaxCachedReleases = %d, want 3", opts.Prowlarr.MaxCachedReleases)
+			}
+		},
+	},
+	{
+		name: "jellyfin default_role",
+		env:  map[string]string{"APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE": "viewer"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.Jellyfin.DefaultRole != domain.RoleViewer {
+				t.Fatalf("Jellyfin.DefaultRole = %q, want %q", opts.Jellyfin.DefaultRole, domain.RoleViewer)
+			}
+		},
+	},
+	{
+		name: "tvdb key and pin from env, trimmed",
+		env: map[string]string{
+			"APP_SNATCHARR_METADATA_TVDB_API_KEY": "planted-key\n",
+			"APP_SNATCHARR_METADATA_TVDB_PIN":     " planted-pin ",
+		},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.Metadata.TVDB.APIKey != "planted-key" {
+				t.Fatalf("Metadata.TVDB.APIKey length = %d, want trimmed planted key", len(opts.Metadata.TVDB.APIKey))
+			}
+			if opts.Metadata.TVDB.PIN != "planted-pin" {
+				t.Fatalf("Metadata.TVDB.PIN length = %d, want trimmed planted pin", len(opts.Metadata.TVDB.PIN))
+			}
+		},
+	},
+	{
+		name: "tvdb default off",
+		env:  map[string]string{},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.Metadata.TVDB.APIKey != "" || opts.Metadata.TVDB.PIN != "" {
+				t.Fatal("tvdb credentials must default to empty")
+			}
+		},
+	},
+	{
+		name: "jellyfin full env",
+		env: map[string]string{
+			"APP_SNATCHARR_JELLYFIN_ENABLED":      "true",
+			"APP_SNATCHARR_JELLYFIN_URL":          "https://jf.example.com",
+			"APP_SNATCHARR_JELLYFIN_API_KEY":      "secret-key\n",
+			"APP_SNATCHARR_JELLYFIN_TIMEOUT":      "5s",
+			"APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE": "viewer",
+		},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if !opts.Jellyfin.Enabled {
+				t.Fatal("expected Jellyfin.Enabled = true")
+			}
+			if opts.Jellyfin.URL != "https://jf.example.com" {
+				t.Fatalf("Jellyfin.URL = %q, want %q", opts.Jellyfin.URL, "https://jf.example.com")
+			}
+			if opts.Jellyfin.APIKey != "secret-key" {
+				t.Fatalf("Jellyfin.APIKey = %q, want %q", opts.Jellyfin.APIKey, "secret-key")
+			}
+			if opts.Jellyfin.Timeout != 5*time.Second {
+				t.Fatalf("Jellyfin.Timeout = %v, want 5s", opts.Jellyfin.Timeout)
+			}
+			if opts.Jellyfin.DefaultRole != domain.RoleViewer {
+				t.Fatalf("Jellyfin.DefaultRole = %q, want %q", opts.Jellyfin.DefaultRole, domain.RoleViewer)
+			}
+		},
+	},
+}
+
 func TestLoadCompoundKeysFromEnv(t *testing.T) {
-	cases := []struct {
-		name     string
-		env      map[string]string
-		assertFn func(t *testing.T, opts config.Options)
-	}{
-		{
-			name: "oidc issuer_url",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_ISSUER_URL": "https://auth.example.com"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.OIDC.IssuerURL != "https://auth.example.com" {
-					t.Fatalf("OIDC.IssuerURL = %q, want %q", opts.OIDC.IssuerURL, "https://auth.example.com")
-				}
-			},
-		},
-		{
-			name: "oidc client_id",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_CLIENT_ID": "snatcharr-client"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.OIDC.ClientID != "snatcharr-client" {
-					t.Fatalf("OIDC.ClientID = %q, want %q", opts.OIDC.ClientID, "snatcharr-client")
-				}
-			},
-		},
-		{
-			name: "oidc client_secret",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_CLIENT_SECRET": "secret-xyz"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.OIDC.ClientSecret != "secret-xyz" {
-					t.Fatalf("OIDC.ClientSecret = %q, want %q", opts.OIDC.ClientSecret, "secret-xyz")
-				}
-			},
-		},
-		{
-			name: "oidc redirect_url",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_REDIRECT_URL": "https://snatcharr.example.com/callback"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.OIDC.RedirectURL != "https://snatcharr.example.com/callback" {
-					t.Fatalf("OIDC.RedirectURL = %q, want %q", opts.OIDC.RedirectURL, "https://snatcharr.example.com/callback")
-				}
-			},
-		},
-		{
-			name: "oidc allowed_subjects comma-split",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS": "sub1, sub2"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"sub1", "sub2"}
-				if !slices.Equal(opts.OIDC.AllowedSubjects, want) {
-					t.Fatalf("OIDC.AllowedSubjects = %v, want %v", opts.OIDC.AllowedSubjects, want)
-				}
-			},
-		},
-		{
-			name: "oidc allowed_emails comma-split",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_ALLOWED_EMAILS": "admin@example.com, test@example.com"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"admin@example.com", "test@example.com"}
-				if !slices.Equal(opts.OIDC.AllowedEmails, want) {
-					t.Fatalf("OIDC.AllowedEmails = %v, want %v", opts.OIDC.AllowedEmails, want)
-				}
-			},
-		},
-		{
-			name: "oidc discovery_timeout parsed duration",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_DISCOVERY_TIMEOUT": "15s"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.OIDC.DiscoveryTimeout != 15*time.Second {
-					t.Fatalf("OIDC.DiscoveryTimeout = %v, want 15s", opts.OIDC.DiscoveryTimeout)
-				}
-			},
-		},
-		{
-			name: "oidc admin_groups comma-split",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_ADMIN_GROUPS": "admin, ops"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"admin", "ops"}
-				if !slices.Equal(opts.OIDC.AdminGroups, want) {
-					t.Fatalf("OIDC.AdminGroups = %v, want %v", opts.OIDC.AdminGroups, want)
-				}
-			},
-		},
-		{
-			name: "oidc requester_groups comma-split",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_REQUESTER_GROUPS": "requester, family"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"requester", "family"}
-				if !slices.Equal(opts.OIDC.RequesterGroups, want) {
-					t.Fatalf("OIDC.RequesterGroups = %v, want %v", opts.OIDC.RequesterGroups, want)
-				}
-			},
-		},
-		{
-			name: "oidc viewer_groups comma-split",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_VIEWER_GROUPS": "viewer, guest"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"viewer", "guest"}
-				if !slices.Equal(opts.OIDC.ViewerGroups, want) {
-					t.Fatalf("OIDC.ViewerGroups = %v, want %v", opts.OIDC.ViewerGroups, want)
-				}
-			},
-		},
-		{
-			name: "boundary group name with inner space kept whole",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_VIEWER_GROUPS": " SnatchArr Viewers ,Admins"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"SnatchArr Viewers", "Admins"}
-				if !slices.Equal(opts.OIDC.ViewerGroups, want) {
-					t.Fatalf("OIDC.ViewerGroups = %v, want %v", opts.OIDC.ViewerGroups, want)
-				}
-			},
-		},
-		{
-			name: "oidc groups_claim custom",
-			env:  map[string]string{"APP_SNATCHARR_OIDC_GROUPS_CLAIM": "roles"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.OIDC.GroupsClaim != "roles" {
-					t.Fatalf("OIDC.GroupsClaim = %q, want roles", opts.OIDC.GroupsClaim)
-				}
-			},
-		},
-		{
-			name: "proxy_auth enabled",
-			env: map[string]string{
-				"APP_SNATCHARR_PROXY_AUTH_ENABLED":       "true",
-				"APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS": "10.0.0.0/8",
-				"APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS":  "admin",
-				"APP_SNATCHARR_PROXY_AUTH_SECRET":        strings.Repeat("s", 32),
-			},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if !opts.ProxyAuth.Enabled {
-					t.Fatalf("ProxyAuth.Enabled = false, want true")
-				}
-			},
-		},
-		{
-			name: "proxy_auth secret_header custom",
-			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER": "X-Custom-Secret"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.ProxyAuth.SecretHeader != "X-Custom-Secret" {
-					t.Fatalf("ProxyAuth.SecretHeader = %q, want X-Custom-Secret", opts.ProxyAuth.SecretHeader)
-				}
-			},
-		},
-		{
-			name: "proxy_auth secret",
-			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_SECRET": strings.Repeat("s", 32)},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.ProxyAuth.Secret != strings.Repeat("s", 32) {
-					t.Fatalf("ProxyAuth.Secret = %q, want 32 's'", opts.ProxyAuth.Secret)
-				}
-			},
-		},
-		{
-			name: "proxy_auth groups_header custom",
-			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER": "X-Custom-Groups"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.ProxyAuth.GroupsHeader != "X-Custom-Groups" {
-					t.Fatalf("ProxyAuth.GroupsHeader = %q, want X-Custom-Groups", opts.ProxyAuth.GroupsHeader)
-				}
-			},
-		},
-		{
-			name: "proxy_auth admin_groups comma-split",
-			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS": "admin, ops"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"admin", "ops"}
-				if !slices.Equal(opts.ProxyAuth.AdminGroups, want) {
-					t.Fatalf("ProxyAuth.AdminGroups = %v, want %v", opts.ProxyAuth.AdminGroups, want)
-				}
-			},
-		},
-		{
-			name: "proxy_auth requester_groups comma-split",
-			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS": "requester, family"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"requester", "family"}
-				if !slices.Equal(opts.ProxyAuth.RequesterGroups, want) {
-					t.Fatalf("ProxyAuth.RequesterGroups = %v, want %v", opts.ProxyAuth.RequesterGroups, want)
-				}
-			},
-		},
-		{
-			name: "proxy_auth viewer_groups comma-split",
-			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS": "viewer, guest"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"viewer", "guest"}
-				if !slices.Equal(opts.ProxyAuth.ViewerGroups, want) {
-					t.Fatalf("ProxyAuth.ViewerGroups = %v, want %v", opts.ProxyAuth.ViewerGroups, want)
-				}
-			},
-		},
-		{
-			name: "proxy_auth header",
-			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_HEADER": "X-Forwarded-User"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.ProxyAuth.Header != "X-Forwarded-User" {
-					t.Fatalf("ProxyAuth.Header = %q, want %q", opts.ProxyAuth.Header, "X-Forwarded-User")
-				}
-			},
-		},
-		{
-			name: "proxy_auth trusted_cidrs comma-split",
-			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS": "10.0.0.0/8, 172.16.0.0/12"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"10.0.0.0/8", "172.16.0.0/12"}
-				if !slices.Equal(opts.ProxyAuth.TrustedCIDRs, want) {
-					t.Fatalf("ProxyAuth.TrustedCIDRs = %v, want %v", opts.ProxyAuth.TrustedCIDRs, want)
-				}
-			},
-		},
-		{
-			name: "proxy_auth allowed_users comma-split",
-			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS": "admin, operator"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				want := []string{"admin", "operator"}
-				if !slices.Equal(opts.ProxyAuth.AllowedUsers, want) {
-					t.Fatalf("ProxyAuth.AllowedUsers = %v, want %v", opts.ProxyAuth.AllowedUsers, want)
-				}
-			},
-		},
-		{
-			name: "configarr download_clients",
-			env:  map[string]string{"APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS": "/etc/snatcharr/download-clients.yml"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.Configarr.DownloadClients != "/etc/snatcharr/download-clients.yml" {
-					t.Fatalf("Configarr.DownloadClients = %q, want %q", opts.Configarr.DownloadClients, "/etc/snatcharr/download-clients.yml")
-				}
-			},
-		},
-		{
-			name: "configarr policies",
-			env:  map[string]string{"APP_SNATCHARR_CONFIGARR_POLICIES": "/etc/snatcharr/policies.yml"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.Configarr.Policies != "/etc/snatcharr/policies.yml" {
-					t.Fatalf("Configarr.Policies = %q, want %q", opts.Configarr.Policies, "/etc/snatcharr/policies.yml")
-				}
-			},
-		},
-		{
-			name: "prowlarr search_db_timeout",
-			env:  map[string]string{"APP_SNATCHARR_PROWLARR_SEARCH_DB_TIMEOUT": "2s"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.Prowlarr.SearchDBTimeout != 2*time.Second {
-					t.Fatalf("Prowlarr.SearchDBTimeout = %v, want 2s", opts.Prowlarr.SearchDBTimeout)
-				}
-			},
-		},
-		{
-			name: "prowlarr max_cached_releases",
-			env:  map[string]string{"APP_SNATCHARR_PROWLARR_MAX_CACHED_RELEASES": "3"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.Prowlarr.MaxCachedReleases != 3 {
-					t.Fatalf("Prowlarr.MaxCachedReleases = %d, want 3", opts.Prowlarr.MaxCachedReleases)
-				}
-			},
-		},
-		{
-			name: "jellyfin default_role",
-			env:  map[string]string{"APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE": "viewer"},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.Jellyfin.DefaultRole != domain.RoleViewer {
-					t.Fatalf("Jellyfin.DefaultRole = %q, want %q", opts.Jellyfin.DefaultRole, domain.RoleViewer)
-				}
-			},
-		},
-		{
-			name: "tvdb key and pin from env, trimmed",
-			env: map[string]string{
-				"APP_SNATCHARR_METADATA_TVDB_API_KEY": "planted-key\n",
-				"APP_SNATCHARR_METADATA_TVDB_PIN":     " planted-pin ",
-			},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.Metadata.TVDB.APIKey != "planted-key" {
-					t.Fatalf("Metadata.TVDB.APIKey length = %d, want trimmed planted key", len(opts.Metadata.TVDB.APIKey))
-				}
-				if opts.Metadata.TVDB.PIN != "planted-pin" {
-					t.Fatalf("Metadata.TVDB.PIN length = %d, want trimmed planted pin", len(opts.Metadata.TVDB.PIN))
-				}
-			},
-		},
-		{
-			name: "tvdb default off",
-			env:  map[string]string{},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if opts.Metadata.TVDB.APIKey != "" || opts.Metadata.TVDB.PIN != "" {
-					t.Fatal("tvdb credentials must default to empty")
-				}
-			},
-		},
-		{
-			name: "jellyfin full env",
-			env: map[string]string{
-				"APP_SNATCHARR_JELLYFIN_ENABLED":      "true",
-				"APP_SNATCHARR_JELLYFIN_URL":          "https://jf.example.com",
-				"APP_SNATCHARR_JELLYFIN_API_KEY":      "secret-key\n",
-				"APP_SNATCHARR_JELLYFIN_TIMEOUT":      "5s",
-				"APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE": "viewer",
-			},
-			assertFn: func(t *testing.T, opts config.Options) {
-				t.Helper()
-				if !opts.Jellyfin.Enabled {
-					t.Fatal("expected Jellyfin.Enabled = true")
-				}
-				if opts.Jellyfin.URL != "https://jf.example.com" {
-					t.Fatalf("Jellyfin.URL = %q, want %q", opts.Jellyfin.URL, "https://jf.example.com")
-				}
-				if opts.Jellyfin.APIKey != "secret-key" {
-					t.Fatalf("Jellyfin.APIKey = %q, want %q", opts.Jellyfin.APIKey, "secret-key")
-				}
-				if opts.Jellyfin.Timeout != 5*time.Second {
-					t.Fatalf("Jellyfin.Timeout = %v, want 5s", opts.Jellyfin.Timeout)
-				}
-				if opts.Jellyfin.DefaultRole != domain.RoleViewer {
-					t.Fatalf("Jellyfin.DefaultRole = %q, want %q", opts.Jellyfin.DefaultRole, domain.RoleViewer)
-				}
-			},
-		},
-	}
-	for _, tc := range cases {
+	for _, tc := range loadCompoundKeysFromEnvCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("APP_SNATCHARR_PROFILE", "dev")
 			for k, v := range tc.env {
