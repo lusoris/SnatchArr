@@ -11,6 +11,7 @@ package tvdbprovider
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -100,6 +101,7 @@ type config struct {
 	burst     int
 	retryWait time.Duration
 	userAgent string
+	tlsConfig *tls.Config
 }
 
 // WithBaseURL points the provider at another API root (tests).
@@ -115,6 +117,10 @@ func WithRetryWait(d time.Duration) Option { return func(c *config) { c.retryWai
 
 // WithUserAgent sets the User-Agent header of every TVDB request.
 func WithUserAgent(ua string) Option { return func(c *config) { c.userAgent = ua } }
+
+func withTLSConfig(tlsConfig *tls.Config) Option {
+	return func(c *config) { c.tlsConfig = tlsConfig }
+}
 
 // entry is one cached lookup result; NotFound entries expire after NegativeTTL.
 type entry struct {
@@ -168,7 +174,7 @@ func New(apiKey, pin string, l1 *memory.Cache, clk clock.Clock, logger *slog.Log
 		Retry:   httpclient.RetryOptions{Max: retryMax, Wait: cfg.retryWait, MaxWait: 8 * time.Second},
 		Logger:  logger,
 		Transport: &limitTransport{
-			next:    &capTransport{next: ownTransport(), max: maxBodyBytes},
+			next:    &capTransport{next: ownTransport(cfg.tlsConfig), max: maxBodyBytes},
 			limiter: rate.NewLimiter(cfg.limit, cfg.burst),
 		},
 	})
@@ -511,9 +517,13 @@ func collect(rule, lang string, tr *tvdb.Translation, aliases []tvdb.Alias) []fo
 
 // ownTransport is a private clone of the default transport, so closing idle connections
 // elsewhere in the process cannot break an in-flight TVDB request.
-func ownTransport() http.RoundTripper {
+func ownTransport(tlsConfig *tls.Config) http.RoundTripper {
 	if base, ok := http.DefaultTransport.(*http.Transport); ok {
-		return base.Clone()
+		transport := base.Clone()
+		if tlsConfig != nil {
+			transport.TLSClientConfig = tlsConfig.Clone()
+		}
+		return transport
 	}
 	return http.DefaultTransport
 }

@@ -7,6 +7,7 @@ package tvdbprovider
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,25 +38,36 @@ const (
 
 // stub is a TVDB API double. Every route counts its hits.
 type stub struct {
-	t        *testing.T
-	srv      *httptest.Server
-	total    atomic.Int64
-	logins   atomic.Int64
-	loginRC  int
-	dataRC   int // when non-zero every data route answers with this status
-	series   map[int]string
-	noTr     map[int]bool     // series ids whose deu translation answers 404
-	aliases  map[int][]string // series id -> deu aliases
-	movies   map[string]int   // remote id -> movie id
-	movieAli map[int][]string
-	delay    time.Duration
-	agent    atomic.Value  // last User-Agent header seen
-	started  chan struct{} // signals a held series request
-	release  <-chan struct{}
-	redirect func(http.ResponseWriter, *http.Request) bool
+	t         *testing.T
+	srv       *httptest.Server
+	tlsConfig *tls.Config
+	total     atomic.Int64
+	logins    atomic.Int64
+	loginRC   int
+	dataRC    int // when non-zero every data route answers with this status
+	series    map[int]string
+	noTr      map[int]bool     // series ids whose deu translation answers 404
+	aliases   map[int][]string // series id -> deu aliases
+	movies    map[string]int   // remote id -> movie id
+	movieAli  map[int][]string
+	delay     time.Duration
+	agent     atomic.Value  // last User-Agent header seen
+	started   chan struct{} // signals a held series request
+	release   <-chan struct{}
+	redirect  func(http.ResponseWriter, *http.Request) bool
 }
 
 func newStub(t *testing.T) *stub {
+	t.Helper()
+	return newStubWithServer(t, httptest.NewServer)
+}
+
+func newTLSStub(t *testing.T) *stub {
+	t.Helper()
+	return newStubWithServer(t, httptest.NewTLSServer)
+}
+
+func newStubWithServer(t *testing.T, newServer func(http.Handler) *httptest.Server) *stub {
 	t.Helper()
 	s := &stub{
 		t: t, loginRC: http.StatusOK,
@@ -64,7 +76,10 @@ func newStub(t *testing.T) *stub {
 		movies:   map[string]int{"tt0111161": 439},
 		movieAli: map[int][]string{439: {"Die Verurteilten Alias"}},
 	}
-	s.srv = httptest.NewServer(http.HandlerFunc(s.serve))
+	s.srv = newServer(http.HandlerFunc(s.serve))
+	if transport, ok := s.srv.Client().Transport.(*http.Transport); ok {
+		s.tlsConfig = transport.TLSClientConfig
+	}
 	t.Cleanup(s.srv.Close)
 	return s
 }
@@ -168,7 +183,11 @@ func (s *stub) provider(t *testing.T, key, pin string, logs *bytes.Buffer) *Prov
 	if logs != nil {
 		logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
-	p, err := New(key, pin, testPool(t), clock.NewFake(), logger, WithBaseURL(s.srv.URL), WithRetryWait(time.Millisecond), WithRate(rate.Inf, 1))
+	opts := []Option{WithBaseURL(s.srv.URL), WithRetryWait(time.Millisecond), WithRate(rate.Inf, 1)}
+	if s.tlsConfig != nil {
+		opts = append(opts, withTLSConfig(s.tlsConfig))
+	}
+	p, err := New(key, pin, testPool(t), clock.NewFake(), logger, opts...)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

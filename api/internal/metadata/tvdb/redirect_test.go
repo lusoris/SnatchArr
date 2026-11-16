@@ -39,6 +39,32 @@ func TestRedirectRefused(t *testing.T) {
 	}
 }
 
+func TestTLSRedirectRefused(t *testing.T) {
+	t.Parallel()
+	cases := []redirectCase{
+		{"downgrade data 307", "/series/81189", "", http.StatusTemporaryRedirect, 2},
+		{"downgrade login 308", "/login", "", http.StatusPermanentRedirect, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runTLSRedirectCase(t, tc)
+		})
+	}
+}
+
+func TestTLSStubProvider(t *testing.T) {
+	t.Parallel()
+	s := newTLSStub(t)
+	got, err := s.provider(t, plantedKey, plantedPIN, nil).TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil {
+		t.Fatalf("TitlesFor() error = %v", err)
+	}
+	if titles := strings.Join(titlesOf(got), "|"); titles != "Breaking Bad DE|Breaking Bad Alias" {
+		t.Fatalf("TitlesFor() titles = %q", titles)
+	}
+}
+
 func runRedirectCase(t *testing.T, tc redirectCase) {
 	t.Helper()
 	s := newStub(t)
@@ -90,6 +116,43 @@ func runRedirectCase(t *testing.T, tc redirectCase) {
 	}
 	if n := s.total.Load(); n != tc.wantRequests {
 		t.Fatalf("TVDB requests = %d, want %d (one attempt per call)", n, tc.wantRequests)
+	}
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("TitlesFor() error = %v, want ErrUnavailable", err)
+	}
+	assertNoSecret(t, err.Error(), logs.String())
+}
+
+func runTLSRedirectCase(t *testing.T, tc redirectCase) {
+	t.Helper()
+	s := newTLSStub(t)
+	var remoteHits, loginBodyHits, authHits atomic.Int64
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		remoteHits.Add(1)
+		if r.URL.Path == "/login" && r.ContentLength != 0 {
+			loginBodyHits.Add(1)
+		}
+		if r.Header.Get("Authorization") != "" {
+			authHits.Add(1)
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(remote.Close)
+	s.redirect = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path != tc.path {
+			return false
+		}
+		w.Header().Set("Location", remote.URL+tc.path+"?key="+plantedKey)
+		w.WriteHeader(tc.status)
+		return true
+	}
+	var logs bytes.Buffer
+	_, err := s.provider(t, plantedKey, plantedPIN, &logs).TitlesFor(t.Context(), sonarrRef(), "de")
+	if n := remoteHits.Load(); n != 0 || loginBodyHits.Load() != 0 || authHits.Load() != 0 {
+		t.Fatalf("downgrade target requests = %d, login bodies = %d, Authorization = %d", n, loginBodyHits.Load(), authHits.Load())
+	}
+	if n := s.total.Load(); n != tc.wantRequests {
+		t.Fatalf("TVDB requests = %d, want %d", n, tc.wantRequests)
 	}
 	if !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("TitlesFor() error = %v, want ErrUnavailable", err)
