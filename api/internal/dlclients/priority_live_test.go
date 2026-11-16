@@ -170,8 +170,7 @@ func probeDeluge(ctx context.Context, c liveClient) (priorityResult, error) {
 	if !connected {
 		return priorityResult{}, dlclients.ErrDelugeNoDaemon
 	}
-	// goenvoy asks for the version with daemon.info, which Deluge 2 does not serve
-	// (golusoris/goenvoy#101); the version is informational, so it stays unknown then.
+	// The version is informational, so it stays unknown when the daemon reports none.
 	version, err := cl.GetVersion(callCtx)
 	if err != nil {
 		version = ""
