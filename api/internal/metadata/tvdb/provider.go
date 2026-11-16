@@ -500,7 +500,10 @@ func collect(rule, lang string, tr *tvdb.Translation, aliases []tvdb.Alias) []fo
 	}
 	if tr != nil {
 		add(tr.Name)
-		for i := range min(len(tr.Aliases), maxAliases) {
+		for i := range min(len(tr.Aliases), maxScan) {
+			if len(out) >= maxAliases {
+				break
+			}
 			add(tr.Aliases[i])
 		}
 	}

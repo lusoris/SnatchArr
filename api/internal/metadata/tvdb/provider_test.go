@@ -591,11 +591,27 @@ func TestCollectAliasScan(t *testing.T) {
 		}
 		return out
 	}
+	translationAliases := func(name string, count int) []string {
+		out := make([]string, 0, count)
+		for i := range count {
+			out = append(out, fmt.Sprintf("%s %d", name, i))
+		}
+		return out
+	}
+	duplicateAliases := func(title string, count int) []string {
+		out := make([]string, 0, count)
+		for range count {
+			out = append(out, title)
+		}
+		return out
+	}
 	tests := []struct {
-		name      string
-		aliases   []tvdb.Alias
-		wantLen   int
-		wantTitle string
+		name           string
+		translation    *tvdb.Translation
+		aliases        []tvdb.Alias
+		wantLen        int
+		wantTitle      string
+		wantTitleIndex int
 	}{
 		{
 			name:      "matching alias after output cap",
@@ -615,16 +631,41 @@ func TestCollectAliasScan(t *testing.T) {
 			name:    "no matching aliases",
 			aliases: aliases("eng", maxAliases+50),
 		},
+		{
+			name: "translation duplicate aliases do not consume output cap",
+			translation: &tvdb.Translation{
+				Name:    "Titel",
+				Aliases: append(duplicateAliases("  tItEl  ", maxAliases+50), "Anderer Titel"),
+			},
+			wantLen:        2,
+			wantTitle:      "Anderer Titel",
+			wantTitleIndex: 1,
+		},
+		{
+			name: "translation aliases remain capped",
+			translation: &tvdb.Translation{
+				Aliases: translationAliases("Titel", maxAliases+50),
+			},
+			wantLen: maxAliases,
+		},
+		{
+			name: "translation name duplicates add no titles",
+			translation: &tvdb.Translation{
+				Name:    "Titel",
+				Aliases: []string{"Titel", " titel ", "TITEL"},
+			},
+			wantLen: 1,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := collect("de", "deu", nil, tt.aliases)
+			got := collect("de", "deu", tt.translation, tt.aliases)
 			if len(got) != tt.wantLen {
 				t.Fatalf("len(collect()) = %d, want %d", len(got), tt.wantLen)
 			}
-			if tt.wantTitle != "" && got[0].Title != tt.wantTitle {
-				t.Fatalf("collect()[0].Title = %q, want %q", got[0].Title, tt.wantTitle)
+			if tt.wantTitle != "" && got[tt.wantTitleIndex].Title != tt.wantTitle {
+				t.Fatalf("collect()[%d].Title = %q, want %q", tt.wantTitleIndex, got[tt.wantTitleIndex].Title, tt.wantTitle)
 			}
 		})
 	}

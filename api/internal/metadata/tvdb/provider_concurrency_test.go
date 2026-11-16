@@ -260,6 +260,9 @@ func TestWaitingLookupSharedWorkHonoursBound(t *testing.T) {
 	early, leave := context.WithCancel(ctx)
 	defer leave()
 	work := make(chan context.Context, 1)
+	release := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
 	finished := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
@@ -269,6 +272,7 @@ func TestWaitingLookupSharedWorkHonoursBound(t *testing.T) {
 			if _, ok := shared.Deadline(); !ok {
 				return entry{}, errors.New("shared lookup has no deadline")
 			}
+			<-release
 			<-shared.Done()
 			return entry{}, fmt.Errorf("shared lookup: %w", shared.Err())
 		})
@@ -287,6 +291,7 @@ func TestWaitingLookupSharedWorkHonoursBound(t *testing.T) {
 	if err := receiveLookup(t, ctx, done); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("early waiter = %v, want ErrUnavailable", err)
 	}
+	unblock()
 	select {
 	case <-finished:
 	case <-ctx.Done():
