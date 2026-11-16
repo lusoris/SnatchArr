@@ -22,7 +22,7 @@ Settings load through `golusoris/core/config` under the `metadata_proxy` key tre
 | `metadata_proxy.ports` | `APP_METADATA_PROXY_PORTS` | `[443]` | Allowed `CONNECT` destination ports (`1..65535`). |
 | `metadata_proxy.denied_prefixes` | `APP_METADATA_PROXY_DENIED_PREFIXES` | `[]` | Extra IPv4/IPv6 CIDRs refused at dial time in addition to loopback, RFC 1918 private, link-local, CGNAT, and non-global-unicast IPv6 ranges. |
 | `metadata_proxy.dial_timeout` | `APP_METADATA_PROXY_DIAL_TIMEOUT` | `10s` | Positive deadline for outbound TCP resolution and connection establishment. |
-| `metadata_proxy.idle_timeout` | `APP_METADATA_PROXY_IDLE_TIMEOUT` | `2m` | Positive per-read/write inactivity deadline refreshed on each tunnel transfer. |
+| `metadata_proxy.idle_timeout` | `APP_METADATA_PROXY_IDLE_TIMEOUT` | `2m` | Closes a tunnel after this positive duration with no bytes transferred in either direction. |
 | `metadata_proxy.max_tunnel` | `APP_METADATA_PROXY_MAX_TUNNEL` | `30m` | Positive maximum lifetime of any single established `CONNECT` tunnel. |
 | `metadata_proxy.max_tunnels` | `APP_METADATA_PROXY_MAX_TUNNELS` | `256` | Positive upper bound on concurrent open tunnels per listener (`503` when full). |
 

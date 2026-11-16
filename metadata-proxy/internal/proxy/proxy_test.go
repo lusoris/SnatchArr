@@ -776,6 +776,17 @@ type idleTimeoutCase struct {
 	expectIdleClose bool
 }
 
+type oneWayIdleCase struct {
+	name      string
+	direction string
+	stops     bool
+}
+
+const (
+	idleDirectionDown = "upstream to client"
+	idleDirectionUp   = "client to upstream"
+)
+
 func TestTunnelIdleTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -810,6 +821,181 @@ func TestTunnelIdleTimeout(t *testing.T) {
 			t.Parallel()
 			runIdleTimeoutCase(t, echoPort, tc)
 		})
+	}
+}
+
+func TestTunnelOneWayIdleTimeout(t *testing.T) {
+	t.Parallel()
+
+	cases := []oneWayIdleCase{
+		{
+			name:      "positive: upstream stream survives silent client writes",
+			direction: idleDirectionDown,
+		},
+		{
+			name:      "positive: client upload survives silent upstream writes",
+			direction: idleDirectionUp,
+		},
+		{
+			name:      "boundary: stopped upstream stream closes after shared idle period",
+			direction: idleDirectionDown,
+			stops:     true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if tc.direction == idleDirectionUp {
+				runOneWayUpload(t)
+				return
+			}
+			runOneWayDownload(t, tc.stops)
+		})
+	}
+}
+
+func runOneWayDownload(t *testing.T, expectIdleClose bool) {
+	t.Helper()
+	const (
+		idleTimeout = 300 * time.Millisecond
+		chunkCount  = 8
+	)
+	chunk := []byte("stream-chunk\n")
+	port, cleanup := startStreamingListener(t, chunk, chunkCount, idleTimeout/3)
+	t.Cleanup(cleanup)
+	conn, br := dialIdleTestTunnel(t, port, idleTimeout)
+
+	want := bytes.Repeat(chunk, chunkCount)
+	got := make([]byte, len(want))
+	if _, err := io.ReadFull(br, got); err != nil {
+		t.Fatalf("read one-way stream: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("one-way stream = %q, want %q", got, want)
+	}
+	if !expectIdleClose {
+		return
+	}
+	assertTunnelClosesAfterIdle(t, conn, br, idleTimeout)
+}
+
+func runOneWayUpload(t *testing.T) {
+	t.Helper()
+	const (
+		idleTimeout = 300 * time.Millisecond
+		chunkCount  = 8
+	)
+	chunk := []byte("upload-chunk\n")
+	want := bytes.Repeat(chunk, chunkCount)
+	received := make(chan []byte, 1)
+	port, cleanup := startSingleConnListener(t, func(conn net.Conn) {
+		got := make([]byte, len(want))
+		_, _ = io.ReadFull(conn, got)
+		received <- got
+	})
+	t.Cleanup(cleanup)
+	conn, _ := dialIdleTestTunnel(t, port, idleTimeout)
+
+	ticker := time.NewTicker(idleTimeout / 3)
+	defer ticker.Stop()
+	for range chunkCount {
+		<-ticker.C
+		if _, err := conn.Write(chunk); err != nil {
+			t.Fatalf("write one-way upload: %v", err)
+		}
+	}
+	select {
+	case got := <-received:
+		if !bytes.Equal(got, want) {
+			t.Fatalf("one-way upload = %q, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("upstream did not receive one-way upload")
+	}
+}
+
+func dialIdleTestTunnel(t *testing.T, upstreamPort int, idleTimeout time.Duration) (net.Conn, *bufio.Reader) {
+	t.Helper()
+	opts := config.DefaultOptions()
+	opts.Mode = config.ModeLog
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
+	opts.AllowHosts = []string{"localhost"}
+	opts.Ports = []int{upstreamPort}
+	opts.IdleTimeout = idleTimeout
+	opts.MaxTunnel = 10 * time.Second
+	h := startHarness(t, opts, proxy.WithDialControl(proxy.AllowAllDialControl))
+
+	target := fmt.Sprintf("localhost:%d", upstreamPort)
+	rawReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
+	resp, conn, br := dialRawProxy(t, h.addr, rawReq)
+	t.Cleanup(func() {
+		resp.Body.Close()
+		conn.Close()
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("CONNECT status = %d, want 200", resp.StatusCode)
+	}
+	return conn, br
+}
+
+func assertTunnelClosesAfterIdle(t *testing.T, conn net.Conn, br *bufio.Reader, idleTimeout time.Duration) {
+	t.Helper()
+	idleStart := time.Now()
+	if err := conn.SetReadDeadline(idleStart.Add(2 * idleTimeout)); err != nil {
+		t.Fatalf("SetReadDeadline: %v", err)
+	}
+	_, readErr := br.ReadByte()
+	elapsed := time.Since(idleStart)
+	if readErr == nil {
+		t.Fatal("expected stopped stream tunnel to close")
+	}
+	if isNetTimeout(readErr) {
+		t.Fatalf("stopped stream stayed open for %v: %v", elapsed, readErr)
+	}
+	if elapsed < idleTimeout-50*time.Millisecond {
+		t.Fatalf("stopped stream closed after %v, want at least idle_timeout %v", elapsed, idleTimeout)
+	}
+}
+
+func startStreamingListener(t *testing.T, chunk []byte, count int, interval time.Duration) (int, func()) {
+	t.Helper()
+	return startSingleConnListener(t, func(conn net.Conn) {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range count {
+			<-ticker.C
+			if _, err := conn.Write(chunk); err != nil {
+				return
+			}
+		}
+		_, _ = io.Copy(io.Discard, conn)
+	})
+}
+
+func startSingleConnListener(t *testing.T, handle func(net.Conn)) (int, func()) {
+	t.Helper()
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen tunnel test upstream: %v", err)
+	}
+	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		_ = ln.Close()
+		t.Fatalf("unexpected listener addr %T", ln.Addr())
+	}
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		conn, acceptErr := ln.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		handle(conn)
+	})
+	return tcpAddr.Port, func() {
+		_ = ln.Close()
+		wg.Wait()
 	}
 }
 
