@@ -28,6 +28,8 @@ func TestRedirectRefused(t *testing.T) {
 		{"cross-host data 302", "/series/81189", "cross-host", http.StatusFound, 2},
 		{"same-host data 307", "/series/81189", "same-host", http.StatusTemporaryRedirect, 2},
 		{"same-host another port data 308", "/series/81189", "same-port", http.StatusPermanentRedirect, 2},
+		{"https downgrade data 307", "/series/81189", "downgrade", http.StatusTemporaryRedirect, 2},
+		{"https downgrade login 308", "/login", "downgrade", http.StatusPermanentRedirect, 1},
 		{"data 304 without location", "/series/81189", "none", http.StatusNotModified, 2},
 		{"data 302 without location", "/series/81189", "none", http.StatusFound, 2},
 	}
@@ -35,20 +37,6 @@ func TestRedirectRefused(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			runRedirectCase(t, tc)
-		})
-	}
-}
-
-func TestTLSRedirectRefused(t *testing.T) {
-	t.Parallel()
-	cases := []redirectCase{
-		{"downgrade data 307", "/series/81189", "", http.StatusTemporaryRedirect, 2},
-		{"downgrade login 308", "/login", "", http.StatusPermanentRedirect, 1},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			runTLSRedirectCase(t, tc)
 		})
 	}
 }
@@ -67,7 +55,7 @@ func TestTLSStubProvider(t *testing.T) {
 
 func runRedirectCase(t *testing.T, tc redirectCase) {
 	t.Helper()
-	s := newStub(t)
+	s := stubFor(t, tc.target)
 	var remoteHits, loginBodyHits, authHits, localHits atomic.Int64
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		remoteHits.Add(1)
@@ -123,41 +111,16 @@ func runRedirectCase(t *testing.T, tc redirectCase) {
 	assertNoSecret(t, err.Error(), logs.String())
 }
 
-func runTLSRedirectCase(t *testing.T, tc redirectCase) {
+func stubFor(t *testing.T, target string) *stub {
 	t.Helper()
-	s := newTLSStub(t)
-	var remoteHits, loginBodyHits, authHits atomic.Int64
-	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		remoteHits.Add(1)
-		if r.URL.Path == "/login" && r.ContentLength != 0 {
-			loginBodyHits.Add(1)
+	if target == "downgrade" {
+		s := newTLSStub(t)
+		if !strings.HasPrefix(s.srv.URL, "https://") {
+			t.Fatalf("downgrade stub URL = %q, want https", s.srv.URL)
 		}
-		if r.Header.Get("Authorization") != "" {
-			authHits.Add(1)
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	t.Cleanup(remote.Close)
-	s.redirect = func(w http.ResponseWriter, r *http.Request) bool {
-		if r.URL.Path != tc.path {
-			return false
-		}
-		w.Header().Set("Location", remote.URL+tc.path+"?key="+plantedKey)
-		w.WriteHeader(tc.status)
-		return true
+		return s
 	}
-	var logs bytes.Buffer
-	_, err := s.provider(t, plantedKey, plantedPIN, &logs).TitlesFor(t.Context(), sonarrRef(), "de")
-	if n := remoteHits.Load(); n != 0 || loginBodyHits.Load() != 0 || authHits.Load() != 0 {
-		t.Fatalf("downgrade target requests = %d, login bodies = %d, Authorization = %d", n, loginBodyHits.Load(), authHits.Load())
-	}
-	if n := s.total.Load(); n != tc.wantRequests {
-		t.Fatalf("TVDB requests = %d, want %d", n, tc.wantRequests)
-	}
-	if !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("TitlesFor() error = %v, want ErrUnavailable", err)
-	}
-	assertNoSecret(t, err.Error(), logs.String())
+	return newStub(t)
 }
 
 func redirectLocation(target, baseURL, remoteURL, path string) string {
@@ -166,7 +129,7 @@ func redirectLocation(target, baseURL, remoteURL, path string) string {
 		return strings.Replace(remoteURL, "127.0.0.1", "localhost", 1) + path + "?key=" + plantedKey
 	case "same-host":
 		return baseURL + "/redirect-target?key=" + plantedKey
-	case "same-port":
+	case "same-port", "downgrade":
 		return remoteURL + path + "?key=" + plantedKey
 	default:
 		return ""
