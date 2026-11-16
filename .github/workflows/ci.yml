@@ -279,6 +279,9 @@ jobs:
               - '.github/workflows/ci.yml'
             deploy:
               - 'deploy/**'
+              # A dependency bump can change API start-up (PR 1182 skipped deploy (Helm)).
+              - 'go.mod'
+              - 'go.sum'
               - 'tools/deploy/**'
               - 'tools/e2e/cnpg_pg_upgrade.sh'
               - 'tools/e2e/cnpg_backup_restore.sh'
