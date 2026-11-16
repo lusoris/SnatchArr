@@ -31,6 +31,16 @@ SHELL_DEF = re.compile(
 HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)(-?)")
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 C_ESCAPE = re.compile(rb"\\([0-7]{1,3}|[abtnvfr\"\\])")
+ANSI_C_ESCAPES = {
+    "a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
+    "t": "\t", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?",
+}
+HEX_DIGITS = "0123456789abcdefABCDEF"
+OCTAL_DIGITS = "01234567"
+MAX_ANSI_C_OCTAL_DIGITS = 3
+MAX_ANSI_C_HEX_DIGITS = 2
+MAX_ANSI_C_UNICODE_DIGITS = 4
+MAX_ANSI_C_UNICODE_WIDE_DIGITS = 8
 ESCAPE_MAP = {
     b"a": 7, b"b": 8, b"t": 9, b"n": 10, b"v": 11, b"f": 12, b"r": 13,
     b"\"": 34, b"\\": 92,
@@ -189,10 +199,70 @@ def heredoc_end(line: str, delimiter: str, strip_tabs: bool) -> bool:
     return target == delimiter
 
 
+def ansi_c_digits(line: str, start: int, limit: int, alphabet: str) -> str:
+    """Return up to limit consecutive characters from alphabet starting at start."""
+    end = min(len(line), start + limit)
+    i = start
+    while i < end and line[i] in alphabet:
+        i += 1
+    return line[start:i]
+
+
+def ansi_c_escape(line: str, start: int) -> tuple[str, int]:
+    """Decode one ANSI-C quoted backslash escape or leave an unknown escape intact."""
+    if start + 1 >= len(line):
+        return "\\", 1
+    char = line[start + 1]
+    if char in ANSI_C_ESCAPES:
+        return ANSI_C_ESCAPES[char], 2
+    if char in OCTAL_DIGITS:
+        digits = ansi_c_digits(line, start + 1, MAX_ANSI_C_OCTAL_DIGITS, OCTAL_DIGITS)
+        return chr(int(digits, 8)), len(digits) + 1
+    if char in ("x", "u", "U"):
+        limit = {"x": MAX_ANSI_C_HEX_DIGITS, "u": MAX_ANSI_C_UNICODE_DIGITS,
+                 "U": MAX_ANSI_C_UNICODE_WIDE_DIGITS}[char]
+        digits = ansi_c_digits(line, start + 2, limit, HEX_DIGITS)
+        if digits:
+            try:
+                return chr(int(digits, 16)), len(digits) + 2
+            except ValueError:
+                return "\\", 1
+    if char == "c" and start + 2 < len(line):
+        control = ord(line[start + 2])
+        return chr(127 if control == ord("?") else control & 31), 3
+    return "\\", 1
+
+
+def double_quoted_heredoc_char(line: str, start: int) -> tuple[str, int]:
+    """Read one double-quoted heredoc character with Bash's limited backslash removal."""
+    char = line[start]
+    if char == "\\" and start + 1 < len(line) and line[start + 1] in "$\x60\"\\":
+        return line[start + 1], 2
+    return char, 1
+
+
+def heredoc_quoted_step(line: str, start: int, quote: str) -> tuple[str | None, int, str | None]:
+    """Read one character in a quoted heredoc word, returning text, width, and next quote."""
+    char = line[start]
+    if quote == "single":
+        return (None, 1, None) if char == "'" else (char, 1, quote)
+    if quote == "ansi":
+        if char == "'":
+            return None, 1, None
+        if char == "\\":
+            decoded, width = ansi_c_escape(line, start)
+            return decoded, width, quote
+        return char, 1, quote
+    if char == '"':
+        return None, 1, None
+    decoded, width = double_quoted_heredoc_char(line, start)
+    return decoded, width, quote
+
+
 def heredoc_word(line: str, start: int) -> str | None:
     """Read the complete shell heredoc word after an operator with quote removal."""
     delimiter = []
-    quote = None
+    quote: str | None = None
     seen = False
     i = start
     while i < len(line) and line[i].isspace():
@@ -202,11 +272,19 @@ def heredoc_word(line: str, start: int) -> str | None:
         if quote is None and (char.isspace() or char in ";&|()<>"):
             break
         seen = True
-        if char == quote:
-            quote = None
-        elif char in ("'", '"') and quote is None:
-            quote = char
-        elif char == "\\" and quote != "'" and i + 1 < len(line):
+        if quote is not None:
+            decoded, width, quote = heredoc_quoted_step(line, i, quote)
+            if decoded is not None:
+                delimiter.append(decoded)
+            i += width
+            continue
+        if char == "$" and i + 1 < len(line) and line[i + 1] in "'\"":
+            quote = "ansi" if line[i + 1] == "'" else "double"
+            i += 2
+            continue
+        if char in ("'", '"'):
+            quote = "single" if char == "'" else "double"
+        elif char == "\\" and i + 1 < len(line):
             i += 1
             delimiter.append(line[i])
         else:

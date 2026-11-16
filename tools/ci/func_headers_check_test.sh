@@ -346,6 +346,43 @@ edit_54() {
     printf '%s\n' '#!/usr/bin/env bash' "(echo p)#'" 'bare_paren() { :; }' >paren-comment.sh
 }
 
+# edit_55: double quotes retain a backslash before a non-special character.
+edit_55() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<"END\-TEXT"' 'heredoc body' 'END\-TEXT' \
+        'missing_header() { :; }' >double-quoted-backslash.sh
+}
+
+# edit_56: a nonmatching unescaped line does not end a double-quoted delimiter.
+edit_56() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<"END\-TEXT"' 'END-TEXT' 'fake_dq() { :; }' \
+        'END\-TEXT' >double-quoted-nonending.sh
+}
+
+# edit_57: double quotes remove a backslash before a dollar.
+edit_57() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<\"A\\\$B\"" "A\$B" 'missing_dollar() { :; }' >double-quoted-dollar.sh
+}
+
+# edit_58: ANSI-C quote decoding supplies the heredoc delimiter.
+edit_58() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<\$'E\\x41F'" 'EAF' 'missing_ansi() { :; }' >ansi-end.sh
+}
+
+# edit_59: an undecoded ANSI-C escape does not end the heredoc.
+edit_59() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<\$'E\\x41F'" 'E\x41F' 'fake_ansi() { :; }' 'EAF' >ansi-nonending.sh
+}
+
+# edit_60: locale quotes remove their dollar prefix for the delimiter.
+edit_60() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<$"EOF"' 'EOF' 'missing_locale() { :; }' >locale-end.sh
+}
+
+# edit_61: ANSI-C quote syntax inside double quotes stays literal.
+edit_61() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<\"E\$'O'F\"" 'EOF' 'fake_lit() { :; }' "E\$'O'F" >literal-ansi.sh
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -400,6 +437,13 @@ expect "backslash-quoted heredoc delimiter ends at EOF" 1 "shell function bare_a
 expect "nested arithmetic ends before real heredoc" 0 "ok (" edit_52
 expect "quoted empty heredoc word closes on blank line" 0 "ok (" edit_53
 expect "closing parenthesis starts comment word" 1 "shell function bare_paren has no header comment" edit_54
+expect "double-quoted backslash delimiter finds following function" 1 "shell function missing_header has no header comment" edit_55
+expect "double-quoted backslash delimiter ignores early line" 0 "ok (" edit_56
+expect "double-quoted dollar escape finds following function" 1 "shell function missing_dollar has no header comment" edit_57
+expect "ANSI-C delimiter finds following function" 1 "shell function missing_ansi has no header comment" edit_58
+expect "ANSI-C delimiter ignores raw escape line" 0 "ok (" edit_59
+expect "locale delimiter finds following function" 1 "shell function missing_locale has no header comment" edit_60
+expect "ANSI-C syntax in double quotes stays literal" 0 "ok (" edit_61
 
 if [ "$failed" -ne 0 ]; then
     exit 1
