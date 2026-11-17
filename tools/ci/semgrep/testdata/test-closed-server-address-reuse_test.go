@@ -68,6 +68,22 @@ func closedServerDirectURL() {
 	useClosedAddress(srv.URL)
 }
 
+// closedServerDirectNetAddress documents a direct net.Addr read after Close.
+func closedServerDirectNetAddress() {
+	// ruleid: test-closed-server-address-reuse
+	srv := httptest.NewServer(nil)
+	srv.Close()
+	useClosedNetAddress(srv.Listener.Addr())
+}
+
+// closedServerDirectListenerAddress documents a direct string address read after Close.
+func closedServerDirectListenerAddress() {
+	// ruleid: test-closed-server-address-reuse
+	srv := httptest.NewServer(nil)
+	srv.Close()
+	useClosedAddress(srv.Listener.Addr().String())
+}
+
 // closedTLSServerURL documents a closed TLS server address.
 func closedTLSServerURL() {
 	// ruleid: test-closed-server-address-reuse
@@ -83,6 +99,14 @@ func liveServerURL() {
 	url := srv.URL
 	// ok: test-closed-server-address-reuse
 	useClosedAddress(url)
+	srv.Close()
+}
+
+// liveServerDirectNetAddress documents a direct address read before Close.
+func liveServerDirectNetAddress() {
+	srv := httptest.NewServer(nil)
+	// ok: test-closed-server-address-reuse
+	useClosedNetAddress(srv.Listener.Addr())
 	srv.Close()
 }
 

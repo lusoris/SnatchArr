@@ -67,8 +67,20 @@ rules:
           $SRV.Close()
           ...
           $CALL(..., $SRV.URL, ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $SRV.Listener.Addr(), ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $SRV.Listener.Addr().String(), ...)
 
-  # ── Test isolation · fatal helpers stay in the test goroutine ─────────────
+  # ── Test isolation · fatal helpers stay in their test goroutine ───────────
   - id: test-fatal-helper-in-goroutine
     languages: [go]
     severity: ERROR
@@ -76,25 +88,94 @@ rules:
       include:
         - "*_test.go"
     message: >-
-      This helper can call Fatal from a goroutine other than the test's. Go
-      allows test fatal methods only in the test goroutine. Report with
-      t.Errorf and return, or signal a channel that the test goroutine awaits.
-    patterns:
-      - pattern-inside: |
-          go func(...) {
-            ...
-          }(...)
-      - pattern-either:
-          - pattern: await.Await(...)
-          - pattern: refuse.Listener(...)
-          - pattern: Listener($TB)
-          - pattern: listener($TB, ...)
-          - pattern: $T.Fatal(...)
-          - pattern: $T.Fatalf(...)
-          - pattern: $T.FailNow()
-          - pattern: $T.Skip(...)
-          - pattern: $T.Skipf(...)
-          - pattern: $T.SkipNow()
+      This fatal-capable call runs outside its test or benchmark goroutine. Go
+      allows fatal and skip methods only in that goroutine. Report with Errorf
+      and return, or signal a channel that the test goroutine awaits.
+    pattern-either:
+      - patterns:
+          - pattern-inside: |
+              go func(...) {
+                ...
+              }(...)
+          - pattern-either:
+              - pattern: await.Await($TB, ...)
+              - pattern: refuse.Listener($TB, ...)
+              - pattern: Listener($TB)
+              - pattern: listener($TB, ...)
+              - pattern: $TB.Fatal(...)
+              - pattern: $TB.Fatalf(...)
+              - pattern: $TB.FailNow()
+              - pattern: $TB.Skip(...)
+              - pattern: $TB.Skipf(...)
+              - pattern: $TB.SkipNow()
+          - pattern-not-inside: |
+              $R.Run($NAME, func($TB *testing.T) {
+                ...
+              })
+          - pattern-not-inside: |
+              $R.Run($NAME, func($TB *testing.B) {
+                ...
+              })
+      - patterns:
+          - pattern: |
+              $R.Run($NAME, func($TB *testing.T) {
+                ...
+                go func(...) {
+                  ...
+                  $BAD
+                  ...
+                }(...)
+                ...
+              })
+          - metavariable-pattern:
+              metavariable: $BAD
+              pattern-either:
+                - pattern: await.Await($TB, ...)
+                - pattern: refuse.Listener($TB, ...)
+                - pattern: Listener($TB)
+                - pattern: listener($TB, ...)
+                - pattern: $TB.Fatal(...)
+                - pattern: $TB.Fatalf(...)
+                - pattern: $TB.FailNow()
+                - pattern: $TB.Skip(...)
+                - pattern: $TB.Skipf(...)
+                - pattern: $TB.SkipNow()
+          - focus-metavariable: $BAD
+      - patterns:
+          - pattern: |
+              $R.Run($NAME, func($TB *testing.B) {
+                ...
+                go func(...) {
+                  ...
+                  $BAD
+                  ...
+                }(...)
+                ...
+              })
+          - metavariable-pattern:
+              metavariable: $BAD
+              pattern-either:
+                - pattern: await.Await($TB, ...)
+                - pattern: refuse.Listener($TB, ...)
+                - pattern: Listener($TB)
+                - pattern: listener($TB, ...)
+                - pattern: $TB.Fatal(...)
+                - pattern: $TB.Fatalf(...)
+                - pattern: $TB.FailNow()
+                - pattern: $TB.Skip(...)
+                - pattern: $TB.Skipf(...)
+                - pattern: $TB.SkipNow()
+          - focus-metavariable: $BAD
+      - pattern: go await.Await(...)
+      - pattern: go refuse.Listener(...)
+      - pattern: go Listener($TB)
+      - pattern: go listener($TB, ...)
+      - pattern: go $TB.Fatal(...)
+      - pattern: go $TB.Fatalf(...)
+      - pattern: go $TB.FailNow()
+      - pattern: go $TB.Skip(...)
+      - pattern: go $TB.Skipf(...)
+      - pattern: go $TB.SkipNow()
 
   # ── HISS-02 · an HTTP client carries a timeout ─────────────────────────────
   # A client without Timeout has no deadline of its own, so a request sent
