@@ -26,7 +26,7 @@ source:
   repository: golusoris/goenvoy
   commit: 865c047dc20f2a0df77855f1bdb6f0e19b88ef6c
   path: upstream/specs.yaml
-  sha256: 361f7354c136b29cb877c4fcb8b00c5b8166a18f3fb88a11213b452f91dea366
+  sha256: a7e9e87da936184e71ad93f70a4f83d7f007edcc6353c52288956ec46f1d6830
 specs:
   - name: sonarr
     operations:
