@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -242,7 +243,10 @@ func handleLateDatabaseConnection(t *testing.T, ctx context.Context, conn net.Co
 		return fmt.Errorf("forwarded more than %d database connections", maxProxyAccepts)
 	}
 	active.Go(func() {
-		forwardDatabaseConnection(t, ctx, conn, realAddr, deadline)
+		dial := (&net.Dialer{Timeout: 5 * time.Second}).DialContext
+		if err := forwardDatabaseConnection(t, ctx, conn, realAddr, deadline, dial); err != nil {
+			t.Errorf("forward database connection: %v", err)
+		}
 	})
 	return nil
 }
@@ -274,28 +278,36 @@ func rejectEarlyDatabaseConnection(t *testing.T, conn net.Conn, deadline time.Ti
 	return nil
 }
 
+type proxyDialFunc func(ctx context.Context, network, address string) (net.Conn, error)
+
+// proxyShutdownError treats an error after the test context is done as shutdown,
+// not a test failure; an error before cancellation still fails.
+func proxyShutdownError(ctx context.Context, err error) error {
+	if err != nil && ctx.Err() == nil {
+		return err
+	}
+	return nil
+}
+
 // forwardDatabaseConnection gives each side a deadline and copies PostgreSQL
 // traffic in both directions until the app closes or the test cancels.
-func forwardDatabaseConnection(t *testing.T, ctx context.Context, client net.Conn, realAddr string, deadline time.Time) {
+func forwardDatabaseConnection(t *testing.T, ctx context.Context, client net.Conn, realAddr string, deadline time.Time, dial proxyDialFunc) error {
 	t.Helper()
 	defer closeProxyConnection(t, client)
 	stopClientClose := context.AfterFunc(ctx, func() { closeProxyConnection(t, client) })
 	defer stopClientClose()
 	if err := client.SetDeadline(deadline); err != nil {
-		t.Errorf("deadline on client connection: %v", err)
-		return
+		return proxyShutdownError(ctx, fmt.Errorf("deadline on client connection: %w", err))
 	}
-	server, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", realAddr)
+	server, err := dial(ctx, "tcp", realAddr)
 	if err != nil {
-		t.Errorf("dial real database: %v", err)
-		return
+		return proxyShutdownError(ctx, fmt.Errorf("dial real database: %w", err))
 	}
 	defer closeProxyConnection(t, server)
 	stopServerClose := context.AfterFunc(ctx, func() { closeProxyConnection(t, server) })
 	defer stopServerClose()
 	if err := server.SetDeadline(deadline); err != nil {
-		t.Errorf("deadline on real database connection: %v", err)
-		return
+		return proxyShutdownError(ctx, fmt.Errorf("deadline on real database connection: %w", err))
 	}
 	forward := make(chan error, 1)
 	go func() { _, copyErr := io.Copy(server, client); forward <- copyErr }()
@@ -307,6 +319,115 @@ func forwardDatabaseConnection(t *testing.T, ctx context.Context, client net.Con
 	}
 	if reverseErr != nil && ctx.Err() == nil {
 		t.Logf("database reverse ended: %v", reverseErr)
+	}
+	return nil
+}
+
+func TestProxyShutdownError(t *testing.T) {
+	t.Parallel()
+	sentinel := errors.New("proxy failure")
+	cases := []struct {
+		name      string
+		err       error
+		cancelled bool
+		expired   bool
+		wantError bool
+	}{
+		{name: "nil error, live context"},
+		{name: "nil error, cancelled context", cancelled: true},
+		{name: "error, live context", err: sentinel, wantError: true},
+		{name: "error, cancelled context", err: sentinel, cancelled: true},
+		{name: "error, expired context", err: sentinel, expired: true},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			timeout := 10 * time.Second
+			if test.expired {
+				timeout = -1
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), timeout)
+			defer cancel()
+			if test.cancelled {
+				cancel()
+			}
+			got := proxyShutdownError(ctx, test.err)
+			if (got != nil) != test.wantError || (got != nil && !errors.Is(got, sentinel)) {
+				t.Errorf("proxyShutdownError() = %v, want error %v", got, test.wantError)
+			}
+		})
+	}
+}
+
+func TestForwardDatabaseConnectionCancelDuringDial(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("proxy context has no deadline")
+	}
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for database: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			t.Errorf("close database listener: %v", err)
+		}
+	})
+	client, peer := net.Pipe()
+	defer closeProxyConnection(t, peer)
+	entered := make(chan struct{})
+	var once sync.Once
+	dialer := &net.Dialer{Timeout: 5 * time.Second, ControlContext: func(ctx context.Context, _, _ string, _ syscall.RawConn) error {
+		once.Do(func() { close(entered) })
+		<-ctx.Done()
+		return ctx.Err()
+	}}
+	done := make(chan error, 1)
+	go func() {
+		done <- forwardDatabaseConnection(t, ctx, client, listener.Addr().String(), deadline, dialer.DialContext)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("dial did not reach ControlContext")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("forward after cancellation: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("forward did not stop after cancellation")
+	}
+}
+
+func TestForwardDatabaseConnectionDialRefused(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("proxy context has no deadline")
+	}
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for database: %v", err)
+	}
+	addr := listener.Addr().String()
+	if closeErr := listener.Close(); closeErr != nil {
+		t.Fatalf("close database listener: %v", closeErr)
+	}
+	client, peer := net.Pipe()
+	defer closeProxyConnection(t, peer)
+	dial := (&net.Dialer{Timeout: 5 * time.Second}).DialContext
+	err = forwardDatabaseConnection(t, ctx, client, addr, deadline, dial)
+	const prefix = "dial real database:"
+	if err == nil || len(err.Error()) < len(prefix) || err.Error()[:len(prefix)] != prefix {
+		t.Errorf("forward database connection error = %v, want dial real database", err)
 	}
 }
 
