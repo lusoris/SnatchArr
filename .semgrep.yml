@@ -97,6 +97,10 @@ rules:
               go func(...) {
                 ...
               }(...)
+          - pattern-inside: |
+              func(...) {
+                ...
+              }
           - pattern-either:
               - pattern: await.Await($TB, ...)
               - pattern: refuse.Listener($TB, ...)

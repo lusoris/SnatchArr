@@ -47,6 +47,18 @@ func fatalMethodInDirectGo(t *testing.T) {
 	go t.Fatalf("goroutine failed")
 }
 
+// fatalHelperInGoArgument documents a helper evaluated before the goroutine starts.
+func fatalHelperInGoArgument(t *testing.T) {
+	// ok: test-fatal-helper-in-goroutine
+	go func(u string) { _ = u }(refuse.Listener(t))
+}
+
+// fatalBodyWithGoArgument documents a fatal call in a goroutine body with an argument.
+func fatalBodyWithGoArgument(t *testing.T) {
+	// ruleid: test-fatal-helper-in-goroutine
+	go func(u string) { t.Fatal(u) }("x")
+}
+
 // fatalOnSubtestReceiver documents a fatal call owned by the child test.
 func fatalOnSubtestReceiver(t *testing.T) {
 	go func() {
