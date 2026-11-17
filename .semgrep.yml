@@ -93,14 +93,6 @@ rules:
       and return, or signal a channel that the test goroutine awaits.
     pattern-either:
       - patterns:
-          - pattern-inside: |
-              go func(...) {
-                ...
-              }(...)
-          - pattern-inside: |
-              func(...) {
-                ...
-              }
           - pattern-either:
               - pattern: await.Await($TB, ...)
               - pattern: refuse.Listener($TB, ...)
@@ -112,6 +104,12 @@ rules:
               - pattern: $TB.Skip(...)
               - pattern: $TB.Skipf(...)
               - pattern: $TB.SkipNow()
+          - patterns:
+              - pattern: |
+                  go func(...) {
+                    $...BODY
+                  }(...)
+              - focus-metavariable: $...BODY
           - pattern-not-inside: |
               $R.Run($NAME, func($TB *testing.T) {
                 ...

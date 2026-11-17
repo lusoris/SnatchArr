@@ -53,6 +53,67 @@ func fatalHelperInGoArgument(t *testing.T) {
 	go func(u string) { _ = u }(refuse.Listener(t))
 }
 
+// helperArgInImmediateLiteral documents a helper argument in an immediate literal.
+func helperArgInImmediateLiteral(t *testing.T) {
+	func() {
+		// ok: test-fatal-helper-in-goroutine
+		go func(u string) { _ = u }(refuse.Listener(t))
+	}()
+}
+
+// helperArgInDeferredLiteral documents a helper argument in a deferred literal.
+func helperArgInDeferredLiteral(t *testing.T) {
+	defer func() {
+		// ok: test-fatal-helper-in-goroutine
+		go func(u string) { _ = u }(refuse.Listener(t))
+	}()
+}
+
+// helperArgInNestedGoroutine documents a helper argument in a nested goroutine.
+func helperArgInNestedGoroutine(t *testing.T) {
+	go func() {
+		// ruleid: test-fatal-helper-in-goroutine
+		go func(u string) { _ = u }(refuse.Listener(t))
+	}()
+}
+
+// fatalBodyInImmediateLiteral documents a fatal call in an immediate literal goroutine.
+func fatalBodyInImmediateLiteral(t *testing.T) {
+	func() {
+		go func(u string) {
+			// ruleid: test-fatal-helper-in-goroutine
+			t.Fatal(u)
+		}("x")
+	}()
+}
+
+// fatalInNestedBlock documents a fatal call in a nested block.
+func fatalInNestedBlock(t *testing.T) {
+	go func() {
+		if true {
+			// ruleid: test-fatal-helper-in-goroutine
+			t.Fatal("x")
+		}
+	}()
+}
+
+// fatalBodyWithHelperArgument documents a fatal body with a helper argument.
+func fatalBodyWithHelperArgument(t *testing.T) {
+	go func(u string) {
+		// ruleid: test-fatal-helper-in-goroutine
+		t.Fatal(u)
+		// ok: test-fatal-helper-in-goroutine
+	}(refuse.Listener(t))
+}
+
+// helperSecondArgInImmediateLiteral documents a helper in a later argument position.
+func helperSecondArgInImmediateLiteral(t *testing.T) {
+	func() {
+		// ok: test-fatal-helper-in-goroutine
+		go func(a, u string) { _ = a + u }("x", refuse.Listener(t))
+	}()
+}
+
 // fatalBodyWithGoArgument documents a fatal call in a goroutine body with an argument.
 func fatalBodyWithGoArgument(t *testing.T) {
 	// ruleid: test-fatal-helper-in-goroutine
