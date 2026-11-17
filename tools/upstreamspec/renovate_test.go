@@ -505,6 +505,7 @@ func TestDeploymentCNPGImageStaysWithUpgradeOperand(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			config := decoded(t, raw)
 			if tc.change != nil {
 				tc.change(config)
