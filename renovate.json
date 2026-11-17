@@ -166,6 +166,18 @@
       "versioningTemplate": "docker"
     },
     {
+      "description": "The CloudNativePG current-major operand image in the chart upgrade deployment example",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "docs/deployment.md"
+      ],
+      "matchStrings": [
+        "postgres\\.cnpg\\.imageName=(?<depName>ghcr\\.io/cloudnative-pg/postgresql):(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
       "description": "The S3 store of the chart backup and restore test, pinned by version and digest (tools/e2e/cnpg_backup_restore.sh, C14-04)",
       "customType": "regex",
       "managerFilePatterns": [
@@ -441,9 +453,10 @@
       "allowedVersions": "/^17\\./"
     },
     {
-      "description": "See the rule above: the current-major operand pin of the chart upgrade test stays on 18",
+      "description": "See the rule above: the current-major operand pin of the chart upgrade test and deployment example stays on 18",
       "matchFileNames": [
-        "tools/e2e/cnpg_pg_upgrade.sh"
+        "tools/e2e/cnpg_pg_upgrade.sh",
+        "docs/deployment.md"
       ],
       "matchDepNames": [
         "ghcr.io/cloudnative-pg/postgresql"

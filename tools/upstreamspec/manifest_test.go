@@ -205,6 +205,14 @@ func TestReadManifest(t *testing.T) {
 			want:     "field modules not found",
 		},
 		{
+			name:     "a module field in the local manifest",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [GET /api/v1/status]\n    module: arr/sonarr"})
+			},
+			want: "field module not found",
+		},
+		{
 			name:     "old-shape local file with repository and commit (f)",
 			upstream: defaultUpstreamSpec(nil),
 			local: func(sha string) string {

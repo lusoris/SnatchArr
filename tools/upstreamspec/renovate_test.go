@@ -26,7 +26,10 @@ const (
 	// sourceBranch is the goenvoy branch the source pin follows.
 	sourceBranch = "main"
 	// readers is the number of custom managers that read the manifest: the one for the source pin.
-	readers = 1
+	readers           = 1
+	cnpgDeploymentDoc = "docs/deployment.md"
+	cnpgImage         = "ghcr.io/cloudnative-pg/postgresql"
+	cnpgUpgradeScript = "tools/e2e/cnpg_pg_upgrade.sh"
 )
 
 // renovateConfig is the part of renovate.json that decides whether Renovate keeps the source pin of
@@ -54,8 +57,12 @@ type customManager struct {
 
 //nolint:tagliatelle // renovate.json is camelCase
 type packageRule struct {
-	MatchManagers []string `json:"matchManagers"`
-	Automerge     *bool    `json:"automerge"`
+	MatchManagers     []string `json:"matchManagers"`
+	MatchFileNames    []string `json:"matchFileNames"`
+	MatchDepNames     []string `json:"matchDepNames"`
+	MatchCurrentValue string   `json:"matchCurrentValue"`
+	AllowedVersions   string   `json:"allowedVersions"`
+	Automerge         *bool    `json:"automerge"`
 }
 
 // reading is what Renovate takes from the manifest source block, and the datasource it asks about it.
@@ -205,6 +212,79 @@ func committed(t *testing.T) (config []byte, manifest string, source manifestSou
 		t.Fatalf("unmarshal specs.yaml: %v", err)
 	}
 	return config, string(text), local.Source
+}
+
+// cnpgTags returns the current-major operand tags that the chart-upgrade documentation and test
+// name. The patterns deliberately include the surrounding field, so a nearby image cannot satisfy
+// the check.
+func cnpgTags(deployment, upgrade string) (string, string, []string) {
+	document := regexp.MustCompile(`(?m)^  --set postgres\.cnpg\.imageName=` + regexp.QuoteMeta(cnpgImage) + `:([^\s]+)$`)
+	newImage := regexp.MustCompile(`(?m)^NEW_IMAGE=` + regexp.QuoteMeta(cnpgImage) + `:([^@\s]+)@sha256:[a-f0-9]{64}$`)
+	documentMatch := document.FindStringSubmatch(deployment)
+	upgradeMatch := newImage.FindStringSubmatch(upgrade)
+	if len(documentMatch) != 2 || len(upgradeMatch) != 2 {
+		return "", "", []string{"the deployment example or NEW_IMAGE is missing"}
+	}
+	return documentMatch[1], upgradeMatch[1], nil
+}
+
+// cnpgManagerProblems verifies that Renovate reads the documented image with the Docker
+// datasource and versioning, so it is updated together with the upgrade operand.
+func cnpgManagerProblems(config renovateConfig, deployment string) []string {
+	var managers []customManager
+	for _, manager := range config.CustomManagers {
+		if slices.Contains(manager.ManagerFilePatterns, cnpgDeploymentDoc) {
+			managers = append(managers, manager)
+		}
+	}
+	if len(managers) != 1 {
+		return []string{fmt.Sprintf("%d custom manager(s) read %s; want 1", len(managers), cnpgDeploymentDoc)}
+	}
+	manager := managers[0]
+	for _, pattern := range manager.MatchStrings {
+		rx, err := regexp.Compile(pattern)
+		if err != nil {
+			return []string{fmt.Sprintf("the documentation manager pattern does not compile: %v", err)}
+		}
+		match := rx.FindStringSubmatch(deployment)
+		depName := rx.SubexpIndex("depName")
+		currentValue := rx.SubexpIndex("currentValue")
+		if len(match) > 0 && depName >= 0 && currentValue >= 0 && match[depName] == cnpgImage {
+			if manager.DatasourceTemplate == "docker" && manager.VersioningTemplate == "docker" {
+				return nil
+			}
+			return []string{"the documentation manager does not use Docker datasource and versioning"}
+		}
+	}
+	return []string{"the documentation manager does not capture its CloudNativePG image"}
+}
+
+// cnpgRuleProblems verifies that the documented current-major image has the same major guard as
+// the NEW_IMAGE operand, preventing a docs-only major update.
+func cnpgRuleProblems(config renovateConfig) []string {
+	for _, rule := range config.PackageRules {
+		if slices.Contains(rule.MatchFileNames, cnpgDeploymentDoc) &&
+			slices.Contains(rule.MatchDepNames, cnpgImage) &&
+			rule.MatchCurrentValue == `/^18\./` && rule.AllowedVersions == `/^18\./` {
+			return nil
+		}
+	}
+	return []string{"no package rule keeps the documented CloudNativePG image on major 18"}
+}
+
+// cnpgDeploymentProblems reports a stale documented tag or configuration that leaves it outside
+// the same Renovate update and major guard as the upgrade test's current-major image.
+func cnpgDeploymentProblems(config renovateConfig, deployment, upgrade string) []string {
+	documentTag, upgradeTag, problems := cnpgTags(deployment, upgrade)
+	if len(problems) > 0 {
+		return problems
+	}
+	if documentTag != upgradeTag {
+		return []string{fmt.Sprintf("%s pins %s; %s NEW_IMAGE pins %s", cnpgDeploymentDoc,
+			documentTag, cnpgUpgradeScript, upgradeTag)}
+	}
+	problems = append(problems, cnpgManagerProblems(config, deployment)...)
+	return append(problems, cnpgRuleProblems(config)...)
 }
 
 // planted returns text with its one occurrence of old replaced.
@@ -379,6 +459,62 @@ func TestRenovateKeepsEveryPinCurrent(t *testing.T) {
 				if !strings.Contains(got[i], want) {
 					t.Errorf("problem %d = %q; want it to contain %q", i, got[i], want)
 				}
+			}
+		})
+	}
+}
+
+// TestDeploymentCNPGImageStaysWithUpgradeOperand checks that the deploy example follows the
+// current-major operand and that Renovate will update both under the same major constraint.
+func TestDeploymentCNPGImageStaysWithUpgradeOperand(t *testing.T) {
+	t.Parallel()
+	raw, _, _ := committed(t)
+	deployment, err := os.ReadFile("../../" + cnpgDeploymentDoc)
+	if err != nil {
+		t.Fatalf("read %s: %v", cnpgDeploymentDoc, err)
+	}
+	upgrade, err := os.ReadFile("../e2e/cnpg_pg_upgrade.sh")
+	if err != nil {
+		t.Fatalf("read %s: %v", cnpgUpgradeScript, err)
+	}
+	cases := []struct {
+		name       string
+		deployment string
+		change     func(*renovateConfig)
+		want       string
+	}{
+		{name: "the committed files", deployment: string(deployment)},
+		{
+			name:       "a deployment image one minor behind",
+			deployment: strings.Replace(string(deployment), "18.7-system-trixie", "18.6-system-trixie", 1),
+			want:       "docs/deployment.md pins 18.6-system-trixie; tools/e2e/cnpg_pg_upgrade.sh NEW_IMAGE pins 18.7-system-trixie",
+		},
+		{
+			name:       "no manager reads the deployment example",
+			deployment: string(deployment),
+			change: func(config *renovateConfig) {
+				for index := range config.CustomManagers {
+					config.CustomManagers[index].ManagerFilePatterns = slices.DeleteFunc(
+						config.CustomManagers[index].ManagerFilePatterns,
+						func(path string) bool { return path == cnpgDeploymentDoc },
+					)
+				}
+			},
+			want: "0 custom manager(s) read docs/deployment.md; want 1",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := decoded(t, raw)
+			if tc.change != nil {
+				tc.change(config)
+			}
+			problems := cnpgDeploymentProblems(*config, tc.deployment, string(upgrade))
+			if tc.want == "" && len(problems) > 0 {
+				t.Fatalf("cnpgDeploymentProblems() = %q; want no problems", problems)
+			}
+			if tc.want != "" && (len(problems) != 1 || !strings.Contains(problems[0], tc.want)) {
+				t.Fatalf("cnpgDeploymentProblems() = %q; want %q", problems, tc.want)
 			}
 		})
 	}

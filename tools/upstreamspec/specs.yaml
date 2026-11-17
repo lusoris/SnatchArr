@@ -6,8 +6,9 @@
 # refuses it when its sha256 differs. Nothing listed here is committed or copied into an image.
 #
 # Upstream OpenAPI spec pins (repository, release tag or branch, commit, path, sha256, license,
-# prefix) are owned by golusoris/goenvoy and pinned below in `source`. SnatchArr lists only its
-# consumer operations and C# command classes.
+# prefix, and optionally the goenvoy client module its own endpoint check reads) are owned by
+# golusoris/goenvoy and pinned below in `source`. SnatchArr lists only its consumer operations and
+# C# command classes.
 #
 # Renovate reads source.repository and source.commit (customManagers in renovate.json) and proposes
 # the newest commit of goenvoy's main branch. When the goenvoy manifest changed with the proposed
