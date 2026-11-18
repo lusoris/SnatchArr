@@ -105,11 +105,8 @@ api-openapi-breaking: ## OpenAPI breaking change check vs origin/main (HISS-14 a
 	if ! git rev-parse --verify -q origin/main >/dev/null; then
 	  echo "api-openapi-breaking: no origin/main to check breaking changes against; run git fetch origin main" >&2; exit 1
 	fi
-	base=$$(mktemp)
-	trap 'rm -f "$$base"' EXIT
-	git show origin/main:api/openapi/openapi.yaml >"$$base"
 	sh tools/oasdiff/breaking_test.sh
-	sh tools/oasdiff/breaking.sh "$$base" api/openapi/openapi.yaml "$$(git log -1 --format=%s)"
+	sh tools/oasdiff/local_check.sh origin/main api/openapi/openapi.yaml
 
 settings-parity: ## Generate docs/settings-parity.tsv from config registry
 	go run ./api/cmd/settingsparity
@@ -700,6 +697,7 @@ roadmap-check: ## docs/roadmap.md milestone table shape (offline) and the schedu
 	sh tools/ci/roadmap_test.sh
 
 workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons, the devcontainer engine pin, lane judge edits, one digest per image tag, Renovate release-age and preset-closure coverage, and the release pull request body, against their cases
+	python3 -I tools/ci/deploy_filter_check.py --self-test && python3 -I tools/ci/deploy_filter_check.py
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/squash_merge_test.sh

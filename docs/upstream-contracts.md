@@ -40,7 +40,8 @@ The target downloads the pinned specs on the first run (about 2.9 MB in total, i
 
 1. `tools/upstreamspec/specs.yaml` pins the source manifest from `golusoris/goenvoy` (`source`
    with repository, commit, path `upstream/specs.yaml` and sha256). Goenvoy owns the upstream spec
-   pins (repository, release tag or branch, commit, path, sha256, license, prefix). SnatchArr
+   pins (repository, release tag or branch, commit, path, sha256, license, prefix, and optionally
+   the goenvoy client module its own endpoint check reads). SnatchArr
    lists only its consumer operations and, for an entry with `POST .../command`, the upstream C#
    command classes (path and sha256 at the commit of its spec).
    A new upstream release is pinned in goenvoy, whose Renovate configuration reads
