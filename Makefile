@@ -261,7 +261,7 @@ worker-cover: ## cargo-llvm-cov line coverage gate for the Rust workspace
 # ── end-to-end smoke (#19) ────────────────────────────────────────────────────
 E2E_BIN := api/tmp/e2e
 # The Postgres the integration tests pin (storetest), through the Docker Hub mirror.
-E2E_POSTGRES ?= mirror.gcr.io/library/postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+E2E_POSTGRES ?= mirror.gcr.io/library/postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
 E2E_API_IMAGE ?= snatcharr-api:e2e
 E2E_WORKER_IMAGE ?= snatcharr-worker:e2e
 e2e-smoke: ## Postgres + api + two workers + fakearr end to end (needs Docker unless SMOKE_DSN is set)
