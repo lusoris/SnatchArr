@@ -262,6 +262,9 @@ jobs:
               # The coverage floor: worker-cover and tools/cover.
               - 'Makefile'
               - 'tools/cover/**'
+              # The Rust MSRV declaration check and its planted cases.
+              - 'tools/ci/rust_msrv_check.py'
+              - 'tools/ci/rust_msrv_check_test.sh'
               - '.github/workflows/ci.yml'
             web:
               - 'web/**'
@@ -527,6 +530,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust MSRV declaration
+        run: |
+          bash tools/ci/rust_msrv_check_test.sh
+          python3 -I tools/ci/rust_msrv_check.py
       # The runner's rustup installs the release pinned in rust-toolchain.toml.
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install --component llvm-tools-preview
