@@ -18,6 +18,7 @@ use snatch_proto::{
     AcquireBudgetRequest, AppKind, CompleteRunRequest, EventType, FilterCandidatesRequest, Level,
     Policy, ReportEventsRequest, Run, RunOutcome, SearchedItem, SnatchEvent, SnatchKind,
 };
+use time::OffsetDateTime;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::service::interceptor::InterceptedService;
@@ -146,7 +147,7 @@ impl Events {
     async fn emit(&self, e: Ev) {
         let ev = SnatchEvent {
             run_id: self.run_id.clone(),
-            ts_unix_ms: chrono::Utc::now().timestamp_millis(),
+            ts_unix_ms: unix_ms(OffsetDateTime::now_utc()),
             level: e.level.into(),
             r#type: e.ty.into(),
             entity_type: e.entity_type.to_owned(),
@@ -164,6 +165,11 @@ impl Events {
             tracing::warn!(run = %self.run_id, "event channel closed; dropping event");
         }
     }
+}
+
+fn unix_ms(t: OffsetDateTime) -> i64 {
+    let millis = t.unix_timestamp_nanos().div_euclid(1_000_000);
+    i64::try_from(millis).unwrap_or(if millis < 0 { i64::MIN } else { i64::MAX })
 }
 
 /// A run limited to one entity (movie) or group (series): a quickie for a Seerr request.
@@ -790,7 +796,7 @@ async fn collect_candidates(
     if let Some(focus) = p.focus {
         candidates.retain(|c| focus.matches(c));
     }
-    let filter = filter_of(&p.policy, chrono::Utc::now().timestamp());
+    let filter = filter_of(&p.policy, OffsetDateTime::now_utc().unix_timestamp());
     let filtered = snatch_core::filter(&candidates, &filter);
     let unavailable = snatch_core::unavailable_count(&candidates, &filter);
     let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
@@ -950,3 +956,32 @@ async fn await_command(p: &Prepared, mut cmd: CommandStatus, events: &Events) {
 
 #[cfg(test)]
 mod executor_tests;
+
+#[cfg(test)]
+mod time_tests {
+    use super::unix_ms;
+    use time::OffsetDateTime;
+    use time::format_description::well_known::Rfc3339;
+
+    #[test]
+    fn unix_ms_floors_negative_fractions_and_handles_the_range_limit() {
+        // Positive: subsecond fraction. Boundaries: epoch, +1ms, -1ns, and maximum.
+        for (name, input, expected) in [
+            (
+                "fraction",
+                "2020-01-01T00:00:00.999999999Z",
+                1_577_836_800_999,
+            ),
+            ("epoch", "1970-01-01T00:00:00Z", 0),
+            ("plus one millisecond", "1970-01-01T00:00:00.001Z", 1),
+            ("minus one nanosecond", "1969-12-31T23:59:59.999999999Z", -1),
+        ] {
+            let date = OffsetDateTime::parse(input, &Rfc3339).expect(name);
+            assert_eq!(unix_ms(date), expected, "{name}");
+        }
+        assert!(
+            unix_ms(time::PrimitiveDateTime::MAX.assume_utc()) > 0,
+            "maximum date"
+        );
+    }
+}
