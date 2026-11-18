@@ -22,9 +22,9 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use snatch_core::{Candidate, Target};
+use time::{Date, Month, OffsetDateTime, UtcOffset};
 use url::Url;
 
 /// *arr application family and API generation.
@@ -406,7 +406,8 @@ struct EpisodeLike {
     episode_number: i32,
     #[serde(default)]
     title: String,
-    air_date_utc: Option<DateTime<Utc>>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    air_date_utc: Option<OffsetDateTime>,
     #[serde(default)]
     monitored: bool,
     series: Option<MonitoredParent>,
@@ -433,18 +434,25 @@ struct SceneLike {
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum DateOnly {
-    Text(NaiveDate),
+    Text(#[serde(with = "date_only_text")] Date),
     Parts { year: i32, month: u32, day: u32 },
 }
+
+time::serde::format_description!(date_only_text, Date, "[year]-[month]-[day]");
 
 impl DateOnly {
     /// Midnight UTC of the day; `None` for a day that does not exist.
     fn unix(&self) -> Option<i64> {
         let day = match *self {
             Self::Text(day) => day,
-            Self::Parts { year, month, day } => NaiveDate::from_ymd_opt(year, month, day)?,
+            Self::Parts { year, month, day } => Date::from_calendar_date(
+                year,
+                Month::try_from(u8::try_from(month).ok()?).ok()?,
+                u8::try_from(day).ok()?,
+            )
+            .ok()?,
         };
-        Some(day.and_time(NaiveTime::MIN).and_utc().timestamp())
+        Some(day.midnight().assume_utc().unix_timestamp())
     }
 }
 
@@ -459,7 +467,8 @@ struct WhisparrMovieLike {
     year: i32,
     #[serde(default)]
     monitored: bool,
-    release_date: Option<DateTime<Utc>>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    release_date: Option<OffsetDateTime>,
     #[serde(default)]
     tags: Vec<i32>,
     quality_profile_id: Option<i32>,
@@ -475,9 +484,12 @@ struct MovieLike {
     year: i32,
     #[serde(default)]
     monitored: bool,
-    physical_release: Option<DateTime<Utc>>,
-    digital_release: Option<DateTime<Utc>>,
-    in_cinemas: Option<DateTime<Utc>>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    physical_release: Option<OffsetDateTime>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    digital_release: Option<OffsetDateTime>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    in_cinemas: Option<OffsetDateTime>,
     /// Whether the movie has reached its minimum availability (#350).
     is_available: Option<bool>,
     #[serde(default)]
@@ -493,7 +505,8 @@ struct ChildLike {
     title: String,
     #[serde(default)]
     monitored: bool,
-    release_date: Option<DateTime<Utc>>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    release_date: Option<OffsetDateTime>,
     artist_id: Option<i64>,
     author_id: Option<i64>,
     artist: Option<MonitoredParent>,
@@ -789,11 +802,7 @@ impl ArrClient {
     }
 
     async fn grabbed_since(&self, hours: u32) -> Result<Vec<i64>, Error> {
-        let window = chrono::TimeDelta::try_hours(i64::from(hours)).unwrap_or_default();
-        let since = Utc::now()
-            .checked_sub_signed(window)
-            .unwrap_or_else(Utc::now)
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let since = since_rfc3339(OffsetDateTime::now_utc(), hours);
         let query = [("date", since), ("eventType", "1".to_owned())];
         let records: Vec<BusyLike> = self.get_json("history", "history/since", &query).await?;
         Ok(records.iter().filter_map(|r| self.busy_id(r)).collect())
@@ -904,6 +913,19 @@ impl ArrClient {
     }
 }
 
+fn since_rfc3339(now: OffsetDateTime, hours: u32) -> String {
+    let format =
+        time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z");
+    let now = now.to_offset(UtcOffset::UTC);
+    let shifted = now
+        .checked_sub(time::Duration::hours(i64::from(hours)))
+        .unwrap_or(now);
+    shifted
+        .format(format)
+        .or_else(|_| now.format(format))
+        .unwrap_or_default()
+}
+
 fn page_of<T>(p: Paged<T>, map: impl Fn(T) -> Candidate) -> WantedPage {
     WantedPage {
         page: p.page,
@@ -927,7 +949,7 @@ fn episode_candidate(e: EpisodeLike) -> Candidate {
             "S{:02}E{:02} {}",
             e.season_number, e.episode_number, e.title
         ),
-        release_unix: e.air_date_utc.map(|d| d.timestamp()),
+        release_unix: e.air_date_utc.map(|d| d.unix_timestamp()),
         monitored: e.monitored && parent_monitored,
         available: None,
         tags: labels.tags,
@@ -988,7 +1010,7 @@ fn titled_movie(
     id: i64,
     title: String,
     year: i32,
-    date: Option<DateTime<Utc>>,
+    date: Option<OffsetDateTime>,
     monitored: bool,
     labels: Labels,
 ) -> Candidate {
@@ -1001,7 +1023,7 @@ fn titled_movie(
         } else {
             title
         },
-        release_unix: date.map(|d| d.timestamp()),
+        release_unix: date.map(|d| d.unix_timestamp()),
         monitored,
         available: None,
         tags: labels.tags,
@@ -1029,7 +1051,7 @@ fn child_candidate(c: ChildLike) -> Candidate {
         group: c.artist_id.or(c.author_id).unwrap_or(c.id),
         season: None,
         title: c.title,
-        release_unix: c.release_date.map(|d| d.timestamp()),
+        release_unix: c.release_date.map(|d| d.unix_timestamp()),
         monitored: c.monitored && parent_monitored,
         available: None,
         tags: labels.tags,
@@ -1405,6 +1427,181 @@ mod tests {
     }
 
     type TestResult = Result<(), serde_json::Error>;
+
+    #[test]
+    fn since_uses_utc_whole_seconds_and_falls_back_at_range_boundary() {
+        use time::format_description::well_known::Rfc3339;
+
+        // Positive: year rollover and leap day. Boundary: zero and an unrepresentable shift.
+        for (name, input, hours, expected) in [
+            (
+                "year rollover",
+                "2026-01-01T00:30:15.999Z",
+                1,
+                "2025-12-31T23:30:15Z",
+            ),
+            (
+                "leap day",
+                "2024-03-01T00:00:00Z",
+                24,
+                "2024-02-29T00:00:00Z",
+            ),
+            (
+                "zero hours truncates fractions",
+                "2026-01-01T00:30:15.999Z",
+                0,
+                "2026-01-01T00:30:15Z",
+            ),
+            (
+                "unrepresentable shift falls back",
+                "2026-01-01T00:30:15.999Z",
+                u32::MAX,
+                "2026-01-01T00:30:15Z",
+            ),
+        ] {
+            let now = OffsetDateTime::parse(input, &Rfc3339).expect(name);
+            let actual = since_rfc3339(now, hours);
+            assert_eq!(actual, expected, "{name}");
+            assert!(
+                !actual.contains('.') && !actual.contains('+'),
+                "{name}: UTC whole seconds only"
+            );
+        }
+    }
+
+    #[test]
+    fn movie_rfc3339_dates_decode_with_offsets_and_missing_fields() -> TestResult {
+        // Positive: UTC, offset, and .NET's seven fraction digits. Boundary: time range,
+        // leap day, absent, and null. A missing `physicalRelease` catches a lost serde default.
+        for (name, date, expected) in [
+            ("utc", Some("2020-01-02T03:04:05Z"), Some(1_577_934_245)),
+            (
+                "offset",
+                Some("2020-01-02T05:04:05+02:00"),
+                Some(1_577_934_245),
+            ),
+            (
+                "seven fraction digits",
+                Some("2020-01-02T03:04:05.1234567Z"),
+                Some(1_577_934_245),
+            ),
+            (
+                "minimum year",
+                Some("0001-01-01T00:00:00Z"),
+                Some(-62_135_596_800),
+            ),
+            (
+                "maximum year",
+                Some("9999-12-31T23:59:59Z"),
+                Some(253_402_300_799),
+            ),
+            (
+                "leap day",
+                Some("2024-02-29T00:00:00Z"),
+                Some(1_709_164_800),
+            ),
+            ("null", None, None),
+        ] {
+            let movie: MovieLike = serde_json::from_value(serde_json::json!({
+                "id": 1, "physicalRelease": date
+            }))?;
+            assert_eq!(
+                movie_candidate(movie, RadarrRelease::Physical).release_unix,
+                expected,
+                "{name}"
+            );
+        }
+        let missing: MovieLike = serde_json::from_value(serde_json::json!({"id": 1}))?;
+        assert_eq!(
+            movie_candidate(missing, RadarrRelease::Physical).release_unix,
+            None,
+            "absent date"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn movie_rfc3339_dates_reject_invalid_text() {
+        // Negative: date only, missing offset, non-date text, and an impossible day.
+        for (name, date) in [
+            ("date only", "2020-01-02"),
+            ("no offset", "2020-01-02T03:04:05"),
+            ("non-date", "not a date"),
+            ("impossible day", "2021-02-29T00:00:00Z"),
+        ] {
+            let value = serde_json::json!({"id": 1, "physicalRelease": date});
+            assert!(
+                serde_json::from_value::<MovieLike>(value).is_err(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn date_only_decodes_valid_days_and_boundary_parts() -> TestResult {
+        for (name, value, expected) in [
+            ("text", serde_json::json!("2020-01-02"), Some(1_577_923_200)),
+            (
+                "leap text",
+                serde_json::json!("2024-02-29"),
+                Some(1_709_164_800),
+            ),
+            (
+                "leap parts",
+                serde_json::json!({"year": 2024, "month": 2, "day": 29}),
+                Some(1_709_164_800),
+            ),
+            (
+                "maximum year",
+                serde_json::json!({"year": 9999, "month": 12, "day": 31}),
+                Some(253_402_214_400),
+            ),
+            (
+                "outside range",
+                serde_json::json!({"year": 10000, "month": 1, "day": 1}),
+                None,
+            ),
+            (
+                "zero month",
+                serde_json::json!({"year": 2024, "month": 0, "day": 1}),
+                None,
+            ),
+            (
+                "month 13",
+                serde_json::json!({"year": 2024, "month": 13, "day": 1}),
+                None,
+            ),
+            (
+                "zero day",
+                serde_json::json!({"year": 2024, "month": 1, "day": 0}),
+                None,
+            ),
+            (
+                "large month",
+                serde_json::json!({"year": 2024, "month": 4294967295u32, "day": 1}),
+                None,
+            ),
+        ] {
+            let date: DateOnly = serde_json::from_value(value)?;
+            assert_eq!(date.unix(), expected, "{name}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn date_only_rejects_invalid_text() {
+        // Negative: text must be a real day in the exact YYYY-MM-DD shape.
+        for (name, text) in [
+            ("impossible day", "2021-02-29"),
+            ("unpadded day", "2020-1-2"),
+            ("timestamp", "2020-01-02T00:00:00Z"),
+        ] {
+            assert!(
+                serde_json::from_value::<DateOnly>(serde_json::json!(text)).is_err(),
+                "{name}"
+            );
+        }
+    }
 
     #[test]
     fn candidates_carry_the_parent_tags_and_profiles() -> TestResult {
