@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# The deploy check toolchain, read by the CI job deploy (Helm): make deploy-verify runs
+# tools/deploy/unittest_lint.py, which parses the helm-unittest suites with PyYAML.
+pyyaml==6.0.3

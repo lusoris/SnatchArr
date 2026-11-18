@@ -1447,6 +1447,286 @@ func decodeGetForeignSearchPreflightParams(args [1]string, argsEscaped bool, r *
 	return params, nil
 }
 
+// GetForeignTitlesParams is parameters of getForeignTitles operation.
+type GetForeignTitlesParams struct {
+	// Foreign-title rule language code, for example `de` or `fr`.
+	Language string
+	// Season to scope season-specific aliases to; omitted = whole-item aliases only.
+	Season     OptInt `json:",omitempty,omitzero"`
+	InstanceId uuid.UUID
+	// Sonarr series ID or Radarr movie ID.
+	ItemId int
+}
+
+func unpackGetForeignTitlesParams(packed middleware.Parameters) (params GetForeignTitlesParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "language",
+			In:   "query",
+		}
+		params.Language = packed[key].(string)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "season",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Season = v.(OptInt)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "instanceId",
+			In:   "path",
+		}
+		params.InstanceId = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "itemId",
+			In:   "path",
+		}
+		params.ItemId = packed[key].(int)
+	}
+	return params
+}
+
+func decodeGetForeignTitlesParams(args [2]string, argsEscaped bool, r *http.Request) (params GetForeignTitlesParams, _ error) {
+	q := uri.NewQueryDecoder(r.URL.Query())
+	// Decode query: language.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "language",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.Language = c
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if err := (validate.String{
+					MinLength:     2,
+					MinLengthSet:  true,
+					MaxLength:     8,
+					MaxLengthSet:  true,
+					Email:         false,
+					Hostname:      false,
+					Regex:         nil,
+					MinNumeric:    0,
+					MinNumericSet: false,
+					MaxNumeric:    0,
+					MaxNumericSet: false,
+				}).Validate(string(params.Language)); err != nil {
+					return errors.Wrap(err, "string")
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "language",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode query: season.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "season",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotSeasonVal int
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToInt(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotSeasonVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Season.SetTo(paramsDotSeasonVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.Season.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           0,
+							MaxSet:        false,
+							Max:           0,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "season",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode path: instanceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "instanceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.InstanceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode path: itemId.
+	if err := func() error {
+		param := args[1]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[1])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "itemId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToInt(val)
+				if err != nil {
+					return err
+				}
+
+				params.ItemId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+			if err := func() error {
+				if err := (validate.Int{
+					MinSet:        true,
+					Min:           1,
+					MaxSet:        false,
+					Max:           0,
+					MinExclusive:  false,
+					MaxExclusive:  false,
+					MultipleOfSet: false,
+					MultipleOf:    0,
+					Pattern:       nil,
+				}).Validate(int64(params.ItemId)); err != nil {
+					return errors.Wrap(err, "int")
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "itemId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // GetInstanceParams is parameters of getInstance operation.
 type GetInstanceParams struct {
 	InstanceId uuid.UUID

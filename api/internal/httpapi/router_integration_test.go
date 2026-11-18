@@ -603,6 +603,16 @@ func stepsInstances() []routerStep {
 }
 
 func stepsPoliciesAndRuns() []routerStep {
+	steps := stepsPoliciesAndRunsPolicies()
+	steps = append(steps, stepsPoliciesAndRunsPolicyOptions()...)
+	steps = append(steps, stepsPoliciesAndRunsQueuePolicy()...)
+	steps = append(steps, stepsPoliciesAndRunsQueueOperations()...)
+	steps = append(steps, stepsPoliciesAndRunsLifecycle()...)
+	steps = append(steps, stepsPoliciesAndRunsPreviews()...)
+	return append(steps, stepsPoliciesAndRunsEvents()...)
+}
+
+func stepsPoliciesAndRunsPolicies() []routerStep {
 	return []routerStep{
 		{
 			op:     "getPolicy",
@@ -640,6 +650,11 @@ func stepsPoliciesAndRuns() []routerStep {
 				}
 			},
 		},
+	}
+}
+
+func stepsPoliciesAndRunsPolicyOptions() []routerStep {
+	return []routerStep{
 		{
 			op:     "getPolicyFilterOptions",
 			method: http.MethodGet,
@@ -664,6 +679,25 @@ func stepsPoliciesAndRuns() []routerStep {
 				}
 			},
 		},
+		{
+			op:     "getForeignTitles",
+			method: http.MethodGet,
+			path: func(ids *idsState) string {
+				return "/instances/" + ids.instanceID + "/items/7/foreign-titles?language=de"
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["tvdb"] != "disabled" || decoded["attribution"] == "" {
+					t.Fatalf("getForeignTitles = %v; want tvdb disabled and attribution", decoded)
+				}
+			},
+		},
+	}
+}
+
+func stepsPoliciesAndRunsQueuePolicy() []routerStep {
+	return []routerStep{
 		{
 			op:     "getQueuePolicy",
 			method: http.MethodGet,
@@ -707,6 +741,11 @@ func stepsPoliciesAndRuns() []routerStep {
 				}
 			},
 		},
+	}
+}
+
+func stepsPoliciesAndRunsQueueOperations() []routerStep {
+	return []routerStep{
 		{
 			op:     "listQueueItems",
 			method: http.MethodGet,
@@ -728,6 +767,11 @@ func stepsPoliciesAndRuns() []routerStep {
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/queue/sweep" },
 			want:   http.StatusNoContent,
 		},
+	}
+}
+
+func stepsPoliciesAndRunsLifecycle() []routerStep {
+	return []routerStep{
 		{
 			op:     "triggerRun",
 			method: http.MethodPost,
@@ -778,6 +822,11 @@ func stepsPoliciesAndRuns() []routerStep {
 			path:   func(ids *idsState) string { return "/runs/" + ids.runID + "/cancel" },
 			want:   http.StatusNoContent,
 		},
+	}
+}
+
+func stepsPoliciesAndRunsPreviews() []routerStep {
+	return []routerStep{
 		{
 			op:     "previewRun",
 			method: http.MethodPost,
@@ -828,6 +877,11 @@ func stepsPoliciesAndRuns() []routerStep {
 			path:   func(ids *idsState) string { return "/runs/" + ids.runID + "/cancel" },
 			want:   http.StatusNoContent,
 		},
+	}
+}
+
+func stepsPoliciesAndRunsEvents() []routerStep {
+	return []routerStep{
 		{
 			op: "listEvents",
 
@@ -2749,6 +2803,13 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 	ids := initViewerIDsState(t, csrfToken)
 
 	stepsByOp := indexRouterSteps(buildRouterSteps(f))
+	testViewerForbiddenOperations(t, f, viewerClient, ids, stepsByOp)
+	testViewerForbiddenAdminReads(t, f, viewerClient, ids, stepsByOp)
+	testViewerForbiddenLogStream(t, f, viewerClient)
+}
+
+func testViewerForbiddenOperations(t *testing.T, f *routerFixture, viewerClient *http.Client, ids *idsState, stepsByOp map[string]routerStep) {
+	t.Helper()
 	ops := specOperations(t)
 	testedCount := 0
 
@@ -2772,8 +2833,11 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 	if testedCount == 0 {
 		t.Fatal("no operations tested")
 	}
+}
 
-	adminOnlyReads := []string{"listLogs", "getConfigarrStatus", "getPolicyFilterOptions", "getForeignSearchPreflight", "getModule"}
+func testViewerForbiddenAdminReads(t *testing.T, f *routerFixture, viewerClient *http.Client, ids *idsState, stepsByOp map[string]routerStep) {
+	t.Helper()
+	adminOnlyReads := []string{"listLogs", "getConfigarrStatus", "getPolicyFilterOptions", "getForeignSearchPreflight", "getForeignTitles", "getModule"}
 	for _, opID := range adminOnlyReads {
 		step, ok := stepsByOp[opID]
 		if !ok {
@@ -2784,7 +2848,10 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 			executeViewerForbiddenStep(t, f, viewerClient, ids, step)
 		})
 	}
+}
 
+func testViewerForbiddenLogStream(t *testing.T, f *routerFixture, viewerClient *http.Client) {
+	t.Helper()
 	t.Run("streamLogs", func(t *testing.T) {
 		t.Parallel()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+LogStreamPath, nil)
