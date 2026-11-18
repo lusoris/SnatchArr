@@ -5,7 +5,24 @@
 package watchaware
 
 import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/golusoris/goenvoy/mediaserver/jellyfin/v3"
+	"github.com/google/uuid"
+
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/crypto"
+	"github.com/golusoris/golusoris/core/id"
+
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
+	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 func TestBuildItemParams(t *testing.T) {
@@ -89,5 +106,75 @@ func TestExtractTvdbID(t *testing.T) {
 				t.Errorf("extractTvdbID(%v) = %q, want %q", tt.providers, got, tt.want)
 			}
 		})
+	}
+}
+
+type stubSettingsReader struct {
+	ua string
+}
+
+func (r *stubSettingsReader) Get(context.Context) (domain.Settings, error) {
+	return domain.Settings{UserAgent: r.ua}, nil
+}
+
+func TestNewServiceWithSource_UserAgent(t *testing.T) {
+	t.Parallel()
+
+	received := make(chan string, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]jellyfin.UserDto{})
+	}))
+	t.Cleanup(srv.Close)
+
+	enc, err := crypto.NewEncryptor([]byte("01234567890123456789012345678901"))
+	if err != nil {
+		t.Fatalf("crypto.NewEncryptor: %v", err)
+	}
+	sealed, err := enc.Seal([]byte("secret-key"))
+	if err != nil {
+		t.Fatalf("enc.Seal: %v", err)
+	}
+	rows := []sqlcgen.WatchawareSource{{
+		ID:        uuid.New(),
+		Kind:      string(KindJellyfin),
+		Name:      "jf",
+		Url:       srv.URL,
+		ApiKeyEnc: sealed,
+		Enabled:   true,
+	}}
+	clk := clock.NewFake()
+	logger := slog.New(slog.DiscardHandler)
+	info := buildinfo.Info{Version: "2.3.4"}
+
+	staticSvc := newServiceWithSource(nil, enc, clk, id.New(), logger, nil, nil, nil, nil, nil, info, nil)
+	named := staticSvc.buildNamedSources(t.Context(), rows)
+	if len(named) != 1 {
+		t.Fatalf("len(named) = %d, want 1", len(named))
+	}
+	if _, err := named[0].Source.Watches(t.Context()); err != nil {
+		t.Fatalf("Watches(static): %v", err)
+	}
+	if got, want := <-received, useragent.Default(info); got != want {
+		t.Fatalf("static User-Agent = %q, want %q", got, want)
+	}
+
+	reader := &stubSettingsReader{ua: "WatchAwareUA/1.0"}
+	uaSource := useragent.New(reader, info, clk, logger)
+	dynSvc := newServiceWithSource(nil, enc, clk, id.New(), logger, nil, nil, nil, nil, nil, info, uaSource)
+	for _, want := range []string{"WatchAwareUA/1.0", "WatchAwareUA/2.0"} {
+		reader.ua = want
+		uaSource.Invalidate()
+		dynNamed := dynSvc.buildNamedSources(t.Context(), rows)
+		if len(dynNamed) != 1 {
+			t.Fatalf("len(dynNamed) = %d, want 1", len(dynNamed))
+		}
+		if _, err := dynNamed[0].Source.Watches(t.Context()); err != nil {
+			t.Fatalf("Watches(%s): %v", want, err)
+		}
+		if got := <-received; got != want {
+			t.Fatalf("dynamic User-Agent = %q, want %q", got, want)
+		}
 	}
 }

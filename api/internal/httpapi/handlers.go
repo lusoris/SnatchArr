@@ -127,7 +127,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 ) *Handlers {
 	jf := d.Jellyfin
 	if jf == nil {
-		jf, _ = jellyfin.ProvideAuthenticator(config.Options{}, nil)
+		jf, _ = jellyfin.ProvideAuthenticatorWithSource(config.Options{}, build, nil, nil)
 	}
 	var plans priorityPlanReader
 	if d.PriorityPlans != nil {

@@ -8,17 +8,19 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 // Module provides the service and its planner gate.
 var Module = fx.Module("snatcharr.prowlarr",
 	fx.Provide(
 		New,
-		func() prowlarrclient.Client {
-			o := arrclient.DefaultOptions()
-			return prowlarrclient.New(o.Timeout, o.UserAgent)
+		func(info buildinfo.Info, ua *useragent.Source) prowlarrclient.Client {
+			o := arrclient.DefaultOptionsFor(info)
+			return prowlarrclient.NewWithSource(o.Timeout, o.UserAgent, ua)
 		},
 		fx.Annotate(func(s *Service) snatch.Gate { return s }, fx.ResultTags(snatch.GateGroup)),
 	),

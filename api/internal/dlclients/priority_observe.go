@@ -81,7 +81,7 @@ func (g *Goenvoy) qbitPriorityItems(ctx context.Context, c domain.DownloadClient
 
 // nzbgetPriorityItems reads the NZBGet groups as priority items.
 func (g *Goenvoy) nzbgetPriorityItems(ctx context.Context, c domain.DownloadClient, secret string) (PriorityObservation, error) {
-	cl, err := g.nzbgetClient(c, secret)
+	cl, err := g.nzbgetClient(ctx, c, secret)
 	if err != nil {
 		return PriorityObservation{}, err
 	}
@@ -107,7 +107,7 @@ func (g *Goenvoy) nzbgetPriorityItems(ctx context.Context, c domain.DownloadClie
 
 // sabPriorityItems reads the SABnzbd queue slots as priority items.
 func (g *Goenvoy) sabPriorityItems(ctx context.Context, c domain.DownloadClient, secret string) (PriorityObservation, error) {
-	cl, err := g.sabnzbdClient(c, secret)
+	cl, err := g.sabnzbdClient(ctx, c, secret)
 	if err != nil {
 		return PriorityObservation{}, err
 	}

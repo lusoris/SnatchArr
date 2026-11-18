@@ -8,18 +8,18 @@ package jellyfin
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
-
-// DefaultUserAgent is the HTTP User-Agent header used for Jellyfin communication.
-const DefaultUserAgent = "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)"
 
 // Policy holds access and rating restrictions for a Jellyfin user.
 type Policy struct {
@@ -119,14 +119,24 @@ func (disabledAuthenticator) User(context.Context, string) (Member, error) {
 	return Member{}, domain.ErrNotFound
 }
 
-// ProvideAuthenticator provides an Authenticator configured from cfg to the fx graph.
+// ProvideAuthenticatorWithSource builds an Authenticator whose fallback User-Agent carries
+// info and whose per-request User-Agent resolves through source when non-nil.
 // A non-nil logger receives one startup warning when token sign-in is refused
 // because the prod profile points at a plain-http Jellyfin URL.
-func ProvideAuthenticator(cfg config.Options, logger *slog.Logger) (Authenticator, error) {
+func ProvideAuthenticatorWithSource(
+	cfg config.Options,
+	info buildinfo.Info,
+	logger *slog.Logger,
+	source useragent.Provider,
+) (Authenticator, error) {
 	if !cfg.Jellyfin.Enabled {
 		return disabledAuthenticator{}, nil
 	}
-	cl, err := NewClient(cfg.Jellyfin.URL, cfg.Jellyfin.APIKey, cfg.Jellyfin.Timeout, DefaultUserAgent, nil)
+	var hc *http.Client
+	if source != nil {
+		hc = useragent.HTTPClient(cfg.Jellyfin.Timeout, source)
+	}
+	cl, err := NewClient(cfg.Jellyfin.URL, cfg.Jellyfin.APIKey, cfg.Jellyfin.Timeout, useragent.Default(info), hc)
 	if err != nil {
 		return nil, err
 	}
@@ -138,6 +148,19 @@ func ProvideAuthenticator(cfg config.Options, logger *slog.Logger) (Authenticato
 	return cl, nil
 }
 
+func provideFXAuthenticator(
+	cfg config.Options,
+	info buildinfo.Info,
+	logger *slog.Logger,
+	ua *useragent.Source,
+) (Authenticator, error) {
+	var source useragent.Provider
+	if ua != nil {
+		source = ua
+	}
+	return ProvideAuthenticatorWithSource(cfg, info, logger, source)
+}
+
 // ProvideRevalidator provides the Jellyfin session Revalidator to the fx graph.
 func ProvideRevalidator(auth Authenticator, cfg config.Options, clk clock.Clock, logger *slog.Logger) *Revalidator {
 	return NewRevalidator(auth, clk, cfg.Jellyfin.DefaultRole, cfg.Jellyfin.Timeout, logger)
@@ -145,5 +168,5 @@ func ProvideRevalidator(auth Authenticator, cfg config.Options, clk clock.Clock,
 
 // Module provides the Jellyfin Authenticator and Revalidator to the fx graph.
 var Module = fx.Module("snatcharr.jellyfin",
-	fx.Provide(ProvideAuthenticator, ProvideRevalidator),
+	fx.Provide(provideFXAuthenticator, ProvideRevalidator),
 )

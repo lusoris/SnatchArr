@@ -11,6 +11,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
@@ -38,7 +39,7 @@ type liveClient struct {
 // It runs in `make dlclients-live`, which starts the clients and fails when this test skipped.
 func TestLiveDownloadClients(t *testing.T) {
 	t.Parallel()
-	g := dlclients.NewGoenvoy(clock.NewFake())
+	g := dlclients.NewGoenvoyWithSource(clock.NewFake(), buildinfo.Info{Version: "test"}, nil)
 	forEachLiveClient(t, func(t *testing.T, c liveClient) {
 		t.Helper()
 		checkLiveClient(t, g, c)

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/golusoris/goenvoy/arr/v2"
+
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 // BaseFactory builds goenvoy clients with a shared API response policy.
@@ -22,8 +24,10 @@ type BaseFactory struct {
 	Timeout time.Duration
 	// ImportTimeout is the bound for manual-import listing and submission, which scan
 	// the download's files on the *arr side (Lidarr measured 39-48 s).
-	ImportTimeout time.Duration
-	UserAgent     string
+	ImportTimeout    time.Duration
+	UserAgent        string
+	DefaultUserAgent string
+	UserAgentSource  useragent.Provider
 }
 
 // httptest.Server.Close() calls CloseIdleConnections() on http.DefaultTransport,
@@ -50,9 +54,13 @@ func (f BaseFactory) Options() []arr.Option {
 
 // httpClient shares timeout, response, and redirect policies across typed and base clients.
 func (f BaseFactory) httpClient() *http.Client {
+	var transport http.RoundTripper = apiTransport{base: arrTransport}
+	if f.UserAgentSource != nil {
+		transport = useragent.Transport{Base: transport, Source: f.UserAgentSource}
+	}
 	return &http.Client{
 		Timeout:       f.Timeout,
-		Transport:     apiTransport{base: arrTransport},
+		Transport:     transport,
 		CheckRedirect: rejectRedirect,
 	}
 }

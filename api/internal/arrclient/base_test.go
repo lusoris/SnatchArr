@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,10 +18,14 @@ import (
 
 	"github.com/golusoris/goenvoy/arr/v2"
 
+	"github.com/golusoris/golusoris/core/clock"
+
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 func TestBaseFactory_Base(t *testing.T) {
@@ -413,4 +418,46 @@ func TestCloneTransport(t *testing.T) {
 			t.Fatalf("got %v, want nil", got)
 		}
 	})
+}
+
+type uaReader struct{ value string }
+
+func (r *uaReader) Get(context.Context) (domain.Settings, error) {
+	return domain.Settings{UserAgent: r.value}, nil
+}
+
+func TestBaseFactoryUserAgent(t *testing.T) {
+	t.Parallel()
+	info := buildinfo.Info{Version: "9.8.7"}
+	r := &uaReader{value: "initial"}
+	source := useragent.New(r, info, clock.NewFake(), slog.New(slog.DiscardHandler))
+	received := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	f := arrclient.BaseFactory{Timeout: time.Second, UserAgent: "static", UserAgentSource: source}
+	c, err := f.Base(srv.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, value, want string }{
+		{"initial", "initial", "initial"},
+		{"changed", "changed", "changed"},
+		{"empty", "", useragent.Default(info)},
+		{"boundary", strings.Repeat("a", 200), strings.Repeat("a", 200)},
+	} {
+		t.Log(tc.name)
+		r.value = tc.value
+		source.Invalidate()
+		var out map[string]any
+		if err := c.Get(t.Context(), "/", &out); err != nil {
+			t.Fatal(err)
+		}
+		if got := <-received; got != tc.want {
+			t.Errorf("User-Agent = %q, want %q", got, tc.want)
+		}
+	}
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -129,7 +130,7 @@ func TestPriorityItemsMapping(t *testing.T) {
 			fake := &priorityFake{disabled: tc.disabled, fail: tc.fail}
 			server := httptest.NewServer(http.HandlerFunc(fake.serve))
 			defer server.Close()
-			got, err := NewGoenvoy(clock.NewFake()).PriorityItems(t.Context(), domain.DownloadClient{Kind: tc.kind, BaseURL: server.URL}, "")
+			got, err := NewGoenvoyWithSource(clock.NewFake(), buildinfo.Info{Version: "test"}, nil).PriorityItems(t.Context(), domain.DownloadClient{Kind: tc.kind, BaseURL: server.URL}, "")
 			if tc.fail {
 				if err == nil {
 					t.Fatal("expected read failure")
@@ -184,7 +185,7 @@ func TestPriorityItemsDeadline(t *testing.T) {
 				<-r.Context().Done()
 			}))
 			defer srv.Close()
-			observer := NewGoenvoy(clock.NewFake())
+			observer := NewGoenvoyWithSource(clock.NewFake(), buildinfo.Info{Version: "test"}, nil)
 			observer.timeout = 20 * time.Millisecond
 			_, err := observer.PriorityItems(context.Background(), domain.DownloadClient{Kind: kind, BaseURL: srv.URL}, "")
 			if err == nil {
@@ -217,7 +218,7 @@ func TestSABHeadSlot(t *testing.T) {
 		fmt.Fprint(w, `{"queue":{"slots":[{"nzo_id":"a","status":"Downloading","priority":"Normal"},{"nzo_id":"b","status":"Downloading","priority":"Normal"},{"nzo_id":"c","status":"Fetching","priority":"Normal"},{"nzo_id":"d","status":"Paused","priority":"Low"},{"nzo_id":"e","status":"Completed","priority":"Normal"}]}}`)
 	}))
 	defer server.Close()
-	got, err := NewGoenvoy(clock.NewFake()).PriorityItems(t.Context(), domain.DownloadClient{Kind: domain.ClientSABnzbd, BaseURL: server.URL}, "")
+	got, err := NewGoenvoyWithSource(clock.NewFake(), buildinfo.Info{Version: "test"}, nil).PriorityItems(t.Context(), domain.DownloadClient{Kind: domain.ClientSABnzbd, BaseURL: server.URL}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

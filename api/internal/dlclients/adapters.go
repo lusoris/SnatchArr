@@ -24,8 +24,9 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
-	"github.com/lusoris/SnatchArr/api/internal/arrclient"
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 // Snapshotter observes one download client. It never returns an error: an unreachable
@@ -61,16 +62,12 @@ var ErrDelugeNoDaemon = errors.New("deluge: the web UI is not connected to a dae
 type Goenvoy struct {
 	timeout   time.Duration
 	userAgent string
+	source    useragent.Provider
 	clk       clock.Clock
 }
 
 // ObserveTimeout bounds one observation.
 const ObserveTimeout = 10 * time.Second
-
-// NewGoenvoy builds the adapter set.
-func NewGoenvoy(clk clock.Clock) *Goenvoy {
-	return &Goenvoy{timeout: ObserveTimeout, userAgent: arrclient.DefaultOptions().UserAgent, clk: clk}
-}
 
 // Snapshot implements Snapshotter.
 func (g *Goenvoy) Snapshot(ctx context.Context, c domain.DownloadClient, secret string) Snapshot {
@@ -154,7 +151,7 @@ func classifyQbit(state string) dlClass {
 }
 
 func (g *Goenvoy) qbittorrent(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl, err := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.userAgent))
+	cl, err := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.currentUserAgent(ctx)))
 	if err != nil {
 		return observation{}, fmt.Errorf("qbittorrent client: %w", err)
 	}
@@ -184,7 +181,7 @@ func (g *Goenvoy) qbittorrent(ctx context.Context, c domain.DownloadClient, secr
 // qbitClient builds a qBittorrent client with the adapter timeout and user agent, and logs in
 // when the row carries credentials.
 func (g *Goenvoy) qbitClient(ctx context.Context, c domain.DownloadClient, secret string) (*qbit.Client, error) {
-	cl, err := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.userAgent))
+	cl, err := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.currentUserAgent(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("qbittorrent client: %w", err)
 	}
@@ -195,8 +192,8 @@ func (g *Goenvoy) qbitClient(ctx context.Context, c domain.DownloadClient, secre
 }
 
 // sabnzbdClient builds a SABnzbd client with the API key, the adapter timeout and user agent.
-func (g *Goenvoy) sabnzbdClient(c domain.DownloadClient, secret string) (*sabnzbd.Client, error) {
-	cl, err := sabnzbd.New(c.BaseURL, secret, sabnzbd.WithTimeout(g.timeout), sabnzbd.WithUserAgent(g.userAgent))
+func (g *Goenvoy) sabnzbdClient(ctx context.Context, c domain.DownloadClient, secret string) (*sabnzbd.Client, error) {
+	cl, err := sabnzbd.New(c.BaseURL, secret, sabnzbd.WithTimeout(g.timeout), sabnzbd.WithUserAgent(g.currentUserAgent(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("sabnzbd client: %w", err)
 	}
@@ -204,8 +201,8 @@ func (g *Goenvoy) sabnzbdClient(c domain.DownloadClient, secret string) (*sabnzb
 }
 
 // nzbgetClient builds an NZBGet client with the row's credentials, the adapter timeout and user agent.
-func (g *Goenvoy) nzbgetClient(c domain.DownloadClient, secret string) (*nzbget.Client, error) {
-	cl, err := nzbget.New(c.BaseURL, c.Username, secret, nzbget.WithTimeout(g.timeout), nzbget.WithUserAgent(g.userAgent))
+func (g *Goenvoy) nzbgetClient(ctx context.Context, c domain.DownloadClient, secret string) (*nzbget.Client, error) {
+	cl, err := nzbget.New(c.BaseURL, c.Username, secret, nzbget.WithTimeout(g.timeout), nzbget.WithUserAgent(g.currentUserAgent(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("nzbget client: %w", err)
 	}
@@ -335,7 +332,7 @@ func transmissionClient(baseURL, username, secret string, timeout time.Duration,
 }
 
 func (g *Goenvoy) transmission(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl, err := transmissionClient(c.BaseURL, c.Username, secret, g.timeout, g.userAgent)
+	cl, err := transmissionClient(c.BaseURL, c.Username, secret, g.timeout, g.currentUserAgent(ctx))
 	if err != nil {
 		return observation{}, err
 	}
@@ -364,7 +361,7 @@ func (g *Goenvoy) transmission(ctx context.Context, c domain.DownloadClient, sec
 
 // delugeSession logs in to the web UI and checks that it is connected to a daemon.
 func (g *Goenvoy) delugeSession(ctx context.Context, c domain.DownloadClient, secret string) (*deluge.Client, error) {
-	cl, err := deluge.New(c.BaseURL, deluge.WithTimeout(g.timeout), deluge.WithUserAgent(g.userAgent))
+	cl, err := deluge.New(c.BaseURL, deluge.WithTimeout(g.timeout), deluge.WithUserAgent(g.currentUserAgent(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("deluge client: %w", err)
 	}
@@ -490,7 +487,7 @@ func rtorrentHashQueued(v int64) bool {
 }
 
 func (g *Goenvoy) rtorrent(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	opts := []rtorrent.Option{rtorrent.WithTimeout(g.timeout), rtorrent.WithUserAgent(g.userAgent)}
+	opts := []rtorrent.Option{rtorrent.WithTimeout(g.timeout), rtorrent.WithUserAgent(g.currentUserAgent(ctx))}
 	if c.Username != "" {
 		opts = append(opts, rtorrent.WithAuth(c.Username, secret))
 	}
@@ -581,7 +578,7 @@ func classifySAB(slots []sabnzbd.Slot) (active, queued int) {
 
 // sabnzbd observes a SABnzbd instance: version, paused flag, queue counts and download rate.
 func (g *Goenvoy) sabnzbd(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl, err := g.sabnzbdClient(c, secret)
+	cl, err := g.sabnzbdClient(ctx, c, secret)
 	if err != nil {
 		return observation{}, err
 	}
@@ -653,7 +650,7 @@ func classifyNZBGet(status string) dlClass {
 
 // nzbget observes an NZBGet instance: version, paused flag, queue counts and download rate.
 func (g *Goenvoy) nzbget(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl, err := g.nzbgetClient(c, secret)
+	cl, err := g.nzbgetClient(ctx, c, secret)
 	if err != nil {
 		return observation{}, err
 	}
@@ -680,4 +677,21 @@ func (g *Goenvoy) nzbget(ctx context.Context, c domain.DownloadClient, secret st
 		}
 	}
 	return obs, nil
+}
+
+// NewGoenvoyWithSource builds adapters that resolve the identity for each client build.
+func NewGoenvoyWithSource(clk clock.Clock, info buildinfo.Info, ua useragent.Provider) *Goenvoy {
+	return &Goenvoy{
+		timeout:   ObserveTimeout,
+		userAgent: useragent.Default(info),
+		source:    ua,
+		clk:       clk,
+	}
+}
+
+func (g *Goenvoy) currentUserAgent(ctx context.Context) string {
+	if g.source != nil {
+		return g.source.Current(ctx)
+	}
+	return g.userAgent
 }

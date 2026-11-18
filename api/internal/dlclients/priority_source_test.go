@@ -10,6 +10,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 )
 
@@ -26,7 +27,7 @@ func TestNewPriorityReconciler(t *testing.T) {
 			t.Parallel()
 			cfg := config.Default()
 			cfg.DownloadPriority.IntervalSeconds = tc.seconds
-			got, err := NewReconciler(nil, nil, nil, cfg, clock.NewFake(), slog.New(slog.DiscardHandler), nil)
+			got, err := newReconcilerWithSource(nil, nil, nil, cfg, clock.NewFake(), slog.New(slog.DiscardHandler), nil, buildinfo.Info{Version: "test"}, nil)
 			if (err == nil) != tc.valid {
 				t.Fatalf("constructor error = %v", err)
 			}

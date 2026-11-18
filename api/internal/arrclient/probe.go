@@ -25,8 +25,10 @@ import (
 	"github.com/golusoris/goenvoy/mediaserver/stash/v2"
 	"go.uber.org/fx"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 // Result is what a successful probe learns about an instance.
@@ -72,12 +74,27 @@ type Labeler interface {
 // Options tune the probe.
 type Options = BaseFactory
 
-// DefaultOptions returns a 15 s timeout, 120 s import timeout and the product User-Agent.
+const (
+	defaultTimeout       = 15 * time.Second
+	defaultImportTimeout = 120 * time.Second
+)
+
+// DefaultOptions returns a 15 s timeout and 120 s import timeout with an empty User-Agent.
 func DefaultOptions() Options {
 	return Options{
-		Timeout:       15 * time.Second,
-		ImportTimeout: 120 * time.Second,
-		UserAgent:     "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)",
+		Timeout:       defaultTimeout,
+		ImportTimeout: defaultImportTimeout,
+	}
+}
+
+// DefaultOptionsFor returns DefaultOptions with the build's User-Agent and fallback.
+func DefaultOptionsFor(info buildinfo.Info) Options {
+	ua := useragent.Default(info)
+	return Options{
+		Timeout:          defaultTimeout,
+		ImportTimeout:    defaultImportTimeout,
+		UserAgent:        ua,
+		DefaultUserAgent: ua,
 	}
 }
 
@@ -98,7 +115,7 @@ func NewGoenvoyProber(opts Options) *GoenvoyProber {
 		opts.ImportTimeout = opts.Timeout
 	}
 	if opts.UserAgent == "" {
-		opts.UserAgent = DefaultOptions().UserAgent
+		opts.UserAgent = opts.DefaultUserAgent
 	}
 	return &GoenvoyProber{opts: opts}
 }
@@ -328,7 +345,11 @@ func checkWhisparrGeneration(kind domain.AppKind, version string) error {
 // Module provides the goenvoy-backed Prober, Discoverer, IndexerDiscoverer, Labeler and ProfileLanguager.
 var Module = fx.Module("snatcharr.arrclient",
 	fx.Provide(
-		func() *GoenvoyProber { return NewGoenvoyProber(DefaultOptions()) },
+		func(info buildinfo.Info, ua *useragent.Source) *GoenvoyProber {
+			o := DefaultOptionsFor(info)
+			o.UserAgentSource = ua
+			return NewGoenvoyProber(o)
+		},
 		func(p *GoenvoyProber) Prober { return p },
 		func(p *GoenvoyProber) Discoverer { return p },
 		func(p *GoenvoyProber) IndexerDiscoverer { return p },

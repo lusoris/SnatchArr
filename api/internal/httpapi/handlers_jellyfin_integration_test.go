@@ -26,6 +26,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
@@ -1052,9 +1053,9 @@ func testTokenSessionProdHTTP(t *testing.T, defaultCfg config.JellyfinOptions) {
 	prodCfg := config.Default()
 	prodCfg.Profile = config.ProfileProd
 	prodCfg.Jellyfin = config.JellyfinOptions{Enabled: true, URL: jfSrv.URL, APIKey: "svc-key", Timeout: 2 * time.Second, DefaultRole: domain.RoleRequester}
-	realAuth, err := jellyfin.ProvideAuthenticator(prodCfg, nil)
+	realAuth, err := jellyfin.ProvideAuthenticatorWithSource(prodCfg, buildinfo.Info{Version: "test"}, nil, nil)
 	if err != nil {
-		t.Fatalf("ProvideAuthenticator: %v", err)
+		t.Fatalf("ProvideAuthenticatorWithSource: %v", err)
 	}
 	f.h.cfg = prodCfg
 	f.h.jellyfin = realAuth
@@ -1261,9 +1262,9 @@ func testRouterTokenProdHTTP(t *testing.T) {
 	cfg := config.Default()
 	cfg.Profile = config.ProfileProd
 	cfg.Jellyfin = config.JellyfinOptions{Enabled: true, URL: jfSrv.URL, APIKey: "svc-key", Timeout: 2 * time.Second, DefaultRole: domain.RoleRequester}
-	realAuth, err := jellyfin.ProvideAuthenticator(cfg, nil)
+	realAuth, err := jellyfin.ProvideAuthenticatorWithSource(cfg, buildinfo.Info{Version: "test"}, nil, nil)
 	if err != nil {
-		t.Fatalf("ProvideAuthenticator: %v", err)
+		t.Fatalf("ProvideAuthenticatorWithSource: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(`{"access_token":"tok-prod"}`))
 	req.RemoteAddr = ""

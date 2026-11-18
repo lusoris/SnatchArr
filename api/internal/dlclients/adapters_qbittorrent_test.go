@@ -18,6 +18,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -53,7 +54,7 @@ func TestQBittorrentAuthentication(t *testing.T) {
 			t.Parallel()
 			var calls qbittorrentAuthCalls
 			srv := newQBittorrentAuthServer(t, tc, &calls)
-			g := NewGoenvoy(clock.NewFake())
+			g := NewGoenvoyWithSource(clock.NewFake(), buildinfo.Info{Version: "test"}, nil)
 			ctx, cancel := context.WithTimeout(t.Context(), ObserveTimeout)
 			defer cancel()
 			obs, err := g.qbittorrent(ctx, domain.DownloadClient{BaseURL: srv.URL, Username: tc.username}, tc.secret)

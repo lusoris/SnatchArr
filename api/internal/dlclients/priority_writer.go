@@ -84,7 +84,7 @@ func (g *Goenvoy) setNZBGetItemPriority(ctx context.Context, c domain.DownloadCl
 	if err != nil {
 		return err
 	}
-	cl, err := g.nzbgetClient(c, secret)
+	cl, err := g.nzbgetClient(ctx, c, secret)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func (g *Goenvoy) setSABnzbdItemPriority(ctx context.Context, c domain.DownloadC
 	if err := validateSABnzbdID(itemID); err != nil {
 		return err
 	}
-	cl, err := g.sabnzbdClient(c, secret)
+	cl, err := g.sabnzbdClient(ctx, c, secret)
 	if err != nil {
 		return err
 	}
@@ -288,7 +288,7 @@ func (g *Goenvoy) editNZBGetQueue(ctx context.Context, c domain.DownloadClient, 
 	if err != nil {
 		return err
 	}
-	cl, err := g.nzbgetClient(c, secret)
+	cl, err := g.nzbgetClient(ctx, c, secret)
 	if err != nil {
 		return err
 	}
@@ -316,7 +316,7 @@ func (g *Goenvoy) editNZBGetQueue(ctx context.Context, c domain.DownloadClient, 
 // pauseSABnzbdItems pauses the items one request at a time; a failure after the first success
 // returns a *PartialWriteError naming the paused items.
 func (g *Goenvoy) pauseSABnzbdItems(ctx context.Context, c domain.DownloadClient, secret string, ids []string) error {
-	cl, err := g.sabnzbdClient(c, secret)
+	cl, err := g.sabnzbdClient(ctx, c, secret)
 	if err != nil {
 		return err
 	}
@@ -337,7 +337,7 @@ func (g *Goenvoy) pauseSABnzbdItems(ctx context.Context, c domain.DownloadClient
 // resumeSABnzbdItems resumes the items one request at a time; a failure after the first success
 // returns a *PartialWriteError naming the resumed items.
 func (g *Goenvoy) resumeSABnzbdItems(ctx context.Context, c domain.DownloadClient, secret string, ids []string) error {
-	cl, err := g.sabnzbdClient(c, secret)
+	cl, err := g.sabnzbdClient(ctx, c, secret)
 	if err != nil {
 		return err
 	}

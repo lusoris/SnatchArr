@@ -17,6 +17,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 // Bounds (HISS-02).
@@ -73,6 +74,11 @@ type HTTP struct {
 // New builds the client.
 func New(timeout time.Duration, userAgent string) *HTTP {
 	return &HTTP{factory: arrclient.BaseFactory{Timeout: timeout, UserAgent: userAgent}}
+}
+
+// NewWithSource builds a client with a runtime User-Agent source and static fallback.
+func NewWithSource(timeout time.Duration, userAgent string, ua useragent.Provider) *HTTP {
+	return &HTTP{factory: arrclient.BaseFactory{Timeout: timeout, UserAgent: userAgent, UserAgentSource: ua}}
 }
 
 func (h *HTTP) client(baseURL, apiKey string) (*seerr.Client, error) {

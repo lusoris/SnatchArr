@@ -15,11 +15,13 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/leader/gate"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 type storedPrioritySource struct {
@@ -132,15 +134,23 @@ func (s storedPrioritySource) DeleteNotIn(ctx context.Context, clientID uuid.UUI
 	return nil
 }
 
-// NewReconciler wires a timer without starting it. Only leader/gate starts the loop.
-func NewReconciler(clients *Service, inst *instances.Service, settings *settings.Service, cfg config.Options,
-	clk clock.Clock, logger *slog.Logger, m *metrics.Metrics,
+func newReconcilerWithSource(clients *Service, inst *instances.Service, settings *settings.Service, cfg config.Options,
+	clk clock.Clock, logger *slog.Logger, m *metrics.Metrics, info buildinfo.Info, ua *useragent.Source,
+) (*Reconciler, error) {
+	var provider useragent.Provider
+	if ua != nil {
+		provider = ua
+	}
+	return newReconciler(clients, inst, settings, cfg, clk, logger, m, NewGoenvoyWithSource(clk, info, provider))
+}
+
+func newReconciler(clients *Service, inst *instances.Service, settings *settings.Service, cfg config.Options,
+	clk clock.Clock, logger *slog.Logger, m *metrics.Metrics, envoy *Goenvoy,
 ) (*Reconciler, error) {
 	if err := cfg.DownloadPriority.Validate(); err != nil {
 		return nil, err
 	}
 	source := storedPrioritySource{clients: clients, instances: inst, settings: settings}
-	envoy := NewGoenvoy(clk)
 	r := newPriorityReconciler(source, envoy, envoy, clk, logger)
 	interval := time.Duration(cfg.DownloadPriority.IntervalSeconds) * time.Second
 	r.Periodic = gate.NewPeriodic("download_priority_observe", interval, clk, m, r.Tick)

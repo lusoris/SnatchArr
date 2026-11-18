@@ -46,9 +46,9 @@ func NewTicker(svc *Service, clk clock.Clock, m *metrics.Metrics) *Ticker {
 // Module provides the Service, its Ticker, and registers the ticker in the leader_loops fx group.
 var Module = fx.Module("snatcharr.watchaware",
 	fx.Provide(
-		NewGoenvoySeriesReader,
-		NewGoenvoySeasonWriter,
-		NewService,
+		newSeriesReaderWithSource,
+		newSeasonWriterWithSource,
+		newServiceWithSource,
 		NewTicker,
 	),
 	fx.Provide(gate.Provide[*Ticker]()),
@@ -94,7 +94,13 @@ func (s *Service) createWatchSource(r sqlcgen.WatchawareSource, apiKey string, o
 }
 
 func (s *Service) buildNamedSources(ctx context.Context, rows []sqlcgen.WatchawareSource) []Named {
-	opts := arrclient.DefaultOptions()
+	opts := arrclient.DefaultOptionsFor(s.info)
+	if s.source != nil {
+		opts.UserAgent = s.source.Current(ctx)
+	}
+	if opts.UserAgent == "" {
+		opts.UserAgent = opts.DefaultUserAgent
+	}
 	var namedSources []Named
 	for _, r := range rows {
 		keyBytes, decErr := s.enc.Open(r.ApiKeyEnc)

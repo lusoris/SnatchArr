@@ -24,6 +24,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -179,7 +180,7 @@ func TestPriorityReconcilerReadOnly(t *testing.T) {
 				inputs := priorityTestInputs(kind, mode, goodServer.URL, badServer.URL)
 				clk := clock.NewFake()
 				var logs bytes.Buffer
-				envoy := NewGoenvoy(clk)
+				envoy := NewGoenvoyWithSource(clk, buildinfo.Info{Version: "test"}, nil)
 				r := newPriorityReconciler(&prioritySourceFake{inputs: inputs}, envoy, envoy, clk, slog.New(slog.NewJSONHandler(&logs, nil)))
 				if err := r.Tick(t.Context()); err != nil {
 					t.Fatal(err)
@@ -295,7 +296,7 @@ func TestPriorityReconcilerRetainsLatest(t *testing.T) {
 	inputs := priorityTestInputs(domain.ClientSABnzbd, "observe", srv.URL, srv.URL)
 	clk := clock.NewFake()
 	source := &prioritySourceFake{inputs: inputs}
-	envoy := NewGoenvoy(clk)
+	envoy := NewGoenvoyWithSource(clk, buildinfo.Info{Version: "test"}, nil)
 	r := newPriorityReconciler(source, envoy, envoy, clk, slog.New(slog.DiscardHandler))
 	if err := r.Tick(t.Context()); err != nil {
 		t.Fatal(err)
