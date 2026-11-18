@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"testing"
@@ -26,7 +27,10 @@ const (
 	// sourceBranch is the goenvoy branch the source pin follows.
 	sourceBranch = "main"
 	// readers is the number of custom managers that read the manifest: the one for the source pin.
-	readers = 1
+	readers           = 1
+	cnpgDeploymentDoc = "docs/deployment.md"
+	cnpgImage         = "ghcr.io/cloudnative-pg/postgresql"
+	cnpgUpgradeScript = "tools/e2e/cnpg_pg_upgrade.sh"
 )
 
 // renovateConfig is the part of renovate.json that decides whether Renovate keeps the source pin of
@@ -48,14 +52,20 @@ type customManager struct {
 	ManagerFilePatterns  []string `json:"managerFilePatterns"`
 	MatchStrings         []string `json:"matchStrings"`
 	CurrentValueTemplate string   `json:"currentValueTemplate"`
+	DepNameTemplate      string   `json:"depNameTemplate"`
 	DatasourceTemplate   string   `json:"datasourceTemplate"`
 	VersioningTemplate   string   `json:"versioningTemplate"`
 }
 
 //nolint:tagliatelle // renovate.json is camelCase
 type packageRule struct {
-	MatchManagers []string `json:"matchManagers"`
-	Automerge     *bool    `json:"automerge"`
+	MatchManagers     []string `json:"matchManagers"`
+	MatchFileNames    []string `json:"matchFileNames"`
+	MatchDepNames     []string `json:"matchDepNames"`
+	MatchCurrentValue string   `json:"matchCurrentValue"`
+	AllowedVersions   string   `json:"allowedVersions"`
+	Automerge         *bool    `json:"automerge"`
+	PinDigests        *bool    `json:"pinDigests"`
 }
 
 // reading is what Renovate takes from the manifest source block, and the datasource it asks about it.
@@ -205,6 +215,251 @@ func committed(t *testing.T) (config []byte, manifest string, source manifestSou
 		t.Fatalf("unmarshal specs.yaml: %v", err)
 	}
 	return config, string(text), local.Source
+}
+
+// cnpgTags returns the current-major operand tags that the chart-upgrade documentation and test
+// name. The patterns deliberately include the surrounding field, so a nearby image cannot satisfy
+// the check.
+func cnpgTags(deployment, upgrade string) (string, string, []string) {
+	document := regexp.MustCompile(`(?m)^  --set postgres\.cnpg\.imageName=` + regexp.QuoteMeta(cnpgImage) + `:([^\s]+)$`)
+	newImage := regexp.MustCompile(`(?m)^NEW_IMAGE=` + regexp.QuoteMeta(cnpgImage) + `:([^@\s]+)@sha256:[a-f0-9]{64}$`)
+	documentMatch := document.FindStringSubmatch(deployment)
+	upgradeMatch := newImage.FindStringSubmatch(upgrade)
+	if len(documentMatch) != 2 || len(upgradeMatch) != 2 {
+		return "", "", []string{"the deployment example or NEW_IMAGE is missing"}
+	}
+	return documentMatch[1], upgradeMatch[1], nil
+}
+
+func matchingCNPGTags(t *testing.T, deployment, upgrade []byte) (string, string) {
+	t.Helper()
+	documentTag, upgradeTag, problems := cnpgTags(string(deployment), string(upgrade))
+	if len(problems) > 0 {
+		t.Fatalf("read committed CloudNativePG tags: %s", strings.Join(problems, "; "))
+	}
+	if documentTag != upgradeTag {
+		t.Fatalf("committed CloudNativePG tags differ: %s has %s; %s has %s",
+			cnpgDeploymentDoc, documentTag, cnpgUpgradeScript, upgradeTag)
+	}
+	return documentTag, upgradeTag
+}
+
+// cnpgManagerProblems verifies that Renovate reads the documented image with the Docker
+// datasource and versioning, so it is updated together with the upgrade operand.
+func cnpgManagerProblems(config renovateConfig, deployment string) []string {
+	var managers []customManager
+	for _, manager := range config.CustomManagers {
+		if slices.Contains(manager.ManagerFilePatterns, cnpgDeploymentDoc) {
+			managers = append(managers, manager)
+		}
+	}
+	if len(managers) != 1 {
+		return []string{fmt.Sprintf("%d custom manager(s) read %s; want 1", len(managers), cnpgDeploymentDoc)}
+	}
+	manager := managers[0]
+	for _, pattern := range manager.MatchStrings {
+		rx, err := regexp.Compile(pattern)
+		if err != nil {
+			return []string{fmt.Sprintf("the documentation manager pattern does not compile: %v", err)}
+		}
+		match := rx.FindStringSubmatch(deployment)
+		depName := rx.SubexpIndex("depName")
+		currentValue := rx.SubexpIndex("currentValue")
+		if len(match) > 0 && depName >= 0 && currentValue >= 0 && match[depName] == cnpgImage {
+			if manager.DatasourceTemplate == "docker" && manager.VersioningTemplate == "docker" {
+				return nil
+			}
+			return []string{"the documentation manager does not use Docker datasource and versioning"}
+		}
+	}
+	return []string{"the documentation manager does not capture its CloudNativePG image"}
+}
+
+// cnpgRuleProblems verifies that the documented current-major image has the same major guard as
+// the NEW_IMAGE operand, preventing a docs-only major update.
+func cnpgRuleProblems(config renovateConfig) []string {
+	for _, rule := range config.PackageRules {
+		if slices.Contains(rule.MatchFileNames, cnpgDeploymentDoc) &&
+			slices.Contains(rule.MatchDepNames, cnpgImage) &&
+			rule.MatchCurrentValue == `/^18\./` && rule.AllowedVersions == `/^18\./` {
+			return nil
+		}
+	}
+	return []string{"no package rule keeps the documented CloudNativePG image on major 18"}
+}
+
+// cnpgDeploymentProblems reports a stale documented tag or configuration that leaves it outside
+// the same Renovate update and major guard as the upgrade test's current-major image.
+func cnpgDeploymentProblems(config renovateConfig, deployment, upgrade string) []string {
+	documentTag, upgradeTag, problems := cnpgTags(deployment, upgrade)
+	if len(problems) > 0 {
+		return problems
+	}
+	if documentTag != upgradeTag {
+		return []string{fmt.Sprintf("%s pins %s; %s NEW_IMAGE pins %s", cnpgDeploymentDoc,
+			documentTag, cnpgUpgradeScript, upgradeTag)}
+	}
+	problems = append(problems, cnpgManagerProblems(config, deployment)...)
+	return append(problems, cnpgRuleProblems(config)...)
+}
+
+// digestPinProblems reports Docker custom managers that cannot update a digest while global
+// digest pinning applies to their files.
+func digestPinProblems(config renovateConfig) []string {
+	var problems []string
+	for _, manager := range config.CustomManagers {
+		capturesDigest := slices.ContainsFunc(manager.MatchStrings, func(pattern string) bool {
+			return strings.Contains(pattern, `(?<currentDigest>`)
+		})
+		if manager.DatasourceTemplate != "docker" || capturesDigest {
+			continue
+		}
+		depNames := managerDependencyNames(manager)
+		for _, path := range manager.ManagerFilePatterns {
+			if !digestPinningOff(config.PackageRules, path, depNames) {
+				problems = append(problems,
+					path+" has a Docker custom manager without currentDigest and no pinDigests: false rule")
+			}
+		}
+	}
+	return problems
+}
+
+// managerDependencyNames returns the dependency names a custom manager assigns to its matches.
+func managerDependencyNames(manager customManager) []string {
+	if manager.DepNameTemplate != "" {
+		return []string{manager.DepNameTemplate}
+	}
+	var names []string
+	for _, pattern := range manager.MatchStrings {
+		if name := literalDependencyName(pattern); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// literalDependencyName returns a literal depName capture from a custom-manager match string.
+func literalDependencyName(pattern string) string {
+	const prefix = `(?<depName>`
+	start := strings.Index(pattern, prefix)
+	if start < 0 {
+		return ""
+	}
+	remainder := pattern[start+len(prefix):]
+	end := strings.IndexByte(remainder, ')')
+	if end < 0 {
+		return ""
+	}
+	expression, err := syntax.Parse(remainder[:end], syntax.Perl)
+	if err != nil || expression.Op != syntax.OpLiteral {
+		return ""
+	}
+	return string(expression.Rune)
+}
+
+// digestPinningOff reports whether the last matching explicit pinDigests value is false.
+func digestPinningOff(rules []packageRule, path string, depNames []string) bool {
+	var pinDigests *bool
+	for index := range rules {
+		rule := &rules[index]
+		if digestRuleMatches(*rule, path, depNames) && rule.PinDigests != nil {
+			pinDigests = rule.PinDigests
+		}
+	}
+	return pinDigests != nil && !*pinDigests
+}
+
+// digestRuleMatches reports whether a package rule applies to the manager path and dependency.
+func digestRuleMatches(rule packageRule, path string, depNames []string) bool {
+	fileMatches := len(rule.MatchFileNames) == 0 || slices.Contains(rule.MatchFileNames, path)
+	dependencyMatches := len(rule.MatchDepNames) == 0 || slices.ContainsFunc(depNames, func(name string) bool {
+		return slices.Contains(rule.MatchDepNames, name)
+	})
+	return fileMatches && dependencyMatches
+}
+
+type digestPinCase struct {
+	name   string
+	change func(*renovateConfig)
+	path   string
+	want   int
+}
+
+func removeDeploymentDigestRule(config *renovateConfig) {
+	config.PackageRules = slices.DeleteFunc(config.PackageRules, func(rule packageRule) bool {
+		return slices.Contains(rule.MatchFileNames, cnpgDeploymentDoc) && rule.PinDigests != nil
+	})
+}
+
+func enableDeploymentDigestPinning(config *renovateConfig) {
+	for index := range config.PackageRules {
+		rule := &config.PackageRules[index]
+		if slices.Contains(rule.MatchFileNames, cnpgDeploymentDoc) && rule.PinDigests != nil {
+			enabled := true
+			rule.PinDigests = &enabled
+		}
+	}
+}
+
+// appendDeploymentDigestPinning appends a later matching rule that restores digest pinning.
+func appendDeploymentDigestPinning(config *renovateConfig) {
+	enabled := true
+	config.PackageRules = append(config.PackageRules, packageRule{
+		MatchFileNames: []string{cnpgDeploymentDoc},
+		MatchDepNames:  []string{cnpgImage},
+		PinDigests:     &enabled,
+	})
+}
+
+// redirectDeploymentDigestRule makes the pinDigests rule target a different dependency.
+func redirectDeploymentDigestRule(config *renovateConfig) {
+	for index := range config.PackageRules {
+		rule := &config.PackageRules[index]
+		if slices.Contains(rule.MatchFileNames, cnpgDeploymentDoc) && rule.PinDigests != nil {
+			rule.MatchDepNames = []string{"example.invalid/other-image"}
+		}
+	}
+}
+
+func addDigestCapturingManager(config *renovateConfig) {
+	config.CustomManagers = append(config.CustomManagers, customManager{
+		ManagerFilePatterns: []string{"digest-fixture"},
+		MatchStrings:        []string{`(?<currentDigest>sha256:[a-f0-9]{64})`},
+		DatasourceTemplate:  "docker",
+	})
+}
+
+func addNonDockerManager(config *renovateConfig) {
+	config.CustomManagers = append(config.CustomManagers, customManager{
+		ManagerFilePatterns: []string{"non-docker-fixture"},
+		DatasourceTemplate:  "github-releases",
+	})
+}
+
+func digestPinCases() []digestPinCase {
+	return []digestPinCase{
+		{name: "the committed renovate.json", path: ""},
+		{name: "the pinDigests rule is removed", change: removeDeploymentDigestRule, path: cnpgDeploymentDoc, want: 1},
+		{name: "the pinDigests rule enables pinning", change: enableDeploymentDigestPinning, path: cnpgDeploymentDoc, want: 1},
+		{name: "a later rule enables pinning", change: appendDeploymentDigestPinning, path: cnpgDeploymentDoc, want: 1},
+		{name: "the pinDigests rule targets another dependency", change: redirectDeploymentDigestRule, path: cnpgDeploymentDoc, want: 1},
+		{name: "a Docker manager captures currentDigest", change: addDigestCapturingManager, path: "digest-fixture"},
+		{name: "a non-Docker manager does not capture currentDigest", change: addNonDockerManager, path: "non-docker-fixture"},
+	}
+}
+
+func countDigestPinProblems(problems []string, path string) int {
+	if path == "" {
+		return len(problems)
+	}
+	count := 0
+	for _, problem := range problems {
+		if strings.Contains(problem, path) {
+			count++
+		}
+	}
+	return count
 }
 
 // planted returns text with its one occurrence of old replaced.
@@ -379,6 +634,86 @@ func TestRenovateKeepsEveryPinCurrent(t *testing.T) {
 				if !strings.Contains(got[i], want) {
 					t.Errorf("problem %d = %q; want it to contain %q", i, got[i], want)
 				}
+			}
+		})
+	}
+}
+
+// TestDeploymentCNPGImageStaysWithUpgradeOperand checks that the deploy example follows the
+// current-major operand and that Renovate will update both under the same major constraint.
+func TestDeploymentCNPGImageStaysWithUpgradeOperand(t *testing.T) {
+	t.Parallel()
+	raw, _, _ := committed(t)
+	deployment, err := os.ReadFile("../../" + cnpgDeploymentDoc)
+	if err != nil {
+		t.Fatalf("read %s: %v", cnpgDeploymentDoc, err)
+	}
+	upgrade, err := os.ReadFile("../e2e/cnpg_pg_upgrade.sh")
+	if err != nil {
+		t.Fatalf("read %s: %v", cnpgUpgradeScript, err)
+	}
+	documentTag, upgradeTag := matchingCNPGTags(t, deployment, upgrade)
+	const staleTag = "0.0-stale-system-trixie"
+	cases := []struct {
+		name       string
+		deployment string
+		change     func(*renovateConfig)
+		want       string
+	}{
+		{name: "the committed files", deployment: string(deployment)},
+		{
+			name:       "a stale deployment image",
+			deployment: planted(t, string(deployment), documentTag, staleTag),
+			want: fmt.Sprintf("%s pins %s; %s NEW_IMAGE pins %s",
+				cnpgDeploymentDoc, staleTag, cnpgUpgradeScript, upgradeTag),
+		},
+		{
+			name:       "no manager reads the deployment example",
+			deployment: string(deployment),
+			change: func(config *renovateConfig) {
+				for index := range config.CustomManagers {
+					config.CustomManagers[index].ManagerFilePatterns = slices.DeleteFunc(
+						config.CustomManagers[index].ManagerFilePatterns,
+						func(path string) bool { return path == cnpgDeploymentDoc },
+					)
+				}
+			},
+			want: "0 custom manager(s) read docs/deployment.md; want 1",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			config := decoded(t, raw)
+			if tc.change != nil {
+				tc.change(config)
+			}
+			problems := cnpgDeploymentProblems(*config, tc.deployment, string(upgrade))
+			if tc.want == "" && len(problems) > 0 {
+				t.Fatalf("cnpgDeploymentProblems() = %q; want no problems", problems)
+			}
+			if tc.want != "" && (len(problems) != 1 || !strings.Contains(problems[0], tc.want)) {
+				t.Fatalf("cnpgDeploymentProblems() = %q; want %q", problems, tc.want)
+			}
+		})
+	}
+}
+
+// TestDockerManagersWithoutDigestTurnPinningOff checks that version-only Docker managers opt out
+// of global digest pinning, while managers that capture digests and other datasources need no rule.
+func TestDockerManagersWithoutDigestTurnPinningOff(t *testing.T) {
+	t.Parallel()
+	raw, _, _ := committed(t)
+	for _, tc := range digestPinCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			config := decoded(t, raw)
+			if tc.change != nil {
+				tc.change(config)
+			}
+			got := digestPinProblems(*config)
+			if count := countDigestPinProblems(got, tc.path); count != tc.want {
+				t.Fatalf("digestPinProblems() = %q; want %d problem(s) for %q, got %d", got, tc.want, tc.path, count)
 			}
 		})
 	}
