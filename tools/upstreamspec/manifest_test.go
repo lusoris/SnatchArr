@@ -189,6 +189,22 @@ func TestReadManifest(t *testing.T) {
 			want:     "field unknown_field not found",
 		},
 		{
+			name:     "a module field in goenvoy manifest",
+			upstream: defaultUpstreamSpec(nil) + "    module: arr/sonarr\n",
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+		},
+		{
+			name:     "an empty module field in goenvoy manifest",
+			upstream: defaultUpstreamSpec(nil) + "    module: \"\"\n",
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+		},
+		{
+			name:     "a misspelled module field in goenvoy manifest",
+			upstream: defaultUpstreamSpec(nil) + "    modules: arr/sonarr\n",
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "field modules not found",
+		},
+		{
 			name:     "old-shape local file with repository and commit (f)",
 			upstream: defaultUpstreamSpec(nil),
 			local: func(sha string) string {

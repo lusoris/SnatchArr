@@ -22,8 +22,8 @@ set -euo pipefail
 
 # Operand images of the same OS distribution, by version and digest; Renovate moves them and
 # holds the old one on its major (renovate.json).
-OLD_IMAGE=ghcr.io/cloudnative-pg/postgresql:17.10-system-trixie@sha256:74f29d3343f8db89135b33b0b4c55641c415b96d08605034a6d0c2782f929146
-NEW_IMAGE=ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie@sha256:5efb66993894055f0aa50bd94337c6c4ff2e2129f4d433c527151aebbf283fb0
+OLD_IMAGE=ghcr.io/cloudnative-pg/postgresql:17.12-system-trixie@sha256:63a3c8ba02199ccd2fae4b75df5d197366905d41d792354a6eec3bec27eb05ce
+NEW_IMAGE=ghcr.io/cloudnative-pg/postgresql:18.7-system-trixie@sha256:13f5dc1b42c5d96233724be976740df031136ca013f98a56a2877a62b362b453
 old_major=17
 new_major=18
 
