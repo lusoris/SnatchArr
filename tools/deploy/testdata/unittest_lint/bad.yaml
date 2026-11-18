@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: unsafe notContains assertions
+tests:
+  - it: mapping content lacks any
+    asserts:
+      - notContains:
+          path: spec.containers[0].env
+          content:
+            name: EXAMPLE
+  - it: mapping content has any false
+    asserts:
+      - notContains:
+          path: spec.containers[0].env
+          content:
+            name: EXAMPLE
+          any: false
+  - it: mapping content has a string instead of boolean true
+    asserts:
+      - notContains:
+          path: spec.containers[0].env
+          content:
+            name: EXAMPLE
+          any: "true"
+  - it: empty mapping content also requires any true
+    asserts:
+      - notContains:
+          path: spec.containers[0].env
+          content: {}
