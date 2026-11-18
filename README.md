@@ -48,7 +48,7 @@ SnatchArr asks Sonarr, Radarr, Lidarr, Whisparr (v2 and v3) and Readarr ([legacy
 | Huntarr / newtarr | SnatchArr |
 | :--- | :--- |
 | One setting set per app, shared by all instances | A snatch policy **per instance** |
-| Hourly cap checked once per cycle | Stamina debited **per dispatch** in a rolling 60-minute window, shared across workers |
+| Hourly cap checked once per cycle | Stamina debited **for granted targets before dispatch** in a rolling 60-minute window, shared across workers |
 | Processed items never expire | Afterglow with an exponential-backoff TTL per item, separate for missing and upgrades |
 | Looks at the *arr queue size only | Watches qBittorrent, Transmission, Deluge, rTorrent, SABnzbd and NZBGet for backpressure |
 | Python, single process, JSON files | Go control plane, Rust worker, Postgres, Helm, OpenAPI 3.1 |
@@ -66,7 +66,7 @@ Deploy on Kubernetes with the signed OCI Helm chart:
 helm install snatcharr oci://ghcr.io/lusoris/charts/snatcharr --namespace snatcharr --create-namespace
 ```
 
-Needs the CloudNativePG operator (or an external Postgres). Details, ArgoCD and a kind recipe: [Deployment](https://lusoris.github.io/SnatchArr/deployment/).
+The default install needs the CloudNativePG operator. For an external Postgres instead, set `postgres.cnpg.enabled=false` and point `postgres.external.dsnSecretRef` at a Secret that holds the DSN. Details, ArgoCD and a kind recipe: [Deployment](https://lusoris.github.io/SnatchArr/deployment/).
 
 For a single Docker host, use the homelab Docker Compose bundle (`deploy/homelab/`): [Install with Docker Compose](https://lusoris.github.io/SnatchArr/install-compose/).
 
@@ -139,7 +139,7 @@ Contributions follow the [Contributing Guide](CONTRIBUTING.md) and the canonical
 
 Pre-alpha, released: versions and their notes are on the [releases page](https://github.com/lusoris/SnatchArr/releases). Open version milestones (`0.9` through `0.15` and the `Metadata:*` tracks) are tracked on the [Roadmap](https://lusoris.github.io/SnatchArr/roadmap/) (`docs/roadmap.md`) and [GitHub Milestones](https://github.com/lusoris/SnatchArr/milestones).
 
-Releases are cut by Release Please (`.github/workflows/release-please.yml`) and gated by `.github/workflows/release.yml` on a live cluster MCP dogfood status (`snatcharr/dogfood=success`, `.github/workflows/release-dogfood-gate.yml`) and end-to-end `amd64`/`arm64` image smoke checks. Each release publishes `ghcr.io/lusoris/snatcharr-api`, `ghcr.io/lusoris/snatcharr-worker` and the chart `oci://ghcr.io/lusoris/charts/snatcharr` (semver tags only, no `latest`), all cosign-signed with SLSA Build Level 3 provenance attestations (`.github/workflows/release-build.yml`); both images come with an SPDX SBOM, and the release page stays a draft until `verify` confirms every signature, checksum (`SHA256SUMS`), and provenance bundle (`provenance.sigstore.json`).
+Releases are cut by Release Please (`.github/workflows/release-please.yml`) and gated by `.github/workflows/release.yml` on a live cluster MCP dogfood status (`snatcharr/dogfood=success`, `.github/workflows/release-dogfood-gate.yml`) and end-to-end `amd64`/`arm64` image smoke checks. Each release publishes `ghcr.io/lusoris/snatcharr-api`, `ghcr.io/lusoris/snatcharr-worker` and the chart `oci://ghcr.io/lusoris/charts/snatcharr` (semver tags only, no `latest`), all cosign-signed with SLSA build provenance attestations, built in `.github/workflows/release-build.yml` at SLSA Build Level 3 for every release after v0.2.1; both images come with an SPDX SBOM, and the release page stays a draft until `verify` confirms every signature, checksum (`SHA256SUMS`), and provenance bundle (`provenance.sigstore.json`).
 
 ## ⚖️ Upstream and licence
 
