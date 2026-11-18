@@ -105,11 +105,8 @@ api-openapi-breaking: ## OpenAPI breaking change check vs origin/main (HISS-14 a
 	if ! git rev-parse --verify -q origin/main >/dev/null; then
 	  echo "api-openapi-breaking: no origin/main to check breaking changes against; run git fetch origin main" >&2; exit 1
 	fi
-	base=$$(mktemp)
-	trap 'rm -f "$$base"' EXIT
-	git show origin/main:api/openapi/openapi.yaml >"$$base"
 	sh tools/oasdiff/breaking_test.sh
-	sh tools/oasdiff/breaking.sh "$$base" api/openapi/openapi.yaml "$$(git log -1 --format=%s)"
+	sh tools/oasdiff/local_check.sh origin/main api/openapi/openapi.yaml
 
 settings-parity: ## Generate docs/settings-parity.tsv from config registry
 	go run ./api/cmd/settingsparity
