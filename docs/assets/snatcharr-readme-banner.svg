@@ -1,0 +1,43 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" width="1200" height="120" role="img" aria-label="SnatchArr — rate-capped missing and cutoff snatching across *arr">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="oklch(0.14 0.035 285)"/>
+      <stop offset="55%" stop-color="oklch(0.20 0.045 285)"/>
+      <stop offset="100%" stop-color="oklch(0.14 0.035 285)"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="oklch(0.76 0.20 290)"/>
+      <stop offset="50%" stop-color="oklch(0.38 0.22 285)"/>
+      <stop offset="100%" stop-color="oklch(0.75 0.16 80)"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="oklch(0.38 0.22 285)" stop-opacity="0.25"/>
+      <stop offset="50%" stop-color="oklch(0.76 0.20 290)" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="oklch(0.75 0.16 80)" stop-opacity="0.20"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="120" rx="12" fill="url(#bg)" stroke="oklch(0.28 0.04 285)" stroke-width="1"/>
+
+  <!-- rate-capped pulses: search batches dispatched across indexers -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M700 78 C 780 48, 840 96, 920 70 S 1040 40, 1100 68 S 1150 92, 1180 60"
+          stroke="url(#wave)" stroke-width="14"/>
+    <path d="M700 78 C 780 48, 840 96, 920 70 S 1040 40, 1100 68 S 1150 92, 1180 60"
+          stroke="url(#accent)" stroke-width="2.5" opacity="0.95"/>
+    <path d="M700 84 C 780 58, 840 102, 920 78 S 1040 50, 1100 76 S 1150 98, 1180 68"
+          stroke="oklch(0.75 0.16 80)" stroke-width="1.6" stroke-dasharray="7 9" opacity="0.6"/>
+  </g>
+
+  <text x="44" y="74" font-family="ui-sans-serif,Segoe UI,Helvetica,Arial,sans-serif"
+        font-size="64" font-weight="700" fill="oklch(0.96 0.015 285)" letter-spacing="-1">Snatch<tspan fill="url(#accent)">Arr</tspan></text>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="15" fill="oklch(0.72 0.04 285)">
+    <text x="410" y="52">Sonarr · Radarr · Lidarr · Whisparr · Readarr</text>
+    <text x="410" y="76">Missing items &amp; cutoff upgrades · Rate-capped snatching</text>
+  </g>
+</svg>
