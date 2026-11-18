@@ -17,6 +17,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/testkit/refuse"
 )
 
 func observe(t *testing.T, kind domain.DownloadClientKind, baseURL, username, secret string) dlclients.Snapshot {
@@ -272,11 +273,11 @@ func TestNZBGetSnapshot(t *testing.T) {
 	}
 }
 
+// TestUnreachableClientIsASnapshotNotAnError keeps the refused port reserved while
+// checking that every download client returns an unreachable snapshot.
 func TestUnreachableClientIsASnapshotNotAnError(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.NotFoundHandler())
-	url := srv.URL
-	srv.Close()
+	url := refuse.Listener(t)
 	for _, kind := range domain.AllDownloadClientKinds {
 		s := observe(t, kind, url, "u", "p")
 		if s.Reachable || s.Error == "" || s.Kind != kind {
@@ -290,9 +291,7 @@ func TestUnreachableClientIsASnapshotNotAnError(t *testing.T) {
 // from a row written past it; it must still end as a snapshot that names the cause.
 func TestSnapshot_AddressTheClientRefuses(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.NotFoundHandler())
-	closed := srv.URL
-	srv.Close()
+	closed := refuse.Listener(t)
 	cases := []struct {
 		name        string
 		baseURL     string
