@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"testing"
@@ -51,6 +52,7 @@ type customManager struct {
 	ManagerFilePatterns  []string `json:"managerFilePatterns"`
 	MatchStrings         []string `json:"matchStrings"`
 	CurrentValueTemplate string   `json:"currentValueTemplate"`
+	DepNameTemplate      string   `json:"depNameTemplate"`
 	DatasourceTemplate   string   `json:"datasourceTemplate"`
 	VersioningTemplate   string   `json:"versioningTemplate"`
 }
@@ -312,17 +314,69 @@ func digestPinProblems(config renovateConfig) []string {
 		if manager.DatasourceTemplate != "docker" || capturesDigest {
 			continue
 		}
+		depNames := managerDependencyNames(manager)
 		for _, path := range manager.ManagerFilePatterns {
-			pinningOff := slices.ContainsFunc(config.PackageRules, func(rule packageRule) bool {
-				return slices.Contains(rule.MatchFileNames, path) && rule.PinDigests != nil && !*rule.PinDigests
-			})
-			if !pinningOff {
+			if !digestPinningOff(config.PackageRules, path, depNames) {
 				problems = append(problems,
 					path+" has a Docker custom manager without currentDigest and no pinDigests: false rule")
 			}
 		}
 	}
 	return problems
+}
+
+// managerDependencyNames returns the dependency names a custom manager assigns to its matches.
+func managerDependencyNames(manager customManager) []string {
+	if manager.DepNameTemplate != "" {
+		return []string{manager.DepNameTemplate}
+	}
+	var names []string
+	for _, pattern := range manager.MatchStrings {
+		if name := literalDependencyName(pattern); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// literalDependencyName returns a literal depName capture from a custom-manager match string.
+func literalDependencyName(pattern string) string {
+	const prefix = `(?<depName>`
+	start := strings.Index(pattern, prefix)
+	if start < 0 {
+		return ""
+	}
+	remainder := pattern[start+len(prefix):]
+	end := strings.IndexByte(remainder, ')')
+	if end < 0 {
+		return ""
+	}
+	expression, err := syntax.Parse(remainder[:end], syntax.Perl)
+	if err != nil || expression.Op != syntax.OpLiteral {
+		return ""
+	}
+	return string(expression.Rune)
+}
+
+// digestPinningOff reports whether the last matching explicit pinDigests value is false.
+func digestPinningOff(rules []packageRule, path string, depNames []string) bool {
+	var pinDigests *bool
+	for index := range rules {
+		rule := &rules[index]
+		if digestRuleMatches(*rule, path, depNames) && rule.PinDigests != nil {
+			pinDigests = rule.PinDigests
+		}
+	}
+	return pinDigests != nil && !*pinDigests
+}
+
+// digestRuleMatches reports whether a package rule applies to the manager path and dependency.
+func digestRuleMatches(rule packageRule, path string, depNames []string) bool {
+	fileMatches := len(rule.MatchFileNames) == 0 || slices.Contains(rule.MatchFileNames, path)
+	dependencyMatches := len(rule.MatchDepNames) == 0 || slices.ContainsFunc(depNames, func(name string) bool {
+		return slices.Contains(rule.MatchDepNames, name)
+	})
+	return fileMatches && dependencyMatches
 }
 
 type digestPinCase struct {
@@ -348,6 +402,26 @@ func enableDeploymentDigestPinning(config *renovateConfig) {
 	}
 }
 
+// appendDeploymentDigestPinning appends a later matching rule that restores digest pinning.
+func appendDeploymentDigestPinning(config *renovateConfig) {
+	enabled := true
+	config.PackageRules = append(config.PackageRules, packageRule{
+		MatchFileNames: []string{cnpgDeploymentDoc},
+		MatchDepNames:  []string{cnpgImage},
+		PinDigests:     &enabled,
+	})
+}
+
+// redirectDeploymentDigestRule makes the pinDigests rule target a different dependency.
+func redirectDeploymentDigestRule(config *renovateConfig) {
+	for index := range config.PackageRules {
+		rule := &config.PackageRules[index]
+		if slices.Contains(rule.MatchFileNames, cnpgDeploymentDoc) && rule.PinDigests != nil {
+			rule.MatchDepNames = []string{"example.invalid/other-image"}
+		}
+	}
+}
+
 func addDigestCapturingManager(config *renovateConfig) {
 	config.CustomManagers = append(config.CustomManagers, customManager{
 		ManagerFilePatterns: []string{"digest-fixture"},
@@ -368,6 +442,8 @@ func digestPinCases() []digestPinCase {
 		{name: "the committed renovate.json", path: ""},
 		{name: "the pinDigests rule is removed", change: removeDeploymentDigestRule, path: cnpgDeploymentDoc, want: 1},
 		{name: "the pinDigests rule enables pinning", change: enableDeploymentDigestPinning, path: cnpgDeploymentDoc, want: 1},
+		{name: "a later rule enables pinning", change: appendDeploymentDigestPinning, path: cnpgDeploymentDoc, want: 1},
+		{name: "the pinDigests rule targets another dependency", change: redirectDeploymentDigestRule, path: cnpgDeploymentDoc, want: 1},
 		{name: "a Docker manager captures currentDigest", change: addDigestCapturingManager, path: "digest-fixture"},
 		{name: "a non-Docker manager does not capture currentDigest", change: addNonDockerManager, path: "non-docker-fixture"},
 	}
