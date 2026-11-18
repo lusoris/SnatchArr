@@ -119,13 +119,12 @@ func TestTransmissionSnapshot(t *testing.T) {
 
 func TestDelugeSnapshot(t *testing.T) {
 	t.Parallel()
-	srv := delugeServer(t, true)
+	srv := delugeServer(t, true, deluge2)
 	defer srv.Close()
 
-	// The version stays unknown until goenvoy asks Deluge 2 for it (golusoris/goenvoy#101); a
-	// fixed release turns this red, and the expectation becomes "2.2.0".
+	// goenvoy asks Deluge 2 with daemon.get_version since golusoris/goenvoy#101 was fixed.
 	s := observe(t, domain.ClientDeluge, srv.URL, "", "pw")
-	if !s.Reachable || s.Active != 1 || s.Queued != 1 || s.DownloadRate != 300 || s.UploadRate != 50 || s.Version != "" {
+	if !s.Reachable || s.Active != 1 || s.Queued != 1 || s.DownloadRate != 300 || s.UploadRate != 50 || s.Version != "2.2.0" {
 		t.Fatalf("got %+v", s)
 	}
 }
@@ -134,7 +133,7 @@ func TestDelugeSnapshot(t *testing.T) {
 // cause instead (found against a real Deluge 2.2.0, tools/e2e/dlclients_live.sh).
 func TestDelugeSnapshotWithoutDaemon(t *testing.T) {
 	t.Parallel()
-	srv := delugeServer(t, false)
+	srv := delugeServer(t, false, deluge2)
 	defer srv.Close()
 
 	s := observe(t, domain.ClientDeluge, srv.URL, "", "pw")
@@ -143,7 +142,39 @@ func TestDelugeSnapshotWithoutDaemon(t *testing.T) {
 	}
 }
 
-func delugeServer(t *testing.T, connected bool) *httptest.Server {
+// A Deluge 1 daemon reports its version through daemon.info.
+func TestDelugeSnapshotDeluge1Fallback(t *testing.T) {
+	t.Parallel()
+	srv := delugeServer(t, true, deluge1)
+	defer srv.Close()
+
+	s := observe(t, domain.ClientDeluge, srv.URL, "", "pw")
+	if !s.Reachable || s.Active != 1 || s.Queued != 1 || s.DownloadRate != 300 || s.UploadRate != 50 || s.Version != "1.3.15" {
+		t.Fatalf("got %+v", s)
+	}
+}
+
+// An unknown Deluge daemon generation reports no version through either method.
+func TestDelugeSnapshotWithoutVersion(t *testing.T) {
+	t.Parallel()
+	srv := delugeServer(t, true, delugeNoVersion)
+	defer srv.Close()
+
+	s := observe(t, domain.ClientDeluge, srv.URL, "", "pw")
+	if !s.Reachable || s.Active != 1 || s.Queued != 1 || s.DownloadRate != 300 || s.UploadRate != 50 || s.Version != "" || s.Error != "" {
+		t.Fatalf("got %+v", s)
+	}
+}
+
+type delugeDaemonKind uint8
+
+const (
+	deluge2 delugeDaemonKind = iota
+	deluge1
+	delugeNoVersion
+)
+
+func delugeServer(t *testing.T, connected bool, kind delugeDaemonKind) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /json", func(w http.ResponseWriter, r *http.Request) {
@@ -159,20 +190,29 @@ func delugeServer(t *testing.T, connected bool) *httptest.Server {
 		switch body.Method {
 		case "auth.login":
 			reply(len(body.Params) == 1 && body.Params[0] == "pw")
+			return
 		case "web.connected":
 			reply(connected)
+			return
 		case "daemon.get_version":
-			// Deluge 2 serves this; daemon.info (Deluge 1) falls to "Unknown method" below.
-			reply("2.2.0")
+			if kind == deluge2 {
+				reply("2.2.0")
+				return
+			}
+		case "daemon.info":
+			if kind == deluge1 {
+				reply("1.3.15")
+				return
+			}
 		case "core.get_torrents_status":
 			reply(map[string]any{
 				"a": map[string]any{"state": "Downloading", "download_payload_rate": 300, "upload_payload_rate": 30},
 				"b": map[string]any{"state": "Queued"},
 				"c": map[string]any{"state": "Seeding", "upload_payload_rate": 20},
 			})
-		default:
-			writeJSON(t, w, map[string]any{"result": nil, "error": map[string]any{"code": 2, "message": "Unknown method"}, "id": body.ID})
+			return
 		}
+		writeJSON(t, w, map[string]any{"result": nil, "error": map[string]any{"code": 2, "message": "Unknown method"}, "id": body.ID})
 	})
 	return httptest.NewServer(mux)
 }

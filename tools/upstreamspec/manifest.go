@@ -110,6 +110,9 @@ type upstreamSpec struct {
 	SHA256     string `yaml:"sha256"`
 	License    string `yaml:"license"`
 	Prefix     string `yaml:"prefix"`
+	// Module is the goenvoy client module that goenvoy checks against this spec. It is optional;
+	// SnatchArr reads it only so the strict decoder accepts the manifest and does not use it.
+	Module string `yaml:"module"`
 }
 
 // sourceManifestFile is the name of the cached goenvoy manifest inside the cache directory.

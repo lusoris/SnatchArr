@@ -5,6 +5,7 @@
 package settings_test
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"maps"
@@ -12,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/fx"
@@ -279,6 +281,8 @@ func TestUserPreferences(t *testing.T) {
 
 func TestUpdateInvalidatesUserAgent(t *testing.T) {
 	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
 	st := storetest.New(t)
 	var svc *settings.Service
 	var source *useragent.Source
@@ -288,25 +292,25 @@ func TestUpdateInvalidatesUserAgent(t *testing.T) {
 	if err := app.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if got := source.Current(t.Context()); got != useragent.Default(buildinfo.Info{Version: "2"}) {
+	if got := source.Current(ctx); got != useragent.Default(buildinfo.Info{Version: "2"}) {
 		t.Fatal(got)
 	}
-	cfg, err := svc.Get(t.Context())
+	cfg, err := svc.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.UserAgent = "changed"
-	if _, err := svc.Update(t.Context(), cfg); err != nil {
+	if _, err := svc.Update(ctx, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if got := source.Current(t.Context()); got != "changed" {
+	if got := source.Current(ctx); got != "changed" {
 		t.Errorf("Current = %q, want changed", got)
 	}
 	cfg.UserAgent = "invalid\nvalue"
-	if _, err := svc.Update(t.Context(), cfg); err == nil {
+	if _, err := svc.Update(ctx, cfg); err == nil {
 		t.Fatal("invalid update accepted")
 	}
-	if got := source.Current(t.Context()); got != "changed" {
+	if got := source.Current(ctx); got != "changed" {
 		t.Errorf("Current after failed update = %q", got)
 	}
 }

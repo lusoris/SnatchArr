@@ -40,7 +40,8 @@ The target downloads the pinned specs on the first run (about 2.9 MB in total, i
 
 1. `tools/upstreamspec/specs.yaml` pins the source manifest from `golusoris/goenvoy` (`source`
    with repository, commit, path `upstream/specs.yaml` and sha256). Goenvoy owns the upstream spec
-   pins (repository, release tag or branch, commit, path, sha256, license, prefix). SnatchArr
+   pins (repository, release tag or branch, commit, path, sha256, license, prefix, and optionally
+   the goenvoy client module its own endpoint check reads). SnatchArr
    lists only its consumer operations and, for an entry with `POST .../command`, the upstream C#
    command classes (path and sha256 at the commit of its spec).
    A new upstream release is pinned in goenvoy, whose Renovate configuration reads
@@ -186,7 +187,7 @@ Real clients behave in ways a fake did not show:
 | --- | --- | --- |
 | qBittorrent 5 | Answers HTTP 401 when the port in the `Host` header is not the port the WebUI listens on. | The compose file publishes the WebUI on the port it listens on. |
 | Deluge 2 | The web UI starts without a daemon connection and answers every daemon call with "Unknown method". | The snapshot reports `ErrDelugeNoDaemon`; the user connects a daemon in the web UI's connection manager. |
-| Deluge 2 | Serves no `daemon.info`, which goenvoy asks for the version ([golusoris/goenvoy#101](https://github.com/golusoris/goenvoy/issues/101)). | The version stays empty; `unknownVersion` in `live_test.go` fails once a fixed release reports it. |
+| Deluge 2 | Serves no `daemon.info`, which goenvoy asks for the version ([golusoris/goenvoy#101](https://github.com/golusoris/goenvoy/issues/101)). | goenvoy `deluge/v2` v2.0.6 asks `daemon.get_version` first and falls back to `daemon.info` for Deluge 1, so the snapshot reports the version; `TestDelugeSnapshot` expects it. |
 | NZBGet | Starts with downloads paused. | `tools/e2e/dlclients_live.sh` resumes it before the first run. |
 
 

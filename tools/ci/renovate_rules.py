@@ -64,8 +64,11 @@ MODELED_RULE_KEYS = SUPPORTED_MATCHERS | frozenset({
 # never counts as coverage; a pin only a disable rule matches is still refused. A `matchFileNames`
 # disable (the praetor-managed files rule in renovate.json) may match any pin here, so refusing a
 # matching disable would refuse the live config.
+# `pinDigests` only adds or drops digest pin updates (Renovate lookup/index.js); it sets no
+# registry or release age, so it cannot redirect a Docker lookup or shorten the wait.
 INERT_RULE_KEYS = frozenset({
     "allowedVersions", "automerge", "description", "enabled", "groupName", "labels",
+    "pinDigests",
 })
 RULE_REDIRECT_KEYS = (
     "registryUrls", "defaultRegistryUrls", "registryAliases", "registryUrlTemplate",
@@ -581,6 +584,11 @@ def self_test_override_and_aliases() -> None:
         raise AssertionError("null overridePackageName must keep the earlier packageName")
     if judge({"packageRules": [{**to_hub, "overridePackageName": ""}]}, [pin]) != [pin]:
         raise AssertionError('empty overridePackageName "" must leave the pin uncovered')
+    digest_rule = {"matchFileNames": ["docs/deployment.md"], "matchDepNames": [pin],
+                   "pinDigests": False}
+    without_digest_rule = judge({}, [pin])
+    if without_digest_rule != [pin] or judge({"packageRules": [digest_rule]}, [pin]) != without_digest_rule:
+        raise AssertionError("pinDigests: false must not give an undated pin release-age coverage")
     if judge({"registryAliases": {}, "registryUrls": [], "defaultRegistryUrls": None}, []) != []:
         raise AssertionError("empty or null top-level redirect keys must pass")
     npm_redir = {"matchDatasources": ["npm"], "registryUrls": ["https://registry.npmjs.org"]}
