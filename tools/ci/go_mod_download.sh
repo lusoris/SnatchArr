@@ -13,7 +13,7 @@ set -eu
 
 HERE="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 backoff="${GO_MOD_DOWNLOAD_BACKOFF-5 15}"
-if ! printf '%s\n' "$backoff" | LC_ALL=C grep -qE '^[0-9]{1,3}[[:blank:]]+[0-9]{1,3}$'; then
+if [ -z "$backoff" ] || [ "$backoff" != "$(printf '%s\n' "$backoff" | LC_ALL=C grep -E '^[0-9]{1,3}[[:blank:]]+[0-9]{1,3}$')" ]; then
   echo 'go_mod_download: usage: GO_MOD_DOWNLOAD_BACKOFF="SECONDS SECONDS" sh go_mod_download.sh' >&2
   exit 2
 fi

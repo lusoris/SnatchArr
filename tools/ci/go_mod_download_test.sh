@@ -76,6 +76,8 @@ run_case verify_fail 1 'module verification failed' 1 '0 0' "$SCRIPT" \
 run_case bad_backoff 2 'usage:' 0 '5' "$SCRIPT" '0|download ok'
 run_case empty_backoff 2 'usage:' 0 '' "$SCRIPT" '0|download ok'
 run_case blank_backoff 2 'usage:' 0 ' ' "$SCRIPT" '0|download ok'
+run_case multiline_backoff 2 'usage:' 0 '5 15
+x y' "$SCRIPT" '0|download ok'
 
 cp "$SCRIPT" "$WORK/one_attempt.sh"
 cp "$HERE/run_bounded.py" "$WORK/run_bounded.py"
@@ -87,4 +89,4 @@ fi
 run_case planted 1 'gave up after 3 attempts' 1 '0 0' \
   "$WORK/mutated.sh" '1|stream error: stream ID 135; INTERNAL_ERROR; received from peer' \
   '1|stream error: stream ID 135; INTERNAL_ERROR; received from peer' '0|download ok'
-echo 'go_mod_download_test: ok (9 cases)'
+echo 'go_mod_download_test: ok (10 cases)'
