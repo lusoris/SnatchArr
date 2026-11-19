@@ -326,3 +326,24 @@ describe('settings pure helpers and schemas', () => {
 		});
 	});
 });
+
+describe('user agent default', () => {
+	it.each(['', 'a'.repeat(200)])('accepts an empty or boundary override', (user_agent) => {
+		expect(
+			generalSettingsSchema.safeParse({
+				history_retention_days: 30,
+				user_agent,
+				llm_enabled: false
+			}).success
+		).toBe(true);
+	});
+	it('rejects an override above 200 characters', () => {
+		expect(
+			generalSettingsSchema.safeParse({
+				history_retention_days: 30,
+				user_agent: 'a'.repeat(201),
+				llm_enabled: false
+			}).success
+		).toBe(false);
+	});
+});

@@ -1995,13 +1995,16 @@ func TestSettingsOperations(t *testing.T) {
 		cap      int
 		wantErr  error
 	}{
-		{"positive get settings", false, nil, 90, "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)", 0, nil},
+		{"positive get settings", false, nil, 90, "", 0, nil},
 		{"positive update settings", true, &domain.User{Role: domain.RoleAdmin}, 45, "CustomUA", 150, nil},
 		{"negative update settings no user", true, nil, 45, "CustomUA", 150, domain.ErrUnauthorized},
 		{"negative update settings viewer", true, &domain.User{Role: domain.RoleViewer}, 45, "CustomUA", 150, domain.ErrForbidden},
 		{"boundary update settings cap 5001", true, &domain.User{Role: domain.RoleAdmin}, 45, "CustomUA", 5001, domain.ErrInvalid},
 		{"boundary update settings days 0", true, &domain.User{Role: domain.RoleAdmin}, 0, "CustomUA", 150, domain.ErrInvalid},
-		{"boundary update settings empty ua", true, &domain.User{Role: domain.RoleAdmin}, 45, "", 150, domain.ErrInvalid},
+		{"boundary update settings empty ua", true, &domain.User{Role: domain.RoleAdmin}, 45, "", 150, nil},
+		{"boundary update settings ua 200", true, &domain.User{Role: domain.RoleAdmin}, 45, strings.Repeat("a", 200), 150, nil},
+		{"boundary update settings ua 201", true, &domain.User{Role: domain.RoleAdmin}, 45, strings.Repeat("a", 201), 150, domain.ErrInvalid},
+		{"negative update settings ua inner newline", true, &domain.User{Role: domain.RoleAdmin}, 45, "a\nb", 150, domain.ErrInvalid},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2013,8 +2016,8 @@ func TestSettingsOperations(t *testing.T) {
 			}
 			if !tc.isUpdate {
 				got, err := f.h.GetSettings(ctx)
-				if err != nil || got.HistoryRetentionDays != 90 {
-					t.Fatalf("GetSettings() = %+v, %v; want 90 days", got, err)
+				if err != nil || got.HistoryRetentionDays != 90 || got.UserAgent != tc.ua {
+					t.Fatalf("GetSettings() = %+v, %v; want 90 days ua=%q", got, err, tc.ua)
 				}
 				return
 			}
@@ -2037,8 +2040,12 @@ func TestSettingsOperations(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || got.HistoryRetentionDays != tc.days || got.GlobalHourlyCap != tc.cap {
+			if err != nil || got.HistoryRetentionDays != tc.days || got.GlobalHourlyCap != tc.cap || got.UserAgent != tc.ua {
 				t.Fatalf("UpdateSettings() = %+v, %v", got, err)
+			}
+			cur, getErr := f.h.GetSettings(t.Context())
+			if getErr != nil || cur.HistoryRetentionDays != tc.days || cur.GlobalHourlyCap != tc.cap || cur.UserAgent != tc.ua {
+				t.Fatalf("GetSettings() after update = %+v, %v; want ua=%q", cur, getErr, tc.ua)
 			}
 		})
 	}

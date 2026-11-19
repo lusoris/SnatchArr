@@ -21,12 +21,14 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 // Service reads and writes the settings row, creating it with defaults on first use.
 type Service struct {
 	st  *store.Store
 	clk clock.Clock
+	ua  *useragent.Source
 }
 
 // New wires the service.
@@ -54,13 +56,13 @@ func (s *Service) Get(ctx context.Context) (domain.Settings, error) {
 }
 
 func buildUpdateParams(in domain.Settings, now time.Time) (sqlcgen.UpdateSettingsParams, error) {
-	in.UserAgent = strings.TrimSpace(in.UserAgent)
 	if in.BrandMark == "" {
 		in.BrandMark = domain.DefaultBrandMark
 	}
 	if in.SfwMode == "" {
 		in.SfwMode = domain.DefaultSfwMode
 	}
+	in.UserAgent = strings.TrimSpace(in.UserAgent)
 	if err := in.Validate(); err != nil {
 		return sqlcgen.UpdateSettingsParams{}, err
 	}
@@ -120,6 +122,9 @@ func (s *Service) Update(ctx context.Context, in domain.Settings) (domain.Settin
 	if err != nil {
 		return domain.Settings{}, fmt.Errorf("settings: update: %w", err)
 	}
+	if s.ua != nil {
+		s.ua.Invalidate()
+	}
 	out := store.SettingsFromRow(row)
 	out.LLMEnabled = in.LLMEnabled
 	return out, nil
@@ -167,4 +172,6 @@ func (s *Service) UpdateUserPreferences(
 }
 
 // Module provides the Service.
-var Module = fx.Module("snatcharr.settings", fx.Provide(New))
+var Module = fx.Module("snatcharr.settings", fx.Provide(New, func(s *Service) useragent.Reader { return s }),
+	fx.Invoke(func(s *Service, ua *useragent.Source) { s.ua = ua }),
+)

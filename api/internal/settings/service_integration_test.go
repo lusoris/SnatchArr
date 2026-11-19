@@ -5,21 +5,27 @@
 package settings_test
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"maps"
 	"os"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
+	"github.com/lusoris/SnatchArr/api/internal/useragent"
 )
 
 func TestMain(m *testing.M) { os.Exit(storetest.Main(m)) }
@@ -27,7 +33,7 @@ func TestMain(m *testing.M) { os.Exit(storetest.Main(m)) }
 // defaults are the column defaults of the settings table.
 var defaults = domain.Settings{
 	HistoryRetentionDays:   90,
-	UserAgent:              "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)",
+	UserAgent:              "",
 	GlobalHourlyCap:        0,
 	SearchPriorityPreset:   domain.MediaFirstPreset(),
 	DownloadPriorityPreset: domain.MediaFirstPreset(),
@@ -101,6 +107,12 @@ func TestUpdate(t *testing.T) {
 			nil,
 		},
 		{
+			"positive trailing newline user agent is trimmed",
+			domain.Settings{HistoryRetentionDays: 30, UserAgent: "Foo/1\n", GlobalHourlyCap: 100, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
+			domain.Settings{HistoryRetentionDays: 30, UserAgent: "Foo/1", GlobalHourlyCap: 100, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
+			nil,
+		},
+		{
 			"boundary lowest values",
 			domain.Settings{HistoryRetentionDays: 1, UserAgent: "a", GlobalHourlyCap: 0, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
 			domain.Settings{HistoryRetentionDays: 1, UserAgent: "a", GlobalHourlyCap: 0, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
@@ -143,7 +155,7 @@ func TestUpdate(t *testing.T) {
 		{"negative invalid brand_mark", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a", BrandMark: "invalid", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
 		{"negative invalid sfw_mode", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a", SfwMode: "invalid", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
 		{"negative retention of zero days", domain.Settings{HistoryRetentionDays: 0, UserAgent: "a", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
-		{"negative user agent of spaces only", domain.Settings{HistoryRetentionDays: 30, UserAgent: "   ", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
+		{"positive empty user agent", domain.Settings{HistoryRetentionDays: 90, UserAgent: "   ", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, nil},
 		{"negative user agent over two lines", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a\nb", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
 		{"negative global cap above the limit", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a", GlobalHourlyCap: domain.GlobalHourlyCapLimit + 1, SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
 		{"negative missing priority preset", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a"}, defaults, domain.ErrInvalid},
@@ -264,5 +276,41 @@ func TestUserPreferences(t *testing.T) {
 	bad := domain.BrandMark("invalid")
 	if _, err := svc.UpdateUserPreferences(ctx, userID, domain.UserPreferences{BrandMark: &bad}); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("UpdateUserPreferences invalid = %v, want ErrInvalid", err)
+	}
+}
+
+func TestUpdateInvalidatesUserAgent(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	st := storetest.New(t)
+	var svc *settings.Service
+	var source *useragent.Source
+	app := fx.New(fx.NopLogger, settings.Module, useragent.Module,
+		fx.Supply(st, buildinfo.Info{Version: "2"}, slog.New(slog.DiscardHandler)),
+		fx.Provide(func() clock.Clock { return clock.NewFake() }), fx.Populate(&svc, &source))
+	if err := app.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got := source.Current(ctx); got != useragent.Default(buildinfo.Info{Version: "2"}) {
+		t.Fatal(got)
+	}
+	cfg, err := svc.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.UserAgent = "changed"
+	if _, err := svc.Update(ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := source.Current(ctx); got != "changed" {
+		t.Errorf("Current = %q, want changed", got)
+	}
+	cfg.UserAgent = "invalid\nvalue"
+	if _, err := svc.Update(ctx, cfg); err == nil {
+		t.Fatal("invalid update accepted")
+	}
+	if got := source.Current(ctx); got != "changed" {
+		t.Errorf("Current after failed update = %q", got)
 	}
 }
