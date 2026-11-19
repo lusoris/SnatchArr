@@ -136,11 +136,14 @@ with open(sys.argv[1], "rb") as toolchain_file:
 fixture short-msrv 1.100 1.100.0
 expect_fixture short-msrv 0 'ok: Cargo.toml rust-version 1.100 matches rust-toolchain.toml channel 1.100.0'
 
-fixture full-msrv 1.100.0 1.100.0
-expect_fixture full-msrv 0 'ok: Cargo.toml rust-version 1.100.0 matches rust-toolchain.toml channel 1.100.0'
+fixture full-match 1.100.1 1.100.1
+expect_fixture full-match 0 'ok: Cargo.toml rust-version 1.100.1 matches rust-toolchain.toml channel 1.100.1'
+
+fixture patch-only 1.100 1.100.1
+expect_fixture patch-only 3 'rust-version 1.100 does not match rust-toolchain.toml:2 channel 1.100.1'
 
 fixture two-part-channel 1.100 1.100
-expect_fixture two-part-channel 0 'ok: Cargo.toml rust-version 1.100 matches rust-toolchain.toml channel 1.100'
+expect_fixture two-part-channel 3 'rust-toolchain.toml:2 channel 1.100 is no fixed release and proves no minimum'
 
 fixture stale-msrv 1.99 1.100.0
 expect_fixture stale-msrv 3 'Cargo.toml:4 rust-version 1.99 does not match rust-toolchain.toml:2 channel 1.100.0'
@@ -161,6 +164,56 @@ printf '%s\n' '[workspace]' 'members = ["worker/crates/*"]' '[workspace.package]
 printf '%s\n' '[package]' 'name = "snatch-core"' 'version = "0.1.0"' \
     'rust-version = "1.99"' > "$work/literal-member/worker/crates/snatch-core/Cargo.toml"
 expect_fixture literal-member 3 'worker/crates/snatch-core/Cargo.toml:4 has literal rust-version 1.99; use rust-version.workspace = true'
+
+fixture missing-member 1.100 1.100.0
+mkdir -p "$work/missing-member/crates/missing"
+printf '%s\n' '[workspace]' 'members = ["crates/*"]' '[workspace.package]' \
+    'rust-version = "1.100"' > "$work/missing-member/Cargo.toml"
+printf '%s\n' '[package]' 'name = "missing"' 'version = "0.1.0"' \
+    > "$work/missing-member/crates/missing/Cargo.toml"
+expect_fixture missing-member 3 \
+    'crates/missing/Cargo.toml:1 has no rust-version; use rust-version.workspace = true'
+
+fixture false-member 1.100 1.100.0
+mkdir -p "$work/false-member/crates/false"
+printf '%s\n' '[workspace]' 'members = ["crates/*"]' '[workspace.package]' \
+    'rust-version = "1.100"' > "$work/false-member/Cargo.toml"
+printf '%s\n' '[package]' 'name = "false"' 'version = "0.1.0"' \
+    'rust-version.workspace = false' > "$work/false-member/crates/false/Cargo.toml"
+expect_fixture false-member 3 \
+    "crates/false/Cargo.toml:4 has literal rust-version {'workspace': False}; use rust-version.workspace = true"
+
+fixture excluded-glob-member 1.100 1.100.0
+mkdir -p "$work/excluded-glob-member/crates/ignored"
+printf '%s\n' '[workspace]' 'members = ["crates/*"]' 'exclude = ["crates/ignored"]' \
+    '[workspace.package]' 'rust-version = "1.100"' > "$work/excluded-glob-member/Cargo.toml"
+printf '%s\n' '[package]' 'name = "ignored"' 'version = "0.1.0"' \
+    'rust-version = "1.99"' > "$work/excluded-glob-member/crates/ignored/Cargo.toml"
+expect_fixture excluded-glob-member 0 'ok: Cargo.toml rust-version 1.100 matches rust-toolchain.toml channel 1.100.0'
+
+fixture exclude-boundary 1.100 1.100.0
+mkdir -p "$work/exclude-boundary/crates/legacy"
+printf '%s\n' '[workspace]' 'members = ["crates/*"]' 'exclude = ["crates/leg"]' \
+    '[workspace.package]' 'rust-version = "1.100"' > "$work/exclude-boundary/Cargo.toml"
+printf '%s\n' '[package]' 'name = "legacy"' 'version = "0.1.0"' \
+    'rust-version = "1.99"' > "$work/exclude-boundary/crates/legacy/Cargo.toml"
+expect_fixture exclude-boundary 3 \
+    'crates/legacy/Cargo.toml:4 has literal rust-version 1.99; use rust-version.workspace = true'
+
+fixture explicit-excluded-member 1.100 1.100.0
+mkdir -p "$work/explicit-excluded-member/crates/leg"
+printf '%s\n' '[workspace]' 'members = ["crates/*", "crates/leg"]' \
+    'exclude = ["crates/leg"]' '[workspace.package]' 'rust-version = "1.100"' \
+    > "$work/explicit-excluded-member/Cargo.toml"
+printf '%s\n' '[package]' 'name = "leg"' 'version = "0.1.0"' \
+    'rust-version = "1.99"' > "$work/explicit-excluded-member/crates/leg/Cargo.toml"
+expect_fixture explicit-excluded-member 3 \
+    'crates/leg/Cargo.toml:4 has literal rust-version 1.99; use rust-version.workspace = true'
+
+fixture exclude-not-list 1.100 1.100.0
+printf '%s\n' '[workspace]' 'members = []' 'exclude = "crates/ignored"' \
+    '[workspace.package]' 'rust-version = "1.100"' > "$work/exclude-not-list/Cargo.toml"
+expect_fixture exclude-not-list 1 'error: Cargo.toml [workspace].exclude must be a list of relative paths'
 
 fixture invalid-cargo 1.100 1.100.0
 printf '%s\n' '[workspace' > "$work/invalid-cargo/Cargo.toml"
@@ -192,10 +245,11 @@ msrv_parts = msrv.split(".")
 channel_parts = channel.split(".")
 if msrv_parts[:2] != channel_parts[:2]:
     raise SystemExit("real Rust versions do not share major and minor components")
-next_msrv = f"{msrv_parts[0]}.{int(msrv_parts[1]) + 1}"
-print(next_msrv, f"{next_msrv}.0")
+next_minor = f"{msrv_parts[0]}.{int(msrv_parts[1]) + 1}.0"
+next_patch = f"{channel_parts[0]}.{channel_parts[1]}.{int(channel_parts[2]) + 1}"
+print(next_minor, next_minor, next_patch)
 ' "$ROOT/Cargo.toml" "$ROOT/rust-toolchain.toml")
-read -r next_msrv next_channel <<< "$next_values"
+read -r next_msrv next_channel next_patch <<< "$next_values"
 
 moved_together=$work/moved-together
 copy_real_workspace "$moved_together"
@@ -210,3 +264,62 @@ status=0
 out=$(python3 -I "$check" --root "$moved_alone" 2>&1) || status=$?
 check_case moved-alone 3 "$status" 'does not match rust-toolchain.toml' "$out"
 echo 'ok   moved-alone'
+
+moved_patch_together=$work/moved-patch-together
+copy_real_workspace "$moved_patch_together"
+rewrite_release "$moved_patch_together/Cargo.toml" rust-version "$next_patch"
+rewrite_release "$moved_patch_together/rust-toolchain.toml" channel "$next_patch"
+expect_repository_ok "$moved_patch_together"
+
+moved_patch_alone=$work/moved-patch-alone
+copy_real_workspace "$moved_patch_alone"
+rewrite_release "$moved_patch_alone/rust-toolchain.toml" channel "$next_patch"
+status=0
+out=$(python3 -I "$check" --root "$moved_patch_alone" 2>&1) || status=$?
+check_case moved-patch-alone 3 "$status" 'does not match rust-toolchain.toml' "$out"
+echo 'ok   moved-patch-alone'
+
+mkdir -p "$work/renovate-capture"
+printf '%s\n' '[workspace.package]' 'rust-version = "1.100.1"' \
+    > "$work/renovate-capture/Cargo.toml"
+status=0
+out=$(python3 -I - "$ROOT/renovate.json" "$ROOT/Cargo.toml" \
+    "$work/renovate-capture/Cargo.toml" <<'PY'
+import json
+import re
+import sys
+import tomllib
+from pathlib import Path
+
+renovate_path = Path(sys.argv[1])
+real_cargo_path = Path(sys.argv[2])
+planted_cargo_path = Path(sys.argv[3])
+config = json.loads(renovate_path.read_text(encoding="utf-8"))
+manager = next(
+    item for item in config["customManagers"] if item.get("depNameTemplate") == "rust"
+)
+pattern = manager["matchStrings"][0].replace("(?<", "(?P<")
+real_text = real_cargo_path.read_text(encoding="utf-8")
+planted_text = planted_cargo_path.read_text(encoding="utf-8")
+real_match = re.search(pattern, real_text)
+planted_match = re.search(pattern, planted_text)
+if real_match is None or planted_match is None:
+    raise SystemExit("Renovate pattern did not capture a rust-version")
+with real_cargo_path.open("rb") as cargo_file:
+    expected = tomllib.load(cargo_file)["workspace"]["package"]["rust-version"]
+if real_match.group("currentValue") != expected:
+    raise SystemExit(
+        f"real currentValue {real_match.group('currentValue')} != tomllib value {expected}"
+    )
+if planted_match.group("currentValue") != "1.100.1":
+    raise SystemExit(
+        f"planted currentValue {planted_match.group('currentValue')} != 1.100.1"
+    )
+old_pattern = pattern.replace(r"(?:\.[0-9]+)?", "")
+if re.search(old_pattern, planted_text) is not None:
+    raise SystemExit("old two-part Renovate pattern captured a three-part version")
+print("ok renovate capture")
+PY
+) || status=$?
+check_case renovate-capture 0 "$status" 'ok renovate capture' "$out"
+echo 'ok   renovate-capture'

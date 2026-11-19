@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
-r"""Keep the workspace Rust MSRV equal to the leading components of the pinned toolchain.
+r"""Keep the workspace Rust MSRV equal to the fixed release of the pinned toolchain.
 
-Both values must be fixed numeric releases. Workspace members must inherit the one declared
-minimum rather than carrying literal versions that Renovate cannot move with the toolchain.
+The workspace minimum may omit the patch component, but the toolchain must name an exact
+three-component release. Workspace members must inherit the declared minimum rather than
+carrying literal versions that Renovate cannot move with the toolchain.
 
 Exit 0 = ok, 1 = input error, 3 = refused.
 """
@@ -18,7 +19,8 @@ from pathlib import Path
 
 MAX_BYTES = 1 << 20
 MAX_MEMBER_MANIFESTS = 64
-FIXED_RELEASE = re.compile(r"\d+\.\d+(?:\.\d+)?")
+MSRV_RELEASE = re.compile(r"\d+\.\d+(?:\.\d+)?")
+FIXED_RELEASE = re.compile(r"\d+\.\d+\.\d+")
 TABLE_HEADER = re.compile(r"\s*\[([A-Za-z0-9_.-]+)]\s*(?:#.*)?")
 
 
@@ -62,12 +64,21 @@ def table(data: dict[str, object], *keys: str) -> dict[str, object]:
 def key_line(lines: list[str], wanted_table: str, key: str) -> int:
     """Return the one-based line of KEY in WANTED_TABLE, or zero when absent."""
     current_table = ""
-    key_pattern = re.compile(rf"\s*{re.escape(key)}\s*=")
+    key_pattern = re.compile(rf"\s*{re.escape(key)}(?:\.workspace)?\s*=")
     for number, line in enumerate(lines, 1):
         header = TABLE_HEADER.fullmatch(line)
         if header:
             current_table = header.group(1)
         elif current_table == wanted_table and key_pattern.match(line):
+            return number
+    return 0
+
+
+def table_line(lines: list[str], wanted_table: str) -> int:
+    """Return the one-based line of WANTED_TABLE, or zero when absent."""
+    for number, line in enumerate(lines, 1):
+        header = TABLE_HEADER.fullmatch(line)
+        if header and header.group(1) == wanted_table:
             return number
     return 0
 
@@ -79,7 +90,31 @@ def fixed_release(value: object) -> str | None:
     return None
 
 
-def member_manifests(root: Path, members: object) -> list[Path]:
+def minimum_release(value: object) -> str | None:
+    """Return VALUE when it is a two- or three-component Rust minimum, otherwise none."""
+    if isinstance(value, str) and MSRV_RELEASE.fullmatch(value):
+        return value
+    return None
+
+
+def exclude_paths(exclude: object) -> list[Path]:
+    """Validate workspace EXCLUDE and return its relative paths."""
+    if not isinstance(exclude, list) or any(
+        not isinstance(item, str) for item in exclude
+    ):
+        raise InputError(
+            "Cargo.toml [workspace].exclude must be a list of relative paths"
+        )
+    paths = []
+    for item in exclude:
+        path = Path(item)
+        if path.is_absolute():
+            raise InputError(f"Cargo.toml workspace exclude path is absolute: {item}")
+        paths.append(path)
+    return paths
+
+
+def member_manifests(root: Path, members: object, excludes: list[Path]) -> list[Path]:
     """Expand workspace MEMBERS below ROOT, refusing more than 64 manifest matches."""
     if not isinstance(members, list) or any(
         not isinstance(item, str) for item in members
@@ -87,6 +122,11 @@ def member_manifests(root: Path, members: object) -> list[Path]:
         raise InputError("Cargo.toml [workspace].members must be a list of paths")
     found: set[Path] = set()
     matches = 0
+    explicit_members = [
+        Path(pattern)
+        for pattern in members
+        if not any(character in pattern for character in "*?[")
+    ]
     for pattern in members:
         if Path(pattern).is_absolute():
             raise InputError(
@@ -110,6 +150,16 @@ def member_manifests(root: Path, members: object) -> list[Path]:
                     raise InputError(
                         f"workspace member escapes repository root: {manifest}"
                     ) from error
+                member_directory = relative.parent
+                excluded = any(
+                    member_directory.is_relative_to(exclude) for exclude in excludes
+                )
+                explicit = any(
+                    member_directory.is_relative_to(member)
+                    for member in explicit_members
+                )
+                if excluded and not explicit:
+                    continue
                 found.add(relative)
                 if len(found) > MAX_MEMBER_MANIFESTS:
                     raise InputError(
@@ -119,12 +169,20 @@ def member_manifests(root: Path, members: object) -> list[Path]:
 
 
 def check_members(root: Path, cargo: dict[str, object]) -> int:
-    """Refuse literal package rust-version values in workspace member manifests."""
+    """Require workspace member manifests to inherit package rust-version exactly."""
     workspace = table(cargo, "workspace")
-    for relative in member_manifests(root, workspace.get("members", [])):
+    excludes = exclude_paths(workspace.get("exclude", []))
+    for relative in member_manifests(root, workspace.get("members", []), excludes):
         member, lines = read_toml(root, relative)
         value = table(member, "package").get("rust-version")
-        if isinstance(value, str):
+        if value is None:
+            line = table_line(lines, "package")
+            print(
+                f"refused: {relative.as_posix()}:{line} has no rust-version; "
+                "use rust-version.workspace = true"
+            )
+            return 3
+        if value != {"workspace": True}:
             line = key_line(lines, "package", "rust-version")
             print(
                 f"refused: {relative.as_posix()}:{line} has literal rust-version {value}; "
@@ -142,7 +200,7 @@ def check(root: Path) -> int:
     if raw_msrv is None:
         print("refused: Cargo.toml is missing [workspace.package].rust-version")
         return 3
-    msrv = fixed_release(raw_msrv)
+    msrv = minimum_release(raw_msrv)
     msrv_line = key_line(cargo_lines, "workspace.package", "rust-version")
     if msrv is None:
         print(
@@ -158,13 +216,16 @@ def check(root: Path) -> int:
             "is no fixed release and proves no minimum"
         )
         return 3
-    msrv_components = msrv.split(".")
-    channel_components = channel.split(".")
-    if channel_components[: len(msrv_components)] != msrv_components:
+    msrv_components = tuple(int(component) for component in msrv.split("."))
+    if len(msrv_components) == 2:
+        msrv_components += (0,)
+    channel_components = tuple(int(component) for component in channel.split("."))
+    if channel_components != msrv_components:
         print(
             f"refused: Cargo.toml:{msrv_line} rust-version {msrv} does not match "
             f"rust-toolchain.toml:{channel_line} channel {channel}; move rust-version with "
-            "the toolchain, or add a CI job building with the older release and extend this check"
+            "the exact toolchain release, or add a CI job building with the older release "
+            "and extend this check"
         )
         return 3
     member_status = check_members(root, cargo)
