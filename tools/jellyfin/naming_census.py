@@ -5,16 +5,15 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import re
 import secrets
-import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import TypedDict
-
-PRIVACY_TIMEOUT_SECONDS = 30
+from typing import BinaryIO, TypedDict
 
 
 class CensusResult(TypedDict):
@@ -805,12 +804,12 @@ SELF_TEST_CASES = [
 
 
 def self_test() -> None:
-    """Run synthetic class cases and process-boundary privacy checks."""
+    """Run synthetic class cases and an in-process CLI privacy check."""
     try:
         for name, records, label, expected in SELF_TEST_CASES:
             _case(name, records, label, expected)
         _privacy_test()
-    except (AssertionError, ValueError, OSError, subprocess.SubprocessError) as error:
+    except (AssertionError, ValueError, OSError) as error:
         name = (
             str(error)
             if isinstance(error, AssertionError)
@@ -822,46 +821,40 @@ def self_test() -> None:
 
 
 def _privacy_test() -> None:
-    """Verify that input path tokens never appear in process output."""
+    """Verify that input path tokens never appear in captured CLI output."""
     tokens = [secrets.token_hex(16) for _ in range(4)]
     inputs = (
-        (f"f\t{tokens[0]}/{tokens[1]}.mkv\0d\t{tokens[2]}\0".encode(), 0, b""),
+        (f"f\t{tokens[0]}/{tokens[1]}.mkv\0d\t{tokens[2]}\0".encode(), 0, ""),
         (
             f"f\t{tokens[3]}.mkv\0{tokens[1]}-malformed\0".encode(),
             2,
-            b"record 2: missing type separator\n",
+            "record 2: missing type separator\n",
         ),
     )
     for input_data, expected_exit, expected_error in inputs:
-        try:
-            result = subprocess.run(
-                [sys.executable, "-I", sys.argv[0]],
-                input=input_data,
-                capture_output=True,
-                check=False,
-                timeout=PRIVACY_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired:
-            raise AssertionError("privacy-check") from None
-        rendered = result.stdout + result.stderr
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            exit_code = main([], io.BytesIO(input_data))
+        rendered = stdout.getvalue() + stderr.getvalue()
         if (
-            result.returncode != expected_exit
-            or result.stderr != expected_error
-            or any(token.encode() in rendered for token in tokens)
+            exit_code != expected_exit
+            or stderr.getvalue() != expected_error
+            or any(token in rendered for token in tokens)
         ):
             raise AssertionError("privacy-check")
 
 
-def main() -> int:
+def main(argv: list[str], stdin: BinaryIO) -> int:
     """Run the self-test or emit a privacy-preserving census as JSON."""
-    if sys.argv[1:] == ["--self-test"]:
+    if argv == ["--self-test"]:
         self_test()
         return 0
-    if sys.argv[1:]:
+    if argv:
         print("usage: naming_census.py [--self-test]", file=sys.stderr)
         return 2
     try:
-        result = census(parse_records(sys.stdin.buffer.read()))
+        result = census(parse_records(stdin.read()))
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
@@ -873,4 +866,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:], sys.stdin.buffer))
