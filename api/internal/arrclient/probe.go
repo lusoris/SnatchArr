@@ -334,6 +334,7 @@ var Module = fx.Module("snatcharr.arrclient",
 		func(p *GoenvoyProber) IndexerDiscoverer { return p },
 		func(p *GoenvoyProber) Labeler { return p },
 		func(p *GoenvoyProber) ProfileLanguager { return p },
+		func(p *GoenvoyProber) ItemTitler { return p },
 		func(p *GoenvoyProber) queue.ArrClient { return p },
 	),
 )

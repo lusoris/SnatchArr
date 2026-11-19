@@ -254,6 +254,18 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/foreign-search/preflight
 	GetForeignSearchPreflight(ctx context.Context, params GetForeignSearchPreflightParams) (*ForeignSearchPreflight, error)
+	// GetForeignTitles implements getForeignTitles operation.
+	//
+	// Admin only. Previews the foreign-language titles of one item in one rule language:
+	// the *arr instance's own cached aliases and, when the operator set a
+	// TheTVDB API key, TheTVDB translations and aliases (ADR-0048). Each title names its
+	// source. A TheTVDB failure never fails the request: `tvdb` reports it and the *arr
+	// titles still return. No search uses this list yet; issue #1150 wires it into the
+	// budgeted Prowlarr search. Other instance kinds answer 422.
+	// Data courtesy of TheTVDB.com.
+	//
+	// GET /instances/{instanceId}/items/{itemId}/foreign-titles
+	GetForeignTitles(ctx context.Context, params GetForeignTitlesParams) (*ForeignTitles, error)
 	// GetHourlyCaps implements getHourlyCaps operation.
 	//
 	// Per-instance stamina spent in the last 60 minutes (rolling window).

@@ -11,27 +11,28 @@ require (
 	github.com/go-faster/errors v0.8.0
 	github.com/go-faster/jx v1.2.0
 	github.com/go-jose/go-jose/v4 v4.1.6
-	github.com/golusoris/goenvoy/arr/lidarr v1.6.2
-	github.com/golusoris/goenvoy/arr/prowlarr/v2 v2.1.6
-	github.com/golusoris/goenvoy/arr/radarr v1.5.5
-	github.com/golusoris/goenvoy/arr/readarr v1.5.2
-	github.com/golusoris/goenvoy/arr/seerr v1.6.1
-	github.com/golusoris/goenvoy/arr/sonarr v1.5.5
-	github.com/golusoris/goenvoy/arr/v2 v2.6.2
-	github.com/golusoris/goenvoy/arr/whisparr v1.6.0
-	github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.3
-	github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.3
-	github.com/golusoris/goenvoy/downloadclient/qbit/v2 v2.1.0
-	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.1.2
-	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.1.0
-	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.3
-	github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.2.1
-	github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.3.0
-	github.com/golusoris/goenvoy/mediaserver/stash/v2 v2.1.0
-	github.com/golusoris/goenvoy/metadata v1.4.3
-	github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.1.0
-	github.com/golusoris/golusoris v0.20.0
-	github.com/golusoris/golusoris/core v0.12.1
+	github.com/golusoris/goenvoy/arr/lidarr v1.6.4
+	github.com/golusoris/goenvoy/arr/prowlarr/v2 v2.1.8
+	github.com/golusoris/goenvoy/arr/radarr v1.5.7
+	github.com/golusoris/goenvoy/arr/readarr v1.5.4
+	github.com/golusoris/goenvoy/arr/seerr v1.6.3
+	github.com/golusoris/goenvoy/arr/sonarr v1.6.1
+	github.com/golusoris/goenvoy/arr/v2 v2.6.3
+	github.com/golusoris/goenvoy/arr/whisparr v1.6.1
+	github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.6
+	github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.5
+	github.com/golusoris/goenvoy/downloadclient/qbit/v2 v2.1.2
+	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.1.4
+	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.1.2
+	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.4
+	github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.2.2
+	github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.3.1
+	github.com/golusoris/goenvoy/mediaserver/stash/v2 v2.1.1
+	github.com/golusoris/goenvoy/metadata v1.4.4
+	github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.2.1
+	github.com/golusoris/goenvoy/metadata/video/tvdb v1.3.7
+	github.com/golusoris/golusoris v0.22.1
+	github.com/golusoris/golusoris/core v0.12.3
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
@@ -50,6 +51,8 @@ require (
 	go.uber.org/fx v1.24.0
 	golang.org/x/image v0.47.0
 	golang.org/x/oauth2 v0.37.0
+	golang.org/x/text v0.44.0
+	golang.org/x/time v0.16.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
@@ -62,7 +65,7 @@ require (
 	github.com/CAFxX/httpcompression v0.0.9 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/alexedwards/argon2id v1.0.0 // indirect
-	github.com/andybalholm/brotli v1.2.7 // indirect
+	github.com/andybalholm/brotli v1.2.8 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -87,9 +90,9 @@ require (
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/go-playground/locales v0.14.1 // indirect
-	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.30.5 // indirect
+	github.com/go-playground/locales v0.14.2 // indirect
+	github.com/go-playground/universal-translator v0.18.2 // indirect
+	github.com/go-playground/validator/v10 v10.30.6 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.20.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4 // indirect
@@ -112,8 +115,9 @@ require (
 	github.com/lmittmann/tint v1.2.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260802145828-341c2f0c90b5 // indirect
 	github.com/magiconair/properties v1.18.11 // indirect
-	github.com/mattn/go-colorable v0.1.15 // indirect
+	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/maypok86/otter/v2 v2.3.0 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -130,6 +134,7 @@ require (
 	github.com/prometheus/common v0.72.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
+	github.com/redis/rueidis v1.0.79 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
@@ -167,9 +172,7 @@ require (
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
-	golang.org/x/text v0.44.0 // indirect
-	golang.org/x/time v0.16.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20261012220534-4341edf3f941 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261012220534-4341edf3f941 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

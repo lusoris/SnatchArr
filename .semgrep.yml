@@ -10,6 +10,175 @@
 #
 # Every rule gives zero findings on the tree; a finding is a regression.
 rules:
+  # ── Test isolation · a closed server's port may be reused ─────────────────
+  - id: test-closed-server-address-reuse
+    languages: [go]
+    severity: ERROR
+    paths:
+      include:
+        - "*_test.go"
+    message: >-
+      Do not use an httptest server address after Close: another parallel test
+      server can bind the freed port. Keep a refusing listener open until cleanup.
+    pattern-either:
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.URL
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $ADDR, ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.Listener.Addr().String()
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $ADDR, ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.Listener.Addr()
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $ADDR, ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.URL
+          ...
+          $SRV.Close()
+          ...
+          $VAR := $TYPE{..., $FIELD: $ADDR, ...}
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $ADDR := $SRV.URL
+          ...
+          $SRV.Close()
+          ...
+          $VAR := []$TYPE{..., {..., $FIELD: $ADDR, ...}, ...}
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $SRV.URL, ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $SRV.Listener.Addr(), ...)
+      - pattern: |
+          $SRV := httptest.$NEW(...)
+          ...
+          $SRV.Close()
+          ...
+          $CALL(..., $SRV.Listener.Addr().String(), ...)
+
+  # ── Test isolation · fatal helpers stay in their test goroutine ───────────
+  - id: test-fatal-helper-in-goroutine
+    languages: [go]
+    severity: ERROR
+    paths:
+      include:
+        - "*_test.go"
+    message: >-
+      This fatal-capable call runs outside its test or benchmark goroutine. Go
+      allows fatal and skip methods only in that goroutine. Report with Errorf
+      and return, or signal a channel that the test goroutine awaits.
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: await.Await($TB, ...)
+              - pattern: refuse.Listener($TB, ...)
+              - pattern: Listener($TB)
+              - pattern: listener($TB, ...)
+              - pattern: $TB.Fatal(...)
+              - pattern: $TB.Fatalf(...)
+              - pattern: $TB.FailNow()
+              - pattern: $TB.Skip(...)
+              - pattern: $TB.Skipf(...)
+              - pattern: $TB.SkipNow()
+          - patterns:
+              - pattern: |
+                  go func(...) {
+                    $...BODY
+                  }(...)
+              - focus-metavariable: $...BODY
+          - pattern-not-inside: |
+              $R.Run($NAME, func($TB *testing.T) {
+                ...
+              })
+          - pattern-not-inside: |
+              $R.Run($NAME, func($TB *testing.B) {
+                ...
+              })
+      - patterns:
+          - pattern: |
+              $R.Run($NAME, func($TB *testing.T) {
+                ...
+                go func(...) {
+                  ...
+                  $BAD
+                  ...
+                }(...)
+                ...
+              })
+          - metavariable-pattern:
+              metavariable: $BAD
+              pattern-either:
+                - pattern: await.Await($TB, ...)
+                - pattern: refuse.Listener($TB, ...)
+                - pattern: Listener($TB)
+                - pattern: listener($TB, ...)
+                - pattern: $TB.Fatal(...)
+                - pattern: $TB.Fatalf(...)
+                - pattern: $TB.FailNow()
+                - pattern: $TB.Skip(...)
+                - pattern: $TB.Skipf(...)
+                - pattern: $TB.SkipNow()
+          - focus-metavariable: $BAD
+      - patterns:
+          - pattern: |
+              $R.Run($NAME, func($TB *testing.B) {
+                ...
+                go func(...) {
+                  ...
+                  $BAD
+                  ...
+                }(...)
+                ...
+              })
+          - metavariable-pattern:
+              metavariable: $BAD
+              pattern-either:
+                - pattern: await.Await($TB, ...)
+                - pattern: refuse.Listener($TB, ...)
+                - pattern: Listener($TB)
+                - pattern: listener($TB, ...)
+                - pattern: $TB.Fatal(...)
+                - pattern: $TB.Fatalf(...)
+                - pattern: $TB.FailNow()
+                - pattern: $TB.Skip(...)
+                - pattern: $TB.Skipf(...)
+                - pattern: $TB.SkipNow()
+          - focus-metavariable: $BAD
+      - pattern: go await.Await(...)
+      - pattern: go refuse.Listener(...)
+      - pattern: go Listener($TB)
+      - pattern: go listener($TB, ...)
+      - pattern: go $TB.Fatal(...)
+      - pattern: go $TB.Fatalf(...)
+      - pattern: go $TB.FailNow()
+      - pattern: go $TB.Skip(...)
+      - pattern: go $TB.Skipf(...)
+      - pattern: go $TB.SkipNow()
+
   # ── HISS-02 · an HTTP client carries a timeout ─────────────────────────────
   # A client without Timeout has no deadline of its own, so a request sent
   # without a context deadline can hang on a slow peer. Tests are exempt: they

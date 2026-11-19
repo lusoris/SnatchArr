@@ -3455,6 +3455,203 @@ func (s *ForeignSearchVerdictVerdict) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/ForeignTitle
+type ForeignTitle struct {
+	Title string `json:"title"`
+	// Where the title came from.
+	Source ForeignTitleSource `json:"source"`
+}
+
+// GetTitle returns the value of Title.
+func (s *ForeignTitle) GetTitle() string {
+	return s.Title
+}
+
+// GetSource returns the value of Source.
+func (s *ForeignTitle) GetSource() ForeignTitleSource {
+	return s.Source
+}
+
+// SetTitle sets the value of Title.
+func (s *ForeignTitle) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetSource sets the value of Source.
+func (s *ForeignTitle) SetSource(val ForeignTitleSource) {
+	s.Source = val
+}
+
+// Where the title came from.
+type ForeignTitleSource string
+
+const (
+	ForeignTitleSourceArr  ForeignTitleSource = "arr"
+	ForeignTitleSourceTvdb ForeignTitleSource = "tvdb"
+)
+
+// AllValues returns all ForeignTitleSource values.
+func (ForeignTitleSource) AllValues() []ForeignTitleSource {
+	return []ForeignTitleSource{
+		ForeignTitleSourceArr,
+		ForeignTitleSourceTvdb,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ForeignTitleSource) MarshalText() ([]byte, error) {
+	switch s {
+	case ForeignTitleSourceArr:
+		return []byte(s), nil
+	case ForeignTitleSourceTvdb:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ForeignTitleSource) UnmarshalText(data []byte) error {
+	switch ForeignTitleSource(data) {
+	case ForeignTitleSourceArr:
+		*s = ForeignTitleSourceArr
+		return nil
+	case ForeignTitleSourceTvdb:
+		*s = ForeignTitleSourceTvdb
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Search titles of one item in one rule language. Data courtesy of TheTVDB.com.
+// Ref: #/components/schemas/ForeignTitles
+type ForeignTitles struct {
+	// Rule language code the titles were selected for.
+	Language string `json:"language"`
+	// Season the titles were scoped to, when requested.
+	Season OptInt `json:"season"`
+	// Search titles in search order, at most 50.
+	Titles []ForeignTitle `json:"titles"`
+	// What the opt-in TheTVDB provider did; `disabled` when no API key is set.
+	Tvdb ForeignTitlesTvdb `json:"tvdb"`
+	// TheTVDB attribution; show it next to titles whose source is `tvdb`.
+	Attribution string `json:"attribution"`
+}
+
+// GetLanguage returns the value of Language.
+func (s *ForeignTitles) GetLanguage() string {
+	return s.Language
+}
+
+// GetSeason returns the value of Season.
+func (s *ForeignTitles) GetSeason() OptInt {
+	return s.Season
+}
+
+// GetTitles returns the value of Titles.
+func (s *ForeignTitles) GetTitles() []ForeignTitle {
+	return s.Titles
+}
+
+// GetTvdb returns the value of Tvdb.
+func (s *ForeignTitles) GetTvdb() ForeignTitlesTvdb {
+	return s.Tvdb
+}
+
+// GetAttribution returns the value of Attribution.
+func (s *ForeignTitles) GetAttribution() string {
+	return s.Attribution
+}
+
+// SetLanguage sets the value of Language.
+func (s *ForeignTitles) SetLanguage(val string) {
+	s.Language = val
+}
+
+// SetSeason sets the value of Season.
+func (s *ForeignTitles) SetSeason(val OptInt) {
+	s.Season = val
+}
+
+// SetTitles sets the value of Titles.
+func (s *ForeignTitles) SetTitles(val []ForeignTitle) {
+	s.Titles = val
+}
+
+// SetTvdb sets the value of Tvdb.
+func (s *ForeignTitles) SetTvdb(val ForeignTitlesTvdb) {
+	s.Tvdb = val
+}
+
+// SetAttribution sets the value of Attribution.
+func (s *ForeignTitles) SetAttribution(val string) {
+	s.Attribution = val
+}
+
+// What the opt-in TheTVDB provider did; `disabled` when no API key is set.
+type ForeignTitlesTvdb string
+
+const (
+	ForeignTitlesTvdbDisabled     ForeignTitlesTvdb = "disabled"
+	ForeignTitlesTvdbOk           ForeignTitlesTvdb = "ok"
+	ForeignTitlesTvdbUnauthorized ForeignTitlesTvdb = "unauthorized"
+	ForeignTitlesTvdbRateLimited  ForeignTitlesTvdb = "rate_limited"
+	ForeignTitlesTvdbUnavailable  ForeignTitlesTvdb = "unavailable"
+)
+
+// AllValues returns all ForeignTitlesTvdb values.
+func (ForeignTitlesTvdb) AllValues() []ForeignTitlesTvdb {
+	return []ForeignTitlesTvdb{
+		ForeignTitlesTvdbDisabled,
+		ForeignTitlesTvdbOk,
+		ForeignTitlesTvdbUnauthorized,
+		ForeignTitlesTvdbRateLimited,
+		ForeignTitlesTvdbUnavailable,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ForeignTitlesTvdb) MarshalText() ([]byte, error) {
+	switch s {
+	case ForeignTitlesTvdbDisabled:
+		return []byte(s), nil
+	case ForeignTitlesTvdbOk:
+		return []byte(s), nil
+	case ForeignTitlesTvdbUnauthorized:
+		return []byte(s), nil
+	case ForeignTitlesTvdbRateLimited:
+		return []byte(s), nil
+	case ForeignTitlesTvdbUnavailable:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ForeignTitlesTvdb) UnmarshalText(data []byte) error {
+	switch ForeignTitlesTvdb(data) {
+	case ForeignTitlesTvdbDisabled:
+		*s = ForeignTitlesTvdbDisabled
+		return nil
+	case ForeignTitlesTvdbOk:
+		*s = ForeignTitlesTvdbOk
+		return nil
+	case ForeignTitlesTvdbUnauthorized:
+		*s = ForeignTitlesTvdbUnauthorized
+		return nil
+	case ForeignTitlesTvdbRateLimited:
+		*s = ForeignTitlesTvdbRateLimited
+		return nil
+	case ForeignTitlesTvdbUnavailable:
+		*s = ForeignTitlesTvdbUnavailable
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 type GetRuntimeSettingsForbidden ProblemStatusCode
 
 func (*GetRuntimeSettingsForbidden) getRuntimeSettingsRes() {}
