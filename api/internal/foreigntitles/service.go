@@ -21,6 +21,7 @@ import (
 
 	"github.com/golusoris/golusoris/cache/memory"
 	rediscache "github.com/golusoris/golusoris/cache/redis"
+	"github.com/golusoris/golusoris/cache/twotier"
 	"github.com/golusoris/golusoris/core/clock"
 	gconfig "github.com/golusoris/golusoris/core/config"
 
@@ -176,9 +177,13 @@ func newProvider(
 	logger *slog.Logger,
 	m *metrics.Metrics,
 ) (*tvdbprovider.Provider, error) {
-	redisOpts, err := loadRedisOptions(coreCfg)
-	if err != nil {
-		return nil, err
+	var redisOpts rediscache.Options
+	if cfg.Metadata.TVDB.APIKey != "" && cfg.Metadata.Cache.L2 == twotier.L2Redis {
+		var err error
+		redisOpts, err = loadRedisOptions(coreCfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 	p, err := tvdbprovider.New(
 		cfg.Metadata.TVDB.APIKey,
@@ -188,6 +193,7 @@ func newProvider(
 		logger,
 		tvdbprovider.WithUserAgent(arrclient.DefaultOptions().UserAgent),
 		tvdbprovider.WithL2(cfg.Metadata.Cache.L2, redisOpts),
+		tvdbprovider.WithRedisPlaintext(cfg.Metadata.Cache.RedisPlaintext),
 		tvdbprovider.WithMetrics(m),
 	)
 	if err != nil {

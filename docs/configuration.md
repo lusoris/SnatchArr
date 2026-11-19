@@ -48,6 +48,7 @@ UI.
 | `APP_SNATCHARR_METADATA_TVDB_API_KEY` | | Optional TheTVDB API key (secret, write-only). Empty keeps the TVDB provider off and SnatchArr makes no TVDB request. When set, TVDB translations and aliases join the foreign-title list that `getForeignTitles` previews; no search uses that list until issue #1150 ([ADR-0048](adr/0048-tvdb-metadata-provider.md)) |
 | `APP_SNATCHARR_METADATA_TVDB_PIN` | | Optional TheTVDB subscriber PIN (secret, write-only); needed only for a user-supported key. Ignored without the API key |
 | `APP_SNATCHARR_METADATA_CACHE_L2` | `none` | Outbound metadata HTTP cache L2: `none` or `redis`. Redis mode reuses `cache.redis.*` and supports Dragonfly-compatible deployments ([ADR-0048](adr/0048-tvdb-metadata-provider.md)) |
+| `APP_SNATCHARR_METADATA_CACHE_REDIS_PLAINTEXT` | `false` | Allow a Redis password over an unencrypted connection to a remote address when metadata cache L2 is `redis`. Requires explicit opt-in; prefer TLS. |
 | `APP_SNATCHARR_LOGS_RING_SIZE` | `2000` | Log records the API keeps in memory for the admin [Logs](logs.md) page; clamped to 100 to 20000 |
 | `APP_SNATCHARR_WEB_DEV` | `false` | Disable the embedded SPA (Vite dev server proxies instead) |
 | `APP_SNATCHARR_PROXY_TRUSTED` | | Comma-separated CIDRs of trusted reverse proxies (e.g. `10.0.0.0/8`). Enables client IP resolution from `X-Forwarded-For` for login throttling |

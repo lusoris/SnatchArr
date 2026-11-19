@@ -52,6 +52,7 @@
 //	snatcharr.metadata.tvdb.api_key APP_SNATCHARR_METADATA_TVDB_API_KEY TheTVDB API key; empty = TVDB provider off (ADR-0048)
 //	snatcharr.metadata.tvdb.pin  APP_SNATCHARR_METADATA_TVDB_PIN  optional TheTVDB subscriber PIN (ADR-0048)
 //	snatcharr.metadata.cache.l2  APP_SNATCHARR_METADATA_CACHE_L2  metadata HTTP cache L2: none | redis (default none)
+//	snatcharr.metadata.cache.redis_plaintext APP_SNATCHARR_METADATA_CACHE_REDIS_PLAINTEXT allow remote Redis password without TLS (default false)
 //	snatcharr.item_search.cooldown_seconds APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS per-user item search cooldown in seconds (default 60, 0..3600, 0 = off)
 //	snatcharr.download_priority.interval_seconds APP_SNATCHARR_DOWNLOAD_PRIORITY_INTERVAL_SECONDS observe interval (default 60, 15..3600)
 //
@@ -162,7 +163,8 @@ const (
 
 // MetadataCacheOptions configures the shared outbound metadata HTTP cache.
 type MetadataCacheOptions struct {
-	L2 string `koanf:"l2"`
+	L2             string `koanf:"l2"`
+	RedisPlaintext bool   `koanf:"redis_plaintext"`
 }
 
 // Validate refuses cache backends the provider cannot construct.

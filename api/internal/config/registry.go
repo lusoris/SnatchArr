@@ -473,6 +473,14 @@ var registry = []Setting{
 		Apply:   ApplyRestart,
 	},
 	{
+		Key:     "snatcharr.metadata.cache.redis_plaintext",
+		Env:     "APP_SNATCHARR_METADATA_CACHE_REDIS_PLAINTEXT",
+		Class:   ClassRuntime,
+		Type:    "bool",
+		Default: "false",
+		Apply:   ApplyRestart,
+	},
+	{
 		Key:     "snatcharr.item_search.cooldown_seconds",
 		Env:     "APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS",
 		Class:   ClassRuntime,

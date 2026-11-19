@@ -162,6 +162,24 @@ var applySettingCases = []applySettingCase{
 		errIs:   domain.ErrInvalid,
 	},
 	{
+		name: "positive metadata Redis plaintext opt-in",
+		key:  "snatcharr.metadata.cache.redis_plaintext",
+		val:  "true",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if !o.Metadata.Cache.RedisPlaintext {
+				t.Fatal("metadata Redis plaintext opt-in = false, want true")
+			}
+		},
+	},
+	{
+		name:    "negative invalid metadata Redis plaintext opt-in",
+		key:     "snatcharr.metadata.cache.redis_plaintext",
+		val:     "invalid",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+	},
+	{
 		name:    "negative unknown tvdb option",
 		key:     "snatcharr.metadata.tvdb.unknown",
 		val:     "x",

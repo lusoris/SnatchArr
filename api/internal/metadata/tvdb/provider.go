@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -68,6 +69,8 @@ const (
 	loginFailedMessage = "login failed"
 	cachePrefix        = "metadata.tvdb.http"
 	defaultBaseURL     = "https://api4.thetvdb.com/v4"
+	maxRedisAddresses  = 16
+	redisPlaintextKey  = "snatcharr.metadata.cache.redis_plaintext"
 )
 
 var (
@@ -98,16 +101,17 @@ type Ref struct {
 type Option func(*config)
 
 type config struct {
-	baseURL     string
-	rate        string
-	retryWait   time.Duration
-	userAgent   string
-	tlsConfig   *tls.Config
-	l2          string
-	redis       rediscache.Options
-	redisClient rueidis.Client
-	shared      bool
-	metrics     *metrics.Metrics
+	baseURL        string
+	rate           string
+	retryWait      time.Duration
+	userAgent      string
+	tlsConfig      *tls.Config
+	l2             string
+	redis          rediscache.Options
+	redisClient    rueidis.Client
+	redisPlaintext bool
+	shared         bool
+	metrics        *metrics.Metrics
 }
 
 // WithBaseURL points the provider at another API root (tests).
@@ -129,6 +133,11 @@ func withTLSConfig(tlsConfig *tls.Config) Option {
 // WithL2 selects the metadata cache L2 and supplies the shared cache.redis.* options.
 func WithL2(mode string, opts rediscache.Options) Option {
 	return func(c *config) { c.l2, c.redis = mode, opts }
+}
+
+// WithRedisPlaintext explicitly permits a password over an unencrypted remote Redis connection.
+func WithRedisPlaintext(allowed bool) Option {
+	return func(c *config) { c.redisPlaintext = allowed }
 }
 
 // WithMetrics records cache response statuses.
@@ -266,11 +275,11 @@ func newCacheStore(l1 *memory.Cache, logger *slog.Logger, cfg config) (*twotier.
 	client := cfg.redisClient
 	if cfg.l2 == twotier.L2None {
 		ttl = PositiveTTL
-	} else if client == nil {
+	} else {
 		var err error
-		client, err = rueidis.NewClient(redisClientOption(cfg.redis))
+		client, err = redisForCache(cfg, logger)
 		if err != nil {
-			return nil, nil, fmt.Errorf("tvdb: Redis client: %w", err)
+			return nil, nil, err
 		}
 	}
 	if cfg.l2 != twotier.L2None {
@@ -286,10 +295,37 @@ func newCacheStore(l1 *memory.Cache, logger *slog.Logger, cfg config) (*twotier.
 	return store, client, nil
 }
 
-func redisClientOption(opts rediscache.Options) rueidis.ClientOption {
+func redisForCache(cfg config, logger *slog.Logger) (rueidis.Client, error) {
+	clientOpts, err := redisClientOption(cfg.redis)
+	if err != nil {
+		return nil, fmt.Errorf("tvdb: Redis options: %w", err)
+	}
+	if cfg.redis.Password != "" && !cfg.redis.TLS && hasRemoteRedisAddress(clientOpts.InitAddress) {
+		if !cfg.redisPlaintext {
+			return nil, fmt.Errorf("tvdb: Redis password requires TLS or %s", redisPlaintextKey)
+		}
+		logger.Warn("tvdb: plaintext Redis password explicitly allowed", "option", redisPlaintextKey)
+	}
+	if cfg.redisClient != nil {
+		return cfg.redisClient, nil
+	}
+	client, err := rueidis.NewClient(clientOpts)
+	if err != nil {
+		return nil, fmt.Errorf("tvdb: Redis client: %w", err)
+	}
+	return client, nil
+}
+
+func redisClientOption(opts rediscache.Options) (rueidis.ClientOption, error) {
+	if opts.Addr == "" || strings.Count(opts.Addr, ",")+1 > maxRedisAddresses {
+		return rueidis.ClientOption{}, fmt.Errorf("redis address count must be 1..%d", maxRedisAddresses)
+	}
 	addrs := strings.Split(opts.Addr, ",")
 	for i := range addrs {
 		addrs[i] = strings.TrimSpace(addrs[i])
+		if addrs[i] == "" {
+			return rueidis.ClientOption{}, errors.New("empty Redis address")
+		}
 	}
 	clientOpts := rueidis.ClientOption{
 		InitAddress: addrs, Username: opts.Username, Password: opts.Password, SelectDB: opts.DB,
@@ -297,7 +333,22 @@ func redisClientOption(opts rediscache.Options) rueidis.ClientOption {
 	if opts.TLS {
 		clientOpts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
-	return clientOpts
+	return clientOpts, nil
+}
+
+func hasRemoteRedisAddress(addrs []string) bool {
+	for _, addr := range addrs {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil || (!strings.EqualFold(host, "localhost") && !isLoopbackIP(host)) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLoopbackIP(host string) bool {
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // Close releases the HTTP cache registration, idle connections and optional Redis client.
@@ -381,17 +432,19 @@ func hasLookup(ref Ref) bool {
 	return false
 }
 
-// load holds the provider slot. Its deadline starts before the slot wait, so a caller
-// without one still gives up (HISS-02). The HTTP cache singleflights identical GETs.
+// load holds the provider slot. Caller cancellation bounds the slot wait; the bounded
+// upstream lookup can finish and populate the shared HTTP cache after that.
 func (p *Provider) load(ctx context.Context, ref Ref, lang, rule string) ([]foreigntitle.LanguageTitle, error) {
-	ctx, cancel := context.WithTimeout(ctx, p.lookup)
-	defer cancel()
+	waitCtx, waitCancel := context.WithTimeout(ctx, p.lookup)
+	defer waitCancel()
 	select {
 	case p.slot <- struct{}{}:
-	case <-ctx.Done():
-		return nil, fmt.Errorf("%w: %w", ErrUnavailable, ctx.Err())
+	case <-waitCtx.Done():
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, waitCtx.Err())
 	}
 	defer func() { <-p.slot }()
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.lookup)
+	defer cancel()
 	if p.failed.Load() {
 		return nil, ErrUnauthorized
 	}

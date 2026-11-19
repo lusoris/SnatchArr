@@ -275,7 +275,16 @@ func applyTVDB(o *Options, key, val string) error {
 }
 
 func applyMetadataCache(o *Options, key, val string) error {
-	if key != "snatcharr.metadata.cache.l2" {
+	switch key {
+	case "snatcharr.metadata.cache.redis_plaintext":
+		allowed, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("%w: invalid bool for %s", domain.ErrInvalid, key)
+		}
+		o.Metadata.Cache.RedisPlaintext = allowed
+		return nil
+	case "snatcharr.metadata.cache.l2":
+	default:
 		return fmt.Errorf("%w: unknown metadata cache option %q", domain.ErrInvalid, key)
 	}
 	l2 := strings.ToLower(strings.TrimSpace(val))

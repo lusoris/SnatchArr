@@ -1042,6 +1042,26 @@ var loadCompoundKeysFromEnvCases = []loadCompoundKeysFromEnvCase{
 		},
 	},
 	{
+		name: "metadata Redis plaintext opt-in from env",
+		env:  map[string]string{"APP_SNATCHARR_METADATA_CACHE_REDIS_PLAINTEXT": "true"},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if !opts.Metadata.Cache.RedisPlaintext {
+				t.Fatal("metadata Redis plaintext opt-in = false, want true")
+			}
+		},
+	},
+	{
+		name: "metadata Redis plaintext default off",
+		env:  map[string]string{},
+		assertFn: func(t *testing.T, opts config.Options) {
+			t.Helper()
+			if opts.Metadata.Cache.RedisPlaintext {
+				t.Fatal("metadata Redis plaintext opt-in = true, want false")
+			}
+		},
+	},
+	{
 		name: "jellyfin full env",
 		env: map[string]string{
 			"APP_SNATCHARR_JELLYFIN_ENABLED":      "true",

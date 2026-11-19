@@ -15,8 +15,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -58,6 +60,8 @@ type stub struct {
 	agent     atomic.Value  // last User-Agent header seen
 	started   chan struct{} // signals a held series request
 	release   <-chan struct{}
+	pathMu    sync.Mutex
+	pathHits  map[string]int
 	redirect  func(http.ResponseWriter, *http.Request) bool
 }
 
@@ -90,6 +94,12 @@ func newStubWithServer(t *testing.T, newServer func(http.Handler) *httptest.Serv
 
 func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 	s.total.Add(1)
+	s.pathMu.Lock()
+	if s.pathHits == nil {
+		s.pathHits = make(map[string]int)
+	}
+	s.pathHits[r.URL.Path]++
+	s.pathMu.Unlock()
 	s.agent.Store(r.Header.Get("User-Agent"))
 	if s.redirect != nil && s.redirect(w, r) {
 		return
@@ -374,7 +384,7 @@ func TestOutboundRateLimit(t *testing.T) {
 		minElapsed   time.Duration
 	}{
 		{"burst waits", 0, nil, 3, 500 * time.Millisecond},
-		{"caller deadline stops wait", 50 * time.Millisecond, ErrUnavailable, 2, 0},
+		{"caller deadline does not stop outbound wait", 50 * time.Millisecond, nil, 3, 500 * time.Millisecond},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -411,6 +421,22 @@ func TestOutboundRateLimit(t *testing.T) {
 				t.Fatalf("requests = %d, want %d", got, tc.wantRequests)
 			}
 		})
+	}
+}
+
+func TestCallerDeadlineStopsSlotWait(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, plantedPIN, nil)
+	p.slot <- struct{}{}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	_, err := p.TitlesFor(ctx, sonarrRef(), "de")
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("TitlesFor() error = %v, want %v", err, ErrUnavailable)
+	}
+	if got := s.total.Load(); got != 0 {
+		t.Fatalf("upstream requests = %d, want 0 while waiting for slot", got)
 	}
 }
 
@@ -537,8 +563,131 @@ func TestCacheKeysContainNoCredential(t *testing.T) {
 	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
 		t.Fatal(err)
 	}
+	if count := len(slices.Collect(l1.Keys())); count == 0 {
+		t.Fatalf("cache key count = %d, want at least one", count)
+	}
 	for key := range l1.Keys() {
 		assertNoSecret(t, fmt.Sprint(key))
+	}
+}
+
+func TestRedisPlaintextRequiresOptIn(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, addr string
+		password   string
+		tls, optIn bool
+		wantError  bool
+		wantWarn   bool
+	}{
+		{"remote credential", "cache.example:6379", "planted-password", false, false, true, false},
+		{"remote opted in", "cache.example:6379", "planted-password", false, true, false, true},
+		{"remote TLS", "cache.example:6379", "planted-password", true, false, false, false},
+		{"remote no password", "cache.example:6379", "", false, false, false, false},
+		{"localhost", "localhost:6379", "planted-password", false, false, false, false},
+		{"127 range", "127.0.0.2:6379", "planted-password", false, false, false, false},
+		{"IPv6 loopback", "[::1]:6379", "planted-password", false, false, false, false},
+		{"mixed list", "127.0.0.1:6379,cache.example:6379", "planted-password", false, false, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&logs, nil))
+			p, err := New(plantedKey, "", testPool(t), clock.NewFake(), logger,
+				WithL2("redis", rediscache.Options{Addr: tc.addr, Password: tc.password, TLS: tc.tls}),
+				WithRedisPlaintext(tc.optIn), withRedisClient(&closeOnlyRedisClient{}))
+			if tc.wantError {
+				if err == nil || !strings.Contains(err.Error(), redisPlaintextKey) {
+					t.Fatalf("New() error = %v, want %s", err, redisPlaintextKey)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("New() error = %v", err)
+				}
+				t.Cleanup(func() { _ = p.Close() })
+			}
+			if got := strings.Count(logs.String(), "level=WARN"); (got == 1) != tc.wantWarn || got > 1 {
+				t.Fatalf("Warn records = %d, want one = %t", got, tc.wantWarn)
+			}
+			if tc.wantWarn && !strings.Contains(logs.String(), redisPlaintextKey) {
+				t.Fatal("Warn missing opt-in key")
+			}
+			if strings.Contains(logs.String(), tc.addr) || (tc.password != "" && strings.Contains(logs.String(), tc.password)) {
+				t.Fatal("Warn exposed Redis address or password")
+			}
+		})
+	}
+}
+
+func TestRedisAddressLimit(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, addr string
+		wantError  bool
+	}{
+		{"sixteen", strings.Repeat("a:1,", maxRedisAddresses-1) + "a:1", false},
+		{"seventeen", strings.Repeat("a:1,", maxRedisAddresses) + "a:1", true},
+		{"empty entry", "a:1,,b:2", true},
+		{"empty address", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := redisClientOption(rediscache.Options{Addr: tc.addr})
+			if (err != nil) != tc.wantError {
+				t.Fatalf("redisClientOption() error = %v, want error = %t", err, tc.wantError)
+			}
+			if tc.name == "seventeen" && !strings.Contains(err.Error(), "16") {
+				t.Fatalf("address cap error = %v, want 16", err)
+			}
+		})
+	}
+}
+
+func TestCallerCancelKeepsSharedLookup(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.started = make(chan struct{}, 2)
+	release := make(chan struct{})
+	s.release = release
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	p := s.provider(t, plantedKey, "", nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, err := p.TitlesFor(ctx, sonarrRef(), "de"); result <- err }()
+	deadline, stop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stop()
+	select {
+	case <-s.started:
+	case <-deadline.Done():
+		t.Fatal("series request did not start")
+	}
+	cancel()
+	close(release)
+	resultErr := error(nil)
+	select {
+	case resultErr = <-result:
+	case <-deadline.Done():
+		t.Fatal("first lookup did not finish")
+	}
+	if resultErr != nil {
+		t.Fatalf("first lookup error = %v", resultErr)
+	}
+	got, err := p.TitlesFor(deadline, sonarrRef(), "de")
+	if err != nil || len(got) == 0 {
+		t.Fatalf("second lookup = %v, %v, want titles", got, err)
+	}
+	s.pathMu.Lock()
+	series, translation := s.pathHits["/series/81189"], s.pathHits["/series/81189/translations/deu"]
+	s.pathMu.Unlock()
+	if series != 1 || translation != 1 {
+		t.Fatalf("upstream series/translation requests = %d/%d, want 1/1", series, translation)
 	}
 }
 
