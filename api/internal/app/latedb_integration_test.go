@@ -30,12 +30,16 @@ import (
 )
 
 const (
-	lateDBDelay       = 1500 * time.Millisecond
-	lateDBTimeout     = 30 * time.Second
-	maxProxyAccepts   = 64
-	maxProxyPolls     = 120
-	proxyPollInterval = 250 * time.Millisecond
-	proxyDeadlineHold = 5 * time.Second
+	lateDBDelay        = 1500 * time.Millisecond
+	lateDBTimeout      = 30 * time.Second
+	lateDBConnectTime  = time.Second
+	lateDBRetryMax     = 250 * time.Millisecond
+	lateDBRetryInitial = 100 * time.Millisecond
+	maxLateDBAttempts  = 128
+	maxProxyAccepts    = 64
+	maxProxyPollCount  = 256
+	proxyPollInterval  = 250 * time.Millisecond
+	proxyDeadlineHold  = 5 * time.Second
 )
 
 // lateDatabaseProxyStats tracks early connection resets separately from database forwards.
@@ -46,18 +50,27 @@ type lateDatabaseProxyStats struct {
 
 // lateDatabaseConfig preserves the shutdown test's full control-plane config while
 // pointing both database consumers at the delayed proxy and setting retry explicitly.
-func lateDatabaseConfig(t *testing.T, grpcAddr, proxyAddr string) *config.Config {
+func lateDatabaseConfig(t *testing.T, ctx context.Context, database testDatabase, grpcAddr, proxyAddr string) *config.Config {
 	t.Helper()
-	base := controlPlaneConfig(t, grpcAddr)
+	base := controlPlaneConfigForDatabase(t, grpcAddr, database)
 	dsn, err := url.Parse(base.Get("db.dsn"))
 	if err != nil {
 		t.Fatalf("parse test database DSN: %v", err)
 	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("late database start context has no deadline")
+	}
+	remaining := deadline.Sub(clockwork.NewRealClock().Now())
+	attempts, err := lateDBConnectAttempts(remaining, lateDBConnectTime, lateDBRetryMax, maxLateDBAttempts)
+	if err != nil {
+		t.Fatalf("derive late database retry attempts: %v", err)
+	}
 	dsn.Host = proxyAddr
 	raw, err := json.Marshal(map[string]any{
 		"snatcharr": map[string]any{"profile": base.Get("snatcharr.profile"), "worker": map[string]any{"token": workerToken}},
-		"db": map[string]any{"dsn": dsn.String(), "retry": map[string]any{
-			"attempts": 10, "initial": "100ms", "max": "1s",
+		"db": map[string]any{"dsn": dsn.String(), "connect_timeout": lateDBConnectTime.String(), "retry": map[string]any{
+			"attempts": attempts, "initial": lateDBRetryInitial.String(), "max": lateDBRetryMax.String(),
 		}},
 		"http": map[string]any{"addr": base.Get("http.addr")},
 		"grpc": map[string]any{"listen": grpcAddr},
@@ -78,12 +91,17 @@ func lateDatabaseConfig(t *testing.T, grpcAddr, proxyAddr string) *config.Config
 
 // startLateDatabaseProxy serves from a listener bound before app construction and closes
 // active forwards when the test context ends.
-func startLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListener, realAddr string) *lateDatabaseProxyStats {
+func startLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListener, realAddr string, rejectWindow time.Duration) *lateDatabaseProxyStats {
 	t.Helper()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("late database proxy context has no deadline")
+	}
+	polls := lateDBProxyPollCount(deadline.Sub(clockwork.NewRealClock().Now()), proxyPollInterval, maxProxyPollCount)
 	proxyCtx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	stats := &lateDatabaseProxyStats{}
-	go func() { done <- serveLateDatabaseProxy(t, proxyCtx, ln, realAddr, stats) }()
+	go func() { done <- serveLateDatabaseProxy(t, proxyCtx, ln, realAddr, rejectWindow, polls, stats) }()
 	t.Cleanup(func() {
 		cancel()
 		if err := ln.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
@@ -104,7 +122,7 @@ func startLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListen
 // serveLateDatabaseProxy resets early connections, forwards later ones after the delay
 // window opens at the first rejected connection, and waits for every bounded forwarder
 // after closing active connections on context cancellation.
-func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListener, realAddr string, stats *lateDatabaseProxyStats) error {
+func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListener, realAddr string, rejectWindow time.Duration, pollLimit int, stats *lateDatabaseProxyStats) error {
 	t.Helper()
 	var delay <-chan time.Time
 	var timer *time.Timer
@@ -117,7 +135,7 @@ func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListen
 	defer active.Wait()
 	accepted := 0
 	delayElapsed := false
-	for range maxProxyPolls {
+	for range pollLimit {
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -147,11 +165,11 @@ func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListen
 			return err
 		}
 		if timer == nil && stats.rejected.Load() > 0 {
-			timer = time.NewTimer(lateDBDelay)
+			timer = time.NewTimer(rejectWindow)
 			delay = timer.C
 		}
 	}
-	return fmt.Errorf("proxy accept loop reached %d polls", maxProxyPolls)
+	return fmt.Errorf("proxy accept loop reached %d polls", pollLimit)
 }
 
 // lateDatabaseDelayElapsed reports whether the delay window opened at the first
@@ -444,9 +462,21 @@ func closeProxyConnection(t *testing.T, conn net.Conn) {
 // opens, even when PostgreSQL begins accepting connections after app creation.
 func TestLateDatabaseStart(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), lateDBTimeout)
-	defer cancel()
-	realAddr := newTestDatabase(t).host
+	runLateDatabaseStart(t, lateDBDelay)
+}
+
+// TestLateDatabaseStartWithinRetryBudget proves a delayed database becomes ready after
+// more than ten fast connection resets while app startup remains inside its deadline.
+func TestLateDatabaseStartWithinRetryBudget(t *testing.T) {
+	t.Parallel()
+	runLateDatabaseStart(t, 3*time.Second)
+}
+
+// runLateDatabaseStart starts a control plane through a rejecting database proxy.
+func runLateDatabaseStart(t *testing.T, rejectWindow time.Duration) {
+	t.Helper()
+	database := newTestDatabase(t)
+	realAddr := database.host
 	var startProxy sync.Once
 	var migrator *dbmigrate.Migrator
 	proxyListener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
@@ -459,9 +489,13 @@ func TestLateDatabaseStart(t *testing.T) {
 		}
 	})
 	var proxyStats *lateDatabaseProxyStats
+	ctx, cancel := context.WithTimeout(t.Context(), lateDBTimeout)
+	defer cancel()
 	app, _ := startOnFreePort(ctx, t, freeAddr, func(grpcAddr string) *fx.App {
-		cfg := lateDatabaseConfig(t, grpcAddr, proxyListener.Addr().String())
-		startProxy.Do(func() { proxyStats = startLateDatabaseProxy(t, ctx, proxyListener, realAddr) })
+		cfg := lateDatabaseConfig(t, ctx, database, grpcAddr, proxyListener.Addr().String())
+		startProxy.Do(func() {
+			proxyStats = startLateDatabaseProxy(t, ctx, proxyListener, realAddr, rejectWindow)
+		})
 		return fx.New(
 			fx.Supply(buildinfo.Info{Version: "test"}), Module,
 			fx.Decorate(func(*config.Config) *config.Config { return cfg }),
