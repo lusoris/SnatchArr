@@ -12,6 +12,7 @@ import (
 	gerr "github.com/golusoris/golusoris/core/errors"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/pathsafe"
 )
 
 func resolveRootRel(base, path string) (string, string, error) {
@@ -20,7 +21,7 @@ func resolveRootRel(base, path string) (string, string, error) {
 	if !filepath.IsAbs(cleanPath) {
 		cleanPath = filepath.Clean(filepath.Join(cleanBase, cleanPath))
 	}
-	if !isCleanSubdir(cleanBase, cleanPath) {
+	if !pathsafe.StrictlyWithin(cleanBase, cleanPath) {
 		return "", "", fmt.Errorf("adult: file path escapes base dir: %w", domain.ErrInvalid)
 	}
 	rel, err := filepath.Rel(cleanBase, cleanPath)
