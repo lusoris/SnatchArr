@@ -424,22 +424,6 @@ func TestOutboundRateLimit(t *testing.T) {
 	}
 }
 
-func TestCallerDeadlineStopsSlotWait(t *testing.T) {
-	t.Parallel()
-	s := newStub(t)
-	p := s.provider(t, plantedKey, plantedPIN, nil)
-	p.slot <- struct{}{}
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
-	_, err := p.TitlesFor(ctx, sonarrRef(), "de")
-	if !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("TitlesFor() error = %v, want %v", err, ErrUnavailable)
-	}
-	if got := s.total.Load(); got != 0 {
-		t.Fatalf("upstream requests = %d, want 0 while waiting for slot", got)
-	}
-}
-
 func TestNotFoundResponseIsCached(t *testing.T) {
 	t.Parallel()
 	s := newStub(t)

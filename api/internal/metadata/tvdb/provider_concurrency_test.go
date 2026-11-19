@@ -69,17 +69,46 @@ func TestConcurrentDistinctItemsRace(t *testing.T) {
 
 func TestWaitingLookupHonoursDeadline(t *testing.T) {
 	t.Parallel()
-	s := newStub(t)
-	p := s.provider(t, plantedKey, "", nil)
-	p.slot <- struct{}{}
-	defer func() { <-p.slot }()
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
-	_, err := p.TitlesFor(ctx, sonarrRef(), "de")
-	if !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("TitlesFor() error = %v, want ErrUnavailable", err)
-	}
-	if n := s.total.Load(); n != 0 {
-		t.Fatalf("requests = %d, want 0", n)
+	for _, tc := range []struct {
+		name           string
+		callerDeadline bool
+		lookup         time.Duration
+	}{
+		{name: "caller deadline", callerDeadline: true},
+		{name: "provider lookup bound", lookup: 50 * time.Millisecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			p := s.provider(t, plantedKey, plantedPIN, nil)
+			if tc.lookup > 0 {
+				p.lookup = tc.lookup
+			}
+			p.slot <- struct{}{}
+			defer func() { <-p.slot }()
+
+			lookupCtx := t.Context()
+			cancel := func() {}
+			if tc.callerDeadline {
+				lookupCtx, cancel = context.WithTimeout(t.Context(), time.Second)
+			}
+			defer cancel()
+			result := make(chan error, 1)
+			go func() { _, err := p.TitlesFor(lookupCtx, sonarrRef(), "de"); result <- err }()
+
+			outer, cancelOuter := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancelOuter()
+			select {
+			case err := <-result:
+				if !errors.Is(err, ErrUnavailable) {
+					t.Fatalf("TitlesFor() error = %v, want %v", err, ErrUnavailable)
+				}
+			case <-outer.Done():
+				t.Fatalf("TitlesFor() did not stop waiting for the slot: %v", outer.Err())
+			}
+			if got := s.total.Load(); got != 0 {
+				t.Fatalf("upstream requests = %d, want 0 while waiting for slot", got)
+			}
+		})
 	}
 }
