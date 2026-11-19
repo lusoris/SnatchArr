@@ -296,6 +296,85 @@ done
 expect_fixture path-dep-bound-63 0 'ok: Cargo.toml rust-version 1.100 matches rust-toolchain.toml channel 1.100.0'
 expect_fixture path-dep-bound-64 1 'error: workspace manifests exceed 64'
 
+# Cargo accepts underscore spellings for dependency tables before edition 2024.
+fixture legacy-build-member 1.100.0 1.100.0
+mkdir -p "$work/legacy-build-member/extra/a" "$work/legacy-build-member/extra/b"
+printf '%s\n' '[workspace]' 'members = ["extra/a"]' '[workspace.package]' \
+    'rust-version = "1.100.0"' > "$work/legacy-build-member/Cargo.toml"
+printf '%s\n' '[package]' 'name = "a"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    '[build_dependencies]' 'b = { path = "../b" }' \
+    > "$work/legacy-build-member/extra/a/Cargo.toml"
+printf '%s\n' '[package]' 'name = "b"' 'version = "0.1.0"' \
+    'rust-version = "1.99"' > "$work/legacy-build-member/extra/b/Cargo.toml"
+expect_fixture legacy-build-member 3 \
+    'extra/b/Cargo.toml:4 has literal rust-version 1.99; use rust-version.workspace = true'
+
+fixture legacy-dev-target-member 1.100.0 1.100.0
+mkdir -p "$work/legacy-dev-target-member/extra/a" "$work/legacy-dev-target-member/extra/b"
+printf '%s\n' '[workspace]' 'members = ["extra/a"]' '[workspace.package]' \
+    'rust-version = "1.100.0"' > "$work/legacy-dev-target-member/Cargo.toml"
+printf '%s\n' '[package]' 'name = "a"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    "[target.'cfg(unix)'.dev_dependencies]" 'b = { path = "../b" }' \
+    > "$work/legacy-dev-target-member/extra/a/Cargo.toml"
+printf '%s\n' '[package]' 'name = "b"' 'version = "0.1.0"' \
+    'rust-version = "1.99"' > "$work/legacy-dev-target-member/extra/b/Cargo.toml"
+expect_fixture legacy-dev-target-member 3 \
+    'extra/b/Cargo.toml:4 has literal rust-version 1.99; use rust-version.workspace = true'
+
+fixture root-package-literal 1.100.0 1.100.0
+printf '%s\n' '[workspace]' 'members = []' '[workspace.package]' 'rust-version = "1.100.0"' \
+    '[package]' 'name = "root"' 'version = "0.1.0"' 'rust-version = "1.99"' \
+    > "$work/root-package-literal/Cargo.toml"
+expect_fixture root-package-literal 3 \
+    'Cargo.toml:8 has literal rust-version 1.99; use rust-version.workspace = true'
+
+fixture root-package-missing 1.100.0 1.100.0
+printf '%s\n' '[workspace]' 'members = []' '[workspace.package]' 'rust-version = "1.100.0"' \
+    '[package]' 'name = "root"' 'version = "0.1.0"' \
+    > "$work/root-package-missing/Cargo.toml"
+expect_fixture root-package-missing 3 'Cargo.toml:5 has no rust-version'
+
+fixture root-package-inherits 1.100.0 1.100.0
+printf '%s\n' '[workspace]' 'members = []' '[workspace.package]' 'rust-version = "1.100.0"' \
+    '[package]' 'name = "root"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    > "$work/root-package-inherits/Cargo.toml"
+expect_fixture root-package-inherits 0 \
+    'ok: Cargo.toml rust-version 1.100.0 matches rust-toolchain.toml channel 1.100.0'
+
+fixture root-package-path-dep 1.100.0 1.100.0
+mkdir -p "$work/root-package-path-dep/extra/b"
+printf '%s\n' '[workspace]' 'members = []' '[workspace.package]' 'rust-version = "1.100.0"' \
+    '[package]' 'name = "root"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    '[dependencies]' 'b = { path = "extra/b" }' \
+    > "$work/root-package-path-dep/Cargo.toml"
+printf '%s\n' '[package]' 'name = "b"' 'version = "0.1.0"' \
+    'rust-version = "1.99"' > "$work/root-package-path-dep/extra/b/Cargo.toml"
+expect_fixture root-package-path-dep 3 \
+    'extra/b/Cargo.toml:4 has literal rust-version 1.99; use rust-version.workspace = true'
+
+fixture root-package-listed 1.100.0 1.100.0
+printf '%s\n' '[workspace]' 'members = ["."]' '[workspace.package]' 'rust-version = "1.100.0"' \
+    '[package]' 'name = "root"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    > "$work/root-package-listed/Cargo.toml"
+expect_fixture root-package-listed 0 \
+    'ok: Cargo.toml rust-version 1.100.0 matches rust-toolchain.toml channel 1.100.0'
+
+fixture root-package-listed-literal 1.100.0 1.100.0
+printf '%s\n' '[workspace]' 'members = ["."]' '[workspace.package]' 'rust-version = "1.100.0"' \
+    '[package]' 'name = "root"' 'version = "0.1.0"' 'rust-version = "1.99"' \
+    > "$work/root-package-listed-literal/Cargo.toml"
+status=0
+out=$(python3 -I "$check" --root "$work/root-package-listed-literal" 2>&1) || status=$?
+check_case root-package-listed-literal 3 "$status" \
+    'Cargo.toml:8 has literal rust-version 1.99; use rust-version.workspace = true' "$out"
+refused_count=$(printf '%s\n' "$out" | awk '/^refused:/{count++} END {print count + 0}')
+if [ "$refused_count" -ne 1 ]; then
+    printf 'FAIL root-package-listed-literal: got %s refused lines\n%s\n' \
+        "$refused_count" "$out" >&2
+    exit 1
+fi
+echo 'ok   root-package-listed-literal'
+
 fixture invalid-cargo 1.100 1.100.0
 printf '%s\n' '[workspace' > "$work/invalid-cargo/Cargo.toml"
 expect_fixture invalid-cargo 1 'error: cannot parse Cargo.toml'

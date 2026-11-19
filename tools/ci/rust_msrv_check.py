@@ -17,11 +17,18 @@ import os
 import re
 import sys
 import tomllib
+from collections.abc import Iterable
 from pathlib import Path
 
 MAX_BYTES = 1 << 20
 MAX_MEMBER_MANIFESTS = 64
-DEPENDENCY_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
+DEPENDENCY_TABLES = (
+    "dependencies",
+    "dev-dependencies",
+    "dev_dependencies",
+    "build-dependencies",
+    "build_dependencies",
+)
 MSRV_RELEASE = re.compile(r"\d+\.\d+(?:\.\d+)?")
 FIXED_RELEASE = re.compile(r"\d+\.\d+\.\d+")
 TABLE_HEADER = re.compile(r"\s*\[([A-Za-z0-9_.-]+)]\s*(?:#.*)?")
@@ -147,6 +154,13 @@ def path_dependencies(
     return found
 
 
+def member_candidates(root: Path, pattern: str) -> Iterable[Path]:
+    """Return paths below ROOT matching member PATTERN; a "." pattern names ROOT itself."""
+    if os.path.normpath(pattern) == ".":
+        return [root]
+    return root.glob(pattern)
+
+
 def member_manifests(root: Path, members: object, excludes: list[Path]) -> list[Path]:
     """Expand workspace MEMBERS below ROOT, refusing more than 64 manifest matches."""
     if not isinstance(members, list) or any(
@@ -160,7 +174,7 @@ def member_manifests(root: Path, members: object, excludes: list[Path]) -> list[
             raise InputError(
                 f"Cargo.toml workspace member pattern is absolute: {pattern}"
             )
-        for candidate in root.glob(pattern):
+        for candidate in member_candidates(root, pattern):
             matches += 1
             if matches > MAX_MEMBER_MANIFESTS:
                 raise InputError(
@@ -195,6 +209,8 @@ def check_members(root: Path, cargo: dict[str, object]) -> int:
     excludes = exclude_paths(workspace.get("exclude", []))
     shared = table(workspace, "dependencies")
     pending = member_manifests(root, members, excludes)
+    if "package" in cargo and Path("Cargo.toml") not in pending:
+        pending.insert(0, Path("Cargo.toml"))
     seen = set(pending)
     while pending:
         relative = pending.pop(0)
