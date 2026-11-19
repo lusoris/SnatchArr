@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
 )
 
@@ -154,8 +156,13 @@ func lateDBProxyParameters(test lateDBProxyPollCase) (time.Duration, int) {
 func TestLateDatabaseConfigBudget(t *testing.T) {
 	t.Parallel()
 	perAttempt := lateDBConnectTime + lateDBRetryMax
-	ctx, cancel := context.WithTimeout(t.Context(), lateDBTimeout+perAttempt/2)
+	ctx, cancel := context.WithTimeout(t.Context(), 12*perAttempt+perAttempt/2)
 	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("late database config context has no deadline")
+	}
+	before := deadline.Sub(clockwork.NewRealClock().Now())
 	cfg := lateDatabaseConfig(
 		t,
 		ctx,
@@ -163,6 +170,7 @@ func TestLateDatabaseConfigBudget(t *testing.T) {
 		"127.0.0.1:2",
 		"127.0.0.1:3",
 	)
+	after := deadline.Sub(clockwork.NewRealClock().Now())
 	opts := dbpgx.DefaultOptions()
 	if err := cfg.Unmarshal("db", &opts); err != nil {
 		t.Fatalf("unmarshal database options: %v", err)
@@ -170,18 +178,66 @@ func TestLateDatabaseConfigBudget(t *testing.T) {
 	if opts.ConnectTimeout != lateDBConnectTime || opts.Retry.Max != lateDBRetryMax || opts.Retry.Initial != lateDBRetryInitial {
 		t.Errorf("database timeouts = connect %s, initial %s, max %s", opts.ConnectTimeout, opts.Retry.Initial, opts.Retry.Max)
 	}
-	wantAttempts := int(lateDBTimeout / perAttempt)
-	if opts.Retry.Attempts != wantAttempts {
-		t.Errorf("database retry attempts = %d, want %d", opts.Retry.Attempts, wantAttempts)
+	if opts.Retry.Attempts < int(after/perAttempt) || opts.Retry.Attempts > int(before/perAttempt) {
+		t.Errorf("database retry attempts = %d, want between %d and %d", opts.Retry.Attempts, int(after/perAttempt), int(before/perAttempt))
 	}
-	if time.Duration(opts.Retry.Attempts)*(opts.ConnectTimeout+opts.Retry.Max) > lateDBTimeout+perAttempt/2 {
-		t.Errorf("database retry budget exceeds %s", lateDBTimeout+perAttempt/2)
+	if time.Duration(opts.Retry.Attempts)*(opts.ConnectTimeout+opts.Retry.Max) > before {
+		t.Errorf("database retry budget exceeds remaining %s", before)
 	}
 }
 
-// TestLateDatabaseProxyPollLimit proves the server uses its derived poll limit.
+// TestLateDatabaseProxyPollLimit proves timed-out polls reach their own bound.
 func TestLateDatabaseProxyPollLimit(t *testing.T) {
 	t.Parallel()
+	listener := lateDatabaseTestListener(t)
+	ctx, cancel := context.WithTimeout(t.Context(), lateDBTimeout)
+	defer cancel()
+	const pollLimit = 2
+	stats := &lateDatabaseProxyStats{}
+	err := serveLateDatabaseProxy(t, ctx, listener, "127.0.0.1:1", lateDBDelay, 1, pollLimit, stats)
+	want := fmt.Sprintf("proxy accept loop reached %d polls", pollLimit)
+	if err == nil || err.Error() != want {
+		t.Errorf("serveLateDatabaseProxy error = %v, want %q", err, want)
+	}
+	if got := stats.polls.Load(); got != pollLimit {
+		t.Errorf("proxy timed-out polls = %d, want %d", got, pollLimit)
+	}
+}
+
+// TestLateDatabaseProxyPollLimitAfterAccepts proves queued accepts spend no poll budget.
+func TestLateDatabaseProxyPollLimitAfterAccepts(t *testing.T) {
+	t.Parallel()
+	listener := lateDatabaseTestListener(t)
+	ctx, cancel := context.WithTimeout(t.Context(), lateDBTimeout)
+	defer cancel()
+	const accepted, pollLimit = 3, 2
+	for range accepted {
+		conn, err := (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "tcp", listener.Addr().String())
+		if err != nil {
+			t.Fatalf("queue late database connection: %v", err)
+		}
+		if err := conn.SetDeadline(clockwork.NewRealClock().Now().Add(lateDBTimeout)); err != nil {
+			t.Fatalf("deadline on queued connection: %v", err)
+		}
+		t.Cleanup(func() { closeProxyConnection(t, conn) })
+	}
+	stats := &lateDatabaseProxyStats{}
+	err := serveLateDatabaseProxy(t, ctx, listener, "127.0.0.1:1", lateDBTimeout, 4, pollLimit, stats)
+	want := fmt.Sprintf("proxy accept loop reached %d polls", pollLimit)
+	if err == nil || err.Error() != want {
+		t.Errorf("serveLateDatabaseProxy error = %v, want %q", err, want)
+	}
+	if got := stats.polls.Load(); got != pollLimit {
+		t.Errorf("proxy timed-out polls = %d, want %d", got, pollLimit)
+	}
+	if got := stats.rejected.Load(); got != accepted {
+		t.Errorf("proxy rejected connections = %d, want %d", got, accepted)
+	}
+}
+
+// lateDatabaseTestListener binds a proxy listener and closes it at test cleanup.
+func lateDatabaseTestListener(t *testing.T) *net.TCPListener {
+	t.Helper()
 	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
 		t.Fatalf("listen for late database proxy: %v", err)
@@ -191,12 +247,5 @@ func TestLateDatabaseProxyPollLimit(t *testing.T) {
 			t.Errorf("close late database proxy listener: %v", closeErr)
 		}
 	})
-	ctx, cancel := context.WithTimeout(t.Context(), 3*proxyPollInterval)
-	defer cancel()
-	const pollLimit = 2
-	err = serveLateDatabaseProxy(t, ctx, listener, "127.0.0.1:1", lateDBDelay, pollLimit, &lateDatabaseProxyStats{})
-	want := fmt.Sprintf("proxy accept loop reached %d polls", pollLimit)
-	if err == nil || err.Error() != want {
-		t.Errorf("serveLateDatabaseProxy error = %v, want %q", err, want)
-	}
+	return listener
 }
