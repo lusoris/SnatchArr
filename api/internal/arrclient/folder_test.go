@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,5 +95,48 @@ func TestListFolderDeadline(t *testing.T) {
 	p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 50 * time.Millisecond})
 	if _, err := p.ListFolder(t.Context(), domain.KindSonarr, server.URL, "test-key", "/data/"); err == nil {
 		t.Fatal("ListFolder() error = nil, want deadline error")
+	}
+}
+
+func TestListFolderEntryCap(t *testing.T) {
+	t.Parallel()
+	const maxEntries = 10000
+	for _, tc := range []struct {
+		kind domain.AppKind
+		path string
+	}{{domain.KindSonarr, "/api/v3/filesystem"}, {domain.KindWhisparrV3, "/api/v3/filesystem"}} {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			t.Parallel()
+			for _, count := range []int{maxEntries, maxEntries + 1} {
+				wantOK := count == maxEntries
+				t.Run(strconv.Itoa(count), func(t *testing.T) {
+					t.Parallel()
+					entries := strings.TrimSuffix(strings.Repeat(`{"name":"job"},`, count), ",")
+					payload := `{"directories":[` + entries + `],"files":[]}`
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if r.URL.Path != tc.path {
+							http.NotFound(w, r)
+							return
+						}
+						_, _ = w.Write([]byte(payload))
+					}))
+					defer server.Close()
+					p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: time.Second})
+					names, err := p.ListFolder(t.Context(), tc.kind, server.URL, "test-key", "/data/")
+					if wantOK {
+						if err != nil || len(names) != count {
+							t.Fatalf("ListFolder() count = %d, err = %v; want %d names", len(names), err, count)
+						}
+						for i := range min(len(names), maxEntries) {
+							if names[i] != "job" {
+								t.Fatalf("names[%d] = %q, want job", i, names[i])
+							}
+						}
+					} else if err == nil || names != nil || !strings.Contains(err.Error(), "10001") || !strings.Contains(err.Error(), "10000") {
+						t.Fatalf("ListFolder() = %d names, %v; want capped listing error", len(names), err)
+					}
+				})
+			}
+		})
 	}
 }

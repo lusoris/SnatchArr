@@ -145,9 +145,6 @@ type Item struct {
 	// duplicate is set by Sweep when another download for the same media
 	// item scores higher.
 	duplicate bool
-	// outputChecked is set only when an output check did not list the item's
-	// output name, so import_blocked does not act on an inconclusive result.
-	outputChecked bool
 }
 
 // Strike records the persistent state of one queue item across sweeps.

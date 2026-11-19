@@ -86,22 +86,111 @@ func TestCheckOutputs(t *testing.T) {
 	arr := &outputArr{folders: map[string][]string{"/data/": {"job", "job.1"}}, errs: map[string]error{}}
 	inst := Instance{Kind: domain.KindSonarr}
 	items := []Item{outputItem("listed", "/data/job/", now), outputItem("prefix", "/data/jo", now)}
-	checked, results := checkOutputs(context.Background(), arr, inst, s, items, now)
+	checked, results, _ := checkOutputs(context.Background(), arr, inst, s, items, now, 0)
 	if len(results) != len(items) {
 		t.Fatalf("results = %d, want %d", len(results), len(items))
 	}
-	if !checked[0].OutputListed || checked[0].outputChecked || checked[1].OutputListed || !checked[1].outputChecked || results[1].result != outputNotVisible {
+	if !checked[0].OutputListed || checked[1].OutputListed || results[0].result != outputListed || results[1].result != outputNotVisible {
 		t.Fatalf("exact output names not respected: %#v %#v", checked, results)
 	}
+	arr.folders["/case/"] = []string{"Job"}
+	checked, results, _ = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("case", "/case/job", now)}, now, 0)
+	if checked[0].OutputListed || results[0].result != outputNotVisible {
+		t.Fatalf("case-mismatched output = %#v / %#v, want not visible", checked[0], results[0])
+	}
 	arr.errs["/error/"] = errors.New("unavailable")
-	checked, results = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("error", "/error/job", now), outputItem("empty", "", now)}, now)
+	checked, results, _ = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("error", "/error/job", now), outputItem("empty", "", now)}, now, 0)
 	if len(results) != 2 {
 		t.Fatalf("results = %d, want 2", len(results))
 	}
-	if checked[0].OutputListed || !checked[0].outputChecked || results[0].result != outputError || !checked[1].outputChecked || results[1].result != outputNoPath {
+	if checked[0].OutputListed || results[0].result != outputError || results[1].result != outputNoPath {
 		t.Fatalf("fail-closed results = %#v %#v", checked, results)
 	}
 	assertOutputCheckBounds(t, arr, inst, s, now)
+}
+
+func TestCheckOutputsRotates(t *testing.T) {
+	t.Parallel()
+	now, s := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC), DefaultSettings()
+	arr := &outputArr{folders: make(map[string][]string), errs: map[string]error{}}
+	items := make([]Item, 45)
+	for i := range items {
+		parent := fmt.Sprintf("/parent-%02d/", i)
+		name := fmt.Sprintf("job-%02d", i)
+		items[i] = outputItem(name, parent+name, now)
+		arr.folders[parent] = []string{name}
+	}
+	cursor := 0
+	for sweep := range 3 {
+		_, results, next := checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, items, now, cursor)
+		if sweep == 0 && len(arr.calls) != maxOutputChecks {
+			t.Fatalf("first sweep calls = %d, want %d", len(arr.calls), maxOutputChecks)
+		}
+		wantListed := min(maxOutputChecks, len(items)-sweep*maxOutputChecks)
+		listed := 0
+		for _, result := range results {
+			if result.result == outputListed {
+				listed++
+			}
+		}
+		if listed != wantListed {
+			t.Fatalf("listed results = %d, want %d", listed, wantListed)
+		}
+		cursor = next
+	}
+	if len(arr.calls) != len(items) {
+		t.Fatalf("calls = %d, want %d", len(arr.calls), len(items))
+	}
+	seen := make(map[string]int, len(arr.calls))
+	for _, parent := range arr.calls {
+		seen[parent]++
+	}
+	for i := range items {
+		if got := seen[fmt.Sprintf("/parent-%02d/", i)]; got != 1 {
+			t.Fatalf("parent %d listed %d times, want once", i, got)
+		}
+	}
+	arr.calls = nil
+	twenty := make([]Item, maxOutputChecks)
+	for i := range twenty {
+		name := fmt.Sprintf("job-%02d", i)
+		twenty[i] = outputItem(name, fmt.Sprintf("/exact-%02d/", i)+name, now)
+	}
+	_, _, next := checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, twenty, now, 0)
+	if len(arr.calls) != maxOutputChecks || next != 0 {
+		t.Fatalf("boundary calls/cursor = %d/%d, want %d/0", len(arr.calls), next, maxOutputChecks)
+	}
+	arr.calls = nil
+	_, _, next = checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, nil, now, 7)
+	if len(arr.calls) != 0 || next != 7 {
+		t.Fatalf("empty calls/cursor = %d/%d, want 0/7", len(arr.calls), next)
+	}
+}
+
+func TestCheckOutputsBudget(t *testing.T) {
+	t.Parallel()
+	now, s := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC), DefaultSettings()
+	inst := Instance{Kind: domain.KindSonarr}
+	arr := &outputArr{folders: map[string][]string{}, errs: map[string]error{}}
+	_, _, _ = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("a", "/a/job", now)}, now, 0)
+	if !arr.deadlineSeen {
+		t.Fatal("ListFolder did not receive a deadline")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	arr.calls, arr.deadlineSeen, arr.cancelOnFirst = nil, false, cancel
+	items := []Item{outputItem("a", "/a/job", now), outputItem("b", "/b/job", now), outputItem("c", "/c/job", now)}
+	_, results, _ := checkOutputs(ctx, arr, inst, s, items, now, 0)
+	if len(arr.calls) != 1 {
+		t.Fatalf("calls after cancellation = %d, want 1", len(arr.calls))
+	}
+	if results[0].result == outputError {
+		t.Fatalf("first result = %q, want completed listing", results[0].result)
+	}
+	for _, result := range results[1:] {
+		if result.result != outputError {
+			t.Fatalf("result = %q, want error", result.result)
+		}
+	}
 }
 
 func assertOutputCheckBounds(t *testing.T, arr *outputArr, inst Instance, s Settings, now time.Time) {
@@ -109,9 +198,9 @@ func assertOutputCheckBounds(t *testing.T, arr *outputArr, inst Instance, s Sett
 	arr.calls = nil
 	items := make([]Item, 0, maxOutputChecks+1)
 	for i := 0; i <= maxOutputChecks; i++ {
-		items = append(items, outputItem(fmt.Sprintf("job-%d", i), fmt.Sprintf("/p-%d/job", i), now))
+		items = append(items, outputItem(fmt.Sprintf("job-%d", i), fmt.Sprintf("/p-%02d/job", i), now))
 	}
-	_, results := checkOutputs(context.Background(), arr, inst, s, items, now)
+	_, results, _ := checkOutputs(context.Background(), arr, inst, s, items, now, 0)
 	if len(arr.calls) != maxOutputChecks || results[maxOutputChecks].result != outputOverBudget {
 		t.Fatalf("calls/results = %d/%s, want %d/over_budget", len(arr.calls), results[maxOutputChecks].result, maxOutputChecks)
 	}
@@ -120,7 +209,7 @@ func assertOutputCheckBounds(t *testing.T, arr *outputArr, inst Instance, s Sett
 	for i := range shared {
 		shared[i] = outputItem(fmt.Sprintf("shared-%d", i), "/shared/job", now)
 	}
-	_, _ = checkOutputs(context.Background(), arr, inst, s, shared, now)
+	_, _, _ = checkOutputs(context.Background(), arr, inst, s, shared, now, 0)
 	if len(arr.calls) != 1 {
 		t.Fatalf("shared parent calls = %d, want 1", len(arr.calls))
 	}
@@ -131,9 +220,11 @@ func outputItem(id, path string, now time.Time) Item {
 }
 
 type outputArr struct {
-	folders map[string][]string
-	errs    map[string]error
-	calls   []string
+	folders       map[string][]string
+	errs          map[string]error
+	calls         []string
+	deadlineSeen  bool
+	cancelOnFirst context.CancelFunc
 }
 
 func (a *outputArr) Queue(context.Context, domain.AppKind, string, string, int, int) ([]Item, error) {
@@ -148,7 +239,12 @@ func (a *outputArr) ForceImport(context.Context, domain.AppKind, string, string,
 	return 0, nil
 }
 
-func (a *outputArr) ListFolder(_ context.Context, _ domain.AppKind, _, _, dir string) ([]string, error) {
+func (a *outputArr) ListFolder(ctx context.Context, _ domain.AppKind, _, _, dir string) ([]string, error) {
+	_, a.deadlineSeen = ctx.Deadline()
 	a.calls = append(a.calls, dir)
+	if a.cancelOnFirst != nil {
+		a.cancelOnFirst()
+		a.cancelOnFirst = nil
+	}
 	return a.folders[dir], a.errs[dir]
 }

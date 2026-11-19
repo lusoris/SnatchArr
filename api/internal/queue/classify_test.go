@@ -412,6 +412,7 @@ func TestClassifyRejection(t *testing.T) {
 		{"Not an upgrade for existing episode file(s)", queue.ClassNotWanted},
 		{"Sample", queue.ClassBroken},
 		{"Not enough free space", queue.ClassUnknown},
+		{"No files found are eligible for import in /data/job", queue.ClassUnknown},
 		{"Completely unknown error", queue.ClassUnknown},
 	}
 

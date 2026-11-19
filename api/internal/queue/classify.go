@@ -267,10 +267,10 @@ func classifyLine(line string, s Settings, hasUnpackOrLocked, pastGrace, outputL
 	}
 }
 
-// ClassifyRejection classifies a single rejection reason string using the shared pattern table.
+// ClassifyRejection classifies a single rejection reason string; it carries no output listing.
 // Unrecognized strings classify as unknown.
 func ClassifyRejection(rejection string) Class {
-	c := classifyLine(rejection, DefaultSettings(), false, true, true)
+	c := classifyLine(rejection, DefaultSettings(), false, true, false)
 	return c.class
 }
 

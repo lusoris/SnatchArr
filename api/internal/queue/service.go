@@ -139,14 +139,31 @@ type MetricsRecorder interface {
 
 // Service manages download queues across *arr instances.
 type Service struct {
-	sweepMu   sync.Mutex
-	store     StoreInterface
-	instances InstanceSource
-	arr       ArrClient
-	clk       clock.Clock
-	events    EventPublisher
-	metrics   MetricsRecorder
-	logger    *slog.Logger
+	sweepMu      sync.Mutex
+	outputMu     sync.Mutex
+	outputCursor map[uuid.UUID]int
+	store        StoreInterface
+	instances    InstanceSource
+	arr          ArrClient
+	clk          clock.Clock
+	events       EventPublisher
+	metrics      MetricsRecorder
+	logger       *slog.Logger
+}
+
+func (s *Service) outputCursorFor(instanceID uuid.UUID) int {
+	s.outputMu.Lock()
+	defer s.outputMu.Unlock()
+	return s.outputCursor[instanceID]
+}
+
+func (s *Service) setOutputCursor(instanceID uuid.UUID, cursor int) {
+	s.outputMu.Lock()
+	defer s.outputMu.Unlock()
+	if s.outputCursor == nil {
+		s.outputCursor = make(map[uuid.UUID]int)
+	}
+	s.outputCursor[instanceID] = cursor
 }
 
 // StoreInterface defines the persistence methods required by Service.
@@ -170,13 +187,14 @@ func NewService(
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
-		store:     st,
-		instances: instances,
-		arr:       arr,
-		clk:       clk,
-		events:    ev,
-		metrics:   m,
-		logger:    logger,
+		outputCursor: make(map[uuid.UUID]int),
+		store:        st,
+		instances:    instances,
+		arr:          arr,
+		clk:          clk,
+		events:       ev,
+		metrics:      m,
+		logger:       logger,
 	}
 }
 
@@ -273,7 +291,9 @@ func (s *Service) fetchAndEvaluate(ctx context.Context, inst Instance, cfg Setti
 	if err != nil {
 		return nil, fmt.Errorf("fetch queue for %s: %w", inst.Name, err)
 	}
-	items, results := checkOutputs(ctx, s.arr, inst, cfg, items, now)
+	start := s.outputCursorFor(inst.ID)
+	items, results, next := checkOutputs(ctx, s.arr, inst, cfg, items, now, start)
+	s.setOutputCursor(inst.ID, next)
 	s.recordOutputResults(ctx, inst, results)
 	prev, err := s.store.Strikes(ctx, inst.ID)
 	if err != nil {

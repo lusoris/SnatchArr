@@ -78,6 +78,68 @@ func TestSweepNotVisibleSkipsImportBlocked(t *testing.T) {
 	}
 }
 
+func TestSweepPreGraceNoFilesNoStrike(t *testing.T) {
+	t.Parallel()
+	env := newOutputSweepEnv(t, []string{"job-001"})
+	enableImportBlocked(env.store, env.instance.ID)
+	item := blindWindowItems(1)[0]
+	item.Added = outputSweepAt.Add(-time.Minute)
+	item.ReasonLines = append(item.ReasonLines, "unrecognized import status")
+	env.arr.items[env.key] = []queue.Item{item}
+	for range 2 {
+		if err := env.service.SweepAll(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		env.clk.Advance(time.Minute)
+	}
+	if got := strikeCount(env.store, env.instance.ID); got != 0 || env.arr.folderCalls != 0 {
+		t.Fatalf("strikes/folder calls = %d/%d, want 0/0", got, env.arr.folderCalls)
+	}
+}
+
+func TestSweepUnpackNoFilesKeepsImportBlocked(t *testing.T) {
+	t.Parallel()
+	env := newOutputSweepEnv(t, []string{"job-001"})
+	enableImportBlocked(env.store, env.instance.ID)
+	item := blindWindowItems(1)[0]
+	item.ReasonLines = append(item.ReasonLines, "File is still being unpacked")
+	env.arr.items[env.key] = []queue.Item{item}
+	runOutputSweeps(t, env, 1)
+	strike, ok := env.store.strikes[env.instance.ID][item.DownloadID]
+	if !ok || strike.Rule != queue.RuleImportBlocked || strike.Count != 1 || env.arr.folderCalls != 0 {
+		t.Fatalf("strike/folder calls = %#v/%d, want import_blocked count 1 and no listings", strike, env.arr.folderCalls)
+	}
+}
+
+func TestSweepVisibilityLostBeforeRemoval(t *testing.T) {
+	t.Parallel()
+	env := newOutputSweepEnv(t, []string{"job-001"})
+	env.arr.items[env.key] = blindWindowItems(1)
+	runOutputSweeps(t, env, 1)
+	env.arr.folders[outputParent] = []string{"other-job"}
+	runOutputSweeps(t, env, 1)
+	env.arr.folders[outputParent] = []string{"job-001"}
+	runOutputSweeps(t, env, 1)
+	strike := env.store.strikes[env.instance.ID]["job-001"]
+	if env.arr.removeCalls != 0 || strike.Rule != queue.RuleImportBroken || strike.Count != 1 {
+		t.Fatalf("removals/strike = %d/%#v, want 0/import_broken count 1", env.arr.removeCalls, strike)
+	}
+}
+
+func TestInspectRecordsOutputResults(t *testing.T) {
+	t.Parallel()
+	var logs bytes.Buffer
+	env := newOutputSweepEnvWithLogger(t, []string{"other-job"}, slog.New(slog.NewTextHandler(&logs, nil)))
+	env.arr.items[env.key] = blindWindowItems(1)
+	if _, err := env.service.Inspect(t.Context(), env.instance.ID); err != nil {
+		t.Fatal(err)
+	}
+	assertOutputMetrics(t, env.metrics.outputs, queueOutputNotVisible, 1)
+	if output := logs.String(); !strings.Contains(output, "msg=\"queue: output path not visible to arr\"") || !strings.Contains(output, "instance=sonarr-main") || !strings.Contains(output, "output_path="+outputParent+"job-001/") {
+		t.Fatalf("inspect log = %q", output)
+	}
+}
+
 func TestSweepListedUnrecognizedKeepsImportBlocked(t *testing.T) {
 	t.Parallel()
 	env := newOutputSweepEnv(t, []string{"job-001"})
