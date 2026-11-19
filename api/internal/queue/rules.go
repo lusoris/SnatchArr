@@ -115,8 +115,12 @@ type Item struct {
 	Status                string
 	TrackedDownloadStatus string
 	TrackedDownloadState  string
-	SizeLeft              int64
-	CustomFormatScore     int32
+	// OutputPath is the download path reported by the upstream *arr queue record.
+	OutputPath string
+	// OutputListed reports whether the *arr process listed the output folder's name.
+	OutputListed      bool
+	SizeLeft          int64
+	CustomFormatScore int32
 	// QualityRank is the relative quality rank from quality profiles; higher = better, 0 = unknown.
 	QualityRank int
 	// ExistingScore is the custom-format score of the file already on disk;
@@ -141,6 +145,9 @@ type Item struct {
 	// duplicate is set by Sweep when another download for the same media
 	// item scores higher.
 	duplicate bool
+	// outputChecked is set only when an output check did not list the item's
+	// output name, so import_blocked does not act on an inconclusive result.
+	outputChecked bool
 }
 
 // Strike records the persistent state of one queue item across sweeps.

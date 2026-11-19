@@ -343,9 +343,10 @@ func TestClassifierNoFilesEligibleOverrides(t *testing.T) {
 	t.Run("broken_after_grace", func(t *testing.T) {
 		t.Parallel()
 		item := queue.Item{
-			Title:       "Title",
-			StatusLines: []string{"No files found are eligible for import in /downloads/path"},
-			Added:       now.Add(-20 * time.Minute), // past 15m grace
+			Title:        "Title",
+			StatusLines:  []string{"No files found are eligible for import in /downloads/path"},
+			Added:        now.Add(-20 * time.Minute), // past 15m grace
+			OutputListed: true,
 		}
 		c, _, _ := queue.ClassifyImportItem(item, s, now)
 		if c != queue.ClassBroken {

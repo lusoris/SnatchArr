@@ -520,7 +520,7 @@ func checkImportRule(rule Rule, item Item, c *itemClassifier) bool {
 	case RuleImportNotWanted:
 		return c.getClass() == ClassNotWanted
 	case RuleImportBlocked:
-		if isIDMatchBlock(item) {
+		if isIDMatchBlock(item) || item.outputChecked {
 			return false
 		}
 		return c.getClass() == ClassUnknown

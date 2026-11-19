@@ -338,6 +338,10 @@ type inspectArr struct {
 	forceImportCalls int
 }
 
+func (a *inspectArr) ListFolder(context.Context, domain.AppKind, string, string, string) ([]string, error) {
+	return nil, nil
+}
+
 func (a *inspectArr) Queue(_ context.Context, _ domain.AppKind, _, _ string, _, _ int) ([]queue.Item, error) {
 	if a.err != nil {
 		return nil, a.err

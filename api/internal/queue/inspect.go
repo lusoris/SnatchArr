@@ -71,7 +71,9 @@ func (s *Service) Inspect(ctx context.Context, instanceID uuid.UUID) (Inspection
 		return Inspection{}, fmt.Errorf("fetch queue for %s: %w", inst.Name, err)
 	}
 
-	decisions := Sweep(cfg, items, prev, s.clk.Now())
+	now := s.clk.Now()
+	items, _ = checkOutputs(ctx, s.arr, inst, cfg, items, now)
+	decisions := Sweep(cfg, items, prev, now)
 	inspected := make([]InspectedItem, 0, len(items))
 	for i, item := range items {
 		var d Decision

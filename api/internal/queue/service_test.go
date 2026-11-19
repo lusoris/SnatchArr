@@ -132,8 +132,11 @@ type fakeArrClient struct {
 	visited     []string
 	removeCalls int
 	// importErr is the ForceImport result per download id; imports lists the calls.
-	importErr map[string]error
-	imports   []string
+	importErr   map[string]error
+	imports     []string
+	folders     map[string][]string
+	folderErr   map[string]error
+	folderCalls int
 }
 
 func newFakeArrClient() *fakeArrClient {
@@ -141,6 +144,8 @@ func newFakeArrClient() *fakeArrClient {
 		items:     make(map[string][]queue.Item),
 		queueErr:  make(map[string]error),
 		importErr: make(map[string]error),
+		folders:   make(map[string][]string),
+		folderErr: make(map[string]error),
 	}
 }
 
@@ -162,6 +167,14 @@ func (f *fakeArrClient) Queue(_ context.Context, kind domain.AppKind, baseURL, _
 	return f.items[key], nil
 }
 
+func (f *fakeArrClient) ListFolder(_ context.Context, _ domain.AppKind, _, _, dir string) ([]string, error) {
+	f.folderCalls++
+	if err := f.folderErr[dir]; err != nil {
+		return nil, err
+	}
+	return f.folders[dir], nil
+}
+
 func (f *fakeArrClient) RemoveQueueItem(_ context.Context, kind domain.AppKind, _, _ string, id int32, blocklist, research bool) error {
 	f.removeCalls++
 	f.removals = append(f.removals, fakeRemoval{kind: kind, id: id, blocklist: blocklist, research: research})
@@ -181,10 +194,15 @@ type fakeMetricsRecorder struct {
 	removals []string
 	skipped  []string
 	imports  []string
+	outputs  []string
 }
 
 func (f *fakeMetricsRecorder) QueueImport(instance, result string) {
 	f.imports = append(f.imports, instance+":"+result)
+}
+
+func (f *fakeMetricsRecorder) QueueOutputCheck(instance, result string) {
+	f.outputs = append(f.outputs, instance+":"+result)
 }
 
 func (f *fakeMetricsRecorder) QueueStruck(instance, rule, mode string) {
@@ -200,7 +218,10 @@ func (f *fakeMetricsRecorder) QueueSkipped(instance, reason string) {
 }
 
 func newTestService(st *fakeStore, is *fakeInstanceSource, arr *fakeArrClient, clk clock.Clock, ev *fakeEventPublisher, m *fakeMetricsRecorder) *queue.Service {
-	logger := slog.New(slog.DiscardHandler)
+	return newTestServiceWithLogger(st, is, arr, clk, ev, m, slog.New(slog.DiscardHandler))
+}
+
+func newTestServiceWithLogger(st *fakeStore, is *fakeInstanceSource, arr *fakeArrClient, clk clock.Clock, ev *fakeEventPublisher, m *fakeMetricsRecorder, logger *slog.Logger) *queue.Service {
 	return queue.NewService(st, is, arr, clk, ev, m, logger)
 }
 

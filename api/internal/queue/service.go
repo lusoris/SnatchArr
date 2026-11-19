@@ -118,6 +118,7 @@ func (s *DBInstanceSource) decodeInstance(row sqlcgen.Instance) (Instance, error
 // ArrClient defines the *arr queue operations needed by the sweep.
 type ArrClient interface {
 	Queue(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, maxPages, pageSize int) ([]Item, error)
+	ListFolder(ctx context.Context, kind domain.AppKind, baseURL, apiKey, dir string) ([]string, error)
 	RemoveQueueItem(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, id int32, blocklist, research bool) error
 	ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string, mode ImportMode) (int, error)
 }
@@ -133,6 +134,7 @@ type MetricsRecorder interface {
 	QueueRemoval(instance, rule, result string)
 	QueueSkipped(instance, reason string)
 	QueueImport(instance, result string)
+	QueueOutputCheck(instance, result string)
 }
 
 // Service manages download queues across *arr instances.
@@ -271,11 +273,29 @@ func (s *Service) fetchAndEvaluate(ctx context.Context, inst Instance, cfg Setti
 	if err != nil {
 		return nil, fmt.Errorf("fetch queue for %s: %w", inst.Name, err)
 	}
+	items, results := checkOutputs(ctx, s.arr, inst, cfg, items, now)
+	s.recordOutputResults(ctx, inst, results)
 	prev, err := s.store.Strikes(ctx, inst.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch strikes for %s: %w", inst.Name, err)
 	}
 	return Sweep(cfg, items, prev, now), nil
+}
+
+func (s *Service) recordOutputResults(ctx context.Context, inst Instance, results []outputResult) {
+	for _, result := range results {
+		s.metrics.QueueOutputCheck(inst.Name, result.result)
+		s.logOutputResult(ctx, inst, result)
+	}
+}
+
+func (s *Service) logOutputResult(ctx context.Context, inst Instance, result outputResult) {
+	if result.result == outputNotVisible {
+		s.logger.WarnContext(ctx, "queue: output path not visible to arr", slog.String("instance", inst.Name), slog.String("download_id", result.downloadID), slog.String("output_path", result.outputPath))
+	}
+	if result.result == outputError {
+		s.logger.WarnContext(ctx, "queue: output path check failed", slog.String("instance", inst.Name), slog.String("dir", result.dir), slog.String("error", result.err.Error()))
+	}
 }
 
 func (s *Service) processDecisions(ctx context.Context, inst Instance, cfg Settings, ds []Decision, now time.Time) error {
