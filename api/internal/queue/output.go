@@ -6,6 +6,7 @@ package queue
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 )
@@ -111,10 +112,5 @@ func checkOutput(ctx context.Context, arr ArrClient, inst Instance, item *Item, 
 }
 
 func containsOutputName(names []string, name string) bool {
-	for _, candidate := range names {
-		if candidate == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(names, name)
 }
