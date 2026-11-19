@@ -78,10 +78,13 @@ func TestBuildUpgrade(t *testing.T) {
 		t.Fatalf("upgrade entries = %#v and %#v", oldEntry, newEntry)
 	}
 	sameExtension := after
-	sameExtension.MovieFile.Path = "/source/newer/one.mp4"
-	sameExtension.MovieFile.ID = 13
-	if entryByID(t, build(t, after), 1).Link != entryByID(t, build(t, sameExtension), 1).Link {
-		t.Fatal("same-extension upgrade changed link")
+	sameExtensionFile := *after.MovieFile
+	sameExtensionFile.Path = "/source/newer/one.mp4"
+	sameExtensionFile.ID = 13
+	sameExtension.MovieFile = &sameExtensionFile
+	sameExtensionEntry := entryByID(t, build(t, sameExtension), 1)
+	if newEntry.Link != sameExtensionEntry.Link || newEntry.Target == sameExtensionEntry.Target {
+		t.Fatalf("same-extension upgrade entries = %#v and %#v", newEntry, sameExtensionEntry)
 	}
 }
 
@@ -93,6 +96,9 @@ func TestBuildCollision(t *testing.T) {
 	initial := build(t, five, nine)
 	if entryByID(t, initial, 5).Folder != "Same (2020)" || entryByID(t, initial, 9).Folder != "Same (2020) [whisparr-9]" {
 		t.Fatalf("initial collision map = %#v", initial)
+	}
+	if entryByID(t, initial, 5).Link != "Same (2020).mkv" || entryByID(t, initial, 9).Link != "Same (2020) [whisparr-9].mkv" {
+		t.Fatalf("initial collision links = %#v", initial)
 	}
 	withTwelve := build(t, five, nine, twelve)
 	if entryByID(t, initial, 5) != entryByID(t, withTwelve, 5) || entryByID(t, initial, 9) != entryByID(t, withTwelve, 9) {
@@ -156,6 +162,10 @@ func TestBuildTitleSanitize(t *testing.T) {
 	if len(long.Folder) > 180 || !utf8.ValidString(long.Folder) {
 		t.Fatalf("long folder is not a <=180-byte UTF-8 title: %q", long.Folder)
 	}
+	uneven := entryByID(t, build(t, movie(4, "a"+strings.Repeat("é", 150), 0, "/source/a/four.mkv")), 4)
+	if len(uneven.Folder) != 179 || !utf8.ValidString(uneven.Folder) {
+		t.Fatalf("uneven-width folder is not a 179-byte UTF-8 title: %q", uneven.Folder)
+	}
 	empty := build(t, movie(3, ".. \t\n", 2020, "/source/a/three.mkv"))
 	if len(empty.Refused) != 1 || empty.Refused[0].Reason != overlay.ReasonEmptyTitle {
 		t.Fatalf("empty title result = %#v", empty)
@@ -204,9 +214,24 @@ func TestBuildDuplicateID(t *testing.T) {
 	t.Parallel()
 	first := movie(7, "First", 2020, "/source/a/one.mkv")
 	second := movie(7, "Second", 2020, "/source/a/two.mkv")
-	result := build(t, first, second)
-	if entryByID(t, result, 7).Folder != "First (2020)" || len(result.Refused) != 1 || result.Refused[0].Reason != overlay.ReasonDuplicateMovieID {
+	eight := movie(8, "Eight", 2020, "/source/a/eight.mkv")
+	result := build(t, first, second, eight)
+	if hasEntry(result, 7) || !hasEntry(result, 8) || len(result.Refused) != 2 {
 		t.Fatalf("duplicate result = %#v", result)
+	}
+	for _, refusal := range result.Refused {
+		if refusal.MovieID != 7 || refusal.Reason != overlay.ReasonDuplicateMovieID {
+			t.Fatalf("duplicate refusal = %#v", refusal)
+		}
+	}
+	if reversed := build(t, eight, second, first); !reflect.DeepEqual(result, reversed) {
+		t.Fatalf("reversed duplicate result = %#v, want %#v", reversed, result)
+	}
+	withoutFile := first
+	withoutFile.HasFile = false
+	boundary := build(t, withoutFile, second)
+	if !hasEntry(boundary, 7) || len(boundary.Entries) != 1 || len(boundary.Refused) != 0 {
+		t.Fatalf("fileless duplicate boundary = %#v", boundary)
 	}
 }
 

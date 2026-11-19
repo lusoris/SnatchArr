@@ -34,7 +34,9 @@ const (
 	ReasonNoExtension = "no_extension"
 	// ReasonEmptyTitle reports a title that is empty after sanitization.
 	ReasonEmptyTitle = "empty_title"
-	// ReasonDuplicateMovieID reports a later duplicate movie ID.
+	// ReasonDuplicateMovieID reports every copy of a repeated file-bearing movie ID.
+	// Whisparr movie IDs are unique, so repeats identify an inconsistent list;
+	// refusing every copy keeps the map independent of input order.
 	ReasonDuplicateMovieID = "duplicate_movie_id"
 )
 
@@ -70,16 +72,15 @@ func Build(opts Options, movies []whisparr.Movie) (Map, error) {
 		return Map{}, err
 	}
 	result := Map{}
-	seen := make(map[int]struct{}, len(movies))
+	fileCounts := countFileBearingMovies(movies)
 	for _, movie := range movies {
 		if !movie.HasFile || movie.MovieFile == nil {
 			continue
 		}
-		if _, duplicate := seen[movie.ID]; duplicate {
+		if fileCounts[movie.ID] > 1 {
 			result.Refused = append(result.Refused, Refusal{MovieID: movie.ID, Reason: ReasonDuplicateMovieID})
 			continue
 		}
-		seen[movie.ID] = struct{}{}
 		entry, reason := buildEntry(opts, movie)
 		if reason != "" {
 			result.Refused = append(result.Refused, Refusal{MovieID: movie.ID, Reason: reason})
@@ -90,6 +91,16 @@ func Build(opts Options, movies []whisparr.Movie) (Map, error) {
 	applyCollisions(result.Entries)
 	sortMap(&result)
 	return result, nil
+}
+
+func countFileBearingMovies(movies []whisparr.Movie) map[int]int {
+	counts := make(map[int]int, len(movies))
+	for _, movie := range movies {
+		if movie.HasFile && movie.MovieFile != nil {
+			counts[movie.ID]++
+		}
+	}
+	return counts
 }
 
 func validateOptions(opts Options) error {
