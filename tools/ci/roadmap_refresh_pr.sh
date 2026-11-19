@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
+# Every gh call has a deadline.
 # Proposes a refreshed docs/roadmap.md as a bot pull request. Runs after
 # `roadmap_render.py --write` in the scheduled Roadmap refresh workflow, on a checkout of the
 # default branch at BASE_SHA.
@@ -42,6 +43,8 @@ base="${BASE_SHA:-}"
 base_branch="${BASE_BRANCH:-}"
 slug="${APP_SLUG:-}"
 tmp="$branch-tmp-${RUN_ID:-$$}"
+# Same 60 seconds as roadmap_render.py.
+gh_timeout="${ROADMAP_GH_TIMEOUT:-60}"
 
 case "$repo" in
   */*) ;;
@@ -53,13 +56,18 @@ case "$slug" in
   '' | -* | *[!a-z0-9-]*) echo "roadmap_refresh: APP_SLUG must be a GitHub App slug" >&2; exit 2 ;;
 esac
 
+# run_gh gives every GitHub CLI call the renderer's deadline.
+run_gh() {
+  timeout "$gh_timeout" gh "$@"
+}
+
 # send runs a write; a dry run prints it on stderr and stands in a placeholder for its output.
 send() {
   if [ -n "${DRY_RUN:-}" ]; then
     echo "dry-run: gh $*" >&2
     echo dry-run
   else
-    gh "$@"
+    run_gh "$@"
   fi
 }
 
@@ -93,7 +101,7 @@ pr_body() {
 
 # Only the bot's own pull request: head in this repository, into the base branch. A fork pull
 # request from a branch of the same name does not match.
-open="$(gh api "repos/$repo/pulls?head=${repo%%/*}:$branch&base=$base_branch&state=open" \
+open="$(run_gh api "repos/$repo/pulls?head=${repo%%/*}:$branch&base=$base_branch&state=open" \
   --jq '.[0].number // empty')" || exit 1
 
 if git diff --quiet -- "$doc"; then
@@ -114,7 +122,7 @@ content="$(base64 <"$doc" | tr -d '\n')"
 
 # The App's bot account signs off: GitHub writes it as the author of a contents API commit.
 login="${slug}[bot]"
-id="$(gh api "users/$login" --jq .id)" || exit 1
+id="$(run_gh api "users/$login" --jq .id)" || exit 1
 case "$id" in
   '' | *[!0-9]*) echo "roadmap_refresh: no account id for $login" >&2; exit 1 ;;
 esac
@@ -153,7 +161,7 @@ if [ -z "${DRY_RUN:-}" ] && [ "${written#* }" != "$email" ]; then
   exit 1
 fi
 
-if gh api "repos/$repo/git/ref/heads/$branch" --jq .object.sha >/dev/null 2>&1; then
+if run_gh api "repos/$repo/git/ref/heads/$branch" --jq .object.sha >/dev/null 2>&1; then
   send api -X PATCH "repos/$repo/git/refs/heads/$branch" -f "sha=$commit" -F force=true >/dev/null \
     || { drop_tmp; exit 1; }
 else
@@ -163,7 +171,7 @@ fi
 drop_tmp || exit 1
 
 if [ -n "$open" ]; then
-  open_body="$(gh pr view "$open" --repo "$repo" --json body --jq .body)" || exit 1
+  open_body="$(run_gh pr view "$open" --repo "$repo" --json body --jq .body)" || exit 1
   if ! printf '%s\n' "$open_body" | tr -d '\r' | grep -qxF '## Description'; then
     send pr edit "$open" --repo "$repo" --body-file "$bodyfile" >/dev/null || exit 1
   fi

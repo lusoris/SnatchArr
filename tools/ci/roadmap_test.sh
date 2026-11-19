@@ -65,6 +65,7 @@ case "$*" in
     [ -z "${STUB_FAIL_PUT:-}" ] || exit 1
     echo "newsha ${STUB_AUTHOR:-7+snatcharr-test[bot]@users.noreply.github.com}" ;;
   "pr view 42 --repo o/r --json body --jq .body")
+    [ -z "${STUB_HANG_VIEW:-}" ] || exec sleep 30
     [ -z "${STUB_FAIL_VIEW:-}" ] || exit 1
     printf '%s\n' "${STUB_PR_BODY:-}" ;;
   "pr edit 42"*)
@@ -116,6 +117,19 @@ refresh_with() {
 }
 # refresh <name> <expect rc> [VAR=value ...]: runs the repository's refresh script.
 refresh() { refresh_with "$HERE/roadmap_refresh_pr.sh" "$@"; }
+# refresh_with_timeout <script> <name> <expect rc> [VAR=value ...]: as refresh_with, with a
+# fixed outer bound. refresh_rc holds the command status for a mutant assertion.
+refresh_with_timeout() {
+  script="$1"; name="$2"; want="$3"; shift 3
+  : >"$WORK/$name.log"
+  rm -f "$WORK/$name.msg" "$WORK/$name.body"
+  refresh_rc=0
+  (cd "$repo" && env STUB_LOG="$WORK/$name.log" STUB_MSG="$WORK/$name.msg" \
+    STUB_BODY="$WORK/$name.body" PATH="$WORK/bin:$PATH" \
+    REPO=o/r BASE_SHA="$base" BASE_BRANCH=trunk RUN_ID=7 APP_SLUG=snatcharr-test "$@" \
+    timeout 15 sh "$script" >"$WORK/$name.out" 2>&1) || refresh_rc=$?
+  [ "$refresh_rc" -eq "$want" ]
+}
 signoff='Signed-off-by: snatcharr-test[bot] <7+snatcharr-test[bot]@users.noreply.github.com>'
 # signed_off <case>: the message sent in that case passes the commit-msg policy and its last line
 # is the sign-off of the stub App's bot account.
@@ -218,6 +232,13 @@ else
   fail "failed open pull request view or edit"
 fi
 
+if refresh_with_timeout "$HERE/roadmap_refresh_pr.sh" hangview 1 STUB_BRANCH=1 STUB_OPEN=42 \
+  STUB_HANG_VIEW=1 ROADMAP_GH_TIMEOUT=1 && ! called hangview "^pr edit"; then
+  pass "hung open pull request view: deadline fails the run before pr edit"
+else
+  fail "hung open pull request view"; cat "$WORK/hangview.out"
+fi
+
 if refresh rerun 0 STUB_TMP_LEFT=1 \
   && called rerun "-X PATCH $tmp_ref -f sha=$base -F force=true" \
   && called rerun "^pr create --repo o/r --base trunk"; then
@@ -265,6 +286,8 @@ drop_trailer='s|^message=.*Signed-off-by.*$|message="$title"|'
 skip_policy='s|^sh "$root/.config/hooks/commit-msg.sh" "$msgfile"|true|'
 # shellcheck disable=SC2016 # same: literal sed program text
 raw_body='/^send pr create/s|--body-file "$bodyfile"|--body "x"|'
+# shellcheck disable=SC2016 # sed program: literal $gh_timeout text
+no_gh_deadline='s/timeout "$gh_timeout" gh/gh/'
 
 if mutant notemplate "$no_template_copy" \
   && refresh_with "$mutants/tools/ci/notemplate.sh" notemplate 1 && [ "$(writes notemplate)" -eq 0 ] \
@@ -338,6 +361,16 @@ if mutant keepcr "$keep_cr" \
 else
   fail "planted open pull request check without CR strip went unnoticed"
   if [ -f "$WORK/keepcr.out" ]; then cat "$WORK/keepcr.out"; fi
+fi
+
+if mutant no_gh_deadline "$no_gh_deadline" \
+  && ! refresh_with_timeout "$mutants/tools/ci/no_gh_deadline.sh" hangview_no_gh_deadline 1 \
+    STUB_BRANCH=1 STUB_OPEN=42 STUB_HANG_VIEW=1 ROADMAP_GH_TIMEOUT=1 \
+  && [ "$refresh_rc" -eq 124 ] && ! called hangview_no_gh_deadline "^pr edit"; then
+  pass "planted gh call without deadline: outer timeout kills the hung view"
+else
+  fail "planted gh call without deadline went unnoticed"
+  if [ -f "$WORK/hangview_no_gh_deadline.out" ]; then cat "$WORK/hangview_no_gh_deadline.out"; fi
 fi
 
 if refresh foreign 1 STUB_AUTHOR=someone@example.invalid && called foreign "-X DELETE $tmp_ref" \
