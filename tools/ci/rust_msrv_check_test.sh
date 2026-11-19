@@ -12,6 +12,8 @@ check=$HERE/rust_msrv_check.py
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+# check_case <name> <want rc> <got rc> <needle> <output>: exits 1 with a FAIL line on a
+# wrong exit status or a missing diagnostic fragment.
 check_case() {
     local name=$1 want=$2 got=$3 needle=$4 out=$5
     if [ "$got" -ne "$want" ]; then
@@ -27,6 +29,8 @@ check_case() {
     esac
 }
 
+# fixture <name> <rust-version> <channel>: creates $work/<name> with a Cargo.toml and a
+# rust-toolchain.toml for the given versions.
 fixture() {
     local name=$1 rust_version=$2 channel=$3 dir="$work/$1"
     mkdir -p "$dir"
@@ -39,6 +43,8 @@ fixture() {
     printf '%s\n' '[toolchain]' "channel = \"$channel\"" > "$dir/rust-toolchain.toml"
 }
 
+# expect_fixture <name> <want rc> <needle>: runs the check on $work/<name> and verifies
+# the exit status and a diagnostic fragment via check_case.
 expect_fixture() {
     local name=$1 want=$2 needle=$3 out status=0
     out=$(python3 -I "$check" --root "$work/$name" 2>&1) || status=$?
@@ -46,6 +52,8 @@ expect_fixture() {
     echo "ok   $name"
 }
 
+# copy_real_workspace <destination>: copies the real workspace manifest files (root and
+# member crates) to <destination> for mutation.
 copy_real_workspace() {
     local destination=$1
     python3 -I -c '
@@ -72,6 +80,8 @@ for pattern in members:
 ' "$ROOT" "$destination"
 }
 
+# rewrite_release <path> <key> <value>: rewrites <key> in <path> to <value>, failing if
+# the manifest does not contain exactly one match.
 rewrite_release() {
     local path=$1 key=$2 value=$3
     python3 -I -c '
@@ -90,6 +100,8 @@ path.write_text(updated, encoding="utf-8")
 ' "$path" "$key" "$value"
 }
 
+# expect_repository_ok <root>: runs the check on a full workspace and verifies the exact
+# expected output line.
 expect_repository_ok() {
     local root=$1 name msrv channel expected out status=0
     name=$(basename "$root")
