@@ -51,10 +51,11 @@ const (
 
 	maxAliases  = 200
 	callTimeout = 20 * time.Second
-	// lookupTimeout bounds one load from its start: the wait for the slot plus at most
-	// four calls (two remote-id searches, the movie, its translation) of callTimeout each.
-	lookupTimeout = 4*callTimeout + 10*time.Second
-	maxBodyBytes  = 4 << 20
+	// lookupTimeout bounds one load from its start, including the slot wait and
+	// at most four upstream calls of callTimeout each.
+	lookupTimeout    = 4*callTimeout + 10*time.Second
+	closeWaitTimeout = 1500 * time.Millisecond
+	maxBodyBytes     = 4 << 20
 	// maxScan bounds scans without truncating a decodable response: an array of N smallest
 	// {} entries needs 3N+1 bytes ([{},{},…]), so maxBodyBytes cannot hold more than maxScan.
 	maxScan = maxBodyBytes / 3
@@ -163,10 +164,12 @@ type Provider struct {
 	// A channel instead of a mutex lets a waiting lookup give up at its context deadline.
 	slot chan struct{}
 	// lookup is lookupTimeout; a field so a test can wait on it without the full bound.
-	lookup   time.Duration
-	failed   atomic.Bool
-	closed   sync.Once
-	closeErr error
+	lookup       time.Duration
+	lifetimeDone <-chan struct{}
+	cancel       context.CancelFunc
+	failed       atomic.Bool
+	closed       sync.Once
+	closeErr     error
 }
 
 // New builds the provider over l1, the process-wide in-process cache pool. An empty apiKey
@@ -212,9 +215,11 @@ func New(apiKey, pin string, l1 *memory.Cache, clk clock.Clock, logger *slog.Log
 	})
 	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirect }
 	client := newTVDBClient(apiKey, pin, cfg, hc)
+	lifetime, cancel := context.WithCancel(context.Background())
 	return &Provider{
 		enabled: true, client: client, http: hc, logger: logger,
 		cache: cache, redis: redisClient, slot: make(chan struct{}, 1), lookup: lookupTimeout,
+		lifetimeDone: lifetime.Done(), cancel: cancel,
 	}, nil
 }
 
@@ -351,17 +356,30 @@ func isLoopbackIP(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// Close releases the HTTP cache registration, idle connections and optional Redis client.
+// Close stops lookups before releasing the HTTP cache, idle connections and Redis client.
 func (p *Provider) Close() error {
 	if p == nil {
 		return nil
 	}
 	p.closed.Do(func() {
+		if p.cancel != nil {
+			p.cancel()
+		}
+		if p.slot != nil {
+			wait, cancel := context.WithTimeout(context.Background(), closeWaitTimeout)
+			defer cancel()
+			select {
+			case p.slot <- struct{}{}:
+				defer func() { <-p.slot }()
+			case <-wait.Done():
+				p.closeErr = fmt.Errorf("tvdb: close wait for lookup: %w", wait.Err())
+			}
+		}
 		if p.http != nil {
 			p.http.CloseIdleConnections()
 		}
 		if p.cache != nil {
-			p.closeErr = p.cache.Close()
+			p.closeErr = errors.Join(p.closeErr, p.cache.Close())
 		}
 		if p.redis != nil {
 			p.redis.Close()
@@ -432,19 +450,84 @@ func hasLookup(ref Ref) bool {
 	return false
 }
 
-// load holds the provider slot. Caller cancellation bounds the slot wait; the bounded
-// upstream lookup can finish and populate the shared HTTP cache after that.
+// load uses one deadline for the slot wait and upstream calls. A caller can leave
+// while the shared lookup finishes; the slot bounds detached lookups to one.
 func (p *Provider) load(ctx context.Context, ref Ref, lang, rule string) ([]foreigntitle.LanguageTitle, error) {
-	waitCtx, waitCancel := context.WithTimeout(ctx, p.lookup)
-	defer waitCancel()
+	if p.isClosed() {
+		return nil, fmt.Errorf("%w: provider closed", ErrUnavailable)
+	}
+	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.lookup)
+	if err := p.acquireSlot(ctx, lookupCtx); err != nil {
+		cancel()
+		return nil, err
+	}
+	go func() {
+		select {
+		case <-p.lifetimeDone:
+			cancel()
+		case <-lookupCtx.Done():
+		}
+	}()
+	result := make(chan lookupResult, 1)
+	go func() {
+		defer func() { <-p.slot }()
+		defer cancel()
+		titles, err := p.fetch(lookupCtx, ref, lang, rule)
+		result <- lookupResult{titles: titles, err: err}
+	}()
+	select {
+	case done := <-result:
+		return done.titles, done.err
+	case <-ctx.Done():
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, ctx.Err())
+	}
+}
+
+func (p *Provider) acquireSlot(ctx, lookupCtx context.Context) error {
 	select {
 	case p.slot <- struct{}{}:
-	case <-waitCtx.Done():
-		return nil, fmt.Errorf("%w: %w", ErrUnavailable, waitCtx.Err())
+	case <-p.lifetimeDone:
+		return fmt.Errorf("%w: provider closed", ErrUnavailable)
+	case <-ctx.Done():
+		return fmt.Errorf("%w: %w", ErrUnavailable, ctx.Err())
+	case <-lookupCtx.Done():
+		return fmt.Errorf("%w: %w", ErrUnavailable, lookupCtx.Err())
 	}
-	defer func() { <-p.slot }()
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.lookup)
-	defer cancel()
+	if err := p.lookupStopped(ctx, lookupCtx); err != nil {
+		<-p.slot
+		return err
+	}
+	return nil
+}
+
+func (p *Provider) lookupStopped(ctx, lookupCtx context.Context) error {
+	if p.isClosed() {
+		return fmt.Errorf("%w: provider closed", ErrUnavailable)
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if err := lookupCtx.Err(); err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	return nil
+}
+
+func (p *Provider) isClosed() bool {
+	select {
+	case <-p.lifetimeDone:
+		return true
+	default:
+		return false
+	}
+}
+
+type lookupResult struct {
+	titles []foreigntitle.LanguageTitle
+	err    error
+}
+
+func (p *Provider) fetch(ctx context.Context, ref Ref, lang, rule string) ([]foreigntitle.LanguageTitle, error) {
 	if p.failed.Load() {
 		return nil, ErrUnauthorized
 	}

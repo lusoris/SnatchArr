@@ -69,7 +69,11 @@ func TestNewProviderLoadsRedisOnlyWhenUsed(t *testing.T) {
 			if err != nil {
 				t.Fatalf("newProvider() error = %v", err)
 			}
-			t.Cleanup(func() { _ = p.Close() })
+			t.Cleanup(func() {
+				if err := p.Close(); err != nil {
+					t.Errorf("Close() error = %v", err)
+				}
+			})
 		})
 	}
 }
