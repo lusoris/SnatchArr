@@ -190,11 +190,10 @@ func TestLateDatabaseConfigBudget(t *testing.T) {
 func TestLateDatabaseProxyPollLimit(t *testing.T) {
 	t.Parallel()
 	listener := lateDatabaseTestListener(t)
-	ctx, cancel := context.WithTimeout(t.Context(), lateDBTimeout)
-	defer cancel()
 	const pollLimit = 2
 	stats := &lateDatabaseProxyStats{}
-	err := serveLateDatabaseProxy(t, ctx, listener, "127.0.0.1:1", lateDBDelay, 1, pollLimit, stats)
+	// Serve gets no deadline because each poll has its own listener deadline and the loop has a scalar bound.
+	err := serveLateDatabaseProxy(t, t.Context(), listener, "127.0.0.1:1", lateDBDelay, 1, pollLimit, stats)
 	want := fmt.Sprintf("proxy accept loop reached %d polls", pollLimit)
 	if err == nil || err.Error() != want {
 		t.Errorf("serveLateDatabaseProxy error = %v, want %q", err, want)
@@ -222,6 +221,7 @@ func TestLateDatabaseProxyPollLimitAfterAccepts(t *testing.T) {
 		t.Cleanup(func() { closeProxyConnection(t, conn) })
 	}
 	stats := &lateDatabaseProxyStats{}
+	// Accepted connections take their I/O deadline from ctx, and lateDBTimeout is far above the expected run of two polls.
 	err := serveLateDatabaseProxy(t, ctx, listener, "127.0.0.1:1", lateDBTimeout, 4, pollLimit, stats)
 	want := fmt.Sprintf("proxy accept loop reached %d polls", pollLimit)
 	if err == nil || err.Error() != want {
