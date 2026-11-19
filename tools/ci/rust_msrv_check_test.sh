@@ -215,6 +215,87 @@ printf '%s\n' '[workspace]' 'members = []' 'exclude = "crates/ignored"' \
     '[workspace.package]' 'rust-version = "1.100"' > "$work/exclude-not-list/Cargo.toml"
 expect_fixture exclude-not-list 1 'error: Cargo.toml [workspace].exclude must be a list of relative paths'
 
+# Cargo makes every path dependency inside the workspace a member, listed or not.
+fixture path-dep-member 1.100 1.100.0
+mkdir -p "$work/path-dep-member/crates/a" "$work/path-dep-member/extra/b"
+printf '%s\n' '[workspace]' 'members = ["crates/a"]' '[workspace.package]' \
+    'rust-version = "1.100"' > "$work/path-dep-member/Cargo.toml"
+printf '%s\n' '[package]' 'name = "a"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    '[dependencies]' 'b = { path = "../../extra/b" }' > "$work/path-dep-member/crates/a/Cargo.toml"
+printf '%s\n' '[package]' 'name = "b"' 'version = "0.1.0"' \
+    'rust-version = "1.99"' > "$work/path-dep-member/extra/b/Cargo.toml"
+expect_fixture path-dep-member 3 \
+    'extra/b/Cargo.toml:4 has literal rust-version 1.99; use rust-version.workspace = true'
+
+# workspace = true under a target dev-dependency table, then a build path dependency of it.
+fixture path-dep-chain 1.100 1.100.0
+mkdir -p "$work/path-dep-chain/crates/a" "$work/path-dep-chain/extra/b" "$work/path-dep-chain/extra/c"
+printf '%s\n' '[workspace]' 'members = ["crates/a"]' '[workspace.package]' \
+    'rust-version = "1.100"' '[workspace.dependencies]' 'b = { path = "extra/b" }' \
+    > "$work/path-dep-chain/Cargo.toml"
+printf '%s\n' '[package]' 'name = "a"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    "[target.'cfg(unix)'.dev-dependencies]" 'b = { workspace = true }' \
+    > "$work/path-dep-chain/crates/a/Cargo.toml"
+printf '%s\n' '[package]' 'name = "b"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    '[build-dependencies]' 'c = { path = "../c" }' > "$work/path-dep-chain/extra/b/Cargo.toml"
+printf '%s\n' '[package]' 'name = "c"' 'version = "0.1.0"' \
+    'rust-version = "1.99"' > "$work/path-dep-chain/extra/c/Cargo.toml"
+expect_fixture path-dep-chain 3 \
+    'extra/c/Cargo.toml:4 has literal rust-version 1.99; use rust-version.workspace = true'
+
+# A path dependency outside the workspace, or below an exclude entry, is no member.
+fixture path-dep-skipped 1.100 1.100.0
+mkdir -p "$work/path-dep-skipped/crates/a" "$work/path-dep-skipped/extra/x" "$work/path-dep-outside"
+printf '%s\n' '[workspace]' 'members = ["crates/a"]' 'exclude = ["extra/x"]' \
+    '[workspace.package]' 'rust-version = "1.100"' > "$work/path-dep-skipped/Cargo.toml"
+printf '%s\n' '[package]' 'name = "a"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    '[dependencies]' 'x = { path = "../../extra/x" }' \
+    'out = { path = "../../../path-dep-outside" }' > "$work/path-dep-skipped/crates/a/Cargo.toml"
+for crate in path-dep-skipped/extra/x path-dep-outside; do
+    printf '%s\n' '[package]' "name = \"${crate##*/}\"" 'version = "0.1.0"' \
+        'rust-version = "1.99"' > "$work/$crate/Cargo.toml"
+done
+expect_fixture path-dep-skipped 0 'ok: Cargo.toml rust-version 1.100 matches rust-toolchain.toml channel 1.100.0'
+
+fixture path-dep-missing 1.100 1.100.0
+mkdir -p "$work/path-dep-missing/crates/a"
+printf '%s\n' '[workspace]' 'members = ["crates/a"]' '[workspace.package]' \
+    'rust-version = "1.100"' > "$work/path-dep-missing/Cargo.toml"
+printf '%s\n' '[package]' 'name = "a"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    '[dependencies]' 'none = { path = "../none" }' > "$work/path-dep-missing/crates/a/Cargo.toml"
+expect_fixture path-dep-missing 1 'error: cannot read crates/none/Cargo.toml'
+
+fixture path-dep-absolute 1.100 1.100.0
+mkdir -p "$work/path-dep-absolute/crates/a" "$work/path-dep-absolute/extra/b"
+printf '%s\n' '[workspace]' 'members = ["crates/a"]' '[workspace.package]' \
+    'rust-version = "1.100"' > "$work/path-dep-absolute/Cargo.toml"
+printf '%s\n' '[package]' 'name = "a"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+    '[dependencies]' "b = { path = '$work/path-dep-absolute/extra/b' }" \
+    > "$work/path-dep-absolute/crates/a/Cargo.toml"
+printf '%s\n' '[package]' 'name = "b"' 'version = "0.1.0"' \
+    'rust-version = "1.99"' > "$work/path-dep-absolute/extra/b/Cargo.toml"
+expect_fixture path-dep-absolute 1 'error: crates/a/Cargo.toml: absolute path dependency b'
+
+# The walk shares the 64-manifest bound: crates/a plus 63 path dependencies pass, plus 64 fail.
+for count in 63 64; do
+    name=path-dep-bound-$count
+    fixture "$name" 1.100 1.100.0
+    mkdir -p "$work/$name/crates/a"
+    printf '%s\n' '[workspace]' 'members = ["crates/a"]' '[workspace.package]' \
+        'rust-version = "1.100"' > "$work/$name/Cargo.toml"
+    deps=()
+    for index in $(seq 1 "$count"); do
+        mkdir -p "$work/$name/extra/d$index"
+        printf '%s\n' '[package]' "name = \"d$index\"" 'version = "0.1.0"' \
+            'rust-version.workspace = true' > "$work/$name/extra/d$index/Cargo.toml"
+        deps+=("d$index = { path = \"../../extra/d$index\" }")
+    done
+    printf '%s\n' '[package]' 'name = "a"' 'version = "0.1.0"' 'rust-version.workspace = true' \
+        '[dependencies]' "${deps[@]}" > "$work/$name/crates/a/Cargo.toml"
+done
+expect_fixture path-dep-bound-63 0 'ok: Cargo.toml rust-version 1.100 matches rust-toolchain.toml channel 1.100.0'
+expect_fixture path-dep-bound-64 1 'error: workspace manifests exceed 64'
+
 fixture invalid-cargo 1.100 1.100.0
 printf '%s\n' '[workspace' > "$work/invalid-cargo/Cargo.toml"
 expect_fixture invalid-cargo 1 'error: cannot parse Cargo.toml'

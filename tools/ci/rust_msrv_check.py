@@ -3,8 +3,9 @@
 r"""Keep the workspace Rust MSRV equal to the fixed release of the pinned toolchain.
 
 The workspace minimum may omit the patch component, but the toolchain must name an exact
-three-component release. Workspace members must inherit the declared minimum rather than
-carrying literal versions that Renovate cannot move with the toolchain.
+three-component release. Workspace members, including in-root path dependencies that
+Cargo makes members, must inherit the declared minimum rather than carrying literal
+versions that Renovate cannot move with the toolchain.
 
 Exit 0 = ok, 1 = input error, 3 = refused.
 """
@@ -12,6 +13,7 @@ Exit 0 = ok, 1 = input error, 3 = refused.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 import tomllib
@@ -19,6 +21,7 @@ from pathlib import Path
 
 MAX_BYTES = 1 << 20
 MAX_MEMBER_MANIFESTS = 64
+DEPENDENCY_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
 MSRV_RELEASE = re.compile(r"\d+\.\d+(?:\.\d+)?")
 FIXED_RELEASE = re.compile(r"\d+\.\d+\.\d+")
 TABLE_HEADER = re.compile(r"\s*\[([A-Za-z0-9_.-]+)]\s*(?:#.*)?")
@@ -114,6 +117,36 @@ def exclude_paths(exclude: object) -> list[Path]:
     return paths
 
 
+def excluded(directory: Path, excludes: list[Path], members: list[str]) -> bool:
+    """Return whether EXCLUDES holds DIRECTORY and no literal MEMBERS entry does."""
+    literal = [Path(item) for item in members if not any(c in item for c in "*?[")]
+    held = any(directory.is_relative_to(item) for item in excludes)
+    return held and not any(directory.is_relative_to(item) for item in literal)
+
+
+def path_dependencies(
+    relative: Path, manifest: dict[str, object], shared: dict[str, object]
+) -> list[Path]:
+    """Return RELATIVE's in-root path-dependency manifests (implicit Cargo members)."""
+    targets = table(manifest, "target")
+    scopes = [manifest, *(table(targets, spec) for spec in targets)]
+    tables = [table(scope, kind) for scope in scopes for kind in DEPENDENCY_TABLES]
+    found = []
+    for name, spec in (pair for deps in tables for pair in deps.items()):
+        base = relative.parent
+        if isinstance(spec, dict) and spec.get("workspace") is True:
+            base, spec = Path(), table(shared, name)
+        path = spec.get("path") if isinstance(spec, dict) else None
+        if not isinstance(path, str):
+            continue
+        target = Path(os.path.normpath(base / path))
+        if target.is_absolute():
+            raise InputError(f"{relative.as_posix()}: absolute path dependency {name}")
+        if target.parts[:1] != ("..",):
+            found.append(target / "Cargo.toml")
+    return found
+
+
 def member_manifests(root: Path, members: object, excludes: list[Path]) -> list[Path]:
     """Expand workspace MEMBERS below ROOT, refusing more than 64 manifest matches."""
     if not isinstance(members, list) or any(
@@ -122,11 +155,6 @@ def member_manifests(root: Path, members: object, excludes: list[Path]) -> list[
         raise InputError("Cargo.toml [workspace].members must be a list of paths")
     found: set[Path] = set()
     matches = 0
-    explicit_members = [
-        Path(pattern)
-        for pattern in members
-        if not any(character in pattern for character in "*?[")
-    ]
     for pattern in members:
         if Path(pattern).is_absolute():
             raise InputError(
@@ -150,15 +178,7 @@ def member_manifests(root: Path, members: object, excludes: list[Path]) -> list[
                     raise InputError(
                         f"workspace member escapes repository root: {manifest}"
                     ) from error
-                member_directory = relative.parent
-                excluded = any(
-                    member_directory.is_relative_to(exclude) for exclude in excludes
-                )
-                explicit = any(
-                    member_directory.is_relative_to(member)
-                    for member in explicit_members
-                )
-                if excluded and not explicit:
+                if excluded(relative.parent, excludes, members):
                     continue
                 found.add(relative)
                 if len(found) > MAX_MEMBER_MANIFESTS:
@@ -171,9 +191,20 @@ def member_manifests(root: Path, members: object, excludes: list[Path]) -> list[
 def check_members(root: Path, cargo: dict[str, object]) -> int:
     """Require workspace member manifests to inherit package rust-version exactly."""
     workspace = table(cargo, "workspace")
+    members = workspace.get("members", [])
     excludes = exclude_paths(workspace.get("exclude", []))
-    for relative in member_manifests(root, workspace.get("members", []), excludes):
+    shared = table(workspace, "dependencies")
+    pending = member_manifests(root, members, excludes)
+    seen = set(pending)
+    while pending:
+        relative = pending.pop(0)
         member, lines = read_toml(root, relative)
+        for found in path_dependencies(relative, member, shared):
+            if found not in seen and not excluded(found.parent, excludes, members):
+                seen.add(found)
+                pending.append(found)
+        if len(seen) > MAX_MEMBER_MANIFESTS:
+            raise InputError(f"workspace manifests exceed {MAX_MEMBER_MANIFESTS}")
         value = table(member, "package").get("rust-version")
         if value is None:
             line = table_line(lines, "package")
