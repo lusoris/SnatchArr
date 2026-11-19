@@ -25,6 +25,14 @@ const (
 	outputOverBudget = "over_budget"
 )
 
+var outputResultNames = []string{
+	outputListed,
+	outputNotVisible,
+	outputError,
+	outputNoPath,
+	outputOverBudget,
+}
+
 type outputResult struct {
 	result     string
 	downloadID string

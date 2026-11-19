@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -137,6 +138,85 @@ func TestInspectRecordsOutputResults(t *testing.T) {
 	assertOutputMetrics(t, env.metrics.outputs, queueOutputNotVisible, 1)
 	if output := logs.String(); !strings.Contains(output, "msg=\"queue: output path not visible to arr\"") || !strings.Contains(output, "instance=sonarr-main") || !strings.Contains(output, "output_path="+outputParent+"job-001/") {
 		t.Fatalf("inspect log = %q", output)
+	}
+}
+
+func TestSweepAllInitsOutputSeries(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	arr := newFakeArrClient()
+	metrics := &fakeMetricsRecorder{}
+	instances := []queue.Instance{
+		{ID: uuid.New(), Name: "radarr-main", Kind: domain.KindRadarr, BaseURL: "http://radarr.local", APIKey: "radarr-key"},
+		{ID: uuid.New(), Name: "sonarr-main", Kind: domain.KindSonarr, BaseURL: "http://sonarr.local", APIKey: "sonarr-key"},
+	}
+	for _, inst := range instances {
+		settings := queue.DefaultSettings()
+		settings.Enabled = true
+		settings.Grace = time.Minute
+		store.settings[inst.ID] = settings
+		path := "/data/" + inst.Name + "/job-001/"
+		arr.items[string(inst.Kind)+":"+inst.BaseURL] = []queue.Item{{DownloadID: "job-001", Added: outputSweepAt.Add(-time.Hour), OutputPath: path, ReasonLines: []string{"No files found are eligible for import in " + path}}}
+	}
+	service := newTestService(store, &fakeInstanceSource{instances: instances}, arr, clockwork.NewFakeClockAt(outputSweepAt), &fakeEventPublisher{}, metrics)
+	if err := service.SweepAll(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	wantInit := "listed,not_visible,error,no_path,over_budget"
+	if len(metrics.outputLog) < 4 || metrics.outputLog[0] != "radarr-main:init:"+wantInit || metrics.outputLog[1] != "sonarr-main:init:"+wantInit {
+		t.Fatalf("output log prefix = %#v, want both instance initializers before checks", metrics.outputLog)
+	}
+	firstCheck := 2
+	for i, entry := range metrics.outputLog {
+		if strings.Contains(entry, ":init:") {
+			continue
+		}
+		firstCheck = i
+		break
+	}
+	if firstCheck < 2 {
+		t.Fatalf("first output check index = %d, want after both initializers", firstCheck)
+	}
+}
+
+func TestSweepRotatesOutputWindow(t *testing.T) {
+	t.Parallel()
+	env := newOutputSweepEnv(t, nil)
+	items := make([]queue.Item, 45)
+	parents := make([]string, len(items))
+	for i := range items {
+		name := fmt.Sprintf("job-%02d", i)
+		parent := fmt.Sprintf("/rotating/%02d/", i)
+		parents[i] = parent
+		items[i] = queue.Item{
+			ID:          int32(i + 1),
+			DownloadID:  name,
+			Added:       outputSweepAt.Add(-time.Hour),
+			OutputPath:  parent + name,
+			ReasonLines: []string{"No files found are eligible for import in " + parent + name},
+		}
+	}
+	env.arr.items[env.key] = items
+	for sweep := range 3 {
+		env.arr.folderDirs = nil
+		if err := env.service.SweepAll(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		start := sweep * 20
+		end := min(start+20, len(parents))
+		if !slices.Equal(env.arr.folderDirs, parents[start:end]) {
+			t.Fatalf("sweep %d folders = %v, want %v", sweep+1, env.arr.folderDirs, parents[start:end])
+		}
+		if sweep == 0 {
+			env.arr.folderDirs = nil
+			if _, err := env.service.Inspect(t.Context(), env.instance.ID); err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(env.arr.folderDirs, parents[20:40]) {
+				t.Fatalf("inspect folders = %v, want %v", env.arr.folderDirs, parents[20:40])
+			}
+		}
+		env.clk.Advance(15 * time.Minute)
 	}
 }
 

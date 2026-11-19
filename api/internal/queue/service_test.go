@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -137,6 +138,7 @@ type fakeArrClient struct {
 	folders     map[string][]string
 	folderErr   map[string]error
 	folderCalls int
+	folderDirs  []string
 }
 
 func newFakeArrClient() *fakeArrClient {
@@ -169,6 +171,7 @@ func (f *fakeArrClient) Queue(_ context.Context, kind domain.AppKind, baseURL, _
 
 func (f *fakeArrClient) ListFolder(_ context.Context, _ domain.AppKind, _, _, dir string) ([]string, error) {
 	f.folderCalls++
+	f.folderDirs = append(f.folderDirs, dir)
 	if err := f.folderErr[dir]; err != nil {
 		return nil, err
 	}
@@ -190,11 +193,16 @@ func (f *fakeEventPublisher) Publish(_ context.Context, frame events.Frame) {
 }
 
 type fakeMetricsRecorder struct {
-	strikes  []string
-	removals []string
-	skipped  []string
-	imports  []string
-	outputs  []string
+	strikes   []string
+	removals  []string
+	skipped   []string
+	imports   []string
+	outputs   []string
+	outputLog []string
+}
+
+func (f *fakeMetricsRecorder) QueueOutputCheckInit(instance string, results []string) {
+	f.outputLog = append(f.outputLog, instance+":init:"+strings.Join(results, ","))
 }
 
 func (f *fakeMetricsRecorder) QueueImport(instance, result string) {
@@ -203,6 +211,7 @@ func (f *fakeMetricsRecorder) QueueImport(instance, result string) {
 
 func (f *fakeMetricsRecorder) QueueOutputCheck(instance, result string) {
 	f.outputs = append(f.outputs, instance+":"+result)
+	f.outputLog = append(f.outputLog, instance+":"+result)
 }
 
 func (f *fakeMetricsRecorder) QueueStruck(instance, rule, mode string) {

@@ -134,6 +134,7 @@ type MetricsRecorder interface {
 	QueueRemoval(instance, rule, result string)
 	QueueSkipped(instance, reason string)
 	QueueImport(instance, result string)
+	QueueOutputCheckInit(instance string, results []string)
 	QueueOutputCheck(instance, result string)
 }
 
@@ -230,6 +231,9 @@ func (s *Service) SweepAll(ctx context.Context) error {
 	if err != nil {
 		s.logger.WarnContext(ctx, "queue: some instances not loaded", slog.String("error", err.Error()))
 		errs = append(errs, err)
+	}
+	for _, inst := range insts {
+		s.metrics.QueueOutputCheckInit(inst.Name, outputResultNames)
 	}
 	for _, inst := range insts {
 		if sweepErr := s.sweepInstance(ctx, inst); sweepErr != nil {

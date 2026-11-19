@@ -5,6 +5,8 @@
 package arrclient_test
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -93,8 +95,8 @@ func TestListFolderDeadline(t *testing.T) {
 	}))
 	defer server.Close()
 	p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 50 * time.Millisecond})
-	if _, err := p.ListFolder(t.Context(), domain.KindSonarr, server.URL, "test-key", "/data/"); err == nil {
-		t.Fatal("ListFolder() error = nil, want deadline error")
+	if _, err := p.ListFolder(t.Context(), domain.KindSonarr, server.URL, "test-key", "/data/"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ListFolder() error = %v, want context deadline exceeded", err)
 	}
 }
 

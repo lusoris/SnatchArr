@@ -153,63 +153,40 @@ func sonarrNames(r *sonarr.FileSystemResource) ([]string, error) {
 	if r == nil {
 		return nil, nil
 	}
-	if err := checkFolderEntryCount(len(r.Directories) + len(r.Files)); err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(r.Directories)+len(r.Files))
-	for _, entry := range r.Directories {
-		names = append(names, entry.Name)
-	}
-	for _, entry := range r.Files {
-		names = append(names, entry.Name)
-	}
-	return names, nil
+	return entryNames(r.Directories, r.Files, func(entry sonarr.FileSystemEntry) string { return entry.Name })
 }
 
 func radarrNames(r *radarr.FileSystemResource) ([]string, error) {
 	if r == nil {
 		return nil, nil
 	}
-	if err := checkFolderEntryCount(len(r.Directories) + len(r.Files)); err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(r.Directories)+len(r.Files))
-	for _, entry := range r.Directories {
-		names = append(names, entry.Name)
-	}
-	for _, entry := range r.Files {
-		names = append(names, entry.Name)
-	}
-	return names, nil
+	return entryNames(r.Directories, r.Files, func(entry radarr.FileSystemEntry) string { return entry.Name })
 }
 
 func lidarrNames(r *lidarr.FileSystemResource) ([]string, error) {
 	if r == nil {
 		return nil, nil
 	}
-	if err := checkFolderEntryCount(len(r.Directories) + len(r.Files)); err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(r.Directories)+len(r.Files))
-	for _, entry := range r.Directories {
-		names = append(names, entry.Name)
-	}
-	for _, entry := range r.Files {
-		names = append(names, entry.Name)
-	}
-	return names, nil
+	return entryNames(r.Directories, r.Files, func(entry lidarr.FileSystemEntry) string { return entry.Name })
 }
 
 func readarrNames(r *readarr.FileSystemResource) ([]string, error) {
 	if r == nil {
 		return nil, nil
 	}
-	if err := checkFolderEntryCount(len(r.Directories)); err != nil {
+	return entryNames(r.Directories, nil, func(entry readarr.FileSystemEntry) string { return entry.Name })
+}
+
+func entryNames[E any](dirs, files []E, name func(E) string) ([]string, error) {
+	if err := checkFolderEntryCount(len(dirs) + len(files)); err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(r.Directories))
-	for _, entry := range r.Directories {
-		names = append(names, entry.Name)
+	names := make([]string, 0, len(dirs)+len(files))
+	for _, entry := range dirs {
+		names = append(names, name(entry))
+	}
+	for _, entry := range files {
+		names = append(names, name(entry))
 	}
 	return names, nil
 }

@@ -123,6 +123,25 @@ func TestPlanFailed(t *testing.T) {
 	}
 }
 
+func TestQueueOutputCheckInit(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	m.QueueOutputCheckInit("sonarr-main", []string{"not_visible", "listed"})
+	for _, result := range []string{"not_visible", "listed"} {
+		if got, ok := metricstest.ValueLabels(t, reg, "snatcharr_queue_output_checks_total", map[string]string{"arr_instance": "sonarr-main", "result": result}); !ok || got != 0 {
+			t.Errorf("output check %s = %v (present %t), want 0", result, got, ok)
+		}
+	}
+	m.QueueOutputCheck("sonarr-main", "not_visible")
+	if got, ok := metricstest.ValueLabels(t, reg, "snatcharr_queue_output_checks_total", map[string]string{"arr_instance": "sonarr-main", "result": "not_visible"}); !ok || got != 1 {
+		t.Errorf("not_visible = %v (present %t), want 1", got, ok)
+	}
+	m.QueueOutputCheckInit("sonarr-empty", []string{})
+	if got, ok := metricstest.ValueLabels(t, reg, "snatcharr_queue_output_checks_total", map[string]string{"arr_instance": "sonarr-empty", "result": "listed"}); ok {
+		t.Errorf("empty init listed = %v, want no series", got)
+	}
+}
+
 // Positive: a second New on the same registry (a second fx app in one test binary) reuses
 // the collectors, so both instances record into one series.
 func TestNew_ReusesRegisteredCollectors(t *testing.T) {

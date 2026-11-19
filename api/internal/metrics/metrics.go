@@ -386,6 +386,13 @@ func (m *Metrics) QueueImport(instance, result string) {
 	m.queueImports.WithLabelValues(instance, result).Inc()
 }
 
+// QueueOutputCheckInit creates zero-valued output check series for an instance.
+func (m *Metrics) QueueOutputCheckInit(instance string, results []string) {
+	for _, result := range results {
+		m.queueOutputChecks.WithLabelValues(instance, result)
+	}
+}
+
 // QueueOutputCheck records the result of checking an output path from an *arr queue record.
 func (m *Metrics) QueueOutputCheck(instance, result string) {
 	m.queueOutputChecks.WithLabelValues(instance, result).Inc()
