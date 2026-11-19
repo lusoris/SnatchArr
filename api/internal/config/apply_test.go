@@ -133,6 +133,35 @@ var applySettingCases = []applySettingCase{
 		},
 	},
 	{
+		name: "positive metadata cache l2 none",
+		key:  "snatcharr.metadata.cache.l2",
+		val:  "none",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if o.Metadata.Cache.L2 != MetadataCacheL2None {
+				t.Errorf("metadata cache l2 = %q, want %q", o.Metadata.Cache.L2, MetadataCacheL2None)
+			}
+		},
+	},
+	{
+		name: "positive metadata cache l2 redis",
+		key:  "snatcharr.metadata.cache.l2",
+		val:  "redis",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if o.Metadata.Cache.L2 != MetadataCacheL2Redis {
+				t.Errorf("metadata cache l2 = %q, want %q", o.Metadata.Cache.L2, MetadataCacheL2Redis)
+			}
+		},
+	},
+	{
+		name:    "negative invalid metadata cache l2",
+		key:     "snatcharr.metadata.cache.l2",
+		val:     "disk",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+	},
+	{
 		name:    "negative unknown tvdb option",
 		key:     "snatcharr.metadata.tvdb.unknown",
 		val:     "x",

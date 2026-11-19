@@ -123,6 +123,40 @@ func TestPlanFailed(t *testing.T) {
 	}
 }
 
+func TestMetadataCacheRequest(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	m.MetadataCacheRequest("tvdb", "MISS")
+	m.MetadataCacheRequest("tvdb", "HIT")
+	m.MetadataCacheRequest("tvdb", "HIT")
+
+	for _, tc := range []struct {
+		name, status string
+		want         float64
+	}{
+		{name: "miss", status: "MISS", want: 1},
+		{name: "hit", status: "HIT", want: 2},
+		{name: "negative untouched stale", status: "STALE", want: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
+				"provider": "tvdb",
+				"status":   tc.status,
+			})
+			if tc.want == 0 {
+				if ok {
+					t.Fatalf("untouched series present with value %v", got)
+				}
+				return
+			}
+			if !ok || got != tc.want {
+				t.Fatalf("cache requests = %v (present %t), want %v", got, ok, tc.want)
+			}
+		})
+	}
+}
+
 // Positive: a second New on the same registry (a second fx app in one test binary) reuses
 // the collectors, so both instances record into one series.
 func TestNew_ReusesRegisteredCollectors(t *testing.T) {

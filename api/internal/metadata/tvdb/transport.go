@@ -10,26 +10,29 @@ import (
 	"io"
 	"net/http"
 
-	"golang.org/x/time/rate"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
 )
 
 // errBodyTooLarge reports a TVDB response past the byte cap.
 var errBodyTooLarge = errors.New("tvdb: response body exceeds byte cap")
 
-// limitTransport waits for the limiter, with the request context, before every real HTTP
-// request: logins and retries count against the rate ceiling too.
-type limitTransport struct {
+const cacheStatusHeader = "X-Httpcache-Status"
+
+// cacheMetricsTransport observes the status emitted by golusoris/httpcache.
+type cacheMetricsTransport struct {
 	next    http.RoundTripper
-	limiter *rate.Limiter
+	metrics *metrics.Metrics
 }
 
-func (t *limitTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if err := t.limiter.Wait(req.Context()); err != nil {
-		return nil, fmt.Errorf("tvdb: rate wait: %w", err)
-	}
+func (t *cacheMetricsTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.next.RoundTrip(req)
 	if err != nil {
-		return nil, fmt.Errorf("tvdb: round trip: %w", err)
+		return nil, err //nolint:wrapcheck // preserve ratelimit.ErrLimited for provider mapping
+	}
+	if t.metrics != nil {
+		if status := resp.Header.Get(cacheStatusHeader); status != "" {
+			t.metrics.MetadataCacheRequest(Source, status)
+		}
 	}
 	return resp, nil
 }

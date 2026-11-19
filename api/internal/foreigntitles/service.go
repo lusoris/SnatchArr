@@ -20,7 +20,9 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/cache/memory"
+	rediscache "github.com/golusoris/golusoris/cache/redis"
 	"github.com/golusoris/golusoris/core/clock"
+	gconfig "github.com/golusoris/golusoris/core/config"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/config"
@@ -28,6 +30,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/foreigntitle"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	tvdbprovider "github.com/lusoris/SnatchArr/api/internal/metadata/tvdb"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
 )
 
 // MaxTitles bounds the titles one resolution returns.
@@ -164,13 +167,42 @@ func tag(merged, own []string) []Title {
 // fold normalises case and whitespace so a title both sources hold counts as *arr's.
 func fold(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
 
-func newProvider(cfg config.Options, l1 *memory.Cache, clk clock.Clock, logger *slog.Logger) (*tvdbprovider.Provider, error) {
-	ua := tvdbprovider.WithUserAgent(arrclient.DefaultOptions().UserAgent)
-	p, err := tvdbprovider.New(cfg.Metadata.TVDB.APIKey, cfg.Metadata.TVDB.PIN, l1, clk, logger, ua)
+func newProvider(
+	lc fx.Lifecycle,
+	cfg config.Options,
+	coreCfg *gconfig.Config,
+	l1 *memory.Cache,
+	clk clock.Clock,
+	logger *slog.Logger,
+	m *metrics.Metrics,
+) (*tvdbprovider.Provider, error) {
+	redisOpts, err := loadRedisOptions(coreCfg)
+	if err != nil {
+		return nil, err
+	}
+	p, err := tvdbprovider.New(
+		cfg.Metadata.TVDB.APIKey,
+		cfg.Metadata.TVDB.PIN,
+		l1,
+		clk,
+		logger,
+		tvdbprovider.WithUserAgent(arrclient.DefaultOptions().UserAgent),
+		tvdbprovider.WithL2(cfg.Metadata.Cache.L2, redisOpts),
+		tvdbprovider.WithMetrics(m),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("foreigntitles: tvdb provider: %w", err)
 	}
+	lc.Append(fx.Hook{OnStop: func(context.Context) error { return p.Close() }})
 	return p, nil
+}
+
+func loadRedisOptions(cfg *gconfig.Config) (rediscache.Options, error) {
+	opts := rediscache.Options{Addr: "localhost:6379"}
+	if err := cfg.Unmarshal("cache.redis", &opts); err != nil {
+		return rediscache.Options{}, fmt.Errorf("foreigntitles: load cache.redis options: %w", err)
+	}
+	return opts, nil
 }
 
 // Module provides the TVDB provider and the foreign-title service.

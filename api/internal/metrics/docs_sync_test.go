@@ -140,6 +140,7 @@ func populateRegistry(m *metrics.Metrics) {
 	m.LoopTicked("planner", time.Second, time.Now(), nil)
 	m.LoopTicked("planner", time.Second, time.Now(), errors.New("tick failed"))
 	m.PlanFailed("sonarr-main")
+	m.MetadataCacheRequest("tvdb", "MISS")
 	m.RunsQueued(1)
 	m.RunLeased("missing")
 	m.RunFinished("done")

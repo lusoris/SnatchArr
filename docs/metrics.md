@@ -102,6 +102,7 @@ The API serves these metrics on `/metrics`:
 | `snatcharr_loop_last_success_timestamp_seconds` | gauge | `loop` | no | Unix timestamp of the last successful tick of a leader loop, by loop name. |
 | `snatcharr_loop_interval_seconds` | gauge | `loop` | no | Configured interval between ticks of a leader loop, by loop name. |
 | `snatcharr_planner_instance_failures_total` | counter | `arr_instance` | no | Planner passes that skipped an instance because planning failed. |
+| `snatcharr_metadata_cache_requests_total` | counter | `provider`, `status` | no | Outbound metadata responses by provider and HTTP cache status (`HIT`, `MISS`, `STALE`, `REVALIDATED`). |
 | `snatcharr_runs_queued_total` | counter | none | no | Total runs queued by the planner. |
 | `snatcharr_runs_leased_total` | counter | `kind` | no | Runs leased by a worker, by snatch kind (`missing`, `upgrade`). |
 | `snatcharr_runs_finished_total` | counter | `outcome` | no | Runs completed, by outcome (`done`, `failed`, `cancelled`, `lease_exhausted`). |

@@ -465,6 +465,14 @@ var registry = []Setting{
 		Apply:   ApplyRestart,
 	},
 	{
+		Key:     "snatcharr.metadata.cache.l2",
+		Env:     "APP_SNATCHARR_METADATA_CACHE_L2",
+		Class:   ClassRuntime,
+		Type:    "string",
+		Default: MetadataCacheL2None,
+		Apply:   ApplyRestart,
+	},
+	{
 		Key:     "snatcharr.item_search.cooldown_seconds",
 		Env:     "APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS",
 		Class:   ClassRuntime,

@@ -51,6 +51,7 @@
 //	snatcharr.jellyfin.default_role APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE default role for new Jellyfin members (default requester)
 //	snatcharr.metadata.tvdb.api_key APP_SNATCHARR_METADATA_TVDB_API_KEY TheTVDB API key; empty = TVDB provider off (ADR-0048)
 //	snatcharr.metadata.tvdb.pin  APP_SNATCHARR_METADATA_TVDB_PIN  optional TheTVDB subscriber PIN (ADR-0048)
+//	snatcharr.metadata.cache.l2  APP_SNATCHARR_METADATA_CACHE_L2  metadata HTTP cache L2: none | redis (default none)
 //	snatcharr.item_search.cooldown_seconds APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS per-user item search cooldown in seconds (default 60, 0..3600, 0 = off)
 //	snatcharr.download_priority.interval_seconds APP_SNATCHARR_DOWNLOAD_PRIORITY_INTERVAL_SECONDS observe interval (default 60, 15..3600)
 //
@@ -149,7 +150,29 @@ func (p ProwlarrOptions) Validate() error {
 
 // MetadataOptions groups opt-in external metadata providers (ADR-0048).
 type MetadataOptions struct {
-	TVDB TVDBOptions `koanf:"tvdb"`
+	TVDB  TVDBOptions          `koanf:"tvdb"`
+	Cache MetadataCacheOptions `koanf:"cache"`
+}
+
+// Metadata cache L2 backends.
+const (
+	MetadataCacheL2None  = "none"
+	MetadataCacheL2Redis = "redis"
+)
+
+// MetadataCacheOptions configures the shared outbound metadata HTTP cache.
+type MetadataCacheOptions struct {
+	L2 string `koanf:"l2"`
+}
+
+// Validate refuses cache backends the provider cannot construct.
+func (c MetadataCacheOptions) Validate() error {
+	switch c.L2 {
+	case MetadataCacheL2None, MetadataCacheL2Redis:
+		return nil
+	default:
+		return fmt.Errorf("config: metadata.cache.l2 must be %q or %q, got %q", MetadataCacheL2None, MetadataCacheL2Redis, c.L2)
+	}
 }
 
 // TVDBOptions configures the opt-in TheTVDB provider. Both fields are secrets:
@@ -523,6 +546,7 @@ func Default() Options {
 			Timeout:     10 * time.Second,
 			DefaultRole: domain.RoleRequester,
 		},
+		Metadata:         MetadataOptions{Cache: MetadataCacheOptions{L2: MetadataCacheL2None}},
 		DownloadPriority: DownloadPriorityOptions{IntervalSeconds: 60},
 		ItemSearch:       ItemSearchOptions{CooldownSeconds: DefaultItemSearchCooldownSeconds},
 		Logs:             LogsOptions{RingSize: 2000},
@@ -645,6 +669,7 @@ func normalizeJellyfin(j *JellyfinOptions) {
 func normalizeMetadata(m *MetadataOptions) {
 	m.TVDB.APIKey = strings.TrimSpace(m.TVDB.APIKey)
 	m.TVDB.PIN = strings.TrimSpace(m.TVDB.PIN)
+	m.Cache.L2 = strings.ToLower(strings.TrimSpace(m.Cache.L2))
 }
 
 func cleanTrusted(raw []string) []string {
@@ -709,6 +734,9 @@ func (o Options) Validate() error {
 		return err
 	}
 	if err := o.Jellyfin.Validate(); err != nil {
+		return err
+	}
+	if err := o.Metadata.Cache.Validate(); err != nil {
 		return err
 	}
 	if err := o.ItemSearch.Validate(); err != nil {

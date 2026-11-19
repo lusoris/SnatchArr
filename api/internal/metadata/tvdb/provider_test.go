@@ -15,20 +15,23 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	tvdb "github.com/golusoris/goenvoy/metadata/video/tvdb"
-	"golang.org/x/time/rate"
+	"github.com/jonboulle/clockwork"
+	"github.com/redis/rueidis"
 
 	"github.com/golusoris/golusoris/cache/memory"
+	rediscache "github.com/golusoris/golusoris/cache/redis"
 	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/foreigntitle"
+	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 )
 
 const (
@@ -51,6 +54,7 @@ type stub struct {
 	movies    map[string]int   // remote id -> movie id
 	movieAli  map[int][]string
 	delay     time.Duration
+	age       int64
 	agent     atomic.Value  // last User-Agent header seen
 	started   chan struct{} // signals a held series request
 	release   <-chan struct{}
@@ -96,6 +100,9 @@ func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/login" {
 		s.login(w, r)
 		return
+	}
+	if s.age > 0 {
+		w.Header().Set("Age", strconv.FormatInt(s.age, 10))
 	}
 	if r.Header.Get("Authorization") != "Bearer stub-token" {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -179,18 +186,29 @@ func aliasJSON(names []string) string {
 
 func (s *stub) provider(t *testing.T, key, pin string, logs *bytes.Buffer) *Provider {
 	t.Helper()
+	return s.providerWith(t, key, pin, logs, testPool(t))
+}
+
+func (s *stub) providerWith(t *testing.T, key, pin string, logs *bytes.Buffer, l1 *memory.Cache, extra ...Option) *Provider {
+	t.Helper()
 	logger := slog.New(slog.DiscardHandler)
 	if logs != nil {
 		logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
-	opts := []Option{WithBaseURL(s.srv.URL), WithRetryWait(time.Millisecond), WithRate(rate.Inf, 1)}
+	opts := []Option{WithBaseURL(s.srv.URL), WithRetryWait(time.Millisecond), WithRate("")}
 	if s.tlsConfig != nil {
 		opts = append(opts, withTLSConfig(s.tlsConfig))
 	}
-	p, err := New(key, pin, testPool(t), clock.NewFake(), logger, opts...)
+	opts = append(opts, extra...)
+	p, err := New(key, pin, l1, clock.NewFake(), logger, opts...)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
+	t.Cleanup(func() {
+		if err := p.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	})
 	return p
 }
 
@@ -346,7 +364,57 @@ func TestRateLimitedBoundedAttempts(t *testing.T) {
 	assertNoSecret(t, err.Error(), logs.String())
 }
 
-func TestNotFoundIsEmptyAndNegativeCached(t *testing.T) {
+func TestOutboundRateLimit(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name         string
+		deadline     time.Duration
+		wantErr      error
+		wantRequests int64
+		minElapsed   time.Duration
+	}{
+		{"burst waits", 0, nil, 3, 500 * time.Millisecond},
+		{"caller deadline stops wait", 50 * time.Millisecond, ErrUnavailable, 2, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			p, err := New(
+				plantedKey,
+				plantedPIN,
+				testPool(t),
+				clockwork.NewRealClock(),
+				slog.New(slog.DiscardHandler),
+				WithBaseURL(s.srv.URL),
+				WithRetryWait(time.Millisecond),
+				WithRate("2-S"),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = p.Close() })
+			ctx := t.Context()
+			if tc.deadline > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.deadline)
+				defer cancel()
+			}
+			started := time.Now()
+			_, err = p.TitlesFor(ctx, sonarrRef(), "de")
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("TitlesFor() error = %v, want %v", err, tc.wantErr)
+			}
+			if elapsed := time.Since(started); elapsed < tc.minElapsed {
+				t.Fatalf("elapsed = %v, want at least %v", elapsed, tc.minElapsed)
+			}
+			if got := s.total.Load(); got != tc.wantRequests {
+				t.Fatalf("requests = %d, want %d", got, tc.wantRequests)
+			}
+		})
+	}
+}
+
+func TestNotFoundResponseIsCached(t *testing.T) {
 	t.Parallel()
 	s := newStub(t)
 	p := s.provider(t, plantedKey, "", nil)
@@ -358,153 +426,11 @@ func TestNotFoundIsEmptyAndNegativeCached(t *testing.T) {
 		}
 	}
 	if n, want := s.total.Load(), int64(2); n != want { // login + series 404
-		t.Fatalf("requests = %d, want %d (negative cache)", n, want)
+		t.Fatalf("requests = %d, want %d (cached 404)", n, want)
 	}
 	unknown := Ref{Kind: domain.KindRadarr, IMDBID: "tt0000000"}
 	if got, err := p.TitlesFor(t.Context(), unknown, "de"); err != nil || len(got) != 0 {
 		t.Fatalf("unknown remote id = %v, %v, want empty, nil", got, err)
-	}
-}
-
-func TestNegativeEntryExpires(t *testing.T) {
-	t.Parallel()
-	s := newStub(t)
-	clk := clock.NewFake()
-	p, err := New(plantedKey, "", testPool(t), clk, slog.New(slog.DiscardHandler), WithBaseURL(s.srv.URL), WithRate(rate.Inf, 1), WithRetryWait(time.Millisecond))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
-	if got, ferr := p.TitlesFor(t.Context(), ref, "de"); ferr != nil || len(got) != 0 {
-		t.Fatalf("first = %v, %v", got, ferr)
-	}
-	s.series[7] = "Sieben"
-	clk.Advance(NegativeTTL - time.Second)
-	if got, _ := p.TitlesFor(t.Context(), ref, "de"); len(got) != 0 {
-		t.Fatalf("before expiry = %v, want still empty", got)
-	}
-	clk.Advance(2 * time.Second)
-	got, err := p.TitlesFor(t.Context(), ref, "de")
-	if err != nil || len(got) == 0 || got[0].Title != "Sieben" {
-		t.Fatalf("after expiry = %v, %v, want Sieben", got, err)
-	}
-}
-
-func TestNegativeRefreshPreservesSentinel(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name       string
-		dataRC     int
-		wantErr    error
-		wantTitles int
-	}{
-		{"working stub", 0, nil, 1},
-		{"unauthorized data request", http.StatusUnauthorized, ErrUnauthorized, 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			s := newStub(t)
-			p := s.provider(t, plantedKey, "", nil)
-			clk := clock.NewFake()
-			p.clk = clk
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-			defer cancel()
-			ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
-			if got, err := p.TitlesFor(ctx, ref, "de"); err != nil || len(got) != 0 {
-				t.Fatalf("first lookup = %v, %v, want empty, nil", got, err)
-			}
-			s.series[7] = "Sieben"
-			s.dataRC = tc.dataRC
-			clk.Advance(NegativeTTL + time.Second)
-			got, err := p.TitlesFor(ctx, ref, "de")
-			if !errors.Is(err, tc.wantErr) {
-				t.Fatalf("refresh error = %v, want %v", err, tc.wantErr)
-			}
-			if len(got) != tc.wantTitles {
-				t.Fatalf("refresh titles = %v, want %d titles", got, tc.wantTitles)
-			}
-		})
-	}
-}
-
-// staleReadClock holds callers after each has read the same stale cache entry.
-type staleReadClock struct {
-	clock.Clock
-	reads   chan struct{}
-	release <-chan struct{}
-}
-
-func (c *staleReadClock) Since(at time.Time) time.Duration {
-	age := c.Clock.Since(at)
-	if age >= NegativeTTL {
-		select {
-		case c.reads <- struct{}{}:
-		case <-c.release:
-		}
-		<-c.release
-	}
-	return age
-}
-
-func TestConcurrentNegativeRefresh(t *testing.T) {
-	t.Parallel()
-	s := newStub(t)
-	p := s.provider(t, plantedKey, "", nil)
-	clk := clock.NewFake()
-	p.clk = clk
-	ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
-	if got, err := p.TitlesFor(t.Context(), ref, "de"); err != nil || len(got) != 0 {
-		t.Fatalf("first lookup = %v, %v, want empty, nil", got, err)
-	}
-	clk.Advance(NegativeTTL + time.Second)
-	release := make(chan struct{})
-	reads := make(chan struct{}, 16)
-	p.clk = &staleReadClock{Clock: clk, reads: reads, release: release}
-	negativeRefreshBurst(t, p, ref, reads, release)
-	if n := s.total.Load() - s.logins.Load(); n != 2 {
-		t.Fatalf("data requests = %d, want 2 (initial lookup + one refresh)", n)
-	}
-}
-
-func negativeRefreshBurst(t *testing.T, p *Provider, ref Ref, reads <-chan struct{}, release chan struct{}) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	p.slot <- struct{}{}
-	releaseReads := sync.OnceFunc(func() { close(release) })
-	releaseSlot := sync.OnceFunc(func() { <-p.slot })
-	var wg sync.WaitGroup
-	defer func() { releaseReads(); releaseSlot(); wg.Wait() }()
-	start := make(chan struct{})
-	errs := make(chan error, 16)
-	for range 16 {
-		wg.Go(func() {
-			<-start
-			got, err := p.TitlesFor(ctx, ref, "de")
-			if err == nil && len(got) != 0 {
-				err = fmt.Errorf("refresh got %v, want empty", got)
-			}
-			errs <- err
-		})
-	}
-	close(start)
-	for range 16 {
-		select {
-		case <-reads:
-		case <-ctx.Done():
-			t.Fatal("callers did not all read the stale entry")
-		}
-	}
-	releaseReads()
-	// Keep loads queued until every stale reader can enter the refresh path.
-	time.Sleep(100 * time.Millisecond)
-	releaseSlot()
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		if err != nil {
-			t.Error(err)
-		}
 	}
 }
 
@@ -522,6 +448,149 @@ func TestCacheHitMakesNoRequest(t *testing.T) {
 	}
 	if n := s.total.Load(); n != before {
 		t.Fatalf("cache hit made %d requests", n-before)
+	}
+}
+
+func TestCacheTTLUsesOriginAgeBoundary(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		age      int64
+		wantData int64
+	}{
+		{"positive before expiry", int64(PositiveTTL/time.Second) - 1, 2},
+		{"boundary at expiry", int64(PositiveTTL / time.Second), 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			s.age = tc.age
+			p := s.provider(t, plantedKey, "", nil)
+			for range 2 {
+				if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+					t.Fatalf("TitlesFor() error = %v", err)
+				}
+			}
+			if got := s.total.Load() - s.logins.Load(); got != tc.wantData {
+				t.Fatalf("data requests = %d, want %d", got, tc.wantData)
+			}
+		})
+	}
+}
+
+func TestCredentialedResponsesNeedSharedHost(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		new  func(t *testing.T, p *Provider, s *stub) *http.Request
+	}{
+		{
+			name: "login POST",
+			new: func(t *testing.T, _ *Provider, s *stub) *http.Request {
+				t.Helper()
+				body := strings.NewReader(`{"apikey":"` + plantedKey + `","pin":"` + plantedPIN + `"}`)
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.srv.URL+"/login", body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return req
+			},
+		},
+		{
+			name: "bearer GET without shared host",
+			new: func(t *testing.T, _ *Provider, s *stub) *http.Request {
+				t.Helper()
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.srv.URL+"/series/81189", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Header.Set("Authorization", "Bearer stub-token")
+				return req
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			p := s.providerWith(t, plantedKey, plantedPIN, nil, testPool(t), withSharedHost(false))
+			for range 2 {
+				resp, err := p.http.Do(tc.new(t, p, s))
+				if err != nil {
+					t.Fatalf("Do() error = %v", err)
+				}
+				if err := resp.Body.Close(); err != nil {
+					t.Fatalf("Close() error = %v", err)
+				}
+			}
+			if got := s.total.Load(); got != 2 {
+				t.Fatalf("upstream requests = %d, want 2", got)
+			}
+		})
+	}
+}
+
+func TestCacheKeysContainNoCredential(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	l1 := testPool(t)
+	p := s.providerWith(t, plantedKey, plantedPIN, nil, l1)
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+		t.Fatal(err)
+	}
+	for key := range l1.Keys() {
+		assertNoSecret(t, fmt.Sprint(key))
+	}
+}
+
+func TestCacheMetrics(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	m, reg := metricstest.New(t)
+	p := s.providerWith(t, plantedKey, plantedPIN, nil, testPool(t), WithMetrics(m))
+	for range 2 {
+		if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		status string
+		want   float64
+	}{{"MISS", 2}, {"HIT", 2}} {
+		got, ok := metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
+			"provider": Source,
+			"status":   tc.status,
+		})
+		if !ok || got != tc.want {
+			t.Fatalf("cache metric %s = %v (present %t), want %v", tc.status, got, ok, tc.want)
+		}
+	}
+}
+
+type closeOnlyRedisClient struct {
+	rueidis.Client
+	closed atomic.Bool
+}
+
+func (c *closeOnlyRedisClient) Close() { c.closed.Store(true) }
+
+func TestRedisL2UsesInjectedClientAndClosesIt(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	client := &closeOnlyRedisClient{}
+	p := s.providerWith(
+		t,
+		plantedKey,
+		plantedPIN,
+		nil,
+		testPool(t),
+		WithL2("redis", rediscache.Options{Addr: "dragonfly.test:6379"}),
+		withRedisClient(client),
+	)
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if !client.closed.Load() {
+		t.Fatal("Close() did not close the injected Redis client")
 	}
 }
 
@@ -692,8 +761,12 @@ func TestMissingTranslationKeepsAliases(t *testing.T) {
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("TitlesFor() = %+v, want only %+v", got, want)
 	}
+	got, err = p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil || len(got) != 1 || got[0] != want {
+		t.Fatalf("cached TitlesFor() = %+v, %v, want only %+v", got, err, want)
+	}
 	if n, want := s.total.Load(), int64(3); n != want { // login, series, translation 404
-		t.Fatalf("requests = %d, want %d", n, want)
+		t.Fatalf("requests = %d, want %d (translation 404 cached)", n, want)
 	}
 }
 
@@ -733,10 +806,11 @@ func TestOversizeBodyIsUnavailable(t *testing.T) {
 		_, _ = w.Write(bytes.Repeat([]byte("a"), maxBodyBytes+10))
 	}))
 	t.Cleanup(big.Close)
-	p, err := New(plantedKey, "", testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler), WithBaseURL(big.URL), WithRate(rate.Inf, 1))
+	p, err := New(plantedKey, "", testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler), WithBaseURL(big.URL), WithRate(""))
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = p.Close() })
 	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("error = %v, want ErrUnavailable", err)
 	}
@@ -789,10 +863,11 @@ func TestUserAgentHeader(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := newStub(t)
-			p, err := New(plantedKey, "", testPool(t), clock.NewFake(), nil, WithBaseURL(s.srv.URL), WithRate(rate.Inf, 1), WithUserAgent(tc.ua))
+			p, err := New(plantedKey, "", testPool(t), clock.NewFake(), nil, WithBaseURL(s.srv.URL), WithRate(""), WithUserAgent(tc.ua))
 			if err != nil {
 				t.Fatal(err)
 			}
+			t.Cleanup(func() { _ = p.Close() })
 			if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
 				t.Fatal(err)
 			}

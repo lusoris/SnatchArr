@@ -46,6 +46,7 @@ type Metrics struct {
 	queueRemovals           *prometheus.CounterVec
 	queueSkipped            *prometheus.CounterVec
 	queueImports            *prometheus.CounterVec
+	metadataCacheRequests   *prometheus.CounterVec
 }
 
 // Run outcomes the finished-runs counter carries next to the worker's own (done, failed,
@@ -125,6 +126,7 @@ func New(reg prometheus.Registerer) (*Metrics, error) {
 		queueRemovals:           b.counter("snatcharr_queue_removals_total", "Queue items removed from *arr instances, by instance name, rule and result.", "arr_instance", "rule", "result"),
 		queueSkipped:            b.counter("snatcharr_queue_skipped_total", "Queue sweeps skipped, by instance name and reason.", "arr_instance", "reason"),
 		queueImports:            b.counter("snatcharr_queue_imports_total", "Force imports of ID-matched queue items and their read-back, by instance name and result.", "arr_instance", "result"),
+		metadataCacheRequests:   b.counter("snatcharr_metadata_cache_requests_total", "Outbound metadata requests by provider and HTTP cache status.", "provider", "status"),
 	}
 	if b.err != nil {
 		return nil, b.err
@@ -227,6 +229,11 @@ func (m *Metrics) LoopTicked(name string, interval time.Duration, at time.Time, 
 // PlanFailed records a planner pass that skipped the instance called instance.
 func (m *Metrics) PlanFailed(instance string) {
 	m.planFailures.WithLabelValues(instance).Inc()
+}
+
+// MetadataCacheRequest records one outbound metadata response by cache status.
+func (m *Metrics) MetadataCacheRequest(provider, status string) {
+	m.metadataCacheRequests.WithLabelValues(provider, status).Inc()
 }
 
 // RunsQueued records n runs the planner queued.
