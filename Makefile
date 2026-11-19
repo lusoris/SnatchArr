@@ -239,6 +239,8 @@ tools-opengrep: ## Codacy Opengrep Python rules over tracked Python files, again
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────
 worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
+	bash tools/ci/rust_msrv_check_test.sh
+	python3 -I tools/ci/rust_msrv_check.py
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets --locked -- -D warnings
 	cargo audit
