@@ -72,6 +72,7 @@ type stub struct {
 	requestCount           int
 	redirect               func(http.ResponseWriter, *http.Request) bool
 	numericTranslationOnce atomic.Bool
+	emptySeriesOnce        atomic.Bool
 	staleWhileRevalidate   bool
 	statusHeader           string
 }
@@ -222,6 +223,9 @@ func (s *stub) data(w http.ResponseWriter, path string) {
 		_, _ = fmt.Sscanf(path, "/series/%d", &id)
 		if _, ok := s.series[id]; !ok {
 			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if s.emptySeriesOnce.Swap(false) {
 			return
 		}
 		fmt.Fprintf(w, `{"status":"success","data":{"id":%d,"name":"en","aliases":%s}}`, id, aliasJSON(s.aliases[id]))
@@ -613,6 +617,28 @@ func TestUndecodableTranslationIsNotCached(t *testing.T) {
 	s.pathMu.Unlock()
 	if translationHits != 2 {
 		t.Fatalf("translation requests = %d, want 2", translationHits)
+	}
+}
+
+func TestEmptySeriesBodyIsNotCached(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.emptySeriesOnce.Store(true)
+	p := s.provider(t, plantedKey, "", nil)
+	_, _ = p.TitlesFor(t.Context(), sonarrRef(), "de")
+
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil {
+		t.Fatalf("second TitlesFor() error = %v", err)
+	}
+	if titles := titlesOf(got); !slices.Contains(titles, "Breaking Bad Alias") {
+		t.Fatalf("second TitlesFor() = %v, want Breaking Bad Alias", titles)
+	}
+	s.pathMu.Lock()
+	seriesHits := s.pathHits["/series/81189"]
+	s.pathMu.Unlock()
+	if seriesHits != 2 {
+		t.Fatalf("series requests = %d, want 2", seriesHits)
 	}
 }
 

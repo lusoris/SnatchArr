@@ -80,11 +80,10 @@ func (t *originGuard) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(body))
 	resp.ContentLength = int64(len(body))
-	if len(body) > 0 {
-		path := relativeCachePath(req.URL.Path, t.basePath)
-		if err := decodeTVDBResponse(path, body); err != nil {
-			prependNoStore(resp.Header)
-		}
+	// Empty bodies decode as errors and must be no-store; goenvoy skips decoding them and returns a zero value that the cache keeps for the TTL.
+	path := relativeCachePath(req.URL.Path, t.basePath)
+	if err := decodeTVDBResponse(path, body); err != nil {
+		prependNoStore(resp.Header)
 	}
 	return resp, nil
 }

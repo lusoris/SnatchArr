@@ -110,7 +110,7 @@ func TestOriginGuardAddsNoStoreForUncacheableResponses(t *testing.T) {
 		{name: "unknown path", method: http.MethodGet, path: "/v4/unknown", status: http.StatusOK, body: `{"not":"tvdb"}`, want: true},
 		{name: "not found", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusNotFound, body: `{"message":"missing"}`},
 		{name: "post", method: http.MethodPost, path: "/v4/unknown", status: http.StatusOK, body: `not json`},
-		{name: "empty body", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusOK, want: false},
+		{name: "empty body", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusOK, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
