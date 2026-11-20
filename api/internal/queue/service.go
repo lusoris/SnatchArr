@@ -136,6 +136,7 @@ type MetricsRecorder interface {
 	QueueImport(instance, result string)
 	QueueOutputCheckInit(instance string, results []string)
 	QueueOutputCheck(instance, result string)
+	QueueOutputNotVisibleAt(instance string, at time.Time)
 }
 
 // Service manages download queues across *arr instances.
@@ -298,7 +299,7 @@ func (s *Service) fetchAndEvaluate(ctx context.Context, inst Instance, cfg Setti
 	start := s.outputCursorFor(inst.ID)
 	items, results, next := checkOutputs(ctx, s.arr, inst, cfg, items, now, start)
 	s.setOutputCursor(inst.ID, next)
-	s.recordOutputResults(ctx, inst, results)
+	s.recordOutputResults(ctx, inst, results, now)
 	prev, err := s.store.Strikes(ctx, inst.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch strikes for %s: %w", inst.Name, err)
@@ -306,10 +307,17 @@ func (s *Service) fetchAndEvaluate(ctx context.Context, inst Instance, cfg Setti
 	return Sweep(cfg, items, prev, now), nil
 }
 
-func (s *Service) recordOutputResults(ctx context.Context, inst Instance, results []outputResult) {
+func (s *Service) recordOutputResults(ctx context.Context, inst Instance, results []outputResult, now time.Time) {
+	foundNotVisible := false
 	for _, result := range results {
 		s.metrics.QueueOutputCheck(inst.Name, result.result)
 		s.logOutputResult(ctx, inst, result)
+		if result.result == outputNotVisible {
+			foundNotVisible = true
+		}
+	}
+	if foundNotVisible {
+		s.metrics.QueueOutputNotVisibleAt(inst.Name, now)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -212,6 +213,10 @@ func (f *fakeMetricsRecorder) QueueImport(instance, result string) {
 func (f *fakeMetricsRecorder) QueueOutputCheck(instance, result string) {
 	f.outputs = append(f.outputs, instance+":"+result)
 	f.outputLog = append(f.outputLog, instance+":"+result)
+}
+
+func (f *fakeMetricsRecorder) QueueOutputNotVisibleAt(instance string, at time.Time) {
+	f.outputLog = append(f.outputLog, instance+":not_visible_at:"+strconv.FormatInt(at.Unix(), 10))
 }
 
 func (f *fakeMetricsRecorder) QueueStruck(instance, rule, mode string) {

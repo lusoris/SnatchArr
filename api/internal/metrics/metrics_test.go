@@ -142,6 +142,42 @@ func TestQueueOutputCheckInit(t *testing.T) {
 	}
 }
 
+func TestQueueOutputNotVisibleAt(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	const metric = "snatcharr_queue_output_not_visible_last_timestamp_seconds"
+	t0 := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC)
+	t1 := time.Date(2026, 11, 18, 18, 30, 0, 0, time.UTC)
+
+	// No gather occurs before the counter event and its matching timestamp.
+	m.QueueOutputCheckInit("sonarr-main", []string{"not_visible"})
+	m.QueueOutputCheck("sonarr-main", "not_visible")
+	tests := []struct {
+		name     string
+		instance string
+		at       time.Time
+		want     float64
+	}{
+		{"first scrape after first event", "sonarr-main", t0, float64(t0.Unix())},
+		{"update existing instance", "sonarr-main", t1, float64(t1.Unix())},
+		{"separate instance", "radarr-4k", t0, float64(t0.Unix())},
+	}
+	for _, tc := range tests {
+		m.QueueOutputNotVisibleAt(tc.instance, tc.at)
+		got, ok := value(t, reg, metric, "arr_instance", tc.instance)
+		if !ok || got != tc.want {
+			t.Errorf("%s: %s{%s} = %v (present %t), want %v", tc.name, metric, tc.instance, got, ok, tc.want)
+		}
+	}
+	if got, ok := value(t, reg, metric, "arr_instance", "sonarr-main"); !ok || got != float64(t1.Unix()) {
+		t.Errorf("separate instance changed sonarr value to %v (present %t), want %v", got, ok, float64(t1.Unix()))
+	}
+
+	// Boundary: nil receiver does not panic.
+	var nilM *metrics.Metrics
+	nilM.QueueOutputNotVisibleAt("sonarr-main", t0)
+}
+
 // Positive: a second New on the same registry (a second fx app in one test binary) reuses
 // the collectors, so both instances record into one series.
 func TestNew_ReusesRegisteredCollectors(t *testing.T) {

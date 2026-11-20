@@ -179,6 +179,38 @@ func TestSweepAllInitsOutputSeries(t *testing.T) {
 	}
 }
 
+func TestSweepRecordsNotVisibleTime(t *testing.T) {
+	t.Parallel()
+	timestamp := fmt.Sprintf("sonarr-main:not_visible_at:%d", outputSweepAt.Unix())
+	initRecord := "sonarr-main:init:listed,not_visible,error,no_path,over_budget"
+	tests := []struct {
+		name        string
+		folderNames []string
+		itemCount   int
+		folderError bool
+		want        []string
+	}{
+		{"not visible and listed", []string{"job-002"}, 2, false, []string{initRecord, queueOutputNotVisible, "sonarr-main:listed", timestamp}},
+		{"listed only", []string{"job-001"}, 1, false, []string{initRecord, "sonarr-main:listed"}},
+		{"error only", nil, 1, true, []string{initRecord, queueOutputError}},
+		{"two not visible", nil, 2, false, []string{initRecord, queueOutputNotVisible, queueOutputNotVisible, timestamp}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newOutputSweepEnv(t, tc.folderNames)
+			env.arr.items[env.key] = blindWindowItems(tc.itemCount)
+			if tc.folderError {
+				env.arr.folderErr[outputParent] = errors.New("mount unavailable")
+			}
+			runOutputSweeps(t, env, 1)
+			if !slices.Equal(env.metrics.outputLog, tc.want) {
+				t.Errorf("output log = %#v, want %#v", env.metrics.outputLog, tc.want)
+			}
+		})
+	}
+}
+
 func TestSweepRotatesOutputWindow(t *testing.T) {
 	t.Parallel()
 	env := newOutputSweepEnv(t, nil)

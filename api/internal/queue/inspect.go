@@ -75,7 +75,7 @@ func (s *Service) Inspect(ctx context.Context, instanceID uuid.UUID) (Inspection
 	start := s.outputCursorFor(inst.ID)
 	var results []outputResult
 	items, results, _ = checkOutputs(ctx, s.arr, inst, cfg, items, now, start)
-	s.recordOutputResults(ctx, inst, results)
+	s.recordOutputResults(ctx, inst, results, now)
 	decisions := Sweep(cfg, items, prev, now)
 	inspected := make([]InspectedItem, 0, len(items))
 	for i, item := range items {

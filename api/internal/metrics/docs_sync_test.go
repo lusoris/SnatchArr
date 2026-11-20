@@ -163,6 +163,7 @@ func populateRegistry(m *metrics.Metrics) {
 	m.QueueSkipped("sonarr-main", "disabled")
 	m.QueueImport("sonarr-main", "no_clean_candidate")
 	m.QueueOutputCheck("sonarr-main", "over_budget")
+	m.QueueOutputNotVisibleAt("sonarr-main", time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC))
 }
 
 func gatherCodeMetrics(m *metrics.Metrics, reg *prometheus.Registry) (map[string][]string, error) {
