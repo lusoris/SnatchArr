@@ -100,7 +100,6 @@ func newStubWithServer(t *testing.T, newServer func(http.Handler) *httptest.Serv
 }
 
 func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
-	s.total.Add(1)
 	s.pathMu.Lock()
 	if s.pathHits == nil {
 		s.pathHits = make(map[string]int)
@@ -110,6 +109,8 @@ func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 		s.requestTimes[s.requestCount] = time.Now()
 		s.requestCount++
 	}
+	// Record the arrival before publishing its count to concurrent readers.
+	s.total.Add(1)
 	s.pathMu.Unlock()
 	s.agent.Store(r.Header.Get("User-Agent"))
 	if s.redirect != nil && s.redirect(w, r) {
