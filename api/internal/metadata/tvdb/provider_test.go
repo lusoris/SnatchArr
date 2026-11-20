@@ -415,16 +415,21 @@ func TestRateLimitedBoundedAttempts(t *testing.T) {
 
 func TestOutboundRateLimit(t *testing.T) {
 	t.Parallel()
+	const (
+		// The limiter window starts at the first request, so the two-request burst stays within it.
+		burstCeiling = 900 * time.Millisecond
+		// The limiter window starts at the first request, so the third request waits for the next window.
+		windowFloor = 900 * time.Millisecond
+	)
 	for _, tc := range []struct {
 		name         string
 		deadline     time.Duration
 		wantErr      error
 		wantRequests int64
-		minElapsed   time.Duration
 		wantPrompt   bool
 	}{
-		{"burst waits", 0, nil, 3, 500 * time.Millisecond, false},
-		{"caller deadline does not stop outbound wait", 50 * time.Millisecond, nil, 3, 500 * time.Millisecond, true},
+		{"burst waits", 0, nil, 3, false},
+		{"caller deadline does not stop outbound wait", 50 * time.Millisecond, nil, 3, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -481,12 +486,23 @@ func TestOutboundRateLimit(t *testing.T) {
 					t.Fatalf("requests = %d, want %d", got, tc.wantRequests)
 				}
 			}
-			arrival, ok := s.requestArrival(int(tc.wantRequests - 1))
+			firstArrival, ok := s.requestArrival(0)
 			if !ok {
-				t.Fatalf("request arrival %d was not recorded", tc.wantRequests)
+				t.Fatal("request arrival 1 was not recorded")
 			}
-			if elapsed := arrival.Sub(started); elapsed < tc.minElapsed {
-				t.Fatalf("request %d arrival elapsed = %v, want at least %v", tc.wantRequests, elapsed, tc.minElapsed)
+			secondArrival, ok := s.requestArrival(1)
+			if !ok {
+				t.Fatal("request arrival 2 was not recorded")
+			}
+			thirdArrival, ok := s.requestArrival(2)
+			if !ok {
+				t.Fatal("request arrival 3 was not recorded")
+			}
+			if burstGap := secondArrival.Sub(firstArrival); burstGap >= burstCeiling {
+				t.Fatalf("request 2 - request 1 = %v, want less than %v", burstGap, burstCeiling)
+			}
+			if windowGap := thirdArrival.Sub(firstArrival); windowGap < windowFloor {
+				t.Fatalf("request 3 - request 1 = %v, want at least %v", windowGap, windowFloor)
 			}
 		})
 	}
@@ -746,21 +762,12 @@ func TestCallerCancelKeepsSharedLookup(t *testing.T) {
 func TestLookupSingleDeadline(t *testing.T) {
 	t.Parallel()
 	const (
-		heldSlotShare     = 600 * time.Millisecond
-		deadlineTolerance = 100 * time.Millisecond
+		// Long enough that a fresh deadline taken after the slot differs on every platform clock.
+		distinctDeadlineGap = 20 * time.Millisecond
+		deadlineTolerance   = 100 * time.Millisecond
 	)
 	s := newStub(t)
 	s.series[81200] = "Other Series DE"
-	s.started = make(chan struct{}, 1)
-	release := make(chan struct{})
-	s.release = release
-	t.Cleanup(func() {
-		select {
-		case <-release:
-		default:
-			close(release)
-		}
-	})
 	s.otherStarted = make(chan struct{}, 1)
 	s.otherCanceled = make(chan time.Time, 1)
 	otherRelease := make(chan struct{})
@@ -768,55 +775,71 @@ func TestLookupSingleDeadline(t *testing.T) {
 	t.Cleanup(func() { close(otherRelease) })
 	p := s.provider(t, plantedKey, "", nil)
 	p.lookup = 900 * time.Millisecond
-	first := make(chan error, 1)
-	go func() { _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); first <- err }()
+	p.slot <- struct{}{}
+	slotHeld := true
+	t.Cleanup(func() {
+		if slotHeld {
+			<-p.slot
+		}
+	})
 	deadline, stop := context.WithTimeout(t.Context(), 5*time.Second)
 	defer stop()
-	select {
-	case <-s.started:
-	case <-deadline.Done():
-		t.Fatal("first series request did not start")
+	slotDeadline := make(chan time.Time, 1)
+	p.slotWait = func(ctx context.Context) {
+		value, _ := ctx.Deadline()
+		slotDeadline <- value
 	}
-	second := make(chan error, 1)
-	slotWaitStarted := make(chan time.Time, 1)
-	p.slotWait = func() { slotWaitStarted <- time.Now() }
+	fetchDeadline := make(chan time.Time, 1)
+	p.fetchStart = func(ctx context.Context) {
+		value, _ := ctx.Deadline()
+		fetchDeadline <- value
+	}
+	result := make(chan error, 1)
 	go func() {
 		_, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
-		second <- err
+		result <- err
 	}()
-	var waitStarted time.Time
+	var waitDeadline time.Time
 	select {
-	case waitStarted = <-slotWaitStarted:
+	case waitDeadline = <-slotDeadline:
 	case <-deadline.Done():
-		t.Fatal("second lookup did not start waiting for the slot")
+		t.Fatal("lookup did not start waiting for the slot")
 	}
-	time.Sleep(heldSlotShare)
-	close(release)
+	time.Sleep(distinctDeadlineGap)
+	<-p.slot
+	slotHeld = false
+	var startedDeadline time.Time
+	select {
+	case startedDeadline = <-fetchDeadline:
+	case <-deadline.Done():
+		t.Fatal("fetch did not start")
+	}
+	if !startedDeadline.Equal(waitDeadline) {
+		t.Fatalf("fetch deadline D2 = %v, want slot-wait deadline D1 = %v", startedDeadline, waitDeadline)
+	}
 	select {
 	case <-s.otherStarted:
 	case <-deadline.Done():
-		t.Fatal("second series request did not start")
+		t.Fatal("series request did not start")
 	}
 	select {
-	case err := <-second:
+	case err := <-result:
 		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("second lookup error = %v, want context.DeadlineExceeded", err)
+			t.Fatalf("lookup error = %v, want context.DeadlineExceeded", err)
 		}
 	case <-deadline.Done():
-		t.Fatal("second lookup did not finish")
+		t.Fatal("lookup did not finish")
 	}
 	var canceledAt time.Time
 	select {
 	case canceledAt = <-s.otherCanceled:
 	case <-deadline.Done():
-		t.Fatal("second series request did not observe its lookup deadline")
+		t.Fatal("series request did not observe its lookup deadline")
 	}
-	elapsed := canceledAt.Sub(waitStarted)
-	if elapsed < p.lookup-deadlineTolerance || elapsed >= p.lookup+p.lookup/2 {
-		t.Fatalf("second upstream cancellation elapsed = %v, want [%v, %v)", elapsed, p.lookup-deadlineTolerance, p.lookup+p.lookup/2)
-	}
-	if err := <-first; err != nil {
-		t.Fatalf("first lookup error = %v", err)
+	lowerBound := waitDeadline.Add(-deadlineTolerance)
+	upperBound := waitDeadline.Add(p.lookup / 2)
+	if canceledAt.Before(lowerBound) || !canceledAt.Before(upperBound) {
+		t.Fatalf("upstream cancellation = %v, want [%v, %v)", canceledAt, lowerBound, upperBound)
 	}
 }
 

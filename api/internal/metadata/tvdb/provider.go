@@ -171,7 +171,9 @@ type Provider struct {
 	// lookup is lookupTimeout; a field so a test can wait on it without the full bound.
 	lookup time.Duration
 	// slotWait is a test hook called immediately before waiting for the load slot.
-	slotWait     func()
+	slotWait func(context.Context)
+	// fetchStart is a test hook called as fetch starts; it is nil in production.
+	fetchStart   func(context.Context)
 	active       atomic.Pointer[context.Context]
 	lifetimeDone <-chan struct{}
 	cancel       context.CancelFunc
@@ -475,7 +477,11 @@ func (r *boundRedis) bound(ctx context.Context) (context.Context, context.Cancel
 	return merged, cancel
 }
 
-// Close stops lookups before releasing the HTTP cache, idle connections and Redis client.
+// Close cancels every lookup before releasing the HTTP cache, idle connections and Redis client.
+// Lookup I/O honors that cancellation through upstream requests, bound Redis calls and the
+// storeTimeout, which is shorter than closeWaitTimeout, so the slot wait normally ends early.
+// Its timeout handles only I/O that ignores its context; cache and Redis still close so shutdown
+// remains bounded.
 func (p *Provider) Close() error {
 	if p == nil {
 		return nil
@@ -613,7 +619,7 @@ func (p *Provider) clearActive() {
 
 func (p *Provider) acquireSlot(ctx, lookupCtx context.Context) error {
 	if p.slotWait != nil {
-		p.slotWait()
+		p.slotWait(lookupCtx)
 	}
 	select {
 	case p.slot <- struct{}{}:
@@ -659,6 +665,9 @@ type lookupResult struct {
 }
 
 func (p *Provider) fetch(ctx context.Context, ref Ref, lang, rule string) ([]foreigntitle.LanguageTitle, error) {
+	if p.fetchStart != nil {
+		p.fetchStart(ctx)
+	}
 	if p.failed.Load() {
 		return nil, ErrUnauthorized
 	}
