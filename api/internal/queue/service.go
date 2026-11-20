@@ -118,6 +118,7 @@ func (s *DBInstanceSource) decodeInstance(row sqlcgen.Instance) (Instance, error
 // ArrClient defines the *arr queue operations needed by the sweep.
 type ArrClient interface {
 	Queue(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, maxPages, pageSize int) ([]Item, error)
+	// ListFolder returns directory names visible to the *arr process in dir.
 	ListFolder(ctx context.Context, kind domain.AppKind, baseURL, apiKey, dir string) ([]string, error)
 	RemoveQueueItem(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, id int32, blocklist, research bool) error
 	ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string, mode ImportMode) (int, error)

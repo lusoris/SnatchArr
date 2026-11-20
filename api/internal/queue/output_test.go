@@ -261,6 +261,24 @@ func TestSweepUncheckedOutputKeepsOnlyExistingStrikes(t *testing.T) {
 	}
 }
 
+func TestSweepUncheckedNoFilesKeepsUnwantedScoreStrike(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC)
+	cfg := DefaultSettings()
+	cfg.Enabled = true
+	limit := int32(50)
+	cfg.MinCustomFormatScore = &limit
+	cfg.Rules[RuleUnwantedScore] = RuleSettings{Mode: ModeAct, Threshold: 2}
+	item := outputItem("unchecked-unwanted", "/data/job", now)
+	item.OutputUnchecked = true
+	item.CustomFormatScore = 0
+	prev := Strike{Rule: RuleUnwantedScore, Count: 1}
+	decision := Sweep(cfg, []Item{item}, map[string]Strike{item.DownloadID: prev}, now)[0]
+	if decision.Rule != "" || decision.Strike || decision.Remove || decision.Next.Rule != prev.Rule || decision.Next.Count != prev.Count {
+		t.Fatalf("unchecked unwanted_score decision = %#v, want existing strike preserved without action", decision)
+	}
+}
+
 func TestCheckOutputsBudget(t *testing.T) {
 	t.Parallel()
 	now, s := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC), DefaultSettings()
@@ -273,9 +291,12 @@ func TestCheckOutputsBudget(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	arr.calls, arr.deadlineSeen, arr.cancelOnFirst = nil, false, cancel
 	items := []Item{outputItem("a", "/a/job", now), outputItem("b", "/b/job", now), outputItem("c", "/c/job", now)}
-	_, results, _ := checkOutputs(ctx, arr, inst, s, items, now, "")
+	_, results, next := checkOutputs(ctx, arr, inst, s, items, now, "")
 	if len(arr.calls) != 1 {
 		t.Fatalf("calls after cancellation = %d, want 1", len(arr.calls))
+	}
+	if next != "/a/" {
+		t.Fatalf("cursor after cancellation = %q, want /a/", next)
 	}
 	if results[0].result == outputError {
 		t.Fatalf("first result = %q, want completed listing", results[0].result)
@@ -284,6 +305,58 @@ func TestCheckOutputsBudget(t *testing.T) {
 		if result.result != outputError {
 			t.Fatalf("result = %q, want error", result.result)
 		}
+	}
+	arr.calls = nil
+	ctx, cancel = context.WithCancel(context.Background())
+	cancel()
+	_, _, next = checkOutputs(ctx, arr, inst, s, items, now, "/saved/")
+	if len(arr.calls) != 0 || next != "/saved/" {
+		t.Fatalf("cursor before first call = %d/%q, want 0//saved/", len(arr.calls), next)
+	}
+}
+
+func TestSweepUnlistedNoFilesSkipsPolicyRules(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC)
+	s := DefaultSettings()
+	s.Enabled = true
+	limit := int32(50)
+	s.MinCustomFormatScore = &limit
+	s.Rules[RuleUnwantedScore] = RuleSettings{Mode: ModeAct, Threshold: 1}
+	s.Rules[RuleNotAnUpgrade] = RuleSettings{Mode: ModeAct, Threshold: 1}
+	item := outputItem("unlisted", "/data/job", now)
+	item.CustomFormatScore = 0
+	existing := int32(100)
+	item.ExistingScore = &existing
+
+	for _, tc := range []struct {
+		name  string
+		setup func(*Settings, *Item)
+		rule  Rule
+	}{
+		{name: "unwanted_score", setup: func(_ *Settings, _ *Item) {}, rule: RuleUnwantedScore},
+		{name: "not_an_upgrade", setup: func(settings *Settings, candidate *Item) {
+			settings.MinCustomFormatScore = nil
+			candidate.CustomFormatScore = 0
+			existingScore := int32(100)
+			candidate.ExistingScore = &existingScore
+		}, rule: RuleNotAnUpgrade},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			settings, candidate := s, item
+			tc.setup(&settings, &candidate)
+			candidate.OutputListed = true
+			listed := Sweep(settings, []Item{candidate}, nil, now)[0]
+			if listed.Rule != tc.rule || !listed.Strike || !listed.Remove {
+				t.Fatalf("listed decision = %#v, want %s removal", listed, tc.rule)
+			}
+			candidate.OutputListed = false
+			unlisted := Sweep(settings, []Item{candidate}, nil, now)[0]
+			if unlisted.Rule != "" || unlisted.Strike || unlisted.Remove || unlisted.Next.Rule != "" || unlisted.Next.Count != 0 {
+				t.Fatalf("unlisted decision = %#v, want no rule, strike, or removal", unlisted)
+			}
+		})
 	}
 }
 

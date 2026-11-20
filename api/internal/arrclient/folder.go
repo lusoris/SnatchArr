@@ -6,6 +6,7 @@ package arrclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/golusoris/goenvoy/arr/lidarr"
@@ -23,7 +24,7 @@ const (
 	maxFolderBody    = 8 << 20
 )
 
-// ListFolder lists the entry names the *arr process can see in dir.
+// ListFolder lists the directory names the *arr process can see in dir.
 func (p *GoenvoyProber) ListFolder(ctx context.Context, kind domain.AppKind, baseURL, apiKey, dir string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.opts.Timeout)
 	defer cancel()
@@ -64,7 +65,7 @@ func sonarrFolder(ctx context.Context, baseURL, apiKey, dir string, o []arr.Opti
 	if err != nil {
 		return nil, fmt.Errorf("sonarr filesystem client: %w", err)
 	}
-	r, err := c.BrowseFileSystem(ctx, dir, true)
+	r, err := c.BrowseFileSystem(ctx, dir, false)
 	if err != nil {
 		return nil, fmt.Errorf("sonarr filesystem %q: %w", dir, err)
 	}
@@ -80,7 +81,7 @@ func radarrFolder(ctx context.Context, baseURL, apiKey, dir string, o []arr.Opti
 	if err != nil {
 		return nil, fmt.Errorf("radarr filesystem client: %w", err)
 	}
-	r, err := c.BrowseFileSystem(ctx, dir, true)
+	r, err := c.BrowseFileSystem(ctx, dir, false)
 	if err != nil {
 		return nil, fmt.Errorf("radarr filesystem %q: %w", dir, err)
 	}
@@ -96,7 +97,7 @@ func lidarrFolder(ctx context.Context, baseURL, apiKey, dir string, o []arr.Opti
 	if err != nil {
 		return nil, fmt.Errorf("lidarr filesystem client: %w", err)
 	}
-	r, err := c.BrowseFileSystem(ctx, dir, true)
+	r, err := c.BrowseFileSystem(ctx, dir, false)
 	if err != nil {
 		return nil, fmt.Errorf("lidarr filesystem %q: %w", dir, err)
 	}
@@ -159,73 +160,60 @@ func sonarrNames(r *sonarr.FileSystemResource) ([]string, error) {
 	if r == nil {
 		return nil, nil
 	}
-	return entryNames(r.Directories, r.Files, func(entry sonarr.FileSystemEntry) string { return entry.Name })
+	return entryNames(r.Directories, func(entry sonarr.FileSystemEntry) string { return entry.Name })
 }
 
 func radarrNames(r *radarr.FileSystemResource) ([]string, error) {
 	if r == nil {
 		return nil, nil
 	}
-	return entryNames(r.Directories, r.Files, func(entry radarr.FileSystemEntry) string { return entry.Name })
+	return entryNames(r.Directories, func(entry radarr.FileSystemEntry) string { return entry.Name })
 }
 
 func lidarrNames(r *lidarr.FileSystemResource) ([]string, error) {
 	if r == nil {
 		return nil, nil
 	}
-	return entryNames(r.Directories, r.Files, func(entry lidarr.FileSystemEntry) string { return entry.Name })
+	return entryNames(r.Directories, func(entry lidarr.FileSystemEntry) string { return entry.Name })
 }
 
 func readarrNames(r *readarr.FileSystemResource) ([]string, error) {
 	if r == nil {
 		return nil, nil
 	}
-	return entryNames(r.Directories, nil, func(entry readarr.FileSystemEntry) string { return entry.Name })
+	return entryNames(r.Directories, func(entry readarr.FileSystemEntry) string { return entry.Name })
 }
 
-func entryNames[E any](dirs, files []E, name func(E) string) ([]string, error) {
-	if err := checkFolderEntryCount(len(dirs) + len(files)); err != nil {
+func entryNames[E any](dirs []E, name func(E) string) ([]string, error) {
+	if err := checkFolderEntryCount(len(dirs)); err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(dirs)+len(files))
+	names := make([]string, 0, len(dirs))
 	for _, entry := range dirs {
-		names = append(names, name(entry))
-	}
-	for _, entry := range files {
 		names = append(names, name(entry))
 	}
 	return names, nil
 }
 
 func whisparrNames(raw map[string]any) ([]string, error) {
-	entryCount := 0
-	for _, key := range []string{"directories", "files"} {
-		entries, ok := raw[key].([]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid filesystem %s entries", key)
-		}
-		entryCount += len(entries)
+	entries, ok := raw["directories"].([]any)
+	if !ok {
+		return nil, errors.New("invalid filesystem directories entries")
 	}
-	if err := checkFolderEntryCount(entryCount); err != nil {
+	if err := checkFolderEntryCount(len(entries)); err != nil {
 		return nil, err
 	}
-	names := make([]string, 0)
-	for _, key := range []string{"directories", "files"} {
-		entries, ok := raw[key].([]any)
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		value, ok := entry.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid filesystem %s entries", key)
+			return nil, errors.New("invalid filesystem directories entry")
 		}
-		for _, entry := range entries {
-			value, ok := entry.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid filesystem %s entry", key)
-			}
-			name, ok := value["name"].(string)
-			if !ok {
-				return nil, fmt.Errorf("invalid filesystem %s name", key)
-			}
-			names = append(names, name)
+		name, ok := value["name"].(string)
+		if !ok {
+			return nil, errors.New("invalid filesystem directories name")
 		}
+		names = append(names, name)
 	}
 	return names, nil
 }

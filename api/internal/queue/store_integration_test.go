@@ -5,6 +5,7 @@
 package queue_test
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"reflect"
@@ -244,24 +245,26 @@ func TestRecordAndStrikesRoundTrip(t *testing.T) {
 func TestOutputCursorRoundTrip(t *testing.T) {
 	t.Parallel()
 	f := newQueueFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
 
-	got, err := f.q.OutputCursor(t.Context(), f.instance)
+	got, err := f.q.OutputCursor(ctx, f.instance)
 	if err != nil || got != "" {
 		t.Fatalf("OutputCursor(empty) = %q, %v; want empty, nil", got, err)
 	}
 	first := "/downloads/first/"
-	if err = f.q.SetOutputCursor(t.Context(), f.instance, first, f.clk.Now()); err != nil {
+	if err = f.q.SetOutputCursor(ctx, f.instance, first, f.clk.Now()); err != nil {
 		t.Fatalf("SetOutputCursor(first) = %v", err)
 	}
-	got, err = f.q.OutputCursor(t.Context(), f.instance)
+	got, err = f.q.OutputCursor(ctx, f.instance)
 	if err != nil || got != first {
 		t.Fatalf("OutputCursor(first) = %q, %v; want %q, nil", got, err, first)
 	}
 	second := "/downloads/second/"
-	if err = f.q.SetOutputCursor(t.Context(), f.instance, second, f.clk.Now().Add(time.Minute)); err != nil {
+	if err = f.q.SetOutputCursor(ctx, f.instance, second, f.clk.Now().Add(time.Minute)); err != nil {
 		t.Fatalf("SetOutputCursor(second) = %v", err)
 	}
-	got, err = f.q.OutputCursor(t.Context(), f.instance)
+	got, err = f.q.OutputCursor(ctx, f.instance)
 	if err != nil || got != second {
 		t.Fatalf("OutputCursor(second) = %q, %v; want %q, nil", got, err, second)
 	}
@@ -422,9 +425,11 @@ func TestPurgeRemovesOnlyExpiredRows(t *testing.T) {
 func TestInstanceDeleteCascades(t *testing.T) {
 	t.Parallel()
 	f := newQueueFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
 	now := f.clk.Now().UTC()
 
-	if err := f.q.SaveSettings(t.Context(), f.instance, queue.DefaultSettings()); err != nil {
+	if err := f.q.SaveSettings(ctx, f.instance, queue.DefaultSettings()); err != nil {
 		t.Fatalf("SaveSettings() = %v", err)
 	}
 	dec := []queue.Decision{
@@ -440,35 +445,35 @@ func TestInstanceDeleteCascades(t *testing.T) {
 			},
 		},
 	}
-	if err := f.q.Record(t.Context(), f.instance, dec); err != nil {
+	if err := f.q.Record(ctx, f.instance, dec); err != nil {
 		t.Fatalf("Record() = %v", err)
 	}
-	if err := f.q.SetOutputCursor(t.Context(), f.instance, "/downloads/cascade/", now); err != nil {
+	if err := f.q.SetOutputCursor(ctx, f.instance, "/downloads/cascade/", now); err != nil {
 		t.Fatalf("SetOutputCursor() = %v", err)
 	}
 
 	// Delete instance
-	tag, err := f.st.Pool().Exec(t.Context(), "DELETE FROM instances WHERE id = $1", f.instance)
+	tag, err := f.st.Pool().Exec(ctx, "DELETE FROM instances WHERE id = $1", f.instance)
 	if err != nil || tag.RowsAffected() != 1 {
 		t.Fatalf("DELETE instance: %v (rows: %d)", err, tag.RowsAffected())
 	}
 
 	// Check queue_policies
 	var policyCount int
-	err = f.st.Pool().QueryRow(t.Context(), "SELECT count(*) FROM queue_policies WHERE instance_id = $1", f.instance).Scan(&policyCount)
+	err = f.st.Pool().QueryRow(ctx, "SELECT count(*) FROM queue_policies WHERE instance_id = $1", f.instance).Scan(&policyCount)
 	if err != nil || policyCount != 0 {
 		t.Fatalf("policyCount = %d, %v; want 0", policyCount, err)
 	}
 
 	// Check queue_strikes
 	var strikeCount int
-	err = f.st.Pool().QueryRow(t.Context(), "SELECT count(*) FROM queue_strikes WHERE instance_id = $1", f.instance).Scan(&strikeCount)
+	err = f.st.Pool().QueryRow(ctx, "SELECT count(*) FROM queue_strikes WHERE instance_id = $1", f.instance).Scan(&strikeCount)
 	if err != nil || strikeCount != 0 {
 		t.Fatalf("strikeCount = %d, %v; want 0", strikeCount, err)
 	}
 
 	var cursorCount int
-	err = f.st.Pool().QueryRow(t.Context(), "SELECT count(*) FROM queue_output_cursors WHERE instance_id = $1", f.instance).Scan(&cursorCount)
+	err = f.st.Pool().QueryRow(ctx, "SELECT count(*) FROM queue_output_cursors WHERE instance_id = $1", f.instance).Scan(&cursorCount)
 	if err != nil || cursorCount != 0 {
 		t.Fatalf("cursorCount = %d, %v; want 0", cursorCount, err)
 	}

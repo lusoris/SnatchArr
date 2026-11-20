@@ -496,6 +496,9 @@ func checkDownloadHealthRule(rule Rule, s Settings, item Item, prev Strike, now 
 }
 
 func checkPolicyRule(rule Rule, s Settings, item Item, c *itemClassifier) bool {
+	if noFilesUnlisted(item) {
+		return false
+	}
 	//exhaustive:ignore
 	switch rule {
 	case RuleIDMatched:
@@ -538,7 +541,7 @@ func checkImportRule(rule Rule, item Item, c *itemClassifier) bool {
 	case RuleImportNotWanted:
 		return c.getClass() == ClassNotWanted
 	case RuleImportBlocked:
-		if isIDMatchBlock(item) || noFilesUnlisted(item) {
+		if isIDMatchBlock(item) {
 			return false
 		}
 		return c.getClass() == ClassUnknown

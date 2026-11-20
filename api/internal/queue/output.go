@@ -46,7 +46,7 @@ func needsOutputCheck(item Item, s Settings, now time.Time) bool {
 	return hasNoFilesFound(lines) && !checkUnpackOrLocked(lines) && isPastGrace(item.Added, s.Grace, now)
 }
 
-// noFilesUnlisted keeps inconclusive no-files items out of import_blocked.
+// noFilesUnlisted keeps inconclusive no-files items from matching any policy rule.
 func noFilesUnlisted(item Item) bool {
 	lines := importLines(item)
 	return hasNoFilesFound(lines) && !checkUnpackOrLocked(lines) && !item.OutputListed
@@ -85,8 +85,11 @@ func checkOutputs(ctx context.Context, arr ArrClient, inst Instance, s Settings,
 	if len(parents) == 0 {
 		return out, orderedOutputResults(resultsByItem), lastParent
 	}
-	offset, window, next := outputWindow(parents, lastParent)
-	listings := listOutputWindow(ctx, arr, inst, parents, offset, window)
+	offset, window := outputWindow(parents, lastParent)
+	listings, next := listOutputWindow(ctx, arr, inst, parents, offset, window)
+	if next == "" {
+		next = lastParent
+	}
 	applyOutputResults(out, parentsByItem, listings, resultsByItem)
 	return out, orderedOutputResults(resultsByItem), next
 }
@@ -115,7 +118,7 @@ func collectOutputParents(out []Item, s Settings, now time.Time) ([]string, map[
 	return parents, parentsByItem, resultsByItem
 }
 
-func outputWindow(parents []string, lastParent string) (int, int, string) {
+func outputWindow(parents []string, lastParent string) (int, int) {
 	offset, _ := slices.BinarySearch(parents, lastParent)
 	if offset < len(parents) && parents[offset] == lastParent {
 		offset++
@@ -124,22 +127,24 @@ func outputWindow(parents []string, lastParent string) (int, int, string) {
 		offset = 0
 	}
 	window := min(maxOutputChecks, len(parents)-offset)
-	return offset, window, parents[offset+window-1]
+	return offset, window
 }
 
-func listOutputWindow(ctx context.Context, arr ArrClient, inst Instance, parents []string, offset, window int) map[string]folderListing {
+func listOutputWindow(ctx context.Context, arr ArrClient, inst Instance, parents []string, offset, window int) (map[string]folderListing, string) {
 	listings := make(map[string]folderListing, window)
+	lastAttempted := ""
 	for i := range window {
 		parent := parents[offset+i]
 		listing := folderListing{}
 		if err := ctx.Err(); err != nil {
 			listing.err = err
 		} else {
+			lastAttempted = parent
 			listing.names, listing.err = arr.ListFolder(ctx, inst.Kind, inst.BaseURL, inst.APIKey, parent)
 		}
 		listings[parent] = listing
 	}
-	return listings
+	return listings, lastAttempted
 }
 
 func applyOutputResults(out []Item, parentsByItem map[int]string, listings map[string]folderListing, resultsByItem map[int]outputResult) {
