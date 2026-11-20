@@ -279,7 +279,7 @@ func applyMetadataCache(o *Options, key, val string) error {
 	case "snatcharr.metadata.cache.redis_plaintext":
 		allowed, err := strconv.ParseBool(val)
 		if err != nil {
-			return fmt.Errorf("%w: invalid bool for %s", domain.ErrInvalid, key)
+			return fmt.Errorf("%w: invalid bool for %s: %w", domain.ErrInvalid, key, err)
 		}
 		o.Metadata.Cache.RedisPlaintext = allowed
 		return nil

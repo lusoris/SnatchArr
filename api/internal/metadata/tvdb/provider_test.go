@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -43,29 +44,32 @@ const (
 
 // stub is a TVDB API double. Every route counts its hits.
 type stub struct {
-	t            *testing.T
-	srv          *httptest.Server
-	tlsConfig    *tls.Config
-	total        atomic.Int64
-	logins       atomic.Int64
-	loginRC      int
-	dataRC       int // when non-zero every data route answers with this status
-	series       map[int]string
-	noTr         map[int]bool     // series ids whose deu translation answers 404
-	aliases      map[int][]string // series id -> deu aliases
-	movies       map[string]int   // remote id -> movie id
-	movieAli     map[int][]string
-	delay        time.Duration
-	age          int64
-	agent        atomic.Value  // last User-Agent header seen
-	started      chan struct{} // signals a held series request
-	release      <-chan struct{}
-	canceled     chan struct{} // signals cancellation of the held series request
-	otherStarted chan struct{}
-	otherRelease <-chan struct{}
-	pathMu       sync.Mutex
-	pathHits     map[string]int
-	redirect     func(http.ResponseWriter, *http.Request) bool
+	t             *testing.T
+	srv           *httptest.Server
+	tlsConfig     *tls.Config
+	total         atomic.Int64
+	logins        atomic.Int64
+	loginRC       int
+	dataRC        int // when non-zero every data route answers with this status
+	series        map[int]string
+	noTr          map[int]bool     // series ids whose deu translation answers 404
+	aliases       map[int][]string // series id -> deu aliases
+	movies        map[string]int   // remote id -> movie id
+	movieAli      map[int][]string
+	delay         time.Duration
+	age           int64
+	agent         atomic.Value  // last User-Agent header seen
+	started       chan struct{} // signals a held series request
+	release       <-chan struct{}
+	canceled      chan struct{} // signals cancellation of the held series request
+	otherStarted  chan struct{}
+	otherRelease  <-chan struct{}
+	otherCanceled chan time.Time
+	pathMu        sync.Mutex
+	pathHits      map[string]int
+	requestTimes  [16]time.Time
+	requestCount  int
+	redirect      func(http.ResponseWriter, *http.Request) bool
 }
 
 func newStub(t *testing.T) *stub {
@@ -102,6 +106,10 @@ func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 		s.pathHits = make(map[string]int)
 	}
 	s.pathHits[r.URL.Path]++
+	if s.requestCount < len(s.requestTimes) {
+		s.requestTimes[s.requestCount] = time.Now()
+		s.requestCount++
+	}
 	s.pathMu.Unlock()
 	s.agent.Store(r.Header.Get("User-Agent"))
 	if s.redirect != nil && s.redirect(w, r) {
@@ -142,10 +150,22 @@ func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-s.otherRelease:
 		case <-r.Context().Done():
+			if s.otherCanceled != nil {
+				s.otherCanceled <- time.Now()
+			}
 			return
 		}
 	}
 	s.data(w, r.URL.Path)
+}
+
+func (s *stub) requestArrival(index int) (time.Time, bool) {
+	s.pathMu.Lock()
+	defer s.pathMu.Unlock()
+	if index < 0 || index >= s.requestCount {
+		return time.Time{}, false
+	}
+	return s.requestTimes[index], true
 }
 
 func (s *stub) login(w http.ResponseWriter, r *http.Request) {
@@ -452,20 +472,21 @@ func TestOutboundRateLimit(t *testing.T) {
 				if got := s.total.Load(); got != tc.wantRequests {
 					t.Fatalf("requests = %d, want %d", got, tc.wantRequests)
 				}
-				if elapsed := time.Since(started); elapsed < tc.minElapsed {
-					t.Fatalf("elapsed = %v, want at least %v", elapsed, tc.minElapsed)
-				}
 				t.Logf("caller return = %v, request-count poll = %v", callerElapsed, pollElapsed)
 			default:
 				if !errors.Is(err, tc.wantErr) {
 					t.Fatalf("TitlesFor() error = %v, want %v", err, tc.wantErr)
 				}
-				if elapsed := time.Since(started); elapsed < tc.minElapsed {
-					t.Fatalf("elapsed = %v, want at least %v", elapsed, tc.minElapsed)
-				}
 				if got := s.total.Load(); got != tc.wantRequests {
 					t.Fatalf("requests = %d, want %d", got, tc.wantRequests)
 				}
+			}
+			arrival, ok := s.requestArrival(int(tc.wantRequests - 1))
+			if !ok {
+				t.Fatalf("request arrival %d was not recorded", tc.wantRequests)
+			}
+			if elapsed := arrival.Sub(started); elapsed < tc.minElapsed {
+				t.Fatalf("request %d arrival elapsed = %v, want at least %v", tc.wantRequests, elapsed, tc.minElapsed)
 			}
 		})
 	}
@@ -724,6 +745,10 @@ func TestCallerCancelKeepsSharedLookup(t *testing.T) {
 
 func TestLookupSingleDeadline(t *testing.T) {
 	t.Parallel()
+	const (
+		heldSlotShare     = 600 * time.Millisecond
+		deadlineTolerance = 100 * time.Millisecond
+	)
 	s := newStub(t)
 	s.series[81200] = "Other Series DE"
 	s.started = make(chan struct{}, 1)
@@ -737,6 +762,7 @@ func TestLookupSingleDeadline(t *testing.T) {
 		}
 	})
 	s.otherStarted = make(chan struct{}, 1)
+	s.otherCanceled = make(chan time.Time, 1)
 	otherRelease := make(chan struct{})
 	s.otherRelease = otherRelease
 	t.Cleanup(func() { close(otherRelease) })
@@ -752,14 +778,19 @@ func TestLookupSingleDeadline(t *testing.T) {
 		t.Fatal("first series request did not start")
 	}
 	second := make(chan error, 1)
-	secondStart := make(chan time.Time, 1)
+	slotWaitStarted := make(chan time.Time, 1)
+	p.slotWait = func() { slotWaitStarted <- time.Now() }
 	go func() {
-		secondStart <- time.Now()
 		_, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
 		second <- err
 	}()
-	start := <-secondStart
-	time.Sleep(600 * time.Millisecond)
+	var waitStarted time.Time
+	select {
+	case waitStarted = <-slotWaitStarted:
+	case <-deadline.Done():
+		t.Fatal("second lookup did not start waiting for the slot")
+	}
+	time.Sleep(heldSlotShare)
 	close(release)
 	select {
 	case <-s.otherStarted:
@@ -774,12 +805,103 @@ func TestLookupSingleDeadline(t *testing.T) {
 	case <-deadline.Done():
 		t.Fatal("second lookup did not finish")
 	}
-	if elapsed := time.Since(start); elapsed >= p.lookup+p.lookup/2 {
-		t.Fatalf("second lookup elapsed = %v, want less than %v", elapsed, p.lookup+p.lookup/2)
+	var canceledAt time.Time
+	select {
+	case canceledAt = <-s.otherCanceled:
+	case <-deadline.Done():
+		t.Fatal("second series request did not observe its lookup deadline")
+	}
+	elapsed := canceledAt.Sub(waitStarted)
+	if elapsed < p.lookup-deadlineTolerance || elapsed >= p.lookup+p.lookup/2 {
+		t.Fatalf("second upstream cancellation elapsed = %v, want [%v, %v)", elapsed, p.lookup-deadlineTolerance, p.lookup+p.lookup/2)
 	}
 	if err := <-first; err != nil {
 		t.Fatalf("first lookup error = %v", err)
 	}
+}
+
+func TestActiveLookupContextLifecycle(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.started = make(chan struct{}, 1)
+	release := make(chan struct{})
+	s.release = release
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	p := s.provider(t, plantedKey, "", nil)
+	result := make(chan error, 1)
+	go func() { _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); result <- err }()
+	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	select {
+	case <-s.started:
+	case <-deadline.Done():
+		t.Fatal("series request did not start")
+	}
+	active := p.active.Load()
+	if active == nil {
+		t.Fatal("active lookup context = nil while upstream is blocked")
+	}
+	if _, ok := (*active).Deadline(); !ok {
+		t.Fatal("active lookup context has no deadline")
+	}
+	close(release)
+	if err := <-result; err != nil {
+		t.Fatalf("TitlesFor() error = %v", err)
+	}
+	if active := p.active.Load(); active != nil {
+		t.Fatal("active lookup context remained after lookup returned")
+	}
+}
+
+func TestCloseClosesOwnedIdleConnections(t *testing.T) {
+	t.Parallel()
+	const closeObservationTimeout = 2 * time.Second
+	closed := make(chan struct{}, 4)
+	s := newConnStateStub(t, func(_ net.Conn, state http.ConnState) {
+		if state == http.StateClosed {
+			select {
+			case closed <- struct{}{}:
+			default:
+			}
+		}
+	})
+	p := s.provider(t, plantedKey, "", nil)
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+		t.Fatalf("TitlesFor() error = %v", err)
+	}
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	deadline, cancel := context.WithTimeout(t.Context(), closeObservationTimeout)
+	defer cancel()
+	select {
+	case <-closed:
+	case <-deadline.Done():
+		t.Fatal("owned idle connection did not close")
+	}
+}
+
+func newConnStateStub(t *testing.T, connState func(net.Conn, http.ConnState)) *stub {
+	t.Helper()
+	s := &stub{
+		t: t, loginRC: http.StatusOK,
+		series:   map[int]string{81189: "Breaking Bad DE"},
+		aliases:  map[int][]string{81189: {"Breaking Bad Alias"}},
+		movies:   map[string]int{"tt0111161": 439},
+		movieAli: map[int][]string{439: {"Die Verurteilten Alias"}},
+	}
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(s.serve))
+	srv.Config.ConnState = connState
+	srv.Start()
+	s.srv = srv
+	t.Cleanup(srv.Close)
+	return s
 }
 
 func TestCloseStopsDetachedLookup(t *testing.T) {
@@ -878,6 +1000,9 @@ func TestRedisL2UsesInjectedClientAndClosesIt(t *testing.T) {
 		WithL2("redis", rediscache.Options{Addr: "dragonfly.test:6379"}),
 		withRedisClient(client),
 	)
+	if _, ok := p.redis.(*boundRedis); !ok {
+		t.Fatalf("Redis L2 client type = %T, want *boundRedis", p.redis)
+	}
 	if err := p.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}

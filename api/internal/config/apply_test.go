@@ -6,6 +6,7 @@ package config
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -38,6 +39,7 @@ type applySettingCase struct {
 	val     string
 	wantErr bool
 	errIs   error
+	errAlso error
 	check   func(t *testing.T, o Options)
 }
 
@@ -178,6 +180,7 @@ var applySettingCases = []applySettingCase{
 		val:     "invalid",
 		wantErr: true,
 		errIs:   domain.ErrInvalid,
+		errAlso: strconv.ErrSyntax,
 	},
 	{
 		name:    "negative unknown tvdb option",
@@ -213,6 +216,9 @@ func TestApplySettingTableDriven(t *testing.T) {
 				}
 				if tc.errIs != nil && !errors.Is(err, tc.errIs) {
 					t.Fatalf("expected error %v, got %v", tc.errIs, err)
+				}
+				if tc.errAlso != nil && !errors.Is(err, tc.errAlso) {
+					t.Fatalf("expected error %v, got %v", tc.errAlso, err)
 				}
 				return
 			}

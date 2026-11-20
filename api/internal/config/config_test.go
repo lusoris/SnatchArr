@@ -7,6 +7,7 @@ package config_test
 import (
 	"encoding/hex"
 	"errors"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -725,6 +726,7 @@ func TestLoadSetupSecret(t *testing.T) {
 type loadCompoundKeysFromEnvCase struct {
 	name     string
 	env      map[string]string
+	unsetEnv []string
 	assertFn func(t *testing.T, opts config.Options)
 }
 
@@ -1054,6 +1056,9 @@ var loadCompoundKeysFromEnvCases = []loadCompoundKeysFromEnvCase{
 	{
 		name: "metadata Redis plaintext default off",
 		env:  map[string]string{},
+		unsetEnv: []string{
+			"APP_SNATCHARR_METADATA_CACHE_REDIS_PLAINTEXT",
+		},
 		assertFn: func(t *testing.T, opts config.Options) {
 			t.Helper()
 			if opts.Metadata.Cache.RedisPlaintext {
@@ -1095,6 +1100,12 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 	for _, tc := range loadCompoundKeysFromEnvCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+			for _, key := range tc.unsetEnv {
+				t.Setenv(key, "")
+				if err := os.Unsetenv(key); err != nil {
+					t.Fatalf("Unsetenv(%q): %v", key, err)
+				}
+			}
 			for k, v := range tc.env {
 				t.Setenv(k, v)
 			}
