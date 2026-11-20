@@ -216,6 +216,8 @@ func (s *stub) data(w http.ResponseWriter, path string) {
 			return
 		}
 		fmt.Fprintf(w, `{"status":"success","data":{"name":%q,"language":"deu","aliases":[]}}`, name)
+	case strings.HasSuffix(path, "/translations/eng") && strings.HasPrefix(path, "/series/"):
+		fmt.Fprint(w, `{"status":"success","data":{"name":"English","language":"eng","aliases":[]}}`)
 	case strings.HasPrefix(path, "/series/"):
 		_, _ = fmt.Sscanf(path, "/series/%d", &id)
 		if _, ok := s.series[id]; !ok {
@@ -828,6 +830,14 @@ func TestCallerCancelKeepsSharedLookup(t *testing.T) {
 		t.Fatalf("first lookup error = %v, want ErrUnavailable and context.Canceled", resultErr)
 	}
 	close(release)
+	for len(p.detached) != 0 {
+		select {
+		case <-deadline.Done():
+			t.Fatal("detached lookup did not finish")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
 	got, err := p.TitlesFor(deadline, sonarrRef(), "de")
 	if err != nil || len(got) == 0 {
 		t.Fatalf("second lookup = %v, %v, want titles", got, err)
@@ -840,13 +850,207 @@ func TestCallerCancelKeepsSharedLookup(t *testing.T) {
 	}
 }
 
+func TestWarmHitDuringColdLookup(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	s.started = make(chan struct{}, 1)
+	release := make(chan struct{})
+	s.release = release
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	p := s.provider(t, plantedKey, "", nil)
+	ref := Ref{Kind: domain.KindSonarr, TVDBID: 81200}
+	got, err := p.TitlesFor(t.Context(), ref, "de")
+	if err != nil || len(got) == 0 || titlesOf(got)[0] != "Other Series DE" {
+		t.Fatalf("prime TitlesFor() = %v, %v", got, err)
+	}
+	cold := make(chan error, 1)
+	go func() { _, coldErr := p.TitlesFor(t.Context(), sonarrRef(), "de"); cold <- coldErr }()
+	select {
+	case <-s.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("cold series request did not start")
+	}
+	before := s.total.Load()
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	got, err = p.TitlesFor(ctx, ref, "de")
+	if err != nil || len(got) == 0 {
+		t.Fatalf("warm TitlesFor() = %v, %v", got, err)
+	}
+	if after := s.total.Load(); after != before {
+		t.Fatalf("warm cache hit made %d requests", after-before)
+	}
+	close(release)
+	select {
+	case err := <-cold:
+		if err != nil {
+			t.Fatalf("cold TitlesFor() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("cold lookup did not finish")
+	}
+}
+
+func TestConcurrentColdLookups(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	p := s.provider(t, plantedKey, "", nil)
+	if _, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 424242}, "de"); err != nil {
+		t.Fatalf("token prime TitlesFor() error = %v", err)
+	}
+	cases := []struct {
+		ref  Ref
+		lang string
+	}{
+		{Ref{Kind: domain.KindSonarr, TVDBID: 81189}, "de"},
+		{Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de"},
+		{Ref{Kind: domain.KindRadarr, IMDBID: "tt0111161"}, "de"},
+		{Ref{Kind: domain.KindSonarr, TVDBID: 81189}, "en"},
+	}
+	results := make(chan error, len(cases))
+	var wg sync.WaitGroup
+	for _, tc := range cases {
+		wg.Go(func() {
+			_, err := p.TitlesFor(t.Context(), tc.ref, tc.lang)
+			results <- err
+		})
+	}
+	wg.Wait()
+	close(results)
+	for err := range results {
+		if err != nil {
+			t.Errorf("concurrent TitlesFor() error = %v", err)
+		}
+	}
+}
+
+func TestDetachedLookupsBounded(t *testing.T) {
+	t.Parallel()
+	t.Run("cap-1", func(t *testing.T) {
+		t.Parallel()
+		s := newStub(t)
+		s.started = make(chan struct{}, 1)
+		s.canceled = make(chan struct{}, 1)
+		release := make(chan struct{})
+		s.release = release
+		p := s.provider(t, plantedKey, "", nil)
+		for range cap(p.detached) - 1 {
+			p.detached <- struct{}{}
+		}
+		t.Cleanup(func() {
+			for range cap(p.detached) - 1 {
+				<-p.detached
+			}
+		})
+		t.Cleanup(func() {
+			select {
+			case <-release:
+			default:
+				close(release)
+			}
+		})
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		result := make(chan error, 1)
+		go func() { _, err := p.TitlesFor(ctx, sonarrRef(), "de"); result <- err }()
+		select {
+		case <-s.started:
+			cancel()
+		case <-time.After(5 * time.Second):
+			t.Fatal("detached series request did not start")
+		}
+		select {
+		case err := <-result:
+			if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("detached caller error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("detached caller did not return")
+		}
+		select {
+		case <-s.canceled:
+			t.Fatal("detached lookup observed caller cancellation")
+		case <-time.After(300 * time.Millisecond):
+		}
+		close(release)
+		deadline := time.After(2 * time.Second)
+		for len(p.detached) != cap(p.detached)-1 {
+			select {
+			case <-deadline:
+				t.Fatal("detached lookup did not release its token")
+			default:
+				time.Sleep(time.Millisecond)
+			}
+		}
+		before := s.total.Load()
+		got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+		if err != nil || len(got) == 0 {
+			t.Fatalf("cached detached lookup = %v, %v", got, err)
+		}
+		if after := s.total.Load(); after != before {
+			t.Fatalf("cache fill made %d requests", after-before)
+		}
+	})
+	t.Run("cap", func(t *testing.T) {
+		t.Parallel()
+		s := newStub(t)
+		s.started = make(chan struct{}, 1)
+		s.canceled = make(chan struct{}, 1)
+		release := make(chan struct{})
+		s.release = release
+		p := s.provider(t, plantedKey, "", nil)
+		for range cap(p.detached) {
+			p.detached <- struct{}{}
+		}
+		t.Cleanup(func() {
+			for range cap(p.detached) {
+				<-p.detached
+			}
+		})
+		t.Cleanup(func() {
+			select {
+			case <-release:
+			default:
+				close(release)
+			}
+		})
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		result := make(chan error, 1)
+		go func() { _, err := p.TitlesFor(ctx, sonarrRef(), "de"); result <- err }()
+		select {
+		case <-s.started:
+			cancel()
+		case <-time.After(5 * time.Second):
+			t.Fatal("attached series request did not start")
+		}
+		select {
+		case err := <-result:
+			if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("attached caller error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("attached caller did not return")
+		}
+		select {
+		case <-s.canceled:
+		case <-time.After(2 * time.Second):
+			t.Fatal("attached lookup did not observe caller cancellation")
+		}
+	})
+}
+
 func TestLookupSingleDeadline(t *testing.T) {
 	t.Parallel()
-	const (
-		// Long enough that a fresh deadline taken after the slot differs on every platform clock.
-		distinctDeadlineGap = 20 * time.Millisecond
-		deadlineTolerance   = 100 * time.Millisecond
-	)
+	const deadlineTolerance = 100 * time.Millisecond
 	s := newStub(t)
 	s.series[81200] = "Other Series DE"
 	s.otherStarted = make(chan struct{}, 1)
@@ -856,20 +1060,8 @@ func TestLookupSingleDeadline(t *testing.T) {
 	t.Cleanup(func() { close(otherRelease) })
 	p := s.provider(t, plantedKey, "", nil)
 	p.lookup = 900 * time.Millisecond
-	p.slot <- struct{}{}
-	slotHeld := true
-	t.Cleanup(func() {
-		if slotHeld {
-			<-p.slot
-		}
-	})
 	deadline, stop := context.WithTimeout(t.Context(), 5*time.Second)
 	defer stop()
-	slotDeadline := make(chan time.Time, 1)
-	p.slotWait = func(ctx context.Context) {
-		value, _ := ctx.Deadline()
-		slotDeadline <- value
-	}
 	fetchDeadline := make(chan time.Time, 1)
 	p.fetchStart = func(ctx context.Context) {
 		value, _ := ctx.Deadline()
@@ -880,23 +1072,11 @@ func TestLookupSingleDeadline(t *testing.T) {
 		_, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
 		result <- err
 	}()
-	var waitDeadline time.Time
-	select {
-	case waitDeadline = <-slotDeadline:
-	case <-deadline.Done():
-		t.Fatal("lookup did not start waiting for the slot")
-	}
-	time.Sleep(distinctDeadlineGap)
-	<-p.slot
-	slotHeld = false
 	var startedDeadline time.Time
 	select {
 	case startedDeadline = <-fetchDeadline:
 	case <-deadline.Done():
 		t.Fatal("fetch did not start")
-	}
-	if !startedDeadline.Equal(waitDeadline) {
-		t.Fatalf("fetch deadline D2 = %v, want slot-wait deadline D1 = %v", startedDeadline, waitDeadline)
 	}
 	select {
 	case <-s.otherStarted:
@@ -917,61 +1097,10 @@ func TestLookupSingleDeadline(t *testing.T) {
 	case <-deadline.Done():
 		t.Fatal("series request did not observe its lookup deadline")
 	}
-	lowerBound := waitDeadline.Add(-deadlineTolerance)
-	upperBound := waitDeadline.Add(p.lookup / 2)
+	lowerBound := startedDeadline.Add(-deadlineTolerance)
+	upperBound := startedDeadline.Add(p.lookup / 2)
 	if canceledAt.Before(lowerBound) || !canceledAt.Before(upperBound) {
 		t.Fatalf("upstream cancellation = %v, want [%v, %v)", canceledAt, lowerBound, upperBound)
-	}
-}
-
-func TestActiveLookupContextLifecycle(t *testing.T) {
-	t.Parallel()
-	s := newStub(t)
-	s.started = make(chan struct{}, 1)
-	release := make(chan struct{})
-	s.release = release
-	t.Cleanup(func() {
-		select {
-		case <-release:
-		default:
-			close(release)
-		}
-	})
-	p := s.provider(t, plantedKey, "", nil)
-	result := make(chan error, 1)
-	go func() { _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); result <- err }()
-	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	select {
-	case <-s.started:
-	case <-deadline.Done():
-		t.Fatal("series request did not start")
-	}
-	active := p.active.Load()
-	if active == nil {
-		t.Fatal("active lookup context = nil while upstream is blocked")
-	}
-	if _, ok := (*active).Deadline(); !ok {
-		t.Fatal("active lookup context has no deadline")
-	}
-	close(release)
-	select {
-	case err := <-result:
-		if err != nil {
-			t.Fatalf("TitlesFor() error = %v", err)
-		}
-	case <-deadline.Done():
-		t.Fatal("TitlesFor() did not return")
-	}
-	// TitlesFor can return before the lookup goroutine's defers run, so wait for the slot release.
-	select {
-	case p.slot <- struct{}{}:
-	case <-deadline.Done():
-		t.Fatal("lookup slot was not released")
-	}
-	defer func() { <-p.slot }()
-	if active := p.active.Load(); active != nil {
-		t.Fatal("active lookup context was not cleared before the lookup slot was released")
 	}
 }
 
@@ -1069,6 +1198,95 @@ func TestCloseStopsDetachedLookup(t *testing.T) {
 	}
 	if got := s.total.Load(); got != before {
 		t.Fatalf("requests after Close = %d, want %d", got, before)
+	}
+}
+
+func TestCloseWaitsForDetachedLookups(t *testing.T) {
+	t.Parallel()
+	t.Run("held lookups", testCloseWaitsForHeldLookups)
+	t.Run("close wait bound", testCloseWaitBound)
+}
+
+func testCloseWaitsForHeldLookups(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	s.started = make(chan struct{}, 1)
+	s.canceled = make(chan struct{}, 1)
+	s.otherStarted = make(chan struct{}, 1)
+	s.otherCanceled = make(chan time.Time, 1)
+	release, otherRelease := make(chan struct{}), make(chan struct{})
+	s.release, s.otherRelease = release, otherRelease
+	p := s.provider(t, plantedKey, "", nil)
+	t.Cleanup(func() { close(release); close(otherRelease) })
+	firstCtx, cancelFirst := context.WithCancel(t.Context())
+	secondCtx, cancelSecond := context.WithCancel(t.Context())
+	first, second := make(chan error, 1), make(chan error, 1)
+	go func() { _, err := p.TitlesFor(firstCtx, sonarrRef(), "de"); first <- err }()
+	go func() {
+		_, err := p.TitlesFor(secondCtx, Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
+		second <- err
+	}()
+	for _, started := range []<-chan struct{}{s.started, s.otherStarted} {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("held upstream request did not start")
+		}
+	}
+	cancelFirst()
+	cancelSecond()
+	for _, result := range []<-chan error{first, second} {
+		select {
+		case err := <-result:
+			if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled caller error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("canceled caller did not return")
+		}
+	}
+	select {
+	case <-s.canceled:
+		t.Fatal("first detached lookup observed caller cancellation")
+	case <-s.otherCanceled:
+		t.Fatal("second detached lookup observed caller cancellation")
+	case <-time.After(300 * time.Millisecond):
+	}
+	start := time.Now()
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed >= 2*time.Second {
+		t.Fatalf("Close() elapsed = %v, want less than 2s", elapsed)
+	}
+	select {
+	case <-s.canceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first held upstream request did not observe Close cancellation")
+	}
+	select {
+	case <-s.otherCanceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second held upstream request did not observe Close cancellation")
+	}
+}
+
+func testCloseWaitBound(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p, err := New(plantedKey, "", testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler), WithBaseURL(s.srv.URL), WithRate(""))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	p.detached <- struct{}{}
+	start := time.Now()
+	err = p.Close()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Close() error = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed < closeWaitTimeout-100*time.Millisecond || elapsed >= 3*time.Second {
+		t.Fatalf("Close() elapsed = %v, want close wait bound", elapsed)
 	}
 }
 

@@ -5,6 +5,7 @@
 package tvdbprovider
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"net/http"
@@ -149,6 +150,50 @@ func TestOriginGuardReturnsBodyReadError(t *testing.T) {
 	}
 }
 
+func TestOriginGuardBoundsResponseBody(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		size    int
+		wantErr bool
+	}{
+		{name: "at cap", size: maxBodyBytes},
+		{name: "over cap", size: maxBodyBytes + 1, wantErr: true},
+		{name: "far over cap", size: 2 * maxBodyBytes, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := &trackingBody{Reader: bytes.NewReader(bytes.Repeat([]byte{'x'}, tc.size))}
+			resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: body}
+			guard := originGuard{next: staticRoundTripper(resp), basePath: "/v4"}
+			got, err := guard.RoundTrip(newRequest(t, http.MethodGet, "/v4/series/81189"))
+			if tc.wantErr {
+				if got != nil {
+					got.Body.Close()
+				}
+				if !errors.Is(err, errBodyTooLarge) {
+					t.Fatalf("RoundTrip() error = %v, want errBodyTooLarge", err)
+				}
+				if !body.closed {
+					t.Fatal("oversized body was not closed")
+				}
+				if read := tc.size - body.Len(); read > maxBodyBytes+1 {
+					t.Fatalf("origin guard read %d bytes, want at most %d", read, maxBodyBytes+1)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("RoundTrip() error = %v", err)
+			}
+			defer got.Body.Close()
+			assertBody(t, got, string(bytes.Repeat([]byte{'x'}, tc.size)))
+			if !body.closed {
+				t.Fatal("body was not closed")
+			}
+		})
+	}
+}
+
 func staticRoundTripper(resp *http.Response) roundTripFunc {
 	return func(*http.Request) (*http.Response, error) { return resp, nil }
 }
@@ -189,6 +234,16 @@ type errorReadCloser struct {
 func (b *errorReadCloser) Read([]byte) (int, error) { return 0, b.err }
 
 func (b *errorReadCloser) Close() error {
+	b.closed = true
+	return nil
+}
+
+type trackingBody struct {
+	*bytes.Reader
+	closed bool
+}
+
+func (b *trackingBody) Close() error {
 	b.closed = true
 	return nil
 }

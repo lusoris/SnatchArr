@@ -244,17 +244,14 @@ func TestBoundRedisDoMultiBounds(t *testing.T) {
 func testBoundRedisCalls(t *testing.T, call boundRedisCall) {
 	t.Helper()
 	t.Run("shutdown", func(t *testing.T) { t.Parallel(); testBoundRedisShutdown(t, call) })
-	t.Run("active lookup deadline", func(t *testing.T) { t.Parallel(); testBoundRedisActiveLookup(t, call) })
-	t.Run("caller deadline without active lookup", func(t *testing.T) { t.Parallel(); testBoundRedisCaller(t, call, false) })
-	t.Run("cleared active lookup", func(t *testing.T) { t.Parallel(); testBoundRedisCaller(t, call, true) })
+	t.Run("caller deadline", func(t *testing.T) { t.Parallel(); testBoundRedisCaller(t, call) })
 }
 
 func testBoundRedisShutdown(t *testing.T, call boundRedisCall) {
 	t.Helper()
-	active := &atomicContextPointer{}
 	lifetime, stopLifetime := context.WithCancel(t.Context())
 	held := make(chan struct{}, 1)
-	client := newBoundRedis(blockingRedisClient{held: held}, redisBounds{lifetime: func() context.Context { return lifetime }, active: &active.Pointer})
+	client := newBoundRedis(blockingRedisClient{held: held}, redisBounds{lifetime: func() context.Context { return lifetime }})
 	caller, stopCaller := context.WithCancel(t.Context())
 	defer stopCaller()
 	result := make(chan error, 1)
@@ -264,38 +261,12 @@ func testBoundRedisShutdown(t *testing.T, call boundRedisCall) {
 	assertRedisCancellation(t, result, context.Canceled)
 }
 
-func testBoundRedisActiveLookup(t *testing.T, call boundRedisCall) {
+func testBoundRedisCaller(t *testing.T, call boundRedisCall) {
 	t.Helper()
-	active := &atomicContextPointer{}
-	lifetime, stopLifetime := context.WithCancel(t.Context())
-	defer stopLifetime()
-	lookup, stopLookup := context.WithCancel(t.Context())
-	defer stopLookup()
-	active.Store(&lookup)
-	held := make(chan struct{}, 1)
-	client := newBoundRedis(blockingRedisClient{held: held}, redisBounds{lifetime: func() context.Context { return lifetime }, active: &active.Pointer})
-	caller, stopCaller := context.WithCancel(t.Context())
-	defer stopCaller()
-	result := make(chan error, 1)
-	go func() { result <- call(caller, client) }()
-	waitForRedisHeld(t, held)
-	stopLookup()
-	assertRedisCancellation(t, result, context.Canceled)
-}
-
-func testBoundRedisCaller(t *testing.T, call boundRedisCall, clearActive bool) {
-	t.Helper()
-	active := &atomicContextPointer{}
-	if clearActive {
-		stale, cancel := context.WithCancel(t.Context())
-		cancel()
-		active.Store(&stale)
-		active.Store(nil)
-	}
 	lifetime, stopLifetime := context.WithCancel(t.Context())
 	defer stopLifetime()
 	held := make(chan struct{}, 1)
-	client := newBoundRedis(blockingRedisClient{held: held}, redisBounds{lifetime: func() context.Context { return lifetime }, active: &active.Pointer})
+	client := newBoundRedis(blockingRedisClient{held: held}, redisBounds{lifetime: func() context.Context { return lifetime }})
 	caller := newRedisDeadlineContext(t.Context())
 	result := make(chan error, 1)
 	go func() { result <- call(caller, client) }()
@@ -336,9 +307,3 @@ func assertRedisCancellation(t *testing.T, result <-chan error, want error) {
 		t.Fatalf("Redis call error = %v, want %v", err, want)
 	}
 }
-
-type atomicContextPointer struct {
-	Pointer atomic.Pointer[context.Context]
-}
-
-func (p *atomicContextPointer) Store(ctx *context.Context) { p.Pointer.Store(ctx) }

@@ -219,8 +219,8 @@ github.com/golusoris/goenvoy/metadata v1.4.4 h1:OBSa0LNQs7fQ/cXtiWwgzsNJClqN7xHd
 github.com/golusoris/goenvoy/metadata v1.4.4/go.mod h1:9YVDY4GVDMpOlwjxOQt1ChrZyEiGrk3aJcYRCKkH4WA=
 github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.2.1 h1:L1oqYxShfaaMxPaanzCJUykDwW8ysWe9Pi425bXelVU=
 github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.2.1/go.mod h1:Nrw0rborzsEX75ACYf9m9v8RXVkeZpoDUpypni1V2uE=
-github.com/golusoris/goenvoy/metadata/video/tvdb v1.3.7 h1:x3iRn5L0a8QsDT7cekb7tWP0Sg1IADp6kvhtMdEqh24=
-github.com/golusoris/goenvoy/metadata/video/tvdb v1.3.7/go.mod h1:VUV5c7VRqOwOYwnQs40VwWKAlGHUeRXtwOULuX+UB/I=
+github.com/golusoris/goenvoy/metadata/video/tvdb v1.3.8 h1:TLrnr7oW2cS1WPkijwChcpA3Sh3Ou/DoTBstbpfXfUQ=
+github.com/golusoris/goenvoy/metadata/video/tvdb v1.3.8/go.mod h1:t1nxjpuJ4DIokxY6TBff5UEQ9NW1iPLWcVzn03Bv4nM=
 github.com/golusoris/golusoris v0.22.1 h1:z75L9ASrFPunEtQdjU6hoKX59yK0AuHkSRxY9vZcnYk=
 github.com/golusoris/golusoris v0.22.1/go.mod h1:0T6Ri26u7RNATJd32s4BVh1N7qPybvc5SrxmidrXlsk=
 github.com/golusoris/golusoris/core v0.12.3 h1:Ec/vv/jw4ii/SUqSIcDq3Y6IqA1By8lkRDYd7R1uj9E=

@@ -68,9 +68,12 @@ func (t *originGuard) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Method != http.MethodGet || resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return resp, nil
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("tvdb: read response body: %w", err), resp.Body.Close())
+	}
+	if len(body) > maxBodyBytes {
+		return nil, errors.Join(fmt.Errorf("tvdb: response body: %w", errBodyTooLarge), resp.Body.Close())
 	}
 	if err := resp.Body.Close(); err != nil {
 		return nil, fmt.Errorf("tvdb: close response body: %w", err)

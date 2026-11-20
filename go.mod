@@ -30,7 +30,7 @@ require (
 	github.com/golusoris/goenvoy/mediaserver/stash/v2 v2.1.1
 	github.com/golusoris/goenvoy/metadata v1.4.4
 	github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.2.1
-	github.com/golusoris/goenvoy/metadata/video/tvdb v1.3.7
+	github.com/golusoris/goenvoy/metadata/video/tvdb v1.3.8
 	github.com/golusoris/golusoris v0.22.1
 	github.com/golusoris/golusoris/core v0.12.3
 	github.com/google/jsonschema-go v0.4.3
