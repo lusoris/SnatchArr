@@ -128,7 +128,7 @@ func New(reg prometheus.Registerer) (*Metrics, error) {
 		queueSkipped:            b.counter("snatcharr_queue_skipped_total", "Queue sweeps skipped, by instance name and reason.", "arr_instance", "reason"),
 		queueImports:            b.counter("snatcharr_queue_imports_total", "Force imports of ID-matched queue items and their read-back, by instance name and result.", "arr_instance", "result"),
 		queueOutputChecks:       b.counter("snatcharr_queue_output_checks_total", "Queue output path visibility checks, by instance name and result (listed, not_visible, error, no_path, over_budget).", "arr_instance", "result"),
-		queueOutputNotVisibleAt: b.gauge("snatcharr_queue_output_not_visible_last_timestamp_seconds", "Unix time of the last queue sweep that found an output path not visible to an *arr instance, by instance name.", "arr_instance"),
+		queueOutputNotVisibleAt: b.gauge("snatcharr_queue_output_not_visible_last_timestamp_seconds", "Unix time of the last queue sweep or inspection that found an output path not visible to an *arr instance, by instance name.", "arr_instance"),
 	}
 	if b.err != nil {
 		return nil, b.err
@@ -400,7 +400,7 @@ func (m *Metrics) QueueOutputCheck(instance, result string) {
 	m.queueOutputChecks.WithLabelValues(instance, result).Inc()
 }
 
-// QueueOutputNotVisibleAt records when a queue sweep last found an output path not visible to instance.
+// QueueOutputNotVisibleAt records when a queue sweep or inspection last found an output path not visible to instance.
 func (m *Metrics) QueueOutputNotVisibleAt(instance string, at time.Time) {
 	if m == nil || m.queueOutputNotVisibleAt == nil {
 		return

@@ -124,7 +124,7 @@ The API serves these metrics on `/metrics`:
 | `snatcharr_queue_skipped_total` | counter | `arr_instance`, `reason` | no | Queue sweeps skipped, by instance and reason (`disabled`, `unsupported`). |
 | `snatcharr_queue_imports_total` | counter | `arr_instance`, `result` | no | Force imports of ID-matched queue items and their read-back, by instance and result (`ok`, `error`, `no_clean_candidate`, `still_id_matched`, `would_import`). |
 | `snatcharr_queue_output_checks_total` | counter | `arr_instance`, `result` | no | Queue output path visibility checks, by instance and result (`listed`, `not_visible`, `error`, `no_path`, `over_budget`). |
-| `snatcharr_queue_output_not_visible_last_timestamp_seconds` | gauge | `arr_instance` | no | Unix time of the last queue sweep that found an output path not visible to an *arr instance, by instance name. |
+| `snatcharr_queue_output_not_visible_last_timestamp_seconds` | gauge | `arr_instance` | no | Unix time of the last queue sweep or inspection that found an output path not visible to an *arr instance, by instance name. |
 
 ### Label Values (API)
 

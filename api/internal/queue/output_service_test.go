@@ -136,8 +136,24 @@ func TestInspectRecordsOutputResults(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertOutputMetrics(t, env.metrics.outputs, queueOutputNotVisible, 1)
+	timestamp := fmt.Sprintf("sonarr-main:not_visible_at:%d", outputSweepAt.Unix())
+	if want := []string{queueOutputNotVisible, timestamp}; !slices.Equal(env.metrics.outputLog, want) {
+		t.Errorf("inspect output log = %#v, want %#v", env.metrics.outputLog, want)
+	}
 	if output := logs.String(); !strings.Contains(output, "msg=\"queue: output path not visible to arr\"") || !strings.Contains(output, "instance=sonarr-main") || !strings.Contains(output, "output_path="+outputParent+"job-001/") {
 		t.Fatalf("inspect log = %q", output)
+	}
+}
+
+func TestInspectListedOutputDoesNotRecordNotVisibleTime(t *testing.T) {
+	t.Parallel()
+	env := newOutputSweepEnv(t, []string{"job-001"})
+	env.arr.items[env.key] = blindWindowItems(1)
+	if _, err := env.service.Inspect(t.Context(), env.instance.ID); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"sonarr-main:listed"}; !slices.Equal(env.metrics.outputLog, want) {
+		t.Errorf("inspect output log = %#v, want %#v", env.metrics.outputLog, want)
 	}
 }
 
