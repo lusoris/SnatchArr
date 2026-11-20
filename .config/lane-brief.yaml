@@ -1,0 +1,13 @@
+# Lines a lane brief must carry before praetor agy-run.sh launches it
+# (praetor tools/lanes/brief_stage.py, `required` + `required_by_stage`).
+#
+# Why: the repository gate runs the Semgrep rules in .semgrep.yml, but a
+# lane brief that only lists vet, lint and tests lets a lane draft reach
+# the gate with a finding the lane never saw (PR 1244 round r14: rule
+# no-unbounded-http-body-read at api/internal/metadata/tvdb/transport.go:71).
+# Every implementation and fix brief therefore runs the same rules locally.
+required_by_stage:
+  impl:
+    - "semgrep scan --config .semgrep.yml"
+  fix:
+    - "semgrep scan --config .semgrep.yml"
