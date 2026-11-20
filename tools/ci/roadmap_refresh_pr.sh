@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
+# Every gh call has a deadline.
 # Proposes a refreshed docs/roadmap.md as a bot pull request. Runs after
 # `roadmap_render.py --write` in the scheduled Roadmap refresh workflow, on a checkout of the
 # default branch at BASE_SHA.
@@ -18,6 +19,10 @@
 # must pass the commit-msg policy (.config/hooks/commit-msg.sh) before anything is written, and
 # the author GitHub recorded must be the identity that signed off, else the run fails (#1036
 # carried no trailer and the fleet merge train refused it).
+#
+# The pull request body is rendered from .github/pull_request_template.md with the commit-msg
+# item ticked and bot notes appended; when the bot's open pull request lacks the `## Description`
+# heading, the run updates its body from the rendered template.
 #
 #   REPO=owner/name BASE_SHA=<sha> BASE_BRANCH=<default branch> APP_SLUG=<app slug> \
 #     [RUN_ID=<id>] [DOC=docs/roadmap.md] [BRANCH=bot/roadmap-refresh] [DRY_RUN=1] \
@@ -38,6 +43,8 @@ base="${BASE_SHA:-}"
 base_branch="${BASE_BRANCH:-}"
 slug="${APP_SLUG:-}"
 tmp="$branch-tmp-${RUN_ID:-$$}"
+# Same 60 seconds as roadmap_render.py.
+gh_timeout="${ROADMAP_GH_TIMEOUT:-60}"
 
 case "$repo" in
   */*) ;;
@@ -49,23 +56,57 @@ case "$slug" in
   '' | -* | *[!a-z0-9-]*) echo "roadmap_refresh: APP_SLUG must be a GitHub App slug" >&2; exit 2 ;;
 esac
 
+# run_gh gives every GitHub CLI call the renderer's deadline.
+run_gh() {
+  timeout "$gh_timeout" gh "$@"
+}
+
 # send runs a write; a dry run prints it on stderr and stands in a placeholder for its output.
 send() {
   if [ -n "${DRY_RUN:-}" ]; then
     echo "dry-run: gh $*" >&2
     echo dry-run
   else
-    gh "$@"
+    run_gh "$@"
   fi
+}
+
+# need_template sets template to .github/pull_request_template.md and exits 1 when it is missing.
+need_template() {
+  template="$root/.github/pull_request_template.md"
+  if [ ! -f "$template" ]; then
+    echo "roadmap_refresh: pull request template $template is missing" >&2
+    exit 1
+  fi
+}
+
+# pr_body writes the pull request body for $doc from .github/pull_request_template.md to $1.
+pr_body() {
+  need_template
+  DOC_PATH="$doc" awk '
+    BEGIN { doc = ENVIRON["DOC_PATH"] }
+    /^## / { in_desc = ($0 == "## Description") }
+    in_desc && /^<!-- Provide/ {
+      print "The scheduled Roadmap refresh workflow re-rendered the milestone table in " doc " from the open GitHub milestones (tools/ci/roadmap_render.py --write). The table mirrors the forge milestones, so a moved open count or scope arrives here instead of as a hand edit."
+      next
+    }
+    /^- \[ \].*Conventional Commits/ { sub(/^- \[ \]/, "- [x]") }
+    { print }
+    END {
+      print ""
+      print "Bot notes: the bot ran only the commit-msg policy. The pull request CI runs make verify-all. The HISS, 3D test and agent context items do not apply: this change edits the generated milestone table in " doc " only."
+    }
+  ' <"$template" >"$1" || exit 1
 }
 
 # Only the bot's own pull request: head in this repository, into the base branch. A fork pull
 # request from a branch of the same name does not match.
-open="$(gh api "repos/$repo/pulls?head=${repo%%/*}:$branch&base=$base_branch&state=open" \
+open="$(run_gh api "repos/$repo/pulls?head=${repo%%/*}:$branch&base=$base_branch&state=open" \
   --jq '.[0].number // empty')" || exit 1
 
 if git diff --quiet -- "$doc"; then
   if [ -n "$open" ]; then
+    need_template
     send pr close "$open" --repo "$repo" \
       --comment "The milestone table on $base_branch matches the open milestones again; this refresh is no longer needed." \
       >/dev/null || exit 1
@@ -81,7 +122,7 @@ content="$(base64 <"$doc" | tr -d '\n')"
 
 # The App's bot account signs off: GitHub writes it as the author of a contents API commit.
 login="${slug}[bot]"
-id="$(gh api "users/$login" --jq .id)" || exit 1
+id="$(run_gh api "users/$login" --jq .id)" || exit 1
 case "$id" in
   '' | *[!0-9]*) echo "roadmap_refresh: no account id for $login" >&2; exit 1 ;;
 esac
@@ -90,11 +131,14 @@ message="$(printf '%s\n\nSigned-off-by: %s <%s>' "$title" "$login" "$email")"
 umask 077
 msgfile="$(mktemp)"
 trap 'rm -f "$msgfile"' 0
+bodyfile="$(mktemp)"
+trap 'rm -f "$msgfile" "$bodyfile"' 0
 printf '%s\n' "$message" >"$msgfile"
 sh "$root/.config/hooks/commit-msg.sh" "$msgfile" || {
   echo "roadmap_refresh: the commit message fails the commit-msg policy; nothing written" >&2
   exit 1
 }
+pr_body "$bodyfile"
 
 # drop_tmp deletes the temporary branch the file was written on.
 drop_tmp() {
@@ -117,7 +161,7 @@ if [ -z "${DRY_RUN:-}" ] && [ "${written#* }" != "$email" ]; then
   exit 1
 fi
 
-if gh api "repos/$repo/git/ref/heads/$branch" --jq .object.sha >/dev/null 2>&1; then
+if run_gh api "repos/$repo/git/ref/heads/$branch" --jq .object.sha >/dev/null 2>&1; then
   send api -X PATCH "repos/$repo/git/refs/heads/$branch" -f "sha=$commit" -F force=true >/dev/null \
     || { drop_tmp; exit 1; }
 else
@@ -127,10 +171,12 @@ fi
 drop_tmp || exit 1
 
 if [ -n "$open" ]; then
+  open_body="$(run_gh pr view "$open" --repo "$repo" --json body --jq .body)" || exit 1
+  if ! printf '%s\n' "$open_body" | tr -d '\r' | grep -qxF '## Description'; then
+    send pr edit "$open" --repo "$repo" --body-file "$bodyfile" >/dev/null || exit 1
+  fi
   echo "roadmap_refresh: branch $branch updated, pull request #$open already open"
   exit 0
 fi
-send pr create --repo "$repo" --base "$base_branch" --head "$branch" --title "$title" \
-  --body "The scheduled Roadmap refresh workflow re-rendered the milestone table in $doc from the open GitHub milestones (tools/ci/roadmap_render.py --write)." \
-  >/dev/null || exit 1
+send pr create --repo "$repo" --base "$base_branch" --head "$branch" --title "$title" --body-file "$bodyfile" >/dev/null || exit 1
 echo "roadmap_refresh: pull request proposed from $branch"
