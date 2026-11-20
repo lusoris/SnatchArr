@@ -874,11 +874,23 @@ func TestActiveLookupContextLifecycle(t *testing.T) {
 		t.Fatal("active lookup context has no deadline")
 	}
 	close(release)
-	if err := <-result; err != nil {
-		t.Fatalf("TitlesFor() error = %v", err)
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("TitlesFor() error = %v", err)
+		}
+	case <-deadline.Done():
+		t.Fatal("TitlesFor() did not return")
 	}
+	// TitlesFor can return before the lookup goroutine's defers run, so wait for the slot release.
+	select {
+	case p.slot <- struct{}{}:
+	case <-deadline.Done():
+		t.Fatal("lookup slot was not released")
+	}
+	defer func() { <-p.slot }()
 	if active := p.active.Load(); active != nil {
-		t.Fatal("active lookup context remained after lookup returned")
+		t.Fatal("active lookup context was not cleared before the lookup slot was released")
 	}
 }
 
