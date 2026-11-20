@@ -18,7 +18,10 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
-const maxFolderEntries = 10000
+const (
+	maxFolderEntries = 10000
+	maxFolderBody    = 8 << 20
+)
 
 // ListFolder lists the entry names the *arr process can see in dir.
 func (p *GoenvoyProber) ListFolder(ctx context.Context, kind domain.AppKind, baseURL, apiKey, dir string) ([]string, error) {
@@ -32,7 +35,10 @@ func (p *GoenvoyProber) ListFolder(ctx context.Context, kind domain.AppKind, bas
 }
 
 func (p *GoenvoyProber) listFolder(ctx context.Context, kind domain.AppKind, baseURL, apiKey, dir string) ([]string, error) {
-	o := p.clientOptions()
+	o, err := p.opts.OptionsCapped(maxFolderBody)
+	if err != nil {
+		return nil, fmt.Errorf("arrclient: %w", err)
+	}
 	switch kind {
 	case domain.KindSonarr:
 		return sonarrFolder(ctx, baseURL, apiKey, dir, o)

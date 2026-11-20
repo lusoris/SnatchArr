@@ -26,19 +26,25 @@ import (
 )
 
 type fakeStore struct {
-	settings    map[uuid.UUID]queue.Settings
-	strikes     map[uuid.UUID]map[string]queue.Strike
-	recorded    map[uuid.UUID][]queue.Decision
-	forgotten   map[uuid.UUID][]string
-	purgeCalled int
-	preset      domain.PriorityPreset
-	presetErr   error
+	settings     map[uuid.UUID]queue.Settings
+	strikes      map[uuid.UUID]map[string]queue.Strike
+	cursors      map[uuid.UUID]string
+	recorded     map[uuid.UUID][]queue.Decision
+	forgotten    map[uuid.UUID][]string
+	purgeCalled  int
+	preset       domain.PriorityPreset
+	presetErr    error
+	strikesErr   error
+	recordErr    error
+	cursorErr    error
+	setCursorErr error
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
 		settings:  make(map[uuid.UUID]queue.Settings),
 		strikes:   make(map[uuid.UUID]map[string]queue.Strike),
+		cursors:   make(map[uuid.UUID]string),
 		recorded:  make(map[uuid.UUID][]queue.Decision),
 		forgotten: make(map[uuid.UUID][]string),
 	}
@@ -52,12 +58,18 @@ func (f *fakeStore) Settings(_ context.Context, id uuid.UUID) (queue.Settings, e
 }
 
 func (f *fakeStore) Strikes(_ context.Context, id uuid.UUID) (map[string]queue.Strike, error) {
+	if f.strikesErr != nil {
+		return nil, f.strikesErr
+	}
 	out := make(map[string]queue.Strike)
 	maps.Copy(out, f.strikes[id])
 	return out, nil
 }
 
 func (f *fakeStore) Record(_ context.Context, id uuid.UUID, decisions []queue.Decision) error {
+	if f.recordErr != nil {
+		return f.recordErr
+	}
 	f.recorded[id] = append(f.recorded[id], decisions...)
 	if f.strikes[id] == nil {
 		f.strikes[id] = make(map[string]queue.Strike)
@@ -67,6 +79,21 @@ func (f *fakeStore) Record(_ context.Context, id uuid.UUID, decisions []queue.De
 			f.strikes[id][d.DownloadID] = d.Next
 		}
 	}
+	return nil
+}
+
+func (f *fakeStore) OutputCursor(_ context.Context, id uuid.UUID) (string, error) {
+	if f.cursorErr != nil {
+		return "", f.cursorErr
+	}
+	return f.cursors[id], nil
+}
+
+func (f *fakeStore) SetOutputCursor(_ context.Context, id uuid.UUID, cursor string, _ time.Time) error {
+	if f.setCursorErr != nil {
+		return f.setCursorErr
+	}
+	f.cursors[id] = cursor
 	return nil
 }
 

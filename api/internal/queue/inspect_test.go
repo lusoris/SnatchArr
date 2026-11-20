@@ -193,11 +193,25 @@ func (e *inspectEnv) assertNoMutations(t *testing.T) {
 	if e.st.forgetCalls > 0 {
 		t.Errorf("store.Forget called %d times; want 0 (read-only)", e.st.forgetCalls)
 	}
+	if e.st.setCursorCalls > 0 {
+		t.Errorf("store.SetOutputCursor called %d times; want 0 (read-only)", e.st.setCursorCalls)
+	}
 	if e.arr.removeCalls > 0 {
 		t.Errorf("arr.RemoveQueueItem called %d times; want 0 (read-only)", e.arr.removeCalls)
 	}
 	if e.arr.forceImportCalls > 0 {
 		t.Errorf("arr.ForceImport called %d times; want 0 (read-only)", e.arr.forceImportCalls)
+	}
+}
+
+func TestInspectCursorReadError(t *testing.T) {
+	t.Parallel()
+	clk := clock.NewFake()
+	inst := queue.Instance{ID: uuid.New(), Name: "Sonarr Main", Kind: domain.KindSonarr, BaseURL: "http://sonarr.local", APIKey: "test-key"}
+	st := &inspectStore{settings: queue.DefaultSettings(), cursorErr: errors.New("cursor unavailable")}
+	svc := queue.NewService(st, &inspectInstanceSource{instances: []queue.Instance{inst}}, &inspectArr{}, clk, nil, nil, nil)
+	if _, err := svc.Inspect(t.Context(), inst.ID); err == nil || !errors.Is(err, st.cursorErr) {
+		t.Fatalf("Inspect() error = %v, want wrapped cursor error", err)
 	}
 }
 
@@ -278,10 +292,13 @@ func makeItems(count int, now time.Time) []queue.Item {
 }
 
 type inspectStore struct {
-	settings      queue.Settings
-	strikes       map[string]queue.Strike
-	recordedCalls int
-	forgetCalls   int
+	settings       queue.Settings
+	strikes        map[string]queue.Strike
+	cursor         string
+	cursorErr      error
+	recordedCalls  int
+	forgetCalls    int
+	setCursorCalls int
 }
 
 func (s *inspectStore) Settings(_ context.Context, _ uuid.UUID) (queue.Settings, error) {
@@ -294,6 +311,15 @@ func (s *inspectStore) Strikes(_ context.Context, _ uuid.UUID) (map[string]queue
 
 func (s *inspectStore) Record(_ context.Context, _ uuid.UUID, _ []queue.Decision) error {
 	s.recordedCalls++
+	return nil
+}
+
+func (s *inspectStore) OutputCursor(_ context.Context, _ uuid.UUID) (string, error) {
+	return s.cursor, s.cursorErr
+}
+
+func (s *inspectStore) SetOutputCursor(_ context.Context, _ uuid.UUID, _ string, _ time.Time) error {
+	s.setCursorCalls++
 	return nil
 }
 

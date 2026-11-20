@@ -86,7 +86,7 @@ func TestCheckOutputs(t *testing.T) {
 	arr := &outputArr{folders: map[string][]string{"/data/": {"job", "job.1"}}, errs: map[string]error{}}
 	inst := Instance{Kind: domain.KindSonarr}
 	items := []Item{outputItem("listed", "/data/job/", now), outputItem("prefix", "/data/jo", now)}
-	checked, results, _ := checkOutputs(context.Background(), arr, inst, s, items, now, 0)
+	checked, results, _ := checkOutputs(context.Background(), arr, inst, s, items, now, "")
 	if len(results) != len(items) {
 		t.Fatalf("results = %d, want %d", len(results), len(items))
 	}
@@ -94,12 +94,12 @@ func TestCheckOutputs(t *testing.T) {
 		t.Fatalf("exact output names not respected: %#v %#v", checked, results)
 	}
 	arr.folders["/case/"] = []string{"Job"}
-	checked, results, _ = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("case", "/case/job", now)}, now, 0)
+	checked, results, _ = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("case", "/case/job", now)}, now, "")
 	if checked[0].OutputListed || results[0].result != outputNotVisible {
 		t.Fatalf("case-mismatched output = %#v / %#v, want not visible", checked[0], results[0])
 	}
 	arr.errs["/error/"] = errors.New("unavailable")
-	checked, results, _ = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("error", "/error/job", now), outputItem("empty", "", now)}, now, 0)
+	checked, results, _ = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("error", "/error/job", now), outputItem("empty", "", now)}, now, "")
 	if len(results) != 2 {
 		t.Fatalf("results = %d, want 2", len(results))
 	}
@@ -120,7 +120,7 @@ func TestCheckOutputsRotates(t *testing.T) {
 		items[i] = outputItem(name, parent+name, now)
 		arr.folders[parent] = []string{name}
 	}
-	cursor := 0
+	cursor := ""
 	for sweep := range 3 {
 		_, results, next := checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, items, now, cursor)
 		if sweep == 0 && len(arr.calls) != maxOutputChecks {
@@ -156,14 +156,108 @@ func TestCheckOutputsRotates(t *testing.T) {
 		name := fmt.Sprintf("job-%02d", i)
 		twenty[i] = outputItem(name, fmt.Sprintf("/exact-%02d/", i)+name, now)
 	}
-	_, _, next := checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, twenty, now, 0)
-	if len(arr.calls) != maxOutputChecks || next != 0 {
-		t.Fatalf("boundary calls/cursor = %d/%d, want %d/0", len(arr.calls), next, maxOutputChecks)
+	_, _, next := checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, twenty, now, "")
+	if len(arr.calls) != maxOutputChecks || next != "/exact-19/" {
+		t.Fatalf("boundary calls/cursor = %d/%q, want %d/%q", len(arr.calls), next, maxOutputChecks, "/exact-19/")
 	}
 	arr.calls = nil
-	_, _, next = checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, nil, now, 7)
-	if len(arr.calls) != 0 || next != 7 {
-		t.Fatalf("empty calls/cursor = %d/%d, want 0/7", len(arr.calls), next)
+	_, _, next = checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, nil, now, "/saved/")
+	if len(arr.calls) != 0 || next != "/saved/" {
+		t.Fatalf("empty calls/cursor = %d/%q, want 0/%q", len(arr.calls), next, "/saved/")
+	}
+}
+
+func TestCheckOutputsResumesByPath(t *testing.T) {
+	t.Parallel()
+	now, s := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC), DefaultSettings()
+	arr := &outputArr{folders: make(map[string][]string), errs: map[string]error{}}
+	items := outputItemsWithParents(now, 45)
+	_, _, _ = checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, items, now, "/parent-19/")
+	if len(arr.calls) != maxOutputChecks || arr.calls[0] != "/parent-20/" {
+		t.Fatalf("successor window = %#v, want start at /parent-20/", arr.calls)
+	}
+	arr.calls = nil
+	items = append(items, outputItem("inserted", "/parent-00a/inserted", now))
+	_, _, _ = checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, items, now, "/parent-19/")
+	if len(arr.calls) != maxOutputChecks || arr.calls[0] != "/parent-20/" {
+		t.Fatalf("inserted predecessor shifted window = %#v, want start at /parent-20/", arr.calls)
+	}
+	arr.calls = nil
+	items = removeOutputParent(items, "/parent-19/")
+	_, _, _ = checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, items, now, "/parent-19/")
+	if len(arr.calls) != maxOutputChecks || arr.calls[0] != "/parent-20/" {
+		t.Fatalf("removed cursor parent window = %#v, want start at /parent-20/", arr.calls)
+	}
+	arr.calls = nil
+	_, _, next := checkOutputs(context.Background(), arr, Instance{Kind: domain.KindSonarr}, s, items, now, "/parent-44/")
+	if len(arr.calls) != maxOutputChecks || arr.calls[0] != "/parent-00/" || next != "/parent-18/" {
+		t.Fatalf("wrapped window = %#v, next %q; want start /parent-00/, next /parent-18/", arr.calls, next)
+	}
+}
+
+func outputItemsWithParents(now time.Time, count int) []Item {
+	items := make([]Item, count)
+	for i := range items {
+		parent := fmt.Sprintf("/parent-%02d/", i)
+		items[i] = outputItem(fmt.Sprintf("job-%02d", i), parent+fmt.Sprintf("job-%02d", i), now)
+	}
+	return items
+}
+
+func removeOutputParent(items []Item, parent string) []Item {
+	out := make([]Item, 0, len(items))
+	for _, item := range items {
+		gotParent, _, _ := splitOutputPath(item.OutputPath)
+		if gotParent != parent {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func TestSweepUncheckedOutputKeepsOnlyExistingStrikes(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC)
+	cfg := DefaultSettings()
+	cfg.Enabled = true
+	item := outputItem("unchecked", "/data/job", now)
+	item.OutputUnchecked = true
+	item.Monitored = true
+	item.TrackedDownloadStatus = "warning"
+	item.TrackedDownloadState = "importPending"
+	prev := Strike{Rule: RuleImportBroken, Count: 1, ImportedAt: now.Add(-time.Hour), ImportRefused: true}
+	decision := Sweep(cfg, []Item{item}, map[string]Strike{item.DownloadID: prev}, now)[0]
+	if decision.Rule != "" || decision.Strike || decision.Reached || decision.Next.Rule != prev.Rule || decision.Next.Count != prev.Count || !decision.Next.ImportedAt.Equal(prev.ImportedAt) || !decision.Next.ImportRefused || decision.Next.LastSizeLeft != item.SizeLeft || !decision.Next.LastSeen.Equal(now) {
+		t.Fatalf("unchecked decision = %#v, want preserved strike without new action", decision)
+	}
+	for _, tc := range []struct {
+		name string
+		item Item
+	}{
+		{"no path", func() Item {
+			noPath := outputItem("no-path", "", now)
+			noPath.Monitored, noPath.TrackedDownloadStatus, noPath.TrackedDownloadState = true, "warning", "importPending"
+			return noPath
+		}()},
+		{"listed", func() Item {
+			listed := outputItem("listed", "/data/job", now)
+			listed.OutputListed = true
+			listed.Monitored = true
+			listed.ReasonLines = nil
+			return listed
+		}()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := Sweep(cfg, []Item{tc.item}, map[string]Strike{tc.item.DownloadID: prev}, now)[0]
+			if got.Next.Count != 0 || got.Next.Rule != "" {
+				t.Fatalf("decision = %#v, want reset strike", got)
+			}
+		})
+	}
+	zero := Sweep(cfg, []Item{item}, nil, now)[0]
+	if zero.Next.Count != 0 || zero.Next.Rule != "" {
+		t.Fatalf("no prior unchecked strike = %#v, want zero count", zero)
 	}
 }
 
@@ -172,14 +266,14 @@ func TestCheckOutputsBudget(t *testing.T) {
 	now, s := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC), DefaultSettings()
 	inst := Instance{Kind: domain.KindSonarr}
 	arr := &outputArr{folders: map[string][]string{}, errs: map[string]error{}}
-	_, _, _ = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("a", "/a/job", now)}, now, 0)
+	_, _, _ = checkOutputs(context.Background(), arr, inst, s, []Item{outputItem("a", "/a/job", now)}, now, "")
 	if !arr.deadlineSeen {
 		t.Fatal("ListFolder did not receive a deadline")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	arr.calls, arr.deadlineSeen, arr.cancelOnFirst = nil, false, cancel
 	items := []Item{outputItem("a", "/a/job", now), outputItem("b", "/b/job", now), outputItem("c", "/c/job", now)}
-	_, results, _ := checkOutputs(ctx, arr, inst, s, items, now, 0)
+	_, results, _ := checkOutputs(ctx, arr, inst, s, items, now, "")
 	if len(arr.calls) != 1 {
 		t.Fatalf("calls after cancellation = %d, want 1", len(arr.calls))
 	}
@@ -200,7 +294,7 @@ func assertOutputCheckBounds(t *testing.T, arr *outputArr, inst Instance, s Sett
 	for i := 0; i <= maxOutputChecks; i++ {
 		items = append(items, outputItem(fmt.Sprintf("job-%d", i), fmt.Sprintf("/p-%02d/job", i), now))
 	}
-	_, results, _ := checkOutputs(context.Background(), arr, inst, s, items, now, 0)
+	_, results, _ := checkOutputs(context.Background(), arr, inst, s, items, now, "")
 	if len(arr.calls) != maxOutputChecks || results[maxOutputChecks].result != outputOverBudget {
 		t.Fatalf("calls/results = %d/%s, want %d/over_budget", len(arr.calls), results[maxOutputChecks].result, maxOutputChecks)
 	}
@@ -209,7 +303,7 @@ func assertOutputCheckBounds(t *testing.T, arr *outputArr, inst Instance, s Sett
 	for i := range shared {
 		shared[i] = outputItem(fmt.Sprintf("shared-%d", i), "/shared/job", now)
 	}
-	_, _, _ = checkOutputs(context.Background(), arr, inst, s, shared, now, 0)
+	_, _, _ = checkOutputs(context.Background(), arr, inst, s, shared, now, "")
 	if len(arr.calls) != 1 {
 		t.Fatalf("shared parent calls = %d, want 1", len(arr.calls))
 	}

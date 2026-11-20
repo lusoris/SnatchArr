@@ -142,3 +142,17 @@ func TestListFolderEntryCap(t *testing.T) {
 		})
 	}
 }
+
+func TestListFolderBodyCap(t *testing.T) {
+	t.Parallel()
+	const maxBody = 8 << 20
+	payload := `{"directories":[{"name":"` + strings.Repeat("a", maxBody) + `"}],"files":[]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+	p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: time.Second})
+	if _, err := p.ListFolder(t.Context(), domain.KindSonarr, server.URL, "test-key", "/data/"); err == nil {
+		t.Fatal("ListFolder() error = nil, want body limit error")
+	}
+}

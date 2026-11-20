@@ -118,7 +118,9 @@ type Item struct {
 	// OutputPath is the download path reported by the upstream *arr queue record.
 	OutputPath string
 	// OutputListed reports whether the *arr process listed the output folder's name.
-	OutputListed      bool
+	OutputListed bool
+	// OutputUnchecked is true when this sweep did not decide output visibility (over budget or error).
+	OutputUnchecked   bool
 	SizeLeft          int64
 	CustomFormatScore int32
 	// QualityRank is the relative quality rank from quality profiles; higher = better, 0 = unknown.

@@ -5,6 +5,17 @@
 SELECT * FROM queue_policies
 WHERE instance_id = $1;
 
+-- name: GetQueueOutputCursor :one
+SELECT * FROM queue_output_cursors
+WHERE instance_id = $1;
+
+-- name: UpsertQueueOutputCursor :exec
+INSERT INTO queue_output_cursors (instance_id, last_parent, updated_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (instance_id) DO UPDATE SET
+    last_parent = EXCLUDED.last_parent,
+    updated_at = EXCLUDED.updated_at;
+
 -- name: UpsertQueuePolicy :exec
 INSERT INTO queue_policies (
     instance_id, enabled, rules, grace_s, min_bytes_per_second,

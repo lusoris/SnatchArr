@@ -141,31 +141,14 @@ type MetricsRecorder interface {
 
 // Service manages download queues across *arr instances.
 type Service struct {
-	sweepMu      sync.Mutex
-	outputMu     sync.Mutex
-	outputCursor map[uuid.UUID]int
-	store        StoreInterface
-	instances    InstanceSource
-	arr          ArrClient
-	clk          clock.Clock
-	events       EventPublisher
-	metrics      MetricsRecorder
-	logger       *slog.Logger
-}
-
-func (s *Service) outputCursorFor(instanceID uuid.UUID) int {
-	s.outputMu.Lock()
-	defer s.outputMu.Unlock()
-	return s.outputCursor[instanceID]
-}
-
-func (s *Service) setOutputCursor(instanceID uuid.UUID, cursor int) {
-	s.outputMu.Lock()
-	defer s.outputMu.Unlock()
-	if s.outputCursor == nil {
-		s.outputCursor = make(map[uuid.UUID]int)
-	}
-	s.outputCursor[instanceID] = cursor
+	sweepMu   sync.Mutex
+	store     StoreInterface
+	instances InstanceSource
+	arr       ArrClient
+	clk       clock.Clock
+	events    EventPublisher
+	metrics   MetricsRecorder
+	logger    *slog.Logger
 }
 
 // StoreInterface defines the persistence methods required by Service.
@@ -173,6 +156,8 @@ type StoreInterface interface {
 	Settings(ctx context.Context, instanceID uuid.UUID) (Settings, error)
 	Strikes(ctx context.Context, instanceID uuid.UUID) (map[string]Strike, error)
 	Record(ctx context.Context, instanceID uuid.UUID, decisions []Decision) error
+	OutputCursor(ctx context.Context, instanceID uuid.UUID) (string, error)
+	SetOutputCursor(ctx context.Context, instanceID uuid.UUID, lastParent string, at time.Time) error
 	Forget(ctx context.Context, instanceID uuid.UUID, downloadID string) error
 	Purge(ctx context.Context, batch int) (int64, error)
 	DownloadPriorityPreset(ctx context.Context) (domain.PriorityPreset, error)
@@ -189,14 +174,13 @@ func NewService(
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
-		outputCursor: make(map[uuid.UUID]int),
-		store:        st,
-		instances:    instances,
-		arr:          arr,
-		clk:          clk,
-		events:       ev,
-		metrics:      m,
-		logger:       logger,
+		store:     st,
+		instances: instances,
+		arr:       arr,
+		clk:       clk,
+		events:    ev,
+		metrics:   m,
+		logger:    logger,
 	}
 }
 
@@ -278,7 +262,7 @@ func (s *Service) sweepInstance(ctx context.Context, inst Instance) error {
 	}
 	cfg.ForceImport = SupportsForceImport(inst.Kind)
 	now := s.clk.Now()
-	decisions, err := s.fetchAndEvaluate(ctx, inst, cfg, now)
+	decisions, cursor, err := s.fetchAndEvaluate(ctx, inst, cfg, now)
 	if err != nil {
 		if errors.Is(err, ErrQueueUnsupported) {
 			s.logger.InfoContext(ctx, "queue: sweep skipped unsupported kind", slog.String("instance", inst.Name), slog.String("kind", string(inst.Kind)))
@@ -288,23 +272,31 @@ func (s *Service) sweepInstance(ctx context.Context, inst Instance) error {
 		return err
 	}
 
-	return s.processDecisions(ctx, inst, cfg, decisions, now)
+	if err := s.processDecisions(ctx, inst, cfg, decisions, now); err != nil {
+		return err
+	}
+	if err := s.store.SetOutputCursor(ctx, inst.ID, cursor, now); err != nil {
+		return fmt.Errorf("save output cursor for %s: %w", inst.Name, err)
+	}
+	return nil
 }
 
-func (s *Service) fetchAndEvaluate(ctx context.Context, inst Instance, cfg Settings, now time.Time) ([]Decision, error) {
+func (s *Service) fetchAndEvaluate(ctx context.Context, inst Instance, cfg Settings, now time.Time) ([]Decision, string, error) {
+	cursor, err := s.store.OutputCursor(ctx, inst.ID)
+	if err != nil {
+		return nil, "", fmt.Errorf("fetch output cursor for %s: %w", inst.Name, err)
+	}
 	items, err := s.arr.Queue(ctx, inst.Kind, inst.BaseURL, inst.APIKey, sweepMaxPages, sweepPageSize)
 	if err != nil {
-		return nil, fmt.Errorf("fetch queue for %s: %w", inst.Name, err)
+		return nil, "", fmt.Errorf("fetch queue for %s: %w", inst.Name, err)
 	}
-	start := s.outputCursorFor(inst.ID)
-	items, results, next := checkOutputs(ctx, s.arr, inst, cfg, items, now, start)
-	s.setOutputCursor(inst.ID, next)
+	items, results, next := checkOutputs(ctx, s.arr, inst, cfg, items, now, cursor)
 	s.recordOutputResults(ctx, inst, results, now)
 	prev, err := s.store.Strikes(ctx, inst.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetch strikes for %s: %w", inst.Name, err)
+		return nil, "", fmt.Errorf("fetch strikes for %s: %w", inst.Name, err)
 	}
-	return Sweep(cfg, items, prev, now), nil
+	return Sweep(cfg, items, prev, now), next, nil
 }
 
 func (s *Service) recordOutputResults(ctx context.Context, inst Instance, results []outputResult, now time.Time) {

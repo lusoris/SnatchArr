@@ -74,15 +74,18 @@ func splitOutputPath(path string) (string, string, bool) {
 	return trimmed[:idx+1], trimmed[idx+1:], true
 }
 
-func checkOutputs(ctx context.Context, arr ArrClient, inst Instance, s Settings, items []Item, now time.Time, start int) ([]Item, []outputResult, int) {
+func checkOutputs(ctx context.Context, arr ArrClient, inst Instance, s Settings, items []Item, now time.Time, lastParent string) ([]Item, []outputResult, string) {
 	ctx, cancel := context.WithTimeout(ctx, outputCheckBudget)
 	defer cancel()
 	out := append([]Item(nil), items...)
+	for i := range out {
+		out[i].OutputUnchecked = false
+	}
 	parents, parentsByItem, resultsByItem := collectOutputParents(out, s, now)
 	if len(parents) == 0 {
-		return out, orderedOutputResults(resultsByItem), start
+		return out, orderedOutputResults(resultsByItem), lastParent
 	}
-	offset, window, next := outputWindow(len(parents), start)
+	offset, window, next := outputWindow(parents, lastParent)
 	listings := listOutputWindow(ctx, arr, inst, parents, offset, window)
 	applyOutputResults(out, parentsByItem, listings, resultsByItem)
 	return out, orderedOutputResults(resultsByItem), next
@@ -112,13 +115,16 @@ func collectOutputParents(out []Item, s Settings, now time.Time) ([]string, map[
 	return parents, parentsByItem, resultsByItem
 }
 
-func outputWindow(parentCount, start int) (int, int, int) {
-	offset := start % parentCount
-	if offset < 0 {
-		offset += parentCount
+func outputWindow(parents []string, lastParent string) (int, int, string) {
+	offset, _ := slices.BinarySearch(parents, lastParent)
+	if offset < len(parents) && parents[offset] == lastParent {
+		offset++
 	}
-	window := min(maxOutputChecks, parentCount-offset)
-	return offset, window, (offset + window) % parentCount
+	if offset == len(parents) {
+		offset = 0
+	}
+	window := min(maxOutputChecks, len(parents)-offset)
+	return offset, window, parents[offset+window-1]
 }
 
 func listOutputWindow(ctx context.Context, arr ArrClient, inst Instance, parents []string, offset, window int) map[string]folderListing {
@@ -142,8 +148,10 @@ func applyOutputResults(out []Item, parentsByItem map[int]string, listings map[s
 		listing, selected := listings[parent]
 		switch {
 		case !selected:
+			out[i].OutputUnchecked = true
 			result.result = outputOverBudget
 		case listing.err != nil:
+			out[i].OutputUnchecked = true
 			result.result, result.err = outputError, listing.err
 		default:
 			_, name, _ := splitOutputPath(out[i].OutputPath)

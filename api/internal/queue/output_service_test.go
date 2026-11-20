@@ -23,6 +23,8 @@ import (
 
 var outputSweepAt = time.Date(2026, 11, 18, 17, 0, 0, 0, time.FixedZone("CET", 60*60))
 
+const outputCheckLimit = 20
+
 func TestSweepBlindWindowReplay(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
@@ -66,6 +68,122 @@ func TestSweepOutputListError(t *testing.T) {
 	if output := logs.String(); !strings.Contains(output, "msg=\"queue: output path check failed\"") || !strings.Contains(output, "instance=sonarr-main") || !strings.Contains(output, "dir="+outputParent) || !strings.Contains(output, "error=\"mount unavailable\"") {
 		t.Fatalf("error log = %q", output)
 	}
+}
+
+func TestSweepOutputUncheckedPreservesImportBroken(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		itemCount  int
+		listingErr bool
+	}{
+		{"outside output window", outputCheckLimit + 1, false},
+		{"listing error", 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newOutputSweepEnv(t, nil)
+			settings := env.store.settings[env.instance.ID]
+			settings.Rules[queue.RuleImportBroken] = queue.RuleSettings{Mode: queue.ModeObserve, Threshold: 2}
+			env.store.settings[env.instance.ID] = settings
+			items := outputItemsForSweep(outputSweepAt, tc.itemCount)
+			target := items[len(items)-1]
+			env.arr.items[env.key] = items
+			env.store.strikes[env.instance.ID] = map[string]queue.Strike{target.DownloadID: {Rule: queue.RuleImportBroken, Count: 1}}
+			if tc.listingErr {
+				env.arr.folderErr["/cursor/00/"] = errors.New("mount unavailable")
+			}
+			if err := env.service.SweepAll(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			got := env.store.strikes[env.instance.ID][target.DownloadID]
+			if got.Rule != queue.RuleImportBroken || got.Count != 1 {
+				t.Fatalf("unchecked strike = %#v, want import_broken count 1", got)
+			}
+			if tc.listingErr {
+				delete(env.arr.folderErr, "/cursor/00/")
+			} else {
+				env.clk.Advance(15 * time.Minute)
+			}
+			parent := strings.TrimSuffix(target.OutputPath, target.DownloadID)
+			env.arr.folders[parent] = []string{target.DownloadID}
+			if err := env.service.SweepAll(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			got = env.store.strikes[env.instance.ID][target.DownloadID]
+			if got.Rule != queue.RuleImportBroken || got.Count != 2 {
+				t.Fatalf("checked strike = %#v, want import_broken count 2", got)
+			}
+		})
+	}
+}
+
+func TestSweepOutputCursorRestart(t *testing.T) {
+	t.Parallel()
+	env := newOutputSweepEnv(t, nil)
+	items := outputItemsForSweep(outputSweepAt, 45)
+	env.arr.items[env.key] = items
+	if err := env.service.SweepAll(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	firstCursor := env.store.cursors[env.instance.ID]
+	if firstCursor != "/cursor/19/" {
+		t.Fatalf("first cursor = %q, want /cursor/19/", firstCursor)
+	}
+	env.arr.folderDirs = nil
+	second := newTestService(env.store, &fakeInstanceSource{instances: []queue.Instance{env.instance}}, env.arr, env.clk, &fakeEventPublisher{}, env.metrics)
+	if err := second.SweepAll(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(env.arr.folderDirs) != outputCheckLimit || env.arr.folderDirs[0] != "/cursor/20/" {
+		t.Fatalf("restart listings = %#v, want start at /cursor/20/", env.arr.folderDirs)
+	}
+}
+
+func TestSweepOutputCursorStaysOnFailure(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		strikesErr error
+		recordErr  error
+	}{
+		{"strikes", errors.New("strikes unavailable"), nil},
+		{"record", nil, errors.New("record unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newOutputSweepEnv(t, nil)
+			env.arr.items[env.key] = outputItemsForSweep(outputSweepAt, 1)
+			env.store.cursors[env.instance.ID] = "/saved/"
+			env.store.strikesErr = tc.strikesErr
+			env.store.recordErr = tc.recordErr
+			if err := env.service.SweepAll(t.Context()); err == nil {
+				t.Fatal("SweepAll() error = nil, want failure")
+			}
+			if got := env.store.cursors[env.instance.ID]; got != "/saved/" {
+				t.Fatalf("cursor = %q, want unchanged /saved/", got)
+			}
+		})
+	}
+}
+
+func TestSweepOutputCursorReadError(t *testing.T) {
+	t.Parallel()
+	env := newOutputSweepEnv(t, nil)
+	env.store.cursorErr = errors.New("cursor unavailable")
+	if err := env.service.SweepAll(t.Context()); err == nil || !errors.Is(err, env.store.cursorErr) {
+		t.Fatalf("SweepAll() error = %v, want wrapped cursor error", err)
+	}
+}
+
+func outputItemsForSweep(now time.Time, count int) []queue.Item {
+	items := make([]queue.Item, count)
+	for i := range items {
+		parent := fmt.Sprintf("/cursor/%02d/", i)
+		name := fmt.Sprintf("job-%02d", i)
+		items[i] = queue.Item{ID: int32(i + 1), DownloadID: name, Added: now.Add(-time.Hour), OutputPath: parent + name, Monitored: true, TrackedDownloadStatus: "warning", TrackedDownloadState: "importPending", ReasonLines: []string{"No files found are eligible for import in " + parent + name}}
+	}
+	return items
 }
 
 func TestSweepNotVisibleSkipsImportBlocked(t *testing.T) {
