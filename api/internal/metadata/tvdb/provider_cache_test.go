@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -18,6 +19,12 @@ import (
 
 	rediscache "github.com/golusoris/golusoris/cache/redis"
 )
+
+// redisTestBackstop only makes a broken bound fail instead of hanging the test;
+// it is never the boundary under test.
+const redisTestBackstop = 10 * time.Second
+
+var errUnexpectedRedisDial = errors.New("unexpected Redis dial attempt")
 
 func TestHTTPCacheStoreTimeout(t *testing.T) {
 	t.Parallel()
@@ -70,21 +77,14 @@ func TestLoopbackOnlyDial(t *testing.T) {
 
 func testRemoteRedisDialRefused(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), redisTestBackstop)
 	defer cancel()
-	started := time.Now()
-	conn, err := loopbackOnlyDial(ctx, "192.0.2.1:6379", &net.Dialer{}, nil)
-	if conn != nil || !errors.Is(err, errRedisNotLoopback) {
-		t.Fatalf("loopbackOnlyDial() = %v, %v, want nil and errRedisNotLoopback", conn, err)
-	}
-	if elapsed := time.Since(started); elapsed >= 250*time.Millisecond {
-		t.Fatalf("remote refusal elapsed = %v, want below 250ms", elapsed)
-	}
+	assertRedisDialRefusedBeforeAttempt(t, ctx, "192.0.2.1:6379", nil)
 }
 
 func testLoopbackRedisDialAccepted(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), redisTestBackstop)
 	defer cancel()
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
@@ -92,7 +92,7 @@ func testLoopbackRedisDialAccepted(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 	if tcp, ok := listener.(*net.TCPListener); ok {
-		if deadlineErr := tcp.SetDeadline(time.Now().Add(500 * time.Millisecond)); deadlineErr != nil {
+		if deadlineErr := tcp.SetDeadline(time.Now().Add(redisTestBackstop)); deadlineErr != nil {
 			t.Fatalf("SetDeadline() error = %v", deadlineErr)
 		}
 	}
@@ -120,11 +120,27 @@ func acceptOne(listener net.Listener, result chan<- error) {
 
 func testTLSRedisDialRefused(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), redisTestBackstop)
 	defer cancel()
-	conn, err := loopbackOnlyDial(ctx, "127.0.0.1:6379", &net.Dialer{}, &tls.Config{MinVersion: tls.VersionTLS12})
-	if conn != nil || !errors.Is(err, errRedisNotLoopback) {
-		t.Fatalf("loopbackOnlyDial() = %v, %v, want nil and errRedisNotLoopback", conn, err)
+	assertRedisDialRefusedBeforeAttempt(t, ctx, "127.0.0.1:6379", &tls.Config{MinVersion: tls.VersionTLS12})
+}
+
+func assertRedisDialRefusedBeforeAttempt(t *testing.T, ctx context.Context, dst string, tlsConfig *tls.Config) {
+	t.Helper()
+	attempted := &atomic.Bool{}
+	dialer := &net.Dialer{ControlContext: func(context.Context, string, string, syscall.RawConn) error {
+		attempted.Store(true)
+		return errUnexpectedRedisDial
+	}}
+	conn, err := loopbackOnlyDial(ctx, dst, dialer, tlsConfig)
+	if conn != nil {
+		t.Fatalf("loopbackOnlyDial() connection = %v, want nil", conn)
+	}
+	if !errors.Is(err, errRedisNotLoopback) {
+		t.Fatalf("loopbackOnlyDial() error = %v, want errRedisNotLoopback", err)
+	}
+	if attempted.Load() {
+		t.Fatal("loopbackOnlyDial() attempted a network dial, want refusal before dialing")
 	}
 }
 
@@ -155,20 +171,58 @@ func TestIsLoopbackPeer(t *testing.T) {
 	}
 }
 
-type blockingRedisClient struct{ rueidis.Client }
-
-func (blockingRedisClient) Do(ctx context.Context, _ rueidis.Completed) rueidis.RedisResult {
-	<-ctx.Done()
-	return rueidis.NewErrorResult(ctx.Err())
+type blockingRedisClient struct {
+	rueidis.Client
+	held chan<- struct{}
 }
 
-func (blockingRedisClient) DoMulti(ctx context.Context, multi ...rueidis.Completed) []rueidis.RedisResult {
-	<-ctx.Done()
+func (c blockingRedisClient) Do(ctx context.Context, _ rueidis.Completed) rueidis.RedisResult {
+	return rueidis.NewErrorResult(c.wait(ctx))
+}
+
+func (c blockingRedisClient) DoMulti(ctx context.Context, multi ...rueidis.Completed) []rueidis.RedisResult {
+	err := c.wait(ctx)
 	results := make([]rueidis.RedisResult, len(multi))
 	for i := range results {
-		results[i] = rueidis.NewErrorResult(ctx.Err())
+		results[i] = rueidis.NewErrorResult(err)
 	}
 	return results
+}
+
+func (c blockingRedisClient) wait(ctx context.Context) error {
+	if c.held != nil {
+		select {
+		case c.held <- struct{}{}:
+		default:
+		}
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+type redisDeadlineContext struct {
+	context.Context
+	done    chan struct{}
+	expired atomic.Bool
+}
+
+func newRedisDeadlineContext(parent context.Context) *redisDeadlineContext {
+	return &redisDeadlineContext{Context: parent, done: make(chan struct{})}
+}
+
+func (c *redisDeadlineContext) Done() <-chan struct{} { return c.done }
+
+func (c *redisDeadlineContext) Err() error {
+	if c.expired.Load() {
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
+func (c *redisDeadlineContext) expire() {
+	if c.expired.CompareAndSwap(false, true) {
+		close(c.done)
+	}
 }
 
 type boundRedisCall func(context.Context, rueidis.Client) error
@@ -199,14 +253,15 @@ func testBoundRedisShutdown(t *testing.T, call boundRedisCall) {
 	t.Helper()
 	active := &atomicContextPointer{}
 	lifetime, stopLifetime := context.WithCancel(t.Context())
-	client := newBoundRedis(blockingRedisClient{}, redisBounds{lifetime: func() context.Context { return lifetime }, active: &active.Pointer})
-	caller, stopCaller := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	held := make(chan struct{}, 1)
+	client := newBoundRedis(blockingRedisClient{held: held}, redisBounds{lifetime: func() context.Context { return lifetime }, active: &active.Pointer})
+	caller, stopCaller := context.WithCancel(t.Context())
 	defer stopCaller()
 	result := make(chan error, 1)
-	started := time.Now()
 	go func() { result <- call(caller, client) }()
+	waitForRedisHeld(t, held)
 	stopLifetime()
-	assertPromptRedisCancellation(t, result, started, context.Canceled)
+	assertRedisCancellation(t, result, context.Canceled)
 }
 
 func testBoundRedisActiveLookup(t *testing.T, call boundRedisCall) {
@@ -214,16 +269,18 @@ func testBoundRedisActiveLookup(t *testing.T, call boundRedisCall) {
 	active := &atomicContextPointer{}
 	lifetime, stopLifetime := context.WithCancel(t.Context())
 	defer stopLifetime()
-	lookup, stopLookup := context.WithTimeout(t.Context(), 40*time.Millisecond)
+	lookup, stopLookup := context.WithCancel(t.Context())
 	defer stopLookup()
 	active.Store(&lookup)
-	client := newBoundRedis(blockingRedisClient{}, redisBounds{lifetime: func() context.Context { return lifetime }, active: &active.Pointer})
-	caller, stopCaller := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	held := make(chan struct{}, 1)
+	client := newBoundRedis(blockingRedisClient{held: held}, redisBounds{lifetime: func() context.Context { return lifetime }, active: &active.Pointer})
+	caller, stopCaller := context.WithCancel(t.Context())
 	defer stopCaller()
-	started := time.Now()
 	result := make(chan error, 1)
 	go func() { result <- call(caller, client) }()
-	assertPromptRedisCancellation(t, result, started, context.Canceled)
+	waitForRedisHeld(t, held)
+	stopLookup()
+	assertRedisCancellation(t, result, context.Canceled)
 }
 
 func testBoundRedisCaller(t *testing.T, call boundRedisCall, clearActive bool) {
@@ -237,22 +294,46 @@ func testBoundRedisCaller(t *testing.T, call boundRedisCall, clearActive bool) {
 	}
 	lifetime, stopLifetime := context.WithCancel(t.Context())
 	defer stopLifetime()
-	client := newBoundRedis(blockingRedisClient{}, redisBounds{lifetime: func() context.Context { return lifetime }, active: &active.Pointer})
-	caller, stopCaller := context.WithTimeout(t.Context(), 40*time.Millisecond)
-	defer stopCaller()
-	if err := call(caller, client); !errors.Is(err, context.DeadlineExceeded) {
+	held := make(chan struct{}, 1)
+	client := newBoundRedis(blockingRedisClient{held: held}, redisBounds{lifetime: func() context.Context { return lifetime }, active: &active.Pointer})
+	caller := newRedisDeadlineContext(t.Context())
+	result := make(chan error, 1)
+	go func() { result <- call(caller, client) }()
+	waitForRedisHeld(t, held)
+	caller.expire()
+	if err := waitForRedisResult(t, result); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Redis call error = %v, want context.DeadlineExceeded", err)
 	}
 }
 
-func assertPromptRedisCancellation(t *testing.T, result <-chan error, started time.Time, want error) {
+func waitForRedisHeld(t *testing.T, held <-chan struct{}) {
 	t.Helper()
-	err := <-result
-	if !errors.Is(err, want) {
-		t.Fatalf("Redis call error = %v, want %v", err, want)
+	timer := time.NewTimer(redisTestBackstop)
+	defer timer.Stop()
+	select {
+	case <-held:
+	case <-timer.C:
+		t.Fatal("blocking Redis client did not hold the call before the backstop")
 	}
-	if elapsed := time.Since(started); elapsed >= 250*time.Millisecond {
-		t.Fatalf("Redis cancellation elapsed = %v, want below 250ms", elapsed)
+}
+
+func waitForRedisResult(t *testing.T, result <-chan error) error {
+	t.Helper()
+	timer := time.NewTimer(redisTestBackstop)
+	defer timer.Stop()
+	select {
+	case err := <-result:
+		return err
+	case <-timer.C:
+		t.Fatal("bound Redis call did not return before the backstop")
+		return nil
+	}
+}
+
+func assertRedisCancellation(t *testing.T, result <-chan error, want error) {
+	t.Helper()
+	if err := waitForRedisResult(t, result); !errors.Is(err, want) {
+		t.Fatalf("Redis call error = %v, want %v", err, want)
 	}
 }
 
