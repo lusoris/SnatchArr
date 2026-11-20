@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package overlay builds desired Whisparr-to-Jellyfin overlay links. SnatchArr computes the map and the plugin applies it (ADR-0028 amendment, issue 1209). Collisions preserve the lowest movie ID's plain folder, so deleting that holder renames the next one. Containment is lexical; the plugin must resolve symlinks before applying links.
+// Package overlay builds desired Whisparr-to-Jellyfin overlay links. SnatchArr computes the map and the plugin applies it (ADR-0028 amendment, issue 1209). Collisions preserve the lowest non-reserved movie ID's plain folder, so deleting that holder renames the next one. Canonical caseless matching is at least as wide as the equivalence of any case-insensitive or normalization-insensitive target filesystem; it may add a suffix a case-sensitive target would not need, never fewer. Windows device names are reserved. Containment is lexical; the plugin must resolve symlinks before applying links.
 package overlay
 
 import (
@@ -16,14 +16,27 @@ import (
 	"unicode/utf8"
 
 	"github.com/golusoris/goenvoy/arr/whisparr"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/lusoris/SnatchArr/api/internal/pathsafe"
 )
 
-const maxTitleBytes = 180
+const (
+	maxTitleBytes     = 180
+	maxRawTitleBytes  = 4096
+	maxExtensionBytes = 16 // Includes the leading period.
+	// 180 title + 7 year + 11 " [whisparr-" + 20 digits (strconv.Itoa(math.MinInt)) + 1 "]" = 219 folder bytes; + 16 extension = 235 <= 255.
+	maxComponentBytes = 255
+	// DefaultMaxMovies caps Build when Options.MaxMovies is zero.
+	DefaultMaxMovies = 1_000_000
+)
 
 // ErrInvalidOptions reports an empty or non-absolute source or target root.
 var ErrInvalidOptions = errors.New("invalid overlay options")
+
+// ErrTooManyMovies reports that Build received more movies than its configured limit.
+var ErrTooManyMovies = errors.New("too many overlay movies")
 
 const (
 	// ReasonMissingPath reports a movie with no usable movie-file path.
@@ -32,8 +45,12 @@ const (
 	ReasonOutsideSourceRoot = "outside_source_root"
 	// ReasonNoExtension reports a movie-file path with no extension.
 	ReasonNoExtension = "no_extension"
+	// ReasonUnsupportedExtension keeps every Link within one 255-byte path component and free of reserved characters.
+	ReasonUnsupportedExtension = "unsupported_extension"
 	// ReasonEmptyTitle reports a title that is empty after sanitization.
 	ReasonEmptyTitle = "empty_title"
+	// ReasonTitleTooLong reports a raw title exceeding maxRawTitleBytes.
+	ReasonTitleTooLong = "title_too_long"
 	// ReasonDuplicateMovieID reports every copy of a repeated file-bearing movie ID.
 	// Whisparr movie IDs are unique, so repeats identify an inconsistent list;
 	// refusing every copy keeps the map independent of input order.
@@ -44,6 +61,8 @@ const (
 type Options struct {
 	SourceRoot string
 	TargetRoot string
+	// MaxMovies bounds the list processed by Build; zero selects DefaultMaxMovies.
+	MaxMovies int
 }
 
 // Entry describes one desired overlay symlink.
@@ -71,10 +90,21 @@ func Build(opts Options, movies []whisparr.Movie) (Map, error) {
 	if err := validateOptions(opts); err != nil {
 		return Map{}, err
 	}
+	limit := opts.MaxMovies
+	if limit == 0 {
+		limit = DefaultMaxMovies
+	}
+	if limit < 0 || limit > DefaultMaxMovies {
+		return Map{}, fmt.Errorf("max movies: %w", ErrInvalidOptions)
+	}
+	if len(movies) > limit {
+		return Map{}, fmt.Errorf("%w", ErrTooManyMovies)
+	}
 	result := Map{}
 	fileCounts := countFileBearingMovies(movies)
+	// len(movies) is bounded by limit above.
 	for _, movie := range movies {
-		if !movie.HasFile || movie.MovieFile == nil {
+		if !movie.HasFile {
 			continue
 		}
 		if fileCounts[movie.ID] > 1 {
@@ -95,8 +125,9 @@ func Build(opts Options, movies []whisparr.Movie) (Map, error) {
 
 func countFileBearingMovies(movies []whisparr.Movie) map[int]int {
 	counts := make(map[int]int, len(movies))
+	// len(movies) is bounded by Build's configured limit.
 	for _, movie := range movies {
-		if movie.HasFile && movie.MovieFile != nil {
+		if movie.HasFile {
 			counts[movie.ID]++
 		}
 	}
@@ -104,16 +135,19 @@ func countFileBearingMovies(movies []whisparr.Movie) map[int]int {
 }
 
 func validateOptions(opts Options) error {
-	if opts.SourceRoot == "" || !filepath.IsAbs(opts.SourceRoot) {
+	if opts.SourceRoot == "" || strings.ContainsRune(opts.SourceRoot, '\x00') || !filepath.IsAbs(opts.SourceRoot) {
 		return fmt.Errorf("source root: %w", ErrInvalidOptions)
 	}
-	if opts.TargetRoot == "" || !filepath.IsAbs(opts.TargetRoot) {
+	if opts.TargetRoot == "" || strings.ContainsRune(opts.TargetRoot, '\x00') || !filepath.IsAbs(opts.TargetRoot) {
 		return fmt.Errorf("target root: %w", ErrInvalidOptions)
 	}
 	return nil
 }
 
 func buildEntry(opts Options, movie whisparr.Movie) (Entry, string) {
+	if len(movie.Title) > maxRawTitleBytes {
+		return Entry{}, ReasonTitleTooLong
+	}
 	path, ok := movieFilePath(movie)
 	if !ok {
 		return Entry{}, ReasonMissingPath
@@ -122,8 +156,11 @@ func buildEntry(opts Options, movie whisparr.Movie) (Entry, string) {
 		return Entry{}, ReasonOutsideSourceRoot
 	}
 	ext := filepath.Ext(path)
-	if ext == "" {
+	if ext == "" || ext == "." {
 		return Entry{}, ReasonNoExtension
+	}
+	if !validExtension(ext) {
+		return Entry{}, ReasonUnsupportedExtension
 	}
 	title := sanitizeTitle(movie.Title)
 	if title == "" {
@@ -138,6 +175,9 @@ func buildEntry(opts Options, movie whisparr.Movie) (Entry, string) {
 }
 
 func movieFilePath(movie whisparr.Movie) (string, bool) {
+	if movie.MovieFile == nil {
+		return "", false
+	}
 	path := movie.MovieFile.Path
 	if path != "" {
 		return path, true
@@ -146,6 +186,22 @@ func movieFilePath(movie whisparr.Movie) (string, bool) {
 		return "", false
 	}
 	return filepath.Join(movie.Path, movie.MovieFile.RelativePath), true
+}
+
+func validExtension(ext string) bool {
+	if len(ext) > maxExtensionBytes || len(ext) < 2 || ext[0] != '.' {
+		return false
+	}
+	for index := range len(ext) - 1 {
+		if !validExtensionByte(ext[index+1]) {
+			return false
+		}
+	}
+	return true
+}
+
+func validExtensionByte(char byte) bool {
+	return strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-", rune(char))
 }
 
 func isAllowedPath(sourceRoot, path string) bool {
@@ -180,9 +236,10 @@ func isValidYear(year int) bool {
 
 func sanitizeTitle(title string) string {
 	var clean strings.Builder
+	// buildEntry limits the raw title to maxRawTitleBytes before this loop.
 	for _, char := range title {
 		switch {
-		case char == '/', char == '\\', unicode.IsControl(char):
+		case strings.ContainsRune("/\\<>:\"|?*", char), unicode.IsControl(char):
 			clean.WriteByte(' ')
 		case char == '[':
 			clean.WriteByte('(')
@@ -196,7 +253,7 @@ func sanitizeTitle(title string) string {
 }
 
 func truncateTitle(title string) string {
-	for len(title) > maxTitleBytes {
+	for steps := 0; len(title) > maxTitleBytes && steps < maxRawTitleBytes; steps++ {
 		_, size := utf8.DecodeLastRuneInString(title)
 		title = title[:len(title)-size]
 	}
@@ -209,8 +266,11 @@ func trimTitle(title string) string {
 
 func applyCollisions(entries []Entry) {
 	groups := make(map[string][]int, len(entries))
+	caser := cases.Fold()
+	// Build caps len(entries) at DefaultMaxMovies; these loops are bounded by that input size.
 	for index := range entries {
-		key := strings.ToLower(entries[index].Folder)
+		folder := entries[index].Folder
+		key := norm.NFC.String(caser.String(norm.NFD.String(folder)))
 		groups[key] = append(groups[key], index)
 	}
 	for _, indexes := range groups {
@@ -219,21 +279,51 @@ func applyCollisions(entries []Entry) {
 }
 
 func applyCollision(entries []Entry, indexes []int) {
-	if len(indexes) < 2 {
-		return
-	}
-	plain := indexes[0]
-	for _, index := range indexes[1:] {
-		if entries[index].MovieID < entries[plain].MovieID {
+	plain := -1
+	for _, index := range indexes {
+		if !reservedDeviceFolder(entries[index].Folder) && (plain == -1 || entries[index].MovieID < entries[plain].MovieID) {
 			plain = index
 		}
 	}
 	for _, index := range indexes {
-		if index != plain {
-			entries[index].Folder += " [whisparr-" + strconv.Itoa(entries[index].MovieID) + "]"
-			entries[index].Link = entries[index].Folder + filepath.Ext(entries[index].Target)
+		if index != plain || reservedDeviceFolder(entries[index].Folder) {
+			addCollisionSuffix(&entries[index])
 		}
 	}
+}
+
+func addCollisionSuffix(entry *Entry) {
+	// Sanitization maps square brackets to parentheses, so no title can contain this generated suffix form; duplicate refusal also makes IDs unique.
+	entry.Folder += " [whisparr-" + strconv.Itoa(entry.MovieID) + "]"
+	entry.Link = entry.Folder + filepath.Ext(entry.Target)
+}
+
+func reservedDeviceFolder(folder string) bool {
+	stem := strings.TrimRight(strings.SplitN(folder, ".", 2)[0], " ")
+	reservedNames := [...]string{"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³"}
+	// The reserved name table has a fixed scalar bound.
+	for _, name := range reservedNames {
+		if asciiEqualFold(stem, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func asciiEqualFold(value, upper string) bool {
+	if len(value) != len(upper) || len(value) > maxComponentBytes {
+		return false
+	}
+	for index := range len(value) {
+		char := value[index]
+		if char >= 'a' && char <= 'z' {
+			char -= 'a' - 'A'
+		}
+		if char != upper[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func sortMap(result *Map) {
