@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
 type docMetric struct {
@@ -158,6 +159,12 @@ func populateRegistry(m *metrics.Metrics) {
 	m.SetSeerrRequestsPending(3)
 	m.RunLeaseWait("missing", 5)
 	m.PlannerDeferred(metrics.DeferralScheduleClosed)
+	m.QueueStruck("sonarr-main", string(queue.RuleImportBroken), string(queue.ModeObserve))
+	m.QueueRemoval("sonarr-main", string(queue.RuleImportBroken), "ok")
+	m.QueueSkipped("sonarr-main", "disabled")
+	m.QueueImport("sonarr-main", "no_clean_candidate")
+	m.QueueOutputCheck("sonarr-main", "over_budget")
+	m.QueueOutputNotVisibleAt("sonarr-main", time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC))
 }
 
 func gatherCodeMetrics(m *metrics.Metrics, reg *prometheus.Registry) (map[string][]string, error) {
@@ -255,6 +262,116 @@ func TestDocsSync_APIMetrics(t *testing.T) {
 	if err := checkMetricsSync(codeMetrics, apiDocs); err != nil {
 		t.Errorf("API metrics / docs out of sync: %v", err)
 	}
+}
+
+// TestPopulateRegistry_CoversEveryDeclaredMetric prevents collectors without series from escaping docs sync.
+func TestPopulateRegistry_CoversEveryDeclaredMetric(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	recorder := newRecordingRegisterer(registry)
+	m, err := metrics.New(recorder)
+	if err != nil {
+		t.Fatalf("metrics.New = %v", err)
+	}
+	populateRegistry(m)
+
+	declared, err := recorder.metricNames()
+	if err != nil {
+		t.Fatalf("declared metric names: %v", err)
+	}
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatalf("registry.Gather = %v", err)
+	}
+	gathered := make(map[string]struct{}, len(families))
+	for i := 0; i < len(families) && i < maxMetricNames; i++ {
+		gathered[families[i].GetName()] = struct{}{}
+	}
+	if err := compareMetricNameSets(declared, gathered); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestMetricNameSetComparison(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		declared map[string]struct{}
+		gathered map[string]struct{}
+		want     string
+	}{
+		{name: "matching sets", declared: metricNameSet("snatcharr_runs"), gathered: metricNameSet("snatcharr_runs")},
+		{name: "missing gathered metric names declaration", declared: metricNameSet("snatcharr_runs"), gathered: metricNameSet(), want: "snatcharr_runs"},
+		{name: "unexpected gathered metric", declared: metricNameSet(), gathered: metricNameSet("snatcharr_extra"), want: "snatcharr_extra"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := compareMetricNameSets(tc.declared, tc.gathered)
+			if tc.want == "" && err != nil {
+				t.Errorf("compareMetricNameSets() = %v, want nil", err)
+			}
+			if tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
+				t.Errorf("compareMetricNameSets() = %v, want error naming %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestNames_DescNameReader(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		value string
+		want  string
+		fail  bool
+	}{
+		{name: "positive descriptor", value: `Desc{fqName: "snatcharr_test", help: "h"}`, want: "snatcharr_test"},
+		{name: "boundary escaped descriptor name", value: `Desc{fqName: "snatcharr_\u03b1", help: "h"}`, want: "snatcharr_α"},
+		{name: "negative missing prefix", value: `Desc{name: "snatcharr_test"}`, fail: true},
+		{name: "negative malformed quote", value: `Desc{fqName: "snatcharr_\q", help: "h"}`, fail: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := descName(tc.value)
+			if tc.fail {
+				if err == nil {
+					t.Errorf("descName(%q) = %q, nil error; want failure", tc.value, got)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Errorf("descName(%q) = %q, %v; want %q", tc.value, got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestRecordingRegistererIncludesScalarAndHistogramNames(t *testing.T) {
+	t.Parallel()
+	recorder := newRecordingRegisterer(prometheus.NewRegistry())
+	if _, err := metrics.New(recorder); err != nil {
+		t.Fatalf("metrics.New = %v", err)
+	}
+	names, err := recorder.metricNames()
+	if err != nil {
+		t.Fatalf("metricNames = %v", err)
+	}
+	for _, name := range []string{"snatcharr_seerr_requests_pending", "snatcharr_run_lease_wait_seconds"} {
+		if _, ok := names[name]; !ok {
+			t.Errorf("metricNames omitted %q", name)
+		}
+	}
+}
+
+// metricNameSet builds a set for metric-name comparison tests.
+func metricNameSet(names ...string) map[string]struct{} {
+	set := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		set[name] = struct{}{}
+	}
+	return set
 }
 
 // Negative & boundary: planted cases prove the checker detects missing metrics, extra metrics, and label mismatches.

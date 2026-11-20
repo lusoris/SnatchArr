@@ -234,7 +234,7 @@ func evalDistance(match, numStr string, fixableFloor float64) (lineClassificatio
 	}, true
 }
 
-func classifyLine(line string, s Settings, hasUnpackOrLocked, pastGrace bool) lineClassification {
+func classifyLine(line string, s Settings, hasUnpackOrLocked, pastGrace, outputListed bool) lineClassification {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
 		return lineClassification{class: ClassUnknown}
@@ -243,7 +243,7 @@ func classifyLine(line string, s Settings, hasUnpackOrLocked, pastGrace bool) li
 		return res
 	}
 	if reNoFilesFound.MatchString(trimmed) {
-		if !hasUnpackOrLocked && pastGrace {
+		if !hasUnpackOrLocked && pastGrace && outputListed {
 			return lineClassification{class: ClassBroken, pattern: reNoFilesFound.String()}
 		}
 		return lineClassification{class: ClassUnknown, operational: true}
@@ -267,10 +267,10 @@ func classifyLine(line string, s Settings, hasUnpackOrLocked, pastGrace bool) li
 	}
 }
 
-// ClassifyRejection classifies a single rejection reason string using the shared pattern table.
+// ClassifyRejection classifies a single rejection reason string; it carries no output listing.
 // Unrecognized strings classify as unknown.
 func ClassifyRejection(rejection string) Class {
-	c := classifyLine(rejection, DefaultSettings(), false, true)
+	c := classifyLine(rejection, DefaultSettings(), false, true, false)
 	return c.class
 }
 
@@ -344,7 +344,7 @@ func ClassifyImportItem(item Item, s Settings, now time.Time) (Class, string, *f
 
 	c := &importCollector{rematchOnly: true}
 	for _, l := range lines {
-		res := classifyLine(l, s, hasUnpackOrLocked, pastGrace)
+		res := classifyLine(l, s, hasUnpackOrLocked, pastGrace, item.OutputListed)
 		c.record(res)
 	}
 

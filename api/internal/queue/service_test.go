@@ -11,6 +11,8 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,19 +26,25 @@ import (
 )
 
 type fakeStore struct {
-	settings    map[uuid.UUID]queue.Settings
-	strikes     map[uuid.UUID]map[string]queue.Strike
-	recorded    map[uuid.UUID][]queue.Decision
-	forgotten   map[uuid.UUID][]string
-	purgeCalled int
-	preset      domain.PriorityPreset
-	presetErr   error
+	settings     map[uuid.UUID]queue.Settings
+	strikes      map[uuid.UUID]map[string]queue.Strike
+	cursors      map[uuid.UUID]string
+	recorded     map[uuid.UUID][]queue.Decision
+	forgotten    map[uuid.UUID][]string
+	purgeCalled  int
+	preset       domain.PriorityPreset
+	presetErr    error
+	strikesErr   error
+	recordErr    error
+	cursorErr    error
+	setCursorErr error
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
 		settings:  make(map[uuid.UUID]queue.Settings),
 		strikes:   make(map[uuid.UUID]map[string]queue.Strike),
+		cursors:   make(map[uuid.UUID]string),
 		recorded:  make(map[uuid.UUID][]queue.Decision),
 		forgotten: make(map[uuid.UUID][]string),
 	}
@@ -50,12 +58,18 @@ func (f *fakeStore) Settings(_ context.Context, id uuid.UUID) (queue.Settings, e
 }
 
 func (f *fakeStore) Strikes(_ context.Context, id uuid.UUID) (map[string]queue.Strike, error) {
+	if f.strikesErr != nil {
+		return nil, f.strikesErr
+	}
 	out := make(map[string]queue.Strike)
 	maps.Copy(out, f.strikes[id])
 	return out, nil
 }
 
 func (f *fakeStore) Record(_ context.Context, id uuid.UUID, decisions []queue.Decision) error {
+	if f.recordErr != nil {
+		return f.recordErr
+	}
 	f.recorded[id] = append(f.recorded[id], decisions...)
 	if f.strikes[id] == nil {
 		f.strikes[id] = make(map[string]queue.Strike)
@@ -65,6 +79,21 @@ func (f *fakeStore) Record(_ context.Context, id uuid.UUID, decisions []queue.De
 			f.strikes[id][d.DownloadID] = d.Next
 		}
 	}
+	return nil
+}
+
+func (f *fakeStore) OutputCursor(_ context.Context, id uuid.UUID) (string, error) {
+	if f.cursorErr != nil {
+		return "", f.cursorErr
+	}
+	return f.cursors[id], nil
+}
+
+func (f *fakeStore) SetOutputCursor(_ context.Context, id uuid.UUID, cursor string, _ time.Time) error {
+	if f.setCursorErr != nil {
+		return f.setCursorErr
+	}
+	f.cursors[id] = cursor
 	return nil
 }
 
@@ -132,8 +161,12 @@ type fakeArrClient struct {
 	visited     []string
 	removeCalls int
 	// importErr is the ForceImport result per download id; imports lists the calls.
-	importErr map[string]error
-	imports   []string
+	importErr   map[string]error
+	imports     []string
+	folders     map[string][]string
+	folderErr   map[string]error
+	folderCalls int
+	folderDirs  []string
 }
 
 func newFakeArrClient() *fakeArrClient {
@@ -141,6 +174,8 @@ func newFakeArrClient() *fakeArrClient {
 		items:     make(map[string][]queue.Item),
 		queueErr:  make(map[string]error),
 		importErr: make(map[string]error),
+		folders:   make(map[string][]string),
+		folderErr: make(map[string]error),
 	}
 }
 
@@ -162,6 +197,15 @@ func (f *fakeArrClient) Queue(_ context.Context, kind domain.AppKind, baseURL, _
 	return f.items[key], nil
 }
 
+func (f *fakeArrClient) ListFolder(_ context.Context, _ domain.AppKind, _, _, dir string) ([]string, error) {
+	f.folderCalls++
+	f.folderDirs = append(f.folderDirs, dir)
+	if err := f.folderErr[dir]; err != nil {
+		return nil, err
+	}
+	return f.folders[dir], nil
+}
+
 func (f *fakeArrClient) RemoveQueueItem(_ context.Context, kind domain.AppKind, _, _ string, id int32, blocklist, research bool) error {
 	f.removeCalls++
 	f.removals = append(f.removals, fakeRemoval{kind: kind, id: id, blocklist: blocklist, research: research})
@@ -177,14 +221,29 @@ func (f *fakeEventPublisher) Publish(_ context.Context, frame events.Frame) {
 }
 
 type fakeMetricsRecorder struct {
-	strikes  []string
-	removals []string
-	skipped  []string
-	imports  []string
+	strikes   []string
+	removals  []string
+	skipped   []string
+	imports   []string
+	outputs   []string
+	outputLog []string
+}
+
+func (f *fakeMetricsRecorder) QueueOutputCheckInit(instance string, results []string) {
+	f.outputLog = append(f.outputLog, instance+":init:"+strings.Join(results, ","))
 }
 
 func (f *fakeMetricsRecorder) QueueImport(instance, result string) {
 	f.imports = append(f.imports, instance+":"+result)
+}
+
+func (f *fakeMetricsRecorder) QueueOutputCheck(instance, result string) {
+	f.outputs = append(f.outputs, instance+":"+result)
+	f.outputLog = append(f.outputLog, instance+":"+result)
+}
+
+func (f *fakeMetricsRecorder) QueueOutputNotVisibleAt(instance string, at time.Time) {
+	f.outputLog = append(f.outputLog, instance+":not_visible_at:"+strconv.FormatInt(at.Unix(), 10))
 }
 
 func (f *fakeMetricsRecorder) QueueStruck(instance, rule, mode string) {
@@ -200,7 +259,10 @@ func (f *fakeMetricsRecorder) QueueSkipped(instance, reason string) {
 }
 
 func newTestService(st *fakeStore, is *fakeInstanceSource, arr *fakeArrClient, clk clock.Clock, ev *fakeEventPublisher, m *fakeMetricsRecorder) *queue.Service {
-	logger := slog.New(slog.DiscardHandler)
+	return newTestServiceWithLogger(st, is, arr, clk, ev, m, slog.New(slog.DiscardHandler))
+}
+
+func newTestServiceWithLogger(st *fakeStore, is *fakeInstanceSource, arr *fakeArrClient, clk clock.Clock, ev *fakeEventPublisher, m *fakeMetricsRecorder, logger *slog.Logger) *queue.Service {
 	return queue.NewService(st, is, arr, clk, ev, m, logger)
 }
 
