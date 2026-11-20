@@ -5,21 +5,35 @@ least one `// ruleid:` line it must report and one `// ok:` line it must not.
 Every fixture starts with the `//go:build semgrep_fixture` constraint, so no Go
 build, vet or gosec run ever loads the code the rules are meant to report.
 Semgrep's test mode replays every fixture; only when all pass is the scan of
-the tracked Go files trusted. The scan fails on any finding, on any Semgrep
-error, and when the report does not list exactly the files that were passed.
+the Go files trusted: every tracked file still present plus every untracked file
+Git does not ignore, so a new file in a working tree is scanned too. The scan
+fails on any finding, on any Semgrep error, and when the report does not list
+exactly the files that were passed.
+
+`--semgrep PATH` runs a Semgrep binary directly instead of the image, for hosts
+without docker such as a lane sandbox. It prints the binary's version, keeps
+Semgrep's state files in a temporary directory, and applies the same fixture
+replay and scanned-file check; CI keeps the pinned image. A hand-run
+`semgrep scan` on a directory skips `*_test.go` files without saying so (PR 1244
+round r16), so lane briefs name this mode (.config/lane-brief.yaml).
 
 Copied from tekmora/discord-bot tools/ci/semgrep_scan.py (EUPL-1.2, same author)
-at commit 70642249adc9d99375b707cebe0eb756970905cc. Changed here: this paragraph.
+at commit 70642249adc9d99375b707cebe0eb756970905cc. Changed here: this paragraph,
+the `--semgrep` mode and the untracked-file targets.
 
 Usage: python3 -I tools/ci/semgrep_scan.py --image NAME:TAG@sha256:DIGEST
+       python3 -I tools/ci/semgrep_scan.py --semgrep "$(command -v semgrep)"
 """
 
 import argparse
 import json
+import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 RULES = ".semgrep.yml"
 FIXTURES = "tools/ci/semgrep/testdata"
@@ -38,6 +52,7 @@ class ScanError(Exception):
 
 
 def run(command, root):
+    """Run command in root with a bound; a start failure or timeout is a ScanError."""
     try:
         return subprocess.run(command, cwd=root, capture_output=True, text=True,
                               timeout=TIMEOUT_SECONDS, check=False)
@@ -45,11 +60,41 @@ def run(command, root):
         raise ScanError(f"{command[0]} did not complete: {err}") from err
 
 
-def semgrep(docker, image, root, args):
-    command = [docker, "run", "--rm", "--network", "none",
-               "--volume", f"{root}:/src:ro", "--workdir", "/src",
-               "--entrypoint", "semgrep", image, *args]
-    return run(command, root)
+def image_runner(docker, image, root):
+    """Return a call that runs Semgrep in the pinned image, the tree mounted read-only."""
+    def call(args):
+        """Run Semgrep with args in a fresh container without network."""
+        command = [docker, "run", "--rm", "--network", "none",
+                   "--volume", f"{root}:/src:ro", "--workdir", "/src",
+                   "--entrypoint", "semgrep", image, *args]
+        return run(command, root)
+    return call
+
+
+def native_runner(binary, root, state):
+    """Return a call that runs a local Semgrep binary, its state files kept under state.
+
+    The variable names are the ones semgrep/env.py reads (checked on 1.183.0). They go into this
+    process's environment, which the child inherits, so the one subprocess call in run() keeps its
+    source text and its Opengrep baseline key (tools/ci/codacy_opengrep/baseline.json, #1100)."""
+    os.environ.update({"XDG_CONFIG_HOME": state,
+                "SEMGREP_SETTINGS_FILE": os.path.join(state, "settings.yml"),
+                "SEMGREP_LOG_FILE": os.path.join(state, "semgrep.log"),
+                "SEMGREP_VERSION_CACHE_PATH": os.path.join(state, "version")})
+
+    def call(args):
+        """Run the local binary with args and the state environment."""
+        return run([binary, *args], root)
+    return call
+
+
+def native_version(semgrep):
+    """Return the version line of the local binary, refusing a failed or empty answer."""
+    result = semgrep(["--version"])
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if result.returncode != 0 or not lines:
+        raise ScanError(f"semgrep --version exited {result.returncode} without a version")
+    return lines[-1]
 
 
 def rule_ids(root):
@@ -81,10 +126,10 @@ def fixtures(root, ids):
     return [path.relative_to(root).as_posix() for path in files]
 
 
-def self_test(docker, image, root, ids):
-    names = fixtures(root, ids)
+def self_test(semgrep, names, ids):
+    """Replay every rule fixture; a fixture that does not pass is a ScanError."""
     for name in names:
-        result = semgrep(docker, image, root, ["scan", "--test", "--config", RULES, name, *SEMGREP_FLAGS])
+        result = semgrep(["scan", "--test", "--config", RULES, name, *SEMGREP_FLAGS])
         if result.returncode != 0 or "All tests passed" not in result.stdout:
             sys.stderr.write(result.stdout[-4000:] + result.stderr[-4000:])
             raise ScanError(f"fixture {name} did not pass (exit {result.returncode})")
@@ -92,19 +137,21 @@ def self_test(docker, image, root, ids):
 
 
 def targets(root):
-    listed = run(["git", "ls-files", "-z", "--", "*.go"], root)
+    """Tracked Go files still on disk plus untracked ones Git does not ignore, fixtures left out."""
+    listed = run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.go"], root)
     if listed.returncode != 0:
         raise ScanError(f"git ls-files failed: {listed.stderr.strip()}")
-    names = [n for n in listed.stdout.split("\0") if n and not n.startswith(FIXTURES + "/")]
+    names = sorted({n for n in listed.stdout.split("\0")
+                    if n and not n.startswith(FIXTURES + "/") and (root / n).is_file()})
     if not names or len(names) > MAX_TARGETS:
         raise ScanError(f"{len(names)} Go files to scan, expected 1 to {MAX_TARGETS}")
     return names
 
 
-def scan(docker, image, root):
+def scan(semgrep, root):
+    """Scan every target and fail unless the report is clean and names each target as scanned."""
     names = targets(root)
-    result = semgrep(docker, image, root,
-                     ["scan", "--config", RULES, "--error", "--strict", "--json", *SEMGREP_FLAGS, "--", *names])
+    result = semgrep(["scan", "--config", RULES, "--error", "--strict", "--json", *SEMGREP_FLAGS, "--", *names])
     try:
         report = json.loads(result.stdout)
     except json.JSONDecodeError as err:
@@ -126,19 +173,50 @@ def scan(docker, image, root):
     print(f"Semgrep: {len(names)} files scanned, 0 findings")
 
 
+def checked_inputs(root):
+    """Rule ids and fixture paths, refused before any Semgrep call."""
+    ids = rule_ids(root)
+    return ids, fixtures(root, ids)
+
+
+def image_scan(docker, image, root):
+    """Check the image pin, then replay the fixtures and scan inside the pinned image."""
+    if not IMAGE_RE.match(image):
+        raise ScanError(f"image '{image}' is not pinned as NAME:TAG@sha256:DIGEST")
+    ids, names = checked_inputs(root)
+    semgrep = image_runner(docker, image, root)
+    self_test(semgrep, names, ids)
+    scan(semgrep, root)
+
+
+def native_scan(name, root):
+    """Resolve the local binary, then replay the fixtures and scan with state in a temporary directory."""
+    binary = shutil.which(name)
+    if binary is None:
+        raise ScanError(f"--semgrep '{name}' is not an executable file")
+    ids, names = checked_inputs(root)
+    with tempfile.TemporaryDirectory(prefix="semgrep-state-") as state:
+        semgrep = native_runner(binary, root, state)
+        print(f"Semgrep native: {binary} version {native_version(semgrep)}; CI runs the pinned image")
+        self_test(semgrep, names, ids)
+        scan(semgrep, root)
+
+
 def main():
+    """Parse the mode flags, run the scan and return the exit status."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--image", required=True, help="Semgrep image pinned by digest")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--image", help="Semgrep image pinned by digest (CI, hosts with docker)")
+    mode.add_argument("--semgrep", help="Semgrep binary run directly (hosts without docker, lane sandboxes)")
     parser.add_argument("--docker", default="docker")
     parser.add_argument("--root", default=".")
     args = parser.parse_args()
     root = pathlib.Path(args.root).resolve()
     try:
-        if not IMAGE_RE.match(args.image):
-            raise ScanError(f"image '{args.image}' is not pinned as NAME:TAG@sha256:DIGEST")
-        ids = rule_ids(root)
-        self_test(args.docker, args.image, root, ids)
-        scan(args.docker, args.image, root)
+        if args.image is not None:
+            image_scan(args.docker, args.image, root)
+        else:
+            native_scan(args.semgrep, root)
     except ScanError as err:
         print(f"Semgrep scan failed: {err}", file=sys.stderr)
         return 1

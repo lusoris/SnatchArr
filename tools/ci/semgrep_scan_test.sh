@@ -5,8 +5,9 @@
 # Planted cases for semgrep_scan.py: a minimal repository with one rule, one fixture and one
 # Go file, unchanged and with one defect planted at a time. A stub stands in for docker, so no
 # image is pulled; it logs every call, and a defect in the rules, the fixtures or the image
-# reference must be refused before the stub runs. Last: the pinned image comes from
-# tools/ci/tool-versions.env and the scan is wired into Makefile, lefthook, CI and Renovate.
+# reference must be refused before the stub runs. The same stub stands in for a local Semgrep
+# binary (--semgrep). Last: the pinned image comes from tools/ci/tool-versions.env and the scan
+# is wired into Makefile, lefthook, CI, Renovate and the lane brief requirements.
 #
 #   tools/ci/semgrep_scan_test.sh
 #
@@ -86,6 +87,15 @@ cat > "$STUB" <<'EOF'
 #!/bin/sh
 set -eu
 echo "$*" >> "$STUB_LOG"
+# Called as a native binary (no docker "run"): Semgrep state must sit in the scan's temporary
+# directory, as it would fail on a read-only home.
+if [ "$1" != run ]; then
+  case "${XDG_CONFIG_HOME:-}" in
+    */semgrep-state-*) ;;
+    *) echo "state file under the home directory"; exit 3 ;;
+  esac
+fi
+if [ "$1" = --version ]; then echo "semgrep stub"; echo "9.9.9"; exit 0; fi
 for arg in "$@"; do
   if [ "$arg" = "--test" ]; then
     if [ "$STUB_MODE" = fixture-fails ]; then echo "1 test failed"; exit 1; fi
@@ -149,8 +159,13 @@ expect() {
   (cd "$root" && sh -c "$edit")
   : > "$WORK/calls"
   got=0
-  out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" python3 -I "$SCAN" --root "$root" --docker "$STUB" \
-    --image "$image" 2>&1)" || got=$?
+  if [ -n "${NATIVE:-}" ]; then
+    out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" python3 -I "$SCAN" --root "$root" --semgrep "$NATIVE" \
+      2>&1)" || got=$?
+  else
+    out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" python3 -I "$SCAN" --root "$root" --docker "$STUB" \
+      --image "$image" 2>&1)" || got=$?
+  fi
   check_case "$name" "$want" "$got" "$needle" "$out" "output lacks"
   if [ "$called" = no ] && [ -s "$WORK/calls" ]; then
     printf 'FAIL %s: refused only after running docker\n' "$name" >&2
@@ -199,7 +214,26 @@ expect 1 "scan reports a finding" finding yes "1 finding(s), 0 error(s)"
 expect 1 "scan skips a file" skipped yes "report scanned 0 of 1 files; not scanned: ['main.go']"
 expect 1 "scan prints no report" no-json yes "no JSON report"
 expect 1 "clean report, failing exit" exit-2 yes "semgrep exited 2 with a clean report"
-expect 1 "no Go file to scan" clean yes "0 Go files to scan, expected 1 to 4096" 'git rm --quiet --cached main.go'
+expect 1 "no Go file to scan" clean yes "0 Go files to scan, expected 1 to 4096" 'git rm --quiet --cached main.go && rm main.go'
+
+# Targets: what a working tree holds, not only what the index lists.
+expect 0 "untracked Go file is scanned" clean yes "Semgrep: 2 files scanned, 0 findings" \
+  'printf "package main\n" > extra.go'
+expect 0 "ignored Go file is left out" clean yes "Semgrep: 1 files scanned, 0 findings" \
+  'printf "ignored.go\n" > .gitignore && printf "package main\n" > ignored.go'
+expect 0 "deleted tracked file is left out" clean yes "Semgrep: 1 files scanned, 0 findings" \
+  'printf "package main\n" > gone.go && git add gone.go && rm gone.go'
+
+# Native binary (--semgrep): same replay and scanned-file check, state outside the home directory.
+NATIVE="$STUB" expect 0 "native binary, clean repository" clean yes \
+  "Semgrep native: $STUB version 9.9.9; CI runs the pinned image"
+NATIVE="$STUB" expect 1 "native binary, scan skips a file" skipped yes \
+  "report scanned 0 of 1 files; not scanned: ['main.go']"
+NATIVE="$STUB" expect 1 "native binary, scan reports a finding" finding yes "1 finding(s), 0 error(s)"
+# shellcheck disable=SC2016 # literal backticks in semgrep_scan.py's diagnostic
+NATIVE="$STUB" expect 1 "native binary, rule without an ok line" clean no 'no `ok:` fixture line for rule(s): demo-rule' \
+  "sed -i '/ok:/d' $FX/demo-rule.go"
+NATIVE="$WORK/no-such-semgrep" expect 1 "native binary missing" clean no "is not an executable file"
 
 SEMGREP_JOB="$WORK/ci-semgrep-job.yml"
 if [ ! -f "$ROOT/.github/workflows/ci.yml" ]; then
@@ -219,7 +253,8 @@ for wired in \
   "lefthook.yml:make semgrep-scan" \
   ".github/workflows/ci.yml#semgrep:tools/ci/tool-versions.env" \
   ".github/workflows/ci.yml#semgrep:python3 -I tools/ci/semgrep_scan.py --image" \
-  "renovate.json:SEMGREP_IMAGE="; do
+  "renovate.json:SEMGREP_IMAGE=" \
+  ".config/lane-brief.yaml:python3 -I tools/ci/semgrep_scan.py --semgrep"; do
   label="${wired%%:*}"
   pattern="${wired#*:}"
   case "$label" in
@@ -239,6 +274,6 @@ for wired in \
     exit 1
   fi
 done
-echo "ok   Makefile (verify-all, semgrep-scan), lefthook pre-push, CI semgrep job and Renovate wire semgrep_scan.py and SEMGREP_IMAGE"
+echo "ok   Makefile (verify-all, semgrep-scan), lefthook pre-push, CI semgrep job, Renovate and lane briefs wire semgrep_scan.py and SEMGREP_IMAGE"
 
 echo "semgrep scan: $accepted accepted, $refused refused"
