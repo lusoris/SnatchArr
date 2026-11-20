@@ -40,6 +40,7 @@ type applySettingCase struct {
 	wantErr bool
 	errIs   error
 	errAlso error
+	setup   func(*Options)
 	check   func(t *testing.T, o Options)
 }
 
@@ -138,6 +139,9 @@ var applySettingCases = []applySettingCase{
 		name: "positive metadata cache l2 none",
 		key:  "snatcharr.metadata.cache.l2",
 		val:  "none",
+		setup: func(o *Options) {
+			o.Metadata.Cache.L2 = MetadataCacheL2Redis
+		},
 		check: func(t *testing.T, o Options) {
 			t.Helper()
 			if o.Metadata.Cache.L2 != MetadataCacheL2None {
@@ -209,6 +213,9 @@ func TestApplySettingTableDriven(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			o := Default()
+			if tc.setup != nil {
+				tc.setup(&o)
+			}
 			err := ApplySetting(&o, tc.key, tc.val)
 			if tc.wantErr {
 				if err == nil {

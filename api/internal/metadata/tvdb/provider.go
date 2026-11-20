@@ -206,6 +206,10 @@ func New(apiKey, pin string, l1 *memory.Cache, clk clock.Clock, logger *slog.Log
 	if err != nil {
 		return nil, err
 	}
+	basePath, err := cacheBasePath(cfg.baseURL)
+	if err != nil {
+		return nil, err
+	}
 	outbound, err := ratelimit.NewOutbound(ratelimit.TransportOptions{Rate: cfg.rate, MaxWait: callTimeout}, clk)
 	if err != nil {
 		return nil, fmt.Errorf("tvdb: rate limit: %w", err)
@@ -222,7 +226,7 @@ func New(apiKey, pin string, l1 *memory.Cache, clk clock.Clock, logger *slog.Log
 		return nil, err
 	}
 	baseTransport, ownedTransport := ownTransport(cfg.tlsConfig)
-	transport := cache.Wrap(outbound.Wrap(&capTransport{next: baseTransport, max: maxBodyBytes}))
+	transport := cache.Wrap(&originGuard{next: outbound.Wrap(&capTransport{next: baseTransport, max: maxBodyBytes}), basePath: basePath})
 	transport = &cacheMetricsTransport{next: transport, metrics: cfg.metrics}
 	hc := httpclient.New(httpclient.Options{
 		Name:      "snatcharr.metadata.tvdb",
@@ -261,6 +265,17 @@ func cacheHost(baseURL string) (string, error) {
 		return "", errors.New("tvdb: invalid base URL")
 	}
 	return strings.ToLower(u.Hostname()), nil
+}
+
+func cacheBasePath(baseURL string) (string, error) {
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Scheme == "" || u.Hostname() == "" {
+		return "", errors.New("tvdb: invalid base URL")
+	}
+	return strings.TrimRight(u.Path, "/"), nil
 }
 
 func newHTTPCache(l1 *memory.Cache, logger *slog.Logger, host string, cfg config, bounds redisBounds) (*httpcache.Cache, rueidis.Client, error) {
@@ -377,6 +392,7 @@ func redisClientOption(opts rediscache.Options) (rueidis.ClientOption, error) {
 	}
 	clientOpts := rueidis.ClientOption{
 		InitAddress: addrs, Username: opts.Username, Password: opts.Password, SelectDB: opts.DB,
+		DisableCache: true, // Redis is a plain L2 store; SnatchArr does not use client-side tracking.
 	}
 	if opts.TLS {
 		clientOpts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}

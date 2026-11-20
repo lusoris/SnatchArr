@@ -26,6 +26,7 @@ import (
 
 	tvdb "github.com/golusoris/goenvoy/metadata/video/tvdb"
 	"github.com/jonboulle/clockwork"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/rueidis"
 
 	"github.com/golusoris/golusoris/cache/memory"
@@ -44,32 +45,35 @@ const (
 
 // stub is a TVDB API double. Every route counts its hits.
 type stub struct {
-	t             *testing.T
-	srv           *httptest.Server
-	tlsConfig     *tls.Config
-	total         atomic.Int64
-	logins        atomic.Int64
-	loginRC       int
-	dataRC        int // when non-zero every data route answers with this status
-	series        map[int]string
-	noTr          map[int]bool     // series ids whose deu translation answers 404
-	aliases       map[int][]string // series id -> deu aliases
-	movies        map[string]int   // remote id -> movie id
-	movieAli      map[int][]string
-	delay         time.Duration
-	age           int64
-	agent         atomic.Value  // last User-Agent header seen
-	started       chan struct{} // signals a held series request
-	release       <-chan struct{}
-	canceled      chan struct{} // signals cancellation of the held series request
-	otherStarted  chan struct{}
-	otherRelease  <-chan struct{}
-	otherCanceled chan time.Time
-	pathMu        sync.Mutex
-	pathHits      map[string]int
-	requestTimes  [16]time.Time
-	requestCount  int
-	redirect      func(http.ResponseWriter, *http.Request) bool
+	t                      *testing.T
+	srv                    *httptest.Server
+	tlsConfig              *tls.Config
+	total                  atomic.Int64
+	logins                 atomic.Int64
+	loginRC                int
+	dataRC                 int // when non-zero every data route answers with this status
+	series                 map[int]string
+	noTr                   map[int]bool     // series ids whose deu translation answers 404
+	aliases                map[int][]string // series id -> deu aliases
+	movies                 map[string]int   // remote id -> movie id
+	movieAli               map[int][]string
+	delay                  time.Duration
+	age                    int64
+	agent                  atomic.Value  // last User-Agent header seen
+	started                chan struct{} // signals a held series request
+	release                <-chan struct{}
+	canceled               chan struct{} // signals cancellation of the held series request
+	otherStarted           chan struct{}
+	otherRelease           <-chan struct{}
+	otherCanceled          chan time.Time
+	pathMu                 sync.Mutex
+	pathHits               map[string]int
+	requestTimes           [16]time.Time
+	requestCount           int
+	redirect               func(http.ResponseWriter, *http.Request) bool
+	numericTranslationOnce atomic.Bool
+	staleWhileRevalidate   bool
+	statusHeader           string
 }
 
 func newStub(t *testing.T) *stub {
@@ -125,6 +129,12 @@ func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.age > 0 {
 		w.Header().Set("Age", strconv.FormatInt(s.age, 10))
+	}
+	if s.staleWhileRevalidate {
+		w.Header().Set("Cache-Control", "stale-while-revalidate=3600")
+	}
+	if s.statusHeader != "" {
+		w.Header().Set(cacheStatusHeader, s.statusHeader)
 	}
 	if r.Header.Get("Authorization") != "Bearer stub-token" {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -201,6 +211,10 @@ func (s *stub) data(w http.ResponseWriter, path string) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		if s.numericTranslationOnce.Swap(false) {
+			fmt.Fprint(w, `{"status":"success","data":{"name":123}}`)
+			return
+		}
 		fmt.Fprintf(w, `{"status":"success","data":{"name":%q,"language":"deu","aliases":[]}}`, name)
 	case strings.HasPrefix(path, "/series/"):
 		_, _ = fmt.Sscanf(path, "/series/%d", &id)
@@ -244,7 +258,11 @@ func (s *stub) providerWith(t *testing.T, key, pin string, logs *bytes.Buffer, l
 	if s.tlsConfig != nil {
 		opts = append(opts, withTLSConfig(s.tlsConfig))
 	}
-	opts = append(opts, extra...)
+	for _, option := range extra {
+		if option != nil {
+			opts = append(opts, option)
+		}
+	}
 	p, err := New(key, pin, l1, clock.NewFake(), logger, opts...)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -553,7 +571,7 @@ func TestCacheTTLUsesOriginAgeBoundary(t *testing.T) {
 		age      int64
 		wantData int64
 	}{
-		{"positive before expiry", int64(PositiveTTL/time.Second) - 1, 2},
+		{"positive before expiry", int64((PositiveTTL - time.Hour) / time.Second), 2},
 		{"boundary at expiry", int64(PositiveTTL / time.Second), 4},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -573,11 +591,61 @@ func TestCacheTTLUsesOriginAgeBoundary(t *testing.T) {
 	}
 }
 
+func TestUndecodableTranslationIsNotCached(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.numericTranslationOnce.Store(true)
+	p := s.provider(t, plantedKey, "", nil)
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err == nil {
+		t.Fatal("first translation unexpectedly succeeded")
+	}
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil {
+		t.Fatalf("second TitlesFor() error = %v", err)
+	}
+	if titles := titlesOf(got); len(titles) != 2 || titles[0] != "Breaking Bad DE" {
+		t.Fatalf("second TitlesFor() = %v, want corrected translation", titles)
+	}
+	s.pathMu.Lock()
+	translationHits := s.pathHits["/series/81189/translations/deu"]
+	s.pathMu.Unlock()
+	if translationHits != 2 {
+		t.Fatalf("translation requests = %d, want 2", translationHits)
+	}
+}
+
+func TestOriginStaleWhileRevalidateIsIgnored(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.age = int64(PositiveTTL / time.Second)
+	s.staleWhileRevalidate = true
+	p := s.provider(t, plantedKey, "", nil)
+	for range 2 {
+		resp, err := p.http.Do(authorizedRequest(t, s, "/series/81189"))
+		if err != nil {
+			t.Fatalf("Do() error = %v", err)
+		}
+		if status := resp.Header.Get(cacheStatusHeader); status == "STALE" {
+			t.Fatalf("cache status = STALE, want synchronous re-fetch")
+		}
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}
+	s.pathMu.Lock()
+	hits := s.pathHits["/series/81189"]
+	s.pathMu.Unlock()
+	if hits != 2 {
+		t.Fatalf("series requests = %d, want 2", hits)
+	}
+}
+
 func TestCredentialedResponsesNeedSharedHost(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name string
-		new  func(t *testing.T, p *Provider, s *stub) *http.Request
+		name  string
+		new   func(t *testing.T, p *Provider, s *stub) *http.Request
+		extra Option
 	}{
 		{
 			name: "login POST",
@@ -592,7 +660,8 @@ func TestCredentialedResponsesNeedSharedHost(t *testing.T) {
 			},
 		},
 		{
-			name: "bearer GET without shared host",
+			name:  "bearer GET without shared host",
+			extra: withSharedHost(false),
 			new: func(t *testing.T, _ *Provider, s *stub) *http.Request {
 				t.Helper()
 				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.srv.URL+"/series/81189", nil)
@@ -607,7 +676,7 @@ func TestCredentialedResponsesNeedSharedHost(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := newStub(t)
-			p := s.providerWith(t, plantedKey, plantedPIN, nil, testPool(t), withSharedHost(false))
+			p := s.providerWith(t, plantedKey, plantedPIN, nil, testPool(t), tc.extra)
 			for range 2 {
 				resp, err := p.http.Do(tc.new(t, p, s))
 				if err != nil {
@@ -709,6 +778,17 @@ func TestRedisAddressLimit(t *testing.T) {
 				t.Fatalf("address cap error = %v, want 16", err)
 			}
 		})
+	}
+}
+
+func TestRedisClientOptionDisablesClientCache(t *testing.T) {
+	t.Parallel()
+	got, err := redisClientOption(rediscache.Options{Addr: "localhost:6379"})
+	if err != nil {
+		t.Fatalf("redisClientOption() error = %v", err)
+	}
+	if !got.DisableCache {
+		t.Fatal("DisableCache = false, want true for the plain L2 client")
 	}
 }
 
@@ -1014,6 +1094,63 @@ func TestCacheMetrics(t *testing.T) {
 			t.Fatalf("cache metric %s = %v (present %t), want %v", tc.status, got, ok, tc.want)
 		}
 	}
+}
+
+func TestCacheMetricsNormalizesUncachedStatuses(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	m, reg := metricstest.New(t)
+	p := s.providerWith(t, plantedKey, plantedPIN, nil, testPool(t), WithMetrics(m))
+	s.dataRC = http.StatusTooManyRequests
+	doPassThrough(t, p, s)
+	after429 := noneCacheRequests(t, reg)
+	if after429 < 1 {
+		t.Fatalf("cache metric NONE after 429 = %v, want at least 1 (one per attempt)", after429)
+	}
+	// golusoris returns a 429 unchanged, so an origin status header reaches the metric as sent.
+	s.statusHeader = "planted"
+	doPassThrough(t, p, s)
+	if got := noneCacheRequests(t, reg); got != 2*after429 {
+		t.Fatalf("cache metric NONE after planted status = %v, want %v", got, 2*after429)
+	}
+	if got, ok := metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
+		"provider": Source,
+		"status":   "planted",
+	}); ok {
+		t.Fatalf("cache metric status planted = %v, want no series", got)
+	}
+}
+
+func doPassThrough(t *testing.T, p *Provider, s *stub) {
+	t.Helper()
+	resp, err := p.http.Do(authorizedRequest(t, s, "/series/81189"))
+	if err != nil && resp == nil {
+		t.Fatalf("429 Do() error = %v", err)
+	}
+	if resp != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Fatalf("Close(429) error = %v", closeErr)
+		}
+	}
+}
+
+func noneCacheRequests(t *testing.T, reg prometheus.Gatherer) float64 {
+	t.Helper()
+	got, _ := metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
+		"provider": Source,
+		"status":   cacheStatusNone,
+	})
+	return got
+}
+
+func authorizedRequest(t *testing.T, s *stub, path string) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.srv.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer stub-token")
+	return req
 }
 
 type closeOnlyRedisClient struct {
