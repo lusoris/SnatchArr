@@ -27,6 +27,18 @@ func (q *Queries) DeleteQueueStrike(ctx context.Context, arg DeleteQueueStrikePa
 	return err
 }
 
+const getQueueOutputCursor = `-- name: GetQueueOutputCursor :one
+SELECT instance_id, last_parent, updated_at FROM queue_output_cursors
+WHERE instance_id = $1
+`
+
+func (q *Queries) GetQueueOutputCursor(ctx context.Context, instanceID uuid.UUID) (QueueOutputCursor, error) {
+	row := q.db.QueryRow(ctx, getQueueOutputCursor, instanceID)
+	var i QueueOutputCursor
+	err := row.Scan(&i.InstanceID, &i.LastParent, &i.UpdatedAt)
+	return i, err
+}
+
 const getQueuePolicy = `-- name: GetQueuePolicy :one
 
 SELECT instance_id, enabled, rules, grace_s, min_bytes_per_second, min_custom_format_score, max_removals_per_sweep, updated_at, max_imports_per_sweep FROM queue_policies
@@ -111,6 +123,25 @@ func (q *Queries) PurgeExpiredQueueStrikes(ctx context.Context, arg PurgeExpired
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertQueueOutputCursor = `-- name: UpsertQueueOutputCursor :exec
+INSERT INTO queue_output_cursors (instance_id, last_parent, updated_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (instance_id) DO UPDATE SET
+    last_parent = EXCLUDED.last_parent,
+    updated_at = EXCLUDED.updated_at
+`
+
+type UpsertQueueOutputCursorParams struct {
+	InstanceID uuid.UUID
+	LastParent string
+	UpdatedAt  time.Time
+}
+
+func (q *Queries) UpsertQueueOutputCursor(ctx context.Context, arg UpsertQueueOutputCursorParams) error {
+	_, err := q.db.Exec(ctx, upsertQueueOutputCursor, arg.InstanceID, arg.LastParent, arg.UpdatedAt)
+	return err
 }
 
 const upsertQueuePolicy = `-- name: UpsertQueuePolicy :exec

@@ -125,6 +125,9 @@ func evaluateItem(s Settings, item Item, prev Strike, now time.Time, spent *budg
 	}
 	rule, class, pattern, pct := matchRule(s, item, prev, now)
 	if rule == "" {
+		if item.OutputUnchecked && noFilesUnlisted(item) {
+			return uncheckedOutputDecision(item, prev, now)
+		}
 		return Decision{
 			ItemID:     item.ID,
 			DownloadID: item.DownloadID,
@@ -144,6 +147,21 @@ func evaluateItem(s Settings, item Item, prev Strike, now time.Time, spent *budg
 	d.Pattern = pattern
 	d.MatchPercent = pct
 	return d
+}
+
+func uncheckedOutputDecision(item Item, prev Strike, now time.Time) Decision {
+	return Decision{
+		ItemID:     item.ID,
+		DownloadID: item.DownloadID,
+		Next: Strike{
+			Rule:          prev.Rule,
+			Count:         prev.Count,
+			LastSizeLeft:  item.SizeLeft,
+			LastSeen:      now,
+			ImportedAt:    prev.ImportedAt,
+			ImportRefused: prev.ImportRefused,
+		},
+	}
 }
 
 func nextStrikeCount(prev Strike, r Rule, threshold int) int {
@@ -478,6 +496,9 @@ func checkDownloadHealthRule(rule Rule, s Settings, item Item, prev Strike, now 
 }
 
 func checkPolicyRule(rule Rule, s Settings, item Item, c *itemClassifier) bool {
+	if noFilesUnlisted(item) {
+		return false
+	}
 	//exhaustive:ignore
 	switch rule {
 	case RuleIDMatched:
