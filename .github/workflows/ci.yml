@@ -161,7 +161,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: The Opengrep ratchet refuses its recorded regressions
         run: |
           sh tools/ci/codacy_opengrep_scan_test.sh
@@ -486,7 +486,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -781,7 +781,7 @@ jobs:
           package_json_file: web/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Install Playwright browsers
         run: cd web && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
       # The repository's own web checks of make web-verify, which the shared sveltesentio
@@ -1023,7 +1023,7 @@ jobs:
           package_json_file: web/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Install web dependencies
         run: cd web && pnpm install --frozen-lockfile
       - name: Clone gate
