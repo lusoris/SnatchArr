@@ -13,6 +13,7 @@ trap 'rm -rf "$work"' EXIT
 failed=0
 
 # shellcheck source=tools/ci/test_lib.sh
+# shellcheck disable=SC1091 # standalone shellcheck does not follow sourced files
 . "$HERE/test_lib.sh"
 
 # seed_repo DIR: a repository whose base commit holds lib.sh and lib.py, both with headers.
@@ -28,15 +29,20 @@ seed_repo() {
 
 # expect NAME WANT_STATUS WANT_TEXT EDIT [BASE]: the function EDIT changes the repository in $repo, then the check runs.
 expect() {
-    local name=$1 want=$2 text=$3 edit=$4 base=${5:-main} out status
+    local name=$1 want=$2 text=$3 edit=$4 base=${5:-main} tool_path=${6:-} more_text=${7:-} out status
     repo="$work/$(printf '%s' "$name" | tr -c 'a-z0-9' '-')"
     seed_repo "$repo"
     (cd "$repo" && "$edit")
     set +e
-    out=$(python3 -I "$check" --root "$repo" "--base=$base" 2>&1)
+    if [ -n "$tool_path" ]; then
+        out=$(PATH="$tool_path" python3 -I "$check" --root "$repo" "--base=$base" 2>&1)
+    else
+        out=$(python3 -I "$check" --root "$repo" "--base=$base" 2>&1)
+    fi
     status=$?
     set -e
-    if [ "$status" -ne "$want" ] || ! printf '%s' "$out" | grep -qF -- "$text"; then
+    if [ "$status" -ne "$want" ] || ! printf '%s' "$out" | grep -qF -- "$text" ||
+        { [ -n "$more_text" ] && ! printf '%s' "$out" | grep -qF -- "$more_text"; }; then
         echo "FAIL $name: status $status (want $want), output: $out"
         failed=1
     else
@@ -59,8 +65,10 @@ edit_3() {
     sed -i "s/echo bare/echo changed/" lib.sh
 }
 
-# edit_4: deletion inside a bare shell function refused.
+# edit_4: deleting a committed body line leaves a valid bare function and is refused.
 edit_4() {
+    sed -i '/echo bare/a\    :' lib.sh
+    git add lib.sh && git commit -q -m extra-body
     sed -i "/echo bare/d" lib.sh
 }
 
@@ -182,6 +190,408 @@ edit_25() {
     sed -i "s/echo bare/echo changed/" "my script.sh"
 }
 
+# edit_26: function-shaped Python source inside a multiline double-quoted argument is ignored.
+edit_26() {
+    printf '%s\n' '#!/usr/bin/env bash' 'python3 -c "' 'bare_double() {' '    :' '}' '"' >quoted-double.sh
+}
+
+# edit_27: function-shaped text inside a multiline single-quoted argument is ignored.
+edit_27() {
+    printf '%s\n' '#!/usr/bin/env bash' "python3 -c '" 'bare_single() {' '    :' '}' "'" >quoted-single.sh
+}
+
+# edit_28: function-shaped heredoc content is ignored.
+edit_28() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<EOF' 'bare_here() {' '    :' '}' 'EOF' >heredoc.sh
+}
+
+# edit_29: function-shaped <<- heredoc content is ignored with tab stripping.
+edit_29() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<-EOF' $'\tbare_tabbed() {' $'\t    :' $'\t}' $'\tEOF' >heredoc-tabs.sh
+}
+
+# edit_30: real function after a multiline quoted argument is still checked.
+edit_30() {
+    printf '%s\n' '#!/usr/bin/env bash' 'python3 -c "' 'inside_string() {' '    :' '}' '"' \
+        'bare_after_string() {' '    :' '}' >after-string.sh
+}
+
+# edit_31: real function after a heredoc is still checked.
+edit_31() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<EOF' 'inside_heredoc() {' '    :' '}' 'EOF' \
+        'bare_after_heredoc() {' '    :' '}' >after-heredoc.sh
+}
+
+# edit_32: escaped quote does not close a multiline double-quoted argument.
+edit_32() {
+    printf '%s\n' '#!/usr/bin/env bash' 'python3 -c "' '  \" escaped quote' \
+        'inside_escaped() {' '    :' '}' '"' >escaped-quote.sh
+}
+
+# edit_33: quote characters in comments do not affect quote state.
+edit_33() {
+    printf '%s\n' '#!/usr/bin/env bash' '# "' "# '" '' 'bare_after_comments() {' '    :' '}' >comment-quotes.sh
+}
+
+# edit_34: a brace inside a multiline string does not end the real function early.
+edit_34() {
+    printf '%s\n' '' 'undoc_string() {' '    python3 -c "' '}' '"' '    echo changed' '}' >>lib.sh
+    git add lib.sh && git commit -q -m string
+    sed -i 's/echo changed/echo touched/' lib.sh
+}
+
+# edit_35: ANSI-C escaped apostrophe closes only at the final quote.
+edit_35() {
+    printf '%s\n' '#!/usr/bin/env bash' "printf '%s\\n' \$'it\\'s'" 'bare_ansi() { :; }' >ansi.sh
+}
+
+# edit_36: an escaped backslash leaves the next apostrophe unescaped.
+edit_36() {
+    printf '%s\n' '#!/usr/bin/env bash' "printf '%s\\n' \$'a\\\\'" 'bare_ansi_boundary() { :; }' >ansi-boundary.sh
+}
+
+# edit_37: command substitution inside double quotes parses its own quotes.
+# shellcheck disable=SC2016 # literal command substitution is the fixture text
+edit_37() {
+    printf '%s\n' '#!/usr/bin/env bash' 'value="$(printf '\''%s'\'' "can'\''t")"' \
+        'bare_subst() { :; }' >subst.sh
+}
+
+# edit_38: a multiline string inside command substitution masks function text.
+# shellcheck disable=SC2016 # literal command substitution is the fixture text
+edit_38() {
+    printf '%s\n' '#!/usr/bin/env bash' 'x="$(printf '\''%s\n'\'' "' 'fake_sub() { :; }' '")"' >subst-multiline.sh
+}
+
+# edit_39: backtick substitution inside double quotes parses its own quotes.
+edit_39() {
+    printf '%s\n' '#!/usr/bin/env bash' 'value="`printf '\''%s'\'' "can'\''t"`"' \
+        'bare_backtick() { :; }' >backtick.sh
+}
+
+# edit_40: operator-adjacent hash starts a comment.
+edit_40() {
+    printf '%s\n' '#!/usr/bin/env bash' "echo a;#'" 'bare_semi() { :; }' >semi-comment.sh
+}
+
+# edit_41: hash within a word is literal and the following quote opens.
+edit_41() {
+    printf '%s\n' '#!/usr/bin/env bash' 'echo a#"' 'fake_hash() { :; }' '"' >literal-hash.sh
+}
+
+# edit_42: dollar arithmetic left shift does not start a heredoc.
+# shellcheck disable=SC2016 # literal arithmetic expansion is the fixture text
+edit_42() {
+    printf '%s\n' '#!/usr/bin/env bash' 'echo $((1 << BITS))' 'bare_bits() { :; }' >dollar-shift.sh
+}
+
+# edit_43: command arithmetic left shift does not start a heredoc.
+edit_43() {
+    printf '%s\n' '#!/usr/bin/env bash' '(( y = 1 << BITS ))' 'bare_plain_shift() { :; }' >plain-shift.sh
+}
+
+# edit_44: unquoted hyphen belongs to the whole heredoc delimiter.
+edit_44() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<END-TEXT' 'END' 'fake_early() { :; }' 'END-TEXT' >hyphen-here.sh
+}
+
+# edit_45: quoted hyphen belongs to the whole heredoc delimiter.
+edit_45() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<'END-TEXT'" 'END' 'fake_quoted() { :; }' 'END-TEXT' >quoted-hyphen.sh
+}
+
+# edit_46: mixed quoting yields EOF and does not consume the next function.
+edit_46() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<E"O"F' 'EOF' 'bare_after_mixed() { :; }' >mixed-here.sh
+}
+
+# edit_47: a heredoc after a multiline quote masks top-level function text.
+edit_47() {
+    printf '%s\n' '#!/usr/bin/env bash' 'printf '\''%s\n'\'' "prefix' \
+        'suffix"; cat <<EOF' 'fake_tail() { :; }' 'EOF' >tail-here.sh
+}
+
+# edit_48: a heredoc after a multiline quote does not close its enclosing function early.
+edit_48() {
+    printf '%s\n' '' 'undoc_tail() {' '    printf '\''%s\n'\'' "prefix' \
+        'suffix"; cat <<EOF' '}' 'EOF' '    echo a' '}' >>lib.sh
+    git add lib.sh && git commit -q -m tail
+    sed -i 's/echo a$/echo touched/' lib.sh
+}
+
+# edit_49: shfmt refuses the unclosed nested substitutions and reports their location.
+# shellcheck disable=SC2016 # literal command substitution openers are the fixture text
+edit_49() {
+    printf '%s\n' '#!/usr/bin/env bash' "$(printf '\$(%.0s' {1..33})" >deep-context.sh
+}
+
+# edit_50: a double-quoted hyphen delimiter is one word.
+edit_50() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<"END-TEXT"' 'END' 'fake_double_here() { :; }' \
+        'END-TEXT' >double-hyphen.sh
+}
+
+# edit_51: a backslash-quoted delimiter closes at EOF.
+edit_51() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<\EOF' 'EOF' 'bare_after_backslash() { :; }' >backslash-here.sh
+}
+
+# edit_52: nested ordinary parentheses leave arithmetic before a real heredoc.
+# shellcheck disable=SC2016 # literal arithmetic expansion is the fixture text
+edit_52() {
+    printf '%s\n' '#!/usr/bin/env bash' 'echo $(( ((1 << BITS) + 1) ))' \
+        'cat <<EOF' 'fake_nested() { :; }' 'EOF' >nested-shift.sh
+}
+
+# edit_53: a quoted empty word is a valid heredoc delimiter.
+edit_53() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<''" 'fake_empty() { :; }' '' >empty-here.sh
+}
+
+# edit_54: a closing parenthesis starts a new word before a comment.
+edit_54() {
+    printf '%s\n' '#!/usr/bin/env bash' "(echo p)#'" 'bare_paren() { :; }' >paren-comment.sh
+}
+
+# edit_55: double quotes retain a backslash before a non-special character.
+edit_55() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<"END\-TEXT"' 'heredoc body' 'END\-TEXT' \
+        'missing_header() { :; }' >double-quoted-backslash.sh
+}
+
+# edit_56: a nonmatching unescaped line does not end a double-quoted delimiter.
+edit_56() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<"END\-TEXT"' 'END-TEXT' 'fake_dq() { :; }' \
+        'END\-TEXT' >double-quoted-nonending.sh
+}
+
+# edit_57: shfmt leaves a backslash before a dollar in the delimiter and refuses the heredoc.
+edit_57() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<\"A\\\$B\"" "A\$B" 'missing_dollar() { :; }' >double-quoted-dollar.sh
+}
+
+# edit_58: shfmt does not decode ANSI-C delimiter escapes and refuses the heredoc.
+edit_58() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<\$'E\\x41F'" 'EAF' 'missing_ansi() { :; }' >ansi-end.sh
+}
+
+# edit_59: shfmt ends at the raw ANSI-C escape line, then finds fake_ansi strictly.
+edit_59() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<\$'E\\x41F'" 'E\x41F' 'fake_ansi() { :; }' 'EAF' >ansi-nonending.sh
+}
+
+# edit_60: locale quotes remove their dollar prefix for the delimiter.
+edit_60() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<$"EOF"' 'EOF' 'missing_locale() { :; }' >locale-end.sh
+}
+
+# edit_61: ANSI-C quote syntax inside double quotes stays literal.
+edit_61() {
+    printf '%s\n' '#!/usr/bin/env bash' "cat <<\"E\$'O'F\"" 'EOF' 'fake_lit() { :; }' "E\$'O'F" >literal-ansi.sh
+}
+
+# edit_62: a comment in a quoted command substitution does not open a quote.
+edit_62() {
+    cat >comment-sub.sh <<'FIXTURE'
+#!/usr/bin/env bash
+value="$(# don't open a quote
+printf ok
+)"
+bare() { :; }
+FIXTURE
+}
+
+# edit_63: a comment in a quoted backtick substitution does not open a quote.
+edit_63() {
+    cat >comment-tick-dq.sh <<'FIXTURE'
+#!/usr/bin/env bash
+value="`# don't open a quote
+printf ok`"
+bare() { :; }
+FIXTURE
+}
+
+# edit_64: a comment in an unquoted backtick substitution does not open a quote.
+edit_64() {
+    cat >comment-tick-raw.sh <<'FIXTURE'
+#!/usr/bin/env bash
+value=`# don't open a quote
+printf ok`
+bare() { :; }
+FIXTURE
+}
+
+# edit_65: a case pattern in a substitution does not close it.
+edit_65() {
+    cat >case-simple.sh <<'FIXTURE'
+#!/usr/bin/env bash
+value="$(case x in
+  x) printf '%s\n' "can't" ;;
+esac)"
+bare() { :; }
+FIXTURE
+}
+
+# edit_66: an alternative case pattern in a substitution does not close it.
+edit_66() {
+    cat >case-alt.sh <<'FIXTURE'
+#!/usr/bin/env bash
+value="$(case x in
+  a|x) printf '%s\n' "can't" ;;
+esac)"
+bare() { :; }
+FIXTURE
+}
+
+# edit_67: a parenthesized case pattern in a substitution does not close it.
+edit_67() {
+    cat >case-paren.sh <<'FIXTURE'
+#!/usr/bin/env bash
+value="$(case x in
+  (x) printf '%s\n' "can't" ;;
+esac)"
+bare() { :; }
+FIXTURE
+}
+
+# edit_68: a one-line case pattern in a substitution does not close it.
+edit_68() {
+    cat >case-one.sh <<'FIXTURE'
+#!/usr/bin/env bash
+value="$(case x in x) echo "it's" ;; esac)"
+bare() { :; }
+FIXTURE
+}
+
+# edit_69: the word case in an ordinary substitution has no pattern syntax.
+edit_69() {
+    cat >case-guard.sh <<'FIXTURE'
+#!/usr/bin/env bash
+value="$(echo case x in)"
+printf '%s\n' "$value"
+bare() { :; }
+FIXTURE
+}
+
+# edit_70: an unquoted joined heredoc delimiter makes shfmt fail closed.
+edit_70() {
+    cat >join-here.sh <<'FIXTURE'
+#!/usr/bin/env bash
+cat <<EOF2
+EO\
+F2
+bare() { :; }
+FIXTURE
+}
+
+# edit_71: a tab-stripped joined heredoc delimiter makes shfmt fail closed.
+edit_71() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<-EOF2' $'\tEO\\' $'\tF2' 'bare() { :; }' >join-tab.sh
+}
+
+# edit_72: a joined body line does not close an unquoted heredoc.
+edit_72() {
+    cat >join-body.sh <<'FIXTURE'
+#!/usr/bin/env bash
+cat <<EOF2
+body\
+EOF2
+fake_join() { :; }
+EOF2
+FIXTURE
+}
+
+# edit_73: a quoted heredoc does not join a backslash-newline delimiter.
+edit_73() {
+    cat >join-quoted.sh <<'FIXTURE'
+#!/usr/bin/env bash
+cat <<'EOF2'
+EO\
+F2
+fake_quoted() { :; }
+EOF2
+FIXTURE
+}
+
+# edit_74: a tab-stripped heredoc keeps the fake function in its body.
+edit_74() {
+    printf '%s\n' '#!/usr/bin/env bash' 'cat <<-EOF2' $'\tEO\\' $'\tF2' \
+        'fake_tab() { :; }' $'\tEOF2' >join-tab-guard.sh
+}
+
+# edit_75: two backslashes leave the later bare function visible.
+edit_75() {
+    cat >two-slashes.sh <<'FIXTURE'
+#!/usr/bin/env bash
+cat <<EOF2
+body\\
+EOF2
+bare() { :; }
+FIXTURE
+}
+
+# edit_76: a subshell-bodied function is a function, including its body lines.
+edit_76() {
+    cat >subshell.sh <<'FIXTURE'
+#!/usr/bin/env bash
+# sub_doc runs in a subshell.
+sub_doc() (
+  :
+)
+sub_bare() (
+  :
+)
+FIXTURE
+}
+
+# edit_77: a header for the first definition does not document a second on the same line.
+edit_77() {
+    cat >same-line.sh <<'FIXTURE'
+#!/usr/bin/env bash
+# a is documented.
+a() { :; }; b() { :; }
+FIXTURE
+}
+
+# edit_78: the syntax walk finds nested definitions inside an if clause.
+edit_78() {
+    cat >nested.sh <<'FIXTURE'
+#!/usr/bin/env bash
+if true; then
+  nested_bare() { :; }
+fi
+FIXTURE
+}
+
+# edit_79: an attached header documents a nested definition.
+edit_79() {
+    cat >nested-doc.sh <<'FIXTURE'
+#!/usr/bin/env bash
+if true; then
+  # nested_doc is documented.
+  nested_doc() { :; }
+fi
+FIXTURE
+}
+
+# edit_80: explicit Bash dialect recognizes function syntax despite a POSIX shebang.
+edit_80() {
+    cat >keyword-sh.sh <<'FIXTURE'
+#!/bin/sh
+function kw_bare { :; }
+FIXTURE
+}
+
+# edit_81: a shell change fails closed when go cannot resolve shfmt.
+edit_81() {
+    printf '%s\n' '#!/usr/bin/env bash' 'bare_missing_go() { :; }' >missing-go.sh
+}
+
+# edit_82: a Python-only change does not resolve shfmt when go is absent.
+edit_82() {
+    sed -i 's/return 1/return 4/' lib.py
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -207,6 +617,67 @@ expect "closing brace inside heredoc body does not end function early" 1 "shell 
 expect "arithmetic shift is not a heredoc" 1 "shell function undoc_shift has no header comment" edit_23
 expect "untracked name with leading space checked" 1 "shell function bare_space has no header comment" edit_24
 expect "committed file with space in name in diff checked" 1 "my script.sh" edit_25
+expect "function text in double-quoted string ignored" 0 "ok (" edit_26
+expect "function text in single-quoted string ignored" 0 "ok (" edit_27
+expect "function text in heredoc ignored" 0 "ok (" edit_28
+expect "function text in tab-stripped heredoc ignored" 0 "ok (" edit_29
+expect "function after quoted string still checked" 1 "shell function bare_after_string has no header comment" edit_30
+expect "function after heredoc still checked" 1 "shell function bare_after_heredoc has no header comment" edit_31
+expect "escaped quote keeps string open" 0 "ok (" edit_32
+expect "quotes in comments do not open strings" 1 "shell function bare_after_comments has no header comment" edit_33
+expect "brace in string does not end function early" 1 "shell function undoc_string has no header comment" edit_34
+expect "ANSI-C escaped quote closes correctly" 1 "shell function bare_ansi has no header comment" edit_35
+expect "ANSI-C escaped backslash boundary" 1 "shell function bare_ansi_boundary has no header comment" edit_36
+expect "substitution inside double quotes parses shell quotes" 1 "shell function bare_subst has no header comment" edit_37
+expect "multiline substitution quote masks function" 0 "ok (" edit_38
+expect "backtick substitution parses shell quotes" 1 "shell function bare_backtick has no header comment" edit_39
+expect "operator-adjacent hash starts comment" 1 "shell function bare_semi has no header comment" edit_40
+expect "hash within a word stays literal" 0 "ok (" edit_41
+expect "dollar arithmetic shift is not heredoc" 1 "shell function bare_bits has no header comment" edit_42
+expect "command arithmetic shift is not heredoc" 1 "shell function bare_plain_shift has no header comment" edit_43
+expect "unquoted hyphen heredoc delimiter stays whole" 0 "ok (" edit_44
+expect "quoted hyphen heredoc delimiter stays whole" 0 "ok (" edit_45
+expect "mixed quote heredoc delimiter ends at EOF" 1 "shell function bare_after_mixed has no header comment" edit_46
+expect "heredoc after closing quote masks function" 0 "ok (" edit_47
+expect "heredoc after closing quote in function finds end" 1 "shell function undoc_tail has no header comment" edit_48
+expect "unclosed substitutions name the parse location" 2 "deep-context.sh:2" edit_49
+expect "double-quoted hyphen heredoc delimiter stays whole" 0 "ok (" edit_50
+expect "backslash-quoted heredoc delimiter ends at EOF" 1 "shell function bare_after_backslash has no header comment" edit_51
+expect "nested arithmetic ends before real heredoc" 0 "ok (" edit_52
+expect "quoted empty heredoc word closes on blank line" 0 "ok (" edit_53
+expect "closing parenthesis starts comment word" 1 "shell function bare_paren has no header comment" edit_54
+expect "double-quoted backslash delimiter finds following function" 1 "shell function missing_header has no header comment" edit_55
+expect "double-quoted backslash delimiter ignores early line" 0 "ok (" edit_56
+expect "double-quoted dollar delimiter fails closed" 2 "double-quoted-dollar.sh:2" edit_57
+expect "ANSI-C delimiter fails closed" 2 "ansi-end.sh:2" edit_58
+expect "ANSI-C raw escape line exposes fake function" 1 "shell function fake_ansi has no header comment" edit_59
+expect "locale delimiter finds following function" 1 "shell function missing_locale has no header comment" edit_60
+expect "ANSI-C syntax in double quotes stays literal" 0 "ok (" edit_61
+expect "comment in quoted substitution" 1 "shell function bare has no header comment" edit_62
+expect "comment in quoted backticks" 1 "shell function bare has no header comment" edit_63
+expect "comment in unquoted backticks" 1 "shell function bare has no header comment" edit_64
+expect "case pattern in substitution" 1 "shell function bare has no header comment" edit_65
+expect "alternative case pattern in substitution" 1 "shell function bare has no header comment" edit_66
+expect "parenthesized case pattern in substitution" 1 "shell function bare has no header comment" edit_67
+expect "one-line case pattern in substitution" 1 "shell function bare has no header comment" edit_68
+expect "ordinary substitution containing case word" 1 "shell function bare has no header comment" edit_69
+expect "joined heredoc delimiter fails closed" 2 "join-here.sh:" edit_70 main "" "here-document"
+expect "tab-stripped joined delimiter fails closed" 2 "join-tab.sh:" edit_71 main "" "here-document"
+expect "joined heredoc body remains hidden" 0 "ok (" edit_72
+expect "quoted heredoc body remains hidden" 0 "ok (" edit_73
+expect "tab-stripped heredoc body remains hidden" 0 "ok (" edit_74
+expect "two backslashes leave function visible" 1 "shell function bare has no header comment" edit_75
+expect "subshell body finds undocumented function" 1 "shell function sub_bare has no header comment" edit_76
+expect "second function on header line is undocumented" 1 "shell function b has no header comment" edit_77
+expect "nested bare function in if is checked" 1 "shell function nested_bare has no header comment" edit_78
+expect "nested documented function in if passes" 0 "ok (" edit_79
+expect "Bash keyword syntax under POSIX shebang" 1 "shell function kw_bare has no header comment" edit_80
+only_tools="$work/only-tools"
+mkdir -p "$only_tools"
+ln -s "$(command -v python3)" "$only_tools/python3"
+ln -s "$(command -v git)" "$only_tools/git"
+expect "missing go fails closed for shell" 2 "go tool" edit_81 main "$only_tools"
+expect "missing go allows Python-only change" 0 "ok (" edit_82 main "$only_tools"
 
 if [ "$failed" -ne 0 ]; then
     exit 1
