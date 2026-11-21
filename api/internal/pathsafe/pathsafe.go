@@ -11,7 +11,7 @@ import (
 )
 
 // StrictlyWithin reports whether target is lexically below base, without resolving symlinks.
-// It conservatively refuses a first relative-path segment that starts with "..".
+// Following [filepath.IsLocal], it refuses only a whole ".." parent segment, allowing segment names that start with "..".
 func StrictlyWithin(base, target string) bool {
 	cleanBase := filepath.Clean(base)
 	cleanTarget := filepath.Clean(target)
@@ -22,7 +22,7 @@ func StrictlyWithin(base, target string) bool {
 	if err != nil {
 		return false
 	}
-	if strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return false
 	}
 	return true

@@ -7,6 +7,8 @@ package overlay_test
 import (
 	"errors"
 	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,12 +19,15 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/adult/overlay"
 )
 
-var defaultOptions = overlay.Options{SourceRoot: "/source", TargetRoot: "/source"}
+var (
+	sourceRoot     = testRoot("source")
+	defaultOptions = overlay.Options{SourceRoot: sourceRoot, TargetRoot: sourceRoot}
+)
 
 func TestBuildImport(t *testing.T) {
 	t.Parallel()
-	a := movie(1, "Alpha", 2020, "/source/a/one.mkv")
-	b := movie(2, "Beta", 2021, "/source/b/two.mkv")
+	a := movie(1, "Alpha", 2020, rootPath(sourceRoot, "a", "one.mkv"))
+	b := movie(2, "Beta", 2021, rootPath(sourceRoot, "b", "two.mkv"))
 	before := build(t, a)
 	after := build(t, a, b)
 	if entryByID(t, before, 1) != entryByID(t, after, 1) {
@@ -35,8 +40,8 @@ func TestBuildImport(t *testing.T) {
 
 func TestBuildRename(t *testing.T) {
 	t.Parallel()
-	before := build(t, movie(1, "Alpha", 2020, "/source/a/one.mkv"))
-	after := build(t, movie(1, "Alpha", 2020, "/source/new/one.mkv"))
+	before := build(t, movie(1, "Alpha", 2020, rootPath(sourceRoot, "a", "one.mkv")))
+	after := build(t, movie(1, "Alpha", 2020, rootPath(sourceRoot, "new", "one.mkv")))
 	oldEntry := entryByID(t, before, 1)
 	newEntry := entryByID(t, after, 1)
 	if oldEntry.Folder != newEntry.Folder || oldEntry.Link != newEntry.Link || oldEntry.Target == newEntry.Target {
@@ -46,8 +51,8 @@ func TestBuildRename(t *testing.T) {
 
 func TestBuildDelete(t *testing.T) {
 	t.Parallel()
-	a := movie(1, "Alpha", 2020, "/source/a/one.mkv")
-	b := movie(2, "Beta", 2020, "/source/b/two.mkv")
+	a := movie(1, "Alpha", 2020, rootPath(sourceRoot, "a", "one.mkv"))
+	b := movie(2, "Beta", 2020, rootPath(sourceRoot, "b", "two.mkv"))
 	before := build(t, a, b)
 	deleteCases := []struct {
 		name   string
@@ -70,8 +75,8 @@ func TestBuildDelete(t *testing.T) {
 
 func TestBuildUpgrade(t *testing.T) {
 	t.Parallel()
-	before := movie(1, "Alpha", 2020, "/source/a/one.mkv")
-	after := movie(1, "Alpha", 2020, "/source/new/one.mp4")
+	before := movie(1, "Alpha", 2020, rootPath(sourceRoot, "a", "one.mkv"))
+	after := movie(1, "Alpha", 2020, rootPath(sourceRoot, "new", "one.mp4"))
 	after.MovieFile.ID = 12
 	oldEntry := entryByID(t, build(t, before), 1)
 	newEntry := entryByID(t, build(t, after), 1)
@@ -80,7 +85,7 @@ func TestBuildUpgrade(t *testing.T) {
 	}
 	sameExtension := after
 	sameExtensionFile := *after.MovieFile
-	sameExtensionFile.Path = "/source/newer/one.mp4"
+	sameExtensionFile.Path = rootPath(sourceRoot, "newer", "one.mp4")
 	sameExtensionFile.ID = 13
 	sameExtension.MovieFile = &sameExtensionFile
 	sameExtensionEntry := entryByID(t, build(t, sameExtension), 1)
@@ -91,9 +96,9 @@ func TestBuildUpgrade(t *testing.T) {
 
 func TestBuildCollision(t *testing.T) {
 	t.Parallel()
-	five := movie(5, "Same", 2020, "/source/five/a.mkv")
-	nine := movie(9, "Same", 2020, "/source/nine/a.mkv")
-	twelve := movie(12, "Same", 2020, "/source/twelve/a.mkv")
+	five := movie(5, "Same", 2020, rootPath(sourceRoot, "five", "a.mkv"))
+	nine := movie(9, "Same", 2020, rootPath(sourceRoot, "nine", "a.mkv"))
+	twelve := movie(12, "Same", 2020, rootPath(sourceRoot, "twelve", "a.mkv"))
 	initial := build(t, five, nine)
 	assertFoldUnique(t, initial)
 	if entryByID(t, initial, 5).Folder != "Same (2020)" || entryByID(t, initial, 9).Folder != "Same (2020) [whisparr-9]" {
@@ -117,7 +122,7 @@ func TestBuildCollision(t *testing.T) {
 	if !reflect.DeepEqual(reordered, withTwelve) {
 		t.Fatalf("reordered collision map = %#v, want %#v", reordered, withTwelve)
 	}
-	caseVariant := movie(13, "same", 2020, "/source/case/a.mkv")
+	caseVariant := movie(13, "same", 2020, rootPath(sourceRoot, "case", "a.mkv"))
 	caseMap := build(t, five, caseVariant)
 	assertFoldUnique(t, caseMap)
 	if entryByID(t, caseMap, 13).Folder != "same (2020) [whisparr-13]" {
@@ -133,15 +138,15 @@ func TestBuildCollision(t *testing.T) {
 func TestBuildUnicodeCollision(t *testing.T) {
 	t.Parallel()
 	result := build(t,
-		movie(1, "Σ", 2020, "/source/one/a.mkv"),
-		movie(2, "σ", 2020, "/source/two/a.mkv"),
-		movie(3, "ς", 2020, "/source/three/a.mkv"),
-		movie(4, "Straße", 2020, "/source/four/a.mkv"),
-		movie(5, "STRASSE", 2020, "/source/five/a.mkv"),
-		movie(6, "é", 2020, "/source/six/a.mkv"),
-		movie(7, "e\u0301", 2020, "/source/seven/a.mkv"),
-		movie(8, "K", 2020, "/source/eight/a.mkv"),
-		movie(9, "k", 2020, "/source/nine/a.mkv"),
+		movie(1, "Σ", 2020, rootPath(sourceRoot, "one", "a.mkv")),
+		movie(2, "σ", 2020, rootPath(sourceRoot, "two", "a.mkv")),
+		movie(3, "ς", 2020, rootPath(sourceRoot, "three", "a.mkv")),
+		movie(4, "Straße", 2020, rootPath(sourceRoot, "four", "a.mkv")),
+		movie(5, "STRASSE", 2020, rootPath(sourceRoot, "five", "a.mkv")),
+		movie(6, "é", 2020, rootPath(sourceRoot, "six", "a.mkv")),
+		movie(7, "e\u0301", 2020, rootPath(sourceRoot, "seven", "a.mkv")),
+		movie(8, "K", 2020, rootPath(sourceRoot, "eight", "a.mkv")),
+		movie(9, "k", 2020, rootPath(sourceRoot, "nine", "a.mkv")),
 	)
 	assertFoldUnique(t, result)
 	want := map[int]string{
@@ -160,21 +165,40 @@ func TestBuildUnicodeCollision(t *testing.T) {
 func TestBuildWindowsNames(t *testing.T) {
 	t.Parallel()
 	result := build(t,
-		movie(1, "Title: Sub*Part?", 2020, "/source/one/a.mkv"),
-		movie(2, `a<b>c"d|e`, 0, "/source/two/a.mkv"),
-		movie(4, "Con", 0, "/source/four/a.mkv"),
-		movie(5, "con.Air", 0, "/source/five/a.mkv"),
-		movie(6, "LPT¹", 0, "/source/six/a.mkv"),
-		movie(7, "Con", 2020, "/source/seven/a.mkv"),
-		movie(8, "Console", 0, "/source/eight/a.mkv"),
-		movie(10, "nul", 0, "/source/ten/a.mkv"),
-		movie(11, "NUL", 0, "/source/eleven/a.mkv"),
+		movie(1, "Title: Sub*Part?", 2020, rootPath(sourceRoot, "one", "a.mkv")),
+		movie(2, `a<b>c"d|e`, 0, rootPath(sourceRoot, "two", "a.mkv")),
+		movie(4, "Con", 0, rootPath(sourceRoot, "four", "a.mkv")),
+		movie(5, "con.Air", 0, rootPath(sourceRoot, "five", "a.mkv")),
+		movie(6, "LPT¹", 0, rootPath(sourceRoot, "six", "a.mkv")),
+		movie(7, "Con", 2020, rootPath(sourceRoot, "seven", "a.mkv")),
+		movie(8, "Console", 0, rootPath(sourceRoot, "eight", "a.mkv")),
+		movie(10, "nul", 0, rootPath(sourceRoot, "ten", "a.mkv")),
+		movie(11, "NUL", 0, rootPath(sourceRoot, "eleven", "a.mkv")),
+		movie(12, "Con.Air", 2020, rootPath(sourceRoot, "twelve", "a.mkv")),
+		movie(13, "COM1.foo", 0, rootPath(sourceRoot, "thirteen", "a.mkv")),
+		movie(14, "CONIN$", 0, rootPath(sourceRoot, "fourteen", "a.mkv")),
+		movie(15, "conout$.log", 0, rootPath(sourceRoot, "fifteen", "a.mkv")),
+		movie(16, "COM0", 0, rootPath(sourceRoot, "sixteen", "a.mkv")),
+		movie(17, "LPT0.x", 0, rootPath(sourceRoot, "seventeen", "a.mkv")),
 	)
 	assertFoldUnique(t, result)
+	assertLinkAndFolderPairwiseDistinct(t, result)
 	want := map[int]string{
-		1: "Title Sub Part (2020)", 2: "a b c d e",
-		4: "Con [whisparr-4]", 5: "con.Air [whisparr-5]", 6: "LPT¹ [whisparr-6]",
-		7: "Con (2020)", 8: "Console", 10: "nul [whisparr-10]", 11: "NUL [whisparr-11]",
+		1:  "Title Sub Part (2020)",
+		2:  "a b c d e",
+		4:  "Con [whisparr-4]",
+		5:  "con [whisparr-5].Air",
+		6:  "LPT¹ [whisparr-6]",
+		7:  "Con (2020)",
+		8:  "Console",
+		10: "nul [whisparr-10]",
+		11: "NUL [whisparr-11]",
+		12: "Con [whisparr-12].Air (2020)",
+		13: "COM1 [whisparr-13].foo",
+		14: "CONIN$ [whisparr-14]",
+		15: "conout$ [whisparr-15].log",
+		16: "COM0",
+		17: "LPT0.x",
 	}
 	for id, folder := range want {
 		entry := entryByID(t, result, id)
@@ -185,15 +209,18 @@ func TestBuildWindowsNames(t *testing.T) {
 	if got := entryByID(t, result, 4).Link; got != "Con [whisparr-4].mkv" {
 		t.Errorf("reserved-name link = %q", got)
 	}
+	if got := entryByID(t, result, 5).Link; got != "con [whisparr-5].Air.mkv" {
+		t.Errorf("reserved-stem period link = %q", got)
+	}
 }
 
 func TestBuildSuffixNoClash(t *testing.T) {
 	t.Parallel()
 	result := build(t,
-		movie(5, "Same", 2020, "/source/five/a.mkv"),
-		movie(9, "Same", 2020, "/source/nine/a.mkv"),
-		movie(3, "Same [whisparr-9]", 2020, "/source/three/a.mkv"),
-		movie(4, "Same (2020) [whisparr-9]", 0, "/source/four/a.mkv"),
+		movie(5, "Same", 2020, rootPath(sourceRoot, "five", "a.mkv")),
+		movie(9, "Same", 2020, rootPath(sourceRoot, "nine", "a.mkv")),
+		movie(3, "Same [whisparr-9]", 2020, rootPath(sourceRoot, "three", "a.mkv")),
+		movie(4, "Same (2020) [whisparr-9]", 0, rootPath(sourceRoot, "four", "a.mkv")),
 	)
 	assertFoldUnique(t, result)
 	want := map[int]string{5: "Same (2020)", 9: "Same (2020) [whisparr-9]", 3: "Same (whisparr-9) (2020)", 4: "Same (2020) (whisparr-9)"}
@@ -207,15 +234,16 @@ func TestBuildSuffixNoClash(t *testing.T) {
 
 func TestBuildOutsideRoot(t *testing.T) {
 	t.Parallel()
+	sep := string(filepath.Separator)
 	cases := []struct {
 		id   int
 		path string
 	}{
-		{id: 1, path: "/source/../other/one.mkv"},
-		{id: 2, path: "/source2/two.mkv"},
-		{id: 3, path: "relative/three.mkv"},
-		{id: 4, path: "/source"},
-		{id: 5, path: "/source/\x00/five.mkv"},
+		{id: 1, path: sourceRoot + sep + ".." + sep + "other" + sep + "one.mkv"},
+		{id: 2, path: rootPath(testRoot("source2"), "two.mkv")},
+		{id: 3, path: filepath.Join("relative", "three.mkv")},
+		{id: 4, path: sourceRoot},
+		{id: 5, path: rootPath(sourceRoot, "\x00", "five.mkv")},
 	}
 	movies := make([]whisparr.Movie, 0, len(cases))
 	for _, tc := range cases {
@@ -232,41 +260,50 @@ func TestBuildOutsideRoot(t *testing.T) {
 	}
 }
 
+func TestBuildPrefixedDotDotSegment(t *testing.T) {
+	t.Parallel()
+	result := build(t, movie(1, "Prefixed", 2020, rootPath(sourceRoot, "..name", "a.mkv")))
+	if len(result.Refused) != 0 || entryByID(t, result, 1).Target != filepath.Join(sourceRoot, "..name", "a.mkv") {
+		t.Fatalf("prefixed segment result = %#v", result)
+	}
+}
+
 func TestBuildRootMapping(t *testing.T) {
 	t.Parallel()
-	opts := overlay.Options{SourceRoot: "/source", TargetRoot: "/jellyfin-view"}
-	result, err := overlay.Build(opts, []whisparr.Movie{movie(1, "Alpha", 2020, "/source/a/one.mkv")})
+	targetRoot := testRoot("jellyfin-view")
+	opts := overlay.Options{SourceRoot: sourceRoot, TargetRoot: targetRoot}
+	result, err := overlay.Build(opts, []whisparr.Movie{movie(1, "Alpha", 2020, rootPath(sourceRoot, "a", "one.mkv"))})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := entryByID(t, result, 1).Target; got != "/jellyfin-view/a/one.mkv" {
+	if got := entryByID(t, result, 1).Target; got != filepath.Join(targetRoot, "a", "one.mkv") {
 		t.Fatalf("target = %q", got)
 	}
 }
 
 func TestBuildTitleSanitize(t *testing.T) {
 	t.Parallel()
-	sanitized := entryByID(t, build(t, movie(1, ".. Alpha/Beta\\[Tag]\x01 ..", 2020, "/source/a/one.mkv")), 1)
+	sanitized := entryByID(t, build(t, movie(1, ".. Alpha/Beta\\[Tag]\x01 ..", 2020, rootPath(sourceRoot, "a", "one.mkv"))), 1)
 	if sanitized.Folder != "Alpha Beta (Tag) (2020)" {
 		t.Fatalf("sanitized folder = %q", sanitized.Folder)
 	}
-	long := entryByID(t, build(t, movie(2, strings.Repeat("é", 150), 0, "/source/a/two.mkv")), 2)
+	long := entryByID(t, build(t, movie(2, strings.Repeat("é", 150), 0, rootPath(sourceRoot, "a", "two.mkv"))), 2)
 	if len(long.Folder) > 180 || !utf8.ValidString(long.Folder) {
 		t.Fatalf("long folder is not a <=180-byte UTF-8 title: %q", long.Folder)
 	}
-	uneven := entryByID(t, build(t, movie(4, "a"+strings.Repeat("é", 150), 0, "/source/a/four.mkv")), 4)
+	uneven := entryByID(t, build(t, movie(4, "a"+strings.Repeat("é", 150), 0, rootPath(sourceRoot, "a", "four.mkv"))), 4)
 	if len(uneven.Folder) != 179 || !utf8.ValidString(uneven.Folder) {
 		t.Fatalf("uneven-width folder is not a 179-byte UTF-8 title: %q", uneven.Folder)
 	}
-	empty := build(t, movie(3, ".. \t\n", 2020, "/source/a/three.mkv"))
+	empty := build(t, movie(3, ".. \t\n", 2020, rootPath(sourceRoot, "a", "three.mkv")))
 	if len(empty.Refused) != 1 || empty.Refused[0].Reason != overlay.ReasonEmptyTitle {
 		t.Fatalf("empty title result = %#v", empty)
 	}
-	accepted := build(t, movie(5, strings.Repeat("a", 4096), 0, "/source/a/five.mkv"))
+	accepted := build(t, movie(5, strings.Repeat("a", 4096), 0, rootPath(sourceRoot, "a", "five.mkv")))
 	if got := len(entryByID(t, accepted, 5).Folder); got != 180 {
 		t.Fatalf("4096-byte title folder length = %d, want 180", got)
 	}
-	tooLong := build(t, movie(6, strings.Repeat("a", 4097), 0, "/source/a/six.mkv"))
+	tooLong := build(t, movie(6, strings.Repeat("a", 4097), 0, rootPath(sourceRoot, "a", "six.mkv")))
 	if len(tooLong.Entries) != 0 || len(tooLong.Refused) != 1 || tooLong.Refused[0].Reason != overlay.ReasonTitleTooLong {
 		t.Fatalf("4097-byte title result = %#v", tooLong)
 	}
@@ -275,12 +312,12 @@ func TestBuildTitleSanitize(t *testing.T) {
 func TestBuildYear(t *testing.T) {
 	t.Parallel()
 	result := build(t,
-		movie(1, "Low", 1899, "/source/a/one.mkv"),
-		movie(2, "First", 1900, "/source/a/two.mkv"),
-		movie(3, "Last", 2099, "/source/a/three.mkv"),
-		movie(4, "High", 2100, "/source/a/four.mkv"),
-		withReleaseDate(movie(5, "Release", 0, "/source/a/five.mkv"), "2001-02-03"),
-		withReleaseDate(movie(6, "Bad", 0, "/source/a/six.mkv"), "nope"),
+		movie(1, "Low", 1899, rootPath(sourceRoot, "a", "one.mkv")),
+		movie(2, "First", 1900, rootPath(sourceRoot, "a", "two.mkv")),
+		movie(3, "Last", 2099, rootPath(sourceRoot, "a", "three.mkv")),
+		movie(4, "High", 2100, rootPath(sourceRoot, "a", "four.mkv")),
+		withReleaseDate(movie(5, "Release", 0, rootPath(sourceRoot, "a", "five.mkv")), "2001-02-03"),
+		withReleaseDate(movie(6, "Bad", 0, rootPath(sourceRoot, "a", "six.mkv")), "nope"),
 	)
 	want := map[int]string{1: "Low", 2: "First (1900)", 3: "Last (2099)", 4: "High", 5: "Release (2001)", 6: "Bad"}
 	for id, folder := range want {
@@ -292,7 +329,7 @@ func TestBuildYear(t *testing.T) {
 
 func TestBuildDeterministic(t *testing.T) {
 	t.Parallel()
-	forward := []whisparr.Movie{movie(2, "Zulu", 2020, "/source/z/two.mkv"), movie(1, "Alpha", 2020, "/source/a/one.mkv")}
+	forward := []whisparr.Movie{movie(2, "Zulu", 2020, rootPath(sourceRoot, "z", "two.mkv")), movie(1, "Alpha", 2020, rootPath(sourceRoot, "a", "one.mkv"))}
 	reverse := []whisparr.Movie{forward[1], forward[0]}
 	first := build(t, forward...)
 	if !reflect.DeepEqual(first, build(t, reverse...)) || !reflect.DeepEqual(first, build(t, forward...)) {
@@ -302,7 +339,15 @@ func TestBuildDeterministic(t *testing.T) {
 
 func TestBuildOptions(t *testing.T) {
 	t.Parallel()
-	cases := []overlay.Options{{SourceRoot: "source", TargetRoot: "/target"}, {SourceRoot: "/source", TargetRoot: "target"}, {SourceRoot: "", TargetRoot: "/target"}, {SourceRoot: "/source", TargetRoot: ""}, {SourceRoot: "/so\x00urce", TargetRoot: "/target"}, {SourceRoot: "/source", TargetRoot: "/tar\x00get"}}
+	targetRoot := testRoot("target")
+	cases := []overlay.Options{
+		{SourceRoot: "source", TargetRoot: targetRoot},
+		{SourceRoot: sourceRoot, TargetRoot: "target"},
+		{SourceRoot: "", TargetRoot: targetRoot},
+		{SourceRoot: sourceRoot, TargetRoot: ""},
+		{SourceRoot: testRoot("so\x00urce"), TargetRoot: targetRoot},
+		{SourceRoot: sourceRoot, TargetRoot: testRoot("tar\x00get")},
+	}
 	for _, opts := range cases {
 		if _, err := overlay.Build(opts, nil); !errors.Is(err, overlay.ErrInvalidOptions) {
 			t.Fatalf("Build(%#v) error = %v", opts, err)
@@ -321,23 +366,24 @@ func TestBuildMissingMovieFile(t *testing.T) {
 
 func TestBuildMovieLimit(t *testing.T) {
 	t.Parallel()
+	targetRoot := testRoot("target")
 	movies := []whisparr.Movie{
-		movie(1, "One", 0, "/source/one/a.mkv"),
-		movie(2, "Two", 0, "/source/two/a.mkv"),
-		movie(3, "Three", 0, "/source/three/a.mkv"),
+		movie(1, "One", 0, rootPath(sourceRoot, "one", "a.mkv")),
+		movie(2, "Two", 0, rootPath(sourceRoot, "two", "a.mkv")),
+		movie(3, "Three", 0, rootPath(sourceRoot, "three", "a.mkv")),
 	}
-	if _, err := overlay.Build(overlay.Options{SourceRoot: "/source", TargetRoot: "/target", MaxMovies: 2}, movies[:2]); err != nil {
+	if _, err := overlay.Build(overlay.Options{SourceRoot: sourceRoot, TargetRoot: targetRoot, MaxMovies: 2}, movies[:2]); err != nil {
 		t.Fatalf("limit-sized build error = %v", err)
 	}
-	if _, err := overlay.Build(overlay.Options{SourceRoot: "/source", TargetRoot: "/target", MaxMovies: 2}, movies); !errors.Is(err, overlay.ErrTooManyMovies) {
+	if _, err := overlay.Build(overlay.Options{SourceRoot: sourceRoot, TargetRoot: targetRoot, MaxMovies: 2}, movies); !errors.Is(err, overlay.ErrTooManyMovies) {
 		t.Fatalf("over-limit build error = %v", err)
 	}
 	for _, limit := range []int{-1, overlay.DefaultMaxMovies + 1} {
-		if _, err := overlay.Build(overlay.Options{SourceRoot: "/source", TargetRoot: "/target", MaxMovies: limit}, nil); !errors.Is(err, overlay.ErrInvalidOptions) {
+		if _, err := overlay.Build(overlay.Options{SourceRoot: sourceRoot, TargetRoot: targetRoot, MaxMovies: limit}, nil); !errors.Is(err, overlay.ErrInvalidOptions) {
 			t.Errorf("MaxMovies %d error = %v", limit, err)
 		}
 	}
-	if _, err := overlay.Build(overlay.Options{SourceRoot: "/source", TargetRoot: "/target"}, movies); err != nil {
+	if _, err := overlay.Build(overlay.Options{SourceRoot: sourceRoot, TargetRoot: targetRoot}, movies); err != nil {
 		t.Fatalf("default limit build error = %v", err)
 	}
 }
@@ -345,16 +391,16 @@ func TestBuildMovieLimit(t *testing.T) {
 func TestBuildExtensionRules(t *testing.T) {
 	t.Parallel()
 	accepted := build(t,
-		movie(1, "DVR", 0, "/source/a/one.dvr-ms"),
-		movie(2, "Long", 0, "/source/a/two.abcdefghijklmno"),
+		movie(1, "DVR", 0, rootPath(sourceRoot, "a", "one.dvr-ms")),
+		movie(2, "Long", 0, rootPath(sourceRoot, "a", "two.abcdefghijklmno")),
 	)
 	if entryByID(t, accepted, 1).Link != "DVR.dvr-ms" || entryByID(t, accepted, 2).Link != "Long.abcdefghijklmno" {
 		t.Fatalf("accepted extensions = %#v", accepted)
 	}
 	for _, tc := range []struct{ path, reason string }{
-		{"/source/a/one.abcdefghijklmnop", overlay.ReasonUnsupportedExtension},
-		{"/source/a/one.mk:v", overlay.ReasonUnsupportedExtension},
-		{"/source/a/one.", overlay.ReasonNoExtension},
+		{rootPath(sourceRoot, "a", "one.abcdefghijklmnop"), overlay.ReasonUnsupportedExtension},
+		{rootPath(sourceRoot, "a", "one.mk:v"), overlay.ReasonUnsupportedExtension},
+		{rootPath(sourceRoot, "a", "one."), overlay.ReasonNoExtension},
 	} {
 		result := build(t, movie(3, "Invalid", 0, tc.path))
 		if len(result.Entries) != 0 || len(result.Refused) != 1 || result.Refused[0].Reason != tc.reason {
@@ -363,8 +409,8 @@ func TestBuildExtensionRules(t *testing.T) {
 	}
 	longTitle := strings.Repeat("a", 200)
 	boundary := build(t,
-		movie(1, longTitle, 2020, "/source/a/one.abcdefghijklmno"),
-		movie(math.MaxInt, longTitle, 2020, "/source/b/two.abcdefghijklmno"),
+		movie(1, longTitle, 2020, rootPath(sourceRoot, "a", "one.abcdefghijklmno")),
+		movie(math.MaxInt, longTitle, 2020, rootPath(sourceRoot, "b", "two.abcdefghijklmno")),
 	)
 	maxEntry := entryByID(t, boundary, math.MaxInt)
 	if len(maxEntry.Folder) > 255 || len(maxEntry.Link) > 255 {
@@ -374,9 +420,9 @@ func TestBuildExtensionRules(t *testing.T) {
 
 func TestBuildDuplicateID(t *testing.T) {
 	t.Parallel()
-	first := movie(7, "First", 2020, "/source/a/one.mkv")
-	second := movie(7, "Second", 2020, "/source/a/two.mkv")
-	eight := movie(8, "Eight", 2020, "/source/a/eight.mkv")
+	first := movie(7, "First", 2020, rootPath(sourceRoot, "a", "one.mkv"))
+	second := movie(7, "Second", 2020, rootPath(sourceRoot, "a", "two.mkv"))
+	eight := movie(8, "Eight", 2020, rootPath(sourceRoot, "a", "eight.mkv"))
 	result := build(t, first, second, eight)
 	if hasEntry(result, 7) || !hasEntry(result, 8) || len(result.Refused) != 2 {
 		t.Fatalf("duplicate result = %#v", result)
@@ -410,18 +456,29 @@ func TestBuildDuplicateID(t *testing.T) {
 func TestBuildFilePathRules(t *testing.T) {
 	t.Parallel()
 	fallback := movie(1, "Fallback", 2020, "")
-	fallback.Path = "/source/fallback"
+	fallback.Path = rootPath(sourceRoot, "fallback")
 	fallback.MovieFile.RelativePath = "one.mkv"
-	if got := entryByID(t, build(t, fallback), 1).Target; got != "/source/fallback/one.mkv" {
+	if got := entryByID(t, build(t, fallback), 1).Target; got != filepath.Join(sourceRoot, "fallback", "one.mkv") {
 		t.Fatalf("fallback target = %q", got)
 	}
 	missing := movie(2, "Missing", 2020, "")
 	if got := build(t, missing).Refused[0].Reason; got != overlay.ReasonMissingPath {
 		t.Fatalf("missing path reason = %q", got)
 	}
-	if got := build(t, movie(3, "No Extension", 2020, "/source/no-extension")).Refused[0].Reason; got != overlay.ReasonNoExtension {
+	if got := build(t, movie(3, "No Extension", 2020, rootPath(sourceRoot, "no-extension"))).Refused[0].Reason; got != overlay.ReasonNoExtension {
 		t.Fatalf("extension reason = %q", got)
 	}
+}
+
+func testRoot(name string) string {
+	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), name)
+}
+
+func rootPath(root string, parts ...string) string {
+	elems := make([]string, 0, 1+len(parts))
+	elems = append(elems, root)
+	elems = append(elems, parts...)
+	return filepath.Join(elems...)
 }
 
 func movie(id int, title string, year int, path string) whisparr.Movie {

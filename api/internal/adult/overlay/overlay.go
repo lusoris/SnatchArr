@@ -293,14 +293,20 @@ func applyCollision(entries []Entry, indexes []int) {
 }
 
 func addCollisionSuffix(entry *Entry) {
-	// Sanitization maps square brackets to parentheses, so no title can contain this generated suffix form; duplicate refusal also makes IDs unique.
-	entry.Folder += " [whisparr-" + strconv.Itoa(entry.MovieID) + "]"
+	// Sanitization maps square brackets to parentheses and duplicate refusal makes movie IDs unique, so no other folder can contain this suffix, whether placed at the end of a reserved stem before its first period or appended at the end.
+	suffix := " [whisparr-" + strconv.Itoa(entry.MovieID) + "]"
+	if dot := strings.IndexByte(entry.Folder, '.'); dot >= 0 && reservedDeviceFolder(entry.Folder) {
+		entry.Folder = strings.TrimRight(entry.Folder[:dot], " ") + suffix + entry.Folder[dot:]
+	} else {
+		entry.Folder += suffix
+	}
 	entry.Link = entry.Folder + filepath.Ext(entry.Target)
 }
 
 func reservedDeviceFolder(folder string) bool {
 	stem := strings.TrimRight(strings.SplitN(folder, ".", 2)[0], " ")
-	reservedNames := [...]string{"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³"}
+	// Sources: Go src/internal/filepathlite/path_windows.go (isReservedBaseName) and Microsoft "Naming Files, Paths, and Namespaces" (plus Go's CONIN$ and CONOUT$ console handles).
+	reservedNames := [...]string{"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³"}
 	// The reserved name table has a fixed scalar bound.
 	for _, name := range reservedNames {
 		if asciiEqualFold(stem, name) {

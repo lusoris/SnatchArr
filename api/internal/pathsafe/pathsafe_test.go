@@ -13,7 +13,8 @@ import (
 
 func TestStrictlyWithin(t *testing.T) {
 	t.Parallel()
-	base := "/tmp/media/imagesets"
+	sep := string(filepath.Separator)
+	base := filepath.Join(sep, "tmp", "media", "imagesets")
 	cases := []struct {
 		name   string
 		target string
@@ -21,13 +22,16 @@ func TestStrictlyWithin(t *testing.T) {
 	}{
 		{name: "valid sub dir", target: filepath.Join(base, "gallery1"), want: true},
 		{name: "valid nested file", target: filepath.Join(base, "gallery1", "image.jpg"), want: true},
+		{name: "prefixed segment nested", target: filepath.Join(base, "..name", "image.jpg"), want: true},
+		{name: "prefixed segment file", target: filepath.Join(base, "..name"), want: true},
+		{name: "triple dot segment", target: filepath.Join(base, "..."), want: true},
 		{name: "same directory", target: base, want: false},
-		{name: "escape parent", target: "/tmp/media/other", want: false},
-		{name: "escape relative", target: "/tmp/media/imagesets/../other", want: false},
-		{name: "root escape", target: "/etc/passwd", want: false},
-		{name: "sibling prefix", target: "/tmp/media/imagesets2/item", want: false},
-		{name: "relative target", target: "gallery1/image.jpg", want: false},
-		{name: "conservative prefixed segment", target: filepath.Join(base, "..name", "image.jpg"), want: false},
+		{name: "parent directory", target: filepath.Join(sep, "tmp", "media"), want: false},
+		{name: "escape parent", target: filepath.Join(sep, "tmp", "media", "other"), want: false},
+		{name: "escape relative", target: base + sep + ".." + sep + "other", want: false},
+		{name: "root escape", target: filepath.Join(sep, "etc", "passwd"), want: false},
+		{name: "sibling prefix", target: filepath.Join(sep, "tmp", "media", "imagesets2", "item"), want: false},
+		{name: "relative target", target: filepath.Join("gallery1", "image.jpg"), want: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
