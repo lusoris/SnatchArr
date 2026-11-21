@@ -33,6 +33,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
+	"github.com/lusoris/SnatchArr/api/internal/pathsafe"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
 
@@ -168,7 +169,7 @@ func (s *Service) scanDir(ctx context.Context, baseDir string) error {
 }
 
 func isValidSetDir(baseDir, subPath string) bool {
-	if !isCleanSubdir(baseDir, subPath) {
+	if !pathsafe.StrictlyWithin(baseDir, subPath) {
 		return false
 	}
 	fi, err := os.Lstat(subPath)
@@ -271,7 +272,7 @@ type validEntry struct {
 
 func validateFileEntry(baseDir, setDir string, f os.DirEntry) (validEntry, bool) {
 	filePath := filepath.Join(setDir, f.Name())
-	if !isCleanSubdir(baseDir, filePath) {
+	if !pathsafe.StrictlyWithin(baseDir, filePath) {
 		return validEntry{}, false
 	}
 	fi, err := os.Lstat(filePath)
