@@ -28,6 +28,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
+# cleanup: restore the mode of the unreadable-actions-dir fixture when it exists (a failed restore goes to stderr), then remove $WORK.
 cleanup() {
   local locked="$WORK/unreadable-actions-dir/.github/actions/locked"
   if [ -d "$locked" ] && ! chmod 700 "$locked"; then
