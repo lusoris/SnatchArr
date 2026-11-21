@@ -744,7 +744,6 @@ workflows-lint: ## actionlint + pinned actions (zizmor) on every workflow file, 
 	bash tools/ci/workflow-check.sh
 	bash tools/ci/renovate_image_pull_test.sh
 	. tools/ci/tool-versions.env
-	RENOVATE_SIGNED_REPO="$${RENOVATE_SIGNED_REPO:-ghcr.io/renovatebot/renovate}"
 	export RENOVATE_IMAGE RENOVATE_SIGNED_REPO
 	ref="$$(bash tools/ci/renovate_image_pull.sh)"
 	python3 -I tools/ci/renovate_presets.py --image "$$ref"

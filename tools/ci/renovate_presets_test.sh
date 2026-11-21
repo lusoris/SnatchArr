@@ -736,8 +736,9 @@ PY
 echo "ok   bounded-file-and-docker-stderr"
 
 # 13. Both CI entry points invoke this check; planted copies prove every assertion fails closed.
+# assert_wiring FILE KIND NEEDLE [MODE]: require NEEDLE present or absent in the F1 step or workflows-lint.
 assert_wiring() {
-  python3 -I - "$1" "$2" "$3" <<'PY'
+  python3 -I - "$1" "$2" "$3" "${4:-present}" <<'PY'
 import pathlib
 import sys
 
@@ -747,14 +748,138 @@ if sys.argv[2] == "workflow":
     if marker not in text:
         raise SystemExit("presets workflow step is missing")
     section = text.split(marker, 1)[1].split("\n      - name:", 1)[0]
-else:
+elif sys.argv[2] == "makefile":
     marker = "workflows-lint:"
     if marker not in text:
         raise SystemExit("workflows-lint target is missing")
     section = text.split(marker, 1)[1].split("\n\n", 1)[0]
-if sys.argv[3] not in section:
-    raise SystemExit(f"missing wiring: {sys.argv[3]}")
+else:
+    raise SystemExit(f"unknown wiring target: {sys.argv[2]}")
+if sys.argv[4] == "present":
+    if sys.argv[3] not in section:
+        raise SystemExit(f"missing wiring: {sys.argv[3]}")
+elif sys.argv[4] == "absent":
+    if sys.argv[3] in section:
+        raise SystemExit(f"unexpected literal in {sys.argv[2]}: {sys.argv[3]}")
+else:
+    raise SystemExit(f"unknown assert_wiring mode: {sys.argv[4]}")
 PY
+}
+
+# assert_signed_repo_env ENV_FILE: require one valid RENOVATE_SIGNED_REPO line in tool-versions.env.
+assert_signed_repo_env() {
+  python3 -I - "$1" <<'PY'
+import pathlib
+import re
+import sys
+
+with pathlib.Path(sys.argv[1]).open("rb") as fh:
+    raw = fh.read(65537)
+if len(raw) > 65536:
+    raise SystemExit(f"{sys.argv[1]}: exceeds 65536 bytes")
+lines = raw.decode("utf-8").split("\n")
+if len(lines) > 256:
+    raise SystemExit(f"{sys.argv[1]}: exceeds 256 lines")
+pattern = re.compile(r"^RENOVATE_SIGNED_REPO=[a-z0-9.-]+/[a-z0-9._/-]+$")
+matches = 0
+assignments = 0
+for idx in range(len(lines)):
+    line = lines[idx]
+    if pattern.fullmatch(line) is not None:
+        matches += 1
+    if "RENOVATE_SIGNED_REPO=" in line and not line.lstrip().startswith("#"):
+        assignments += 1
+if matches != 1 or assignments != 1:
+    raise SystemExit(
+        f"{sys.argv[1]}: expected 1 RENOVATE_SIGNED_REPO=<host>/<repo> line, got {matches} valid ({assignments} total)"
+    )
+PY
+}
+
+# expect_named_pass NAME CMD...: run CMD and exit 1 with FAIL NAME on non-zero exit.
+expect_named_pass() {
+  local name="$1" out rc=0
+  shift
+  out="$("$@" 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf 'FAIL %s: %s\n' "$name" "$out" >&2
+    exit 1
+  fi
+}
+
+# expect_named_fail NAME DETAIL CMD...: require CMD to exit non-zero or fail with FAIL NAME.
+expect_named_fail() {
+  local name="$1" detail="$2"
+  shift 2
+  if "$@" >/dev/null 2>&1; then
+    printf 'FAIL %s: %s\n' "$name" "$detail" >&2
+    exit 1
+  fi
+}
+
+# plant_replacement SOURCE DEST OLD NEW: replace OLD once in SOURCE, write DEST, or fail closed.
+plant_replacement() {
+  python3 -I - "$1" "$2" "$3" "$4" <<'PY'
+import pathlib
+import sys
+
+src, dst, old, new = sys.argv[1:5]
+text = pathlib.Path(src).read_text(encoding="utf-8")
+if old not in text:
+    raise SystemExit(f"cannot plant fixture in {src}: missing {old!r}")
+pathlib.Path(dst).write_text(text.replace(old, new, 1), encoding="utf-8")
+PY
+}
+
+# test_signed_repo_wiring: require one RENOVATE_SIGNED_REPO source in tool-versions.env and no duplicate literal.
+test_signed_repo_wiring() {
+  local tv="$HERE/tool-versions.env"
+  local ci="$HERE/../../.github/workflows/ci.yml"
+  local mk="$HERE/../../Makefile"
+  local lit="ghcr.io/renovatebot/renovate"
+  local exp="export RENOVATE_IMAGE RENOVATE_SIGNED_REPO"
+
+  expect_named_pass "tool-versions-signed-repo" assert_signed_repo_env "$tv"
+  plant_replacement "$tv" "$work/tv-no-signed.env" "RENOVATE_SIGNED_REPO=" "# removed "
+  expect_named_fail "tool-versions-signed-repo" "missing key passed" \
+    assert_signed_repo_env "$work/tv-no-signed.env"
+  printf '%s\nRENOVATE_SIGNED_REPO=%s\n' "$(cat "$tv")" "$lit" > "$work/tv-dup-signed.env"
+  expect_named_fail "tool-versions-signed-repo" "duplicate key passed" \
+    assert_signed_repo_env "$work/tv-dup-signed.env"
+  plant_replacement "$tv" "$work/tv-tagged-signed.env" \
+    "RENOVATE_SIGNED_REPO=" "RENOVATE_SIGNED_REPO=bad:tag/"
+  expect_named_fail "tool-versions-signed-repo" "tagged repo passed" \
+    assert_signed_repo_env "$work/tv-tagged-signed.env"
+  printf '%s\nRENOVATE_SIGNED_REPO=BAD\n' "$(cat "$tv")" > "$work/tv-shadow-signed.env"
+  expect_named_fail "tool-versions-signed-repo" "shadowed invalid key passed" \
+    assert_signed_repo_env "$work/tv-shadow-signed.env"
+  echo "ok   tool-versions-signed-repo"
+
+  expect_named_pass "workflow-no-signed-repo-literal" assert_wiring "$ci" workflow "$lit" absent
+  expect_named_pass "workflow-no-signed-repo-literal" \
+    assert_wiring "$ci" workflow ". tools/ci/tool-versions.env"
+  expect_named_pass "workflow-no-signed-repo-literal" assert_wiring "$ci" workflow "$exp"
+  plant_replacement "$ci" "$work/ci-signed-literal.yml" "$exp" "RENOVATE_SIGNED_REPO=$lit
+          $exp"
+  expect_named_fail "workflow-no-signed-repo-literal" "workflow literal passed" \
+    assert_wiring "$work/ci-signed-literal.yml" workflow "$lit" absent
+  plant_replacement "$ci" "$work/ci-no-signed-export.yml" "$exp" "export RENOVATE_IMAGE"
+  expect_named_fail "workflow-no-signed-repo-literal" "workflow missing export passed" \
+    assert_wiring "$work/ci-no-signed-export.yml" workflow "$exp"
+  echo "ok   workflow-no-signed-repo-literal"
+
+  expect_named_pass "makefile-no-signed-repo-literal" assert_wiring "$mk" makefile "$lit" absent
+  expect_named_pass "makefile-no-signed-repo-literal" \
+    assert_wiring "$mk" makefile ". tools/ci/tool-versions.env"
+  expect_named_pass "makefile-no-signed-repo-literal" assert_wiring "$mk" makefile "$exp"
+  plant_replacement "$mk" "$work/make-signed-literal" "$exp" "RENOVATE_SIGNED_REPO=$lit
+	$exp"
+  expect_named_fail "makefile-no-signed-repo-literal" "Makefile literal passed" \
+    assert_wiring "$work/make-signed-literal" makefile "$lit" absent
+  plant_replacement "$mk" "$work/make-no-signed-export" "$exp" "export RENOVATE_IMAGE"
+  expect_named_fail "makefile-no-signed-repo-literal" "Makefile missing export passed" \
+    assert_wiring "$work/make-no-signed-export" makefile "$exp"
+  echo "ok   makefile-no-signed-repo-literal"
 }
 
 assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow \
@@ -769,6 +894,7 @@ assert_wiring "$HERE/../../Makefile" makefile \
   "python3 -I tools/ci/renovate_presets.py --image \"\$\$ref\""
 assert_wiring "$HERE/../../Makefile" makefile "tools/ci/renovate_image_pull.sh"
 assert_wiring "$HERE/../../Makefile" makefile "tools/ci/renovate_image_pull_test.sh"
+test_signed_repo_wiring
 
 # assert_workflow_timeout CI_YML [minimum]: require enough budget or print its ceiling in minutes.
 assert_workflow_timeout() {
