@@ -8,7 +8,8 @@
 //! not ready", "connection closed") before any byte reaches the API, so sending it again on the
 //! next connection is safe for every call. The soak (`make e2e-soak`, C14-01) counted these as
 //! failed API calls. [`stream_once_more`] opens a client stream again the same way, on the same
-//! receiver, so no event emitted meanwhile is lost.
+//! receiver, so no event emitted meanwhile is lost; an attempt that took an item is not reopened
+//! and the first refusal is returned.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -63,26 +64,36 @@ where
 }
 
 /// A request stream lent to one call attempt that hands its receiver back when the attempt
-/// drops it.
+/// drops it. An attempt that took an item is not reopened and the first refusal is returned.
 pub struct Lent<T> {
     rx: Option<mpsc::Receiver<T>>,
     back: Option<oneshot::Sender<mpsc::Receiver<T>>>,
+    /// Set once `poll_next` handed an item to the attempt.
+    taken: bool,
 }
 
 impl<T> Stream for Lent<T> {
     type Item = T;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match self.rx.as_mut() {
+        let poll = match self.rx.as_mut() {
             Some(rx) => rx.poll_recv(cx),
             None => Poll::Ready(None),
+        };
+        if matches!(poll, Poll::Ready(Some(_))) {
+            self.taken = true;
         }
+        poll
     }
 }
 
+/// Hands the receiver back only when no item was taken: taken items cannot be replayed, so the
+/// caller must not reopen the stream.
 impl<T> Drop for Lent<T> {
     fn drop(&mut self) {
-        if let (Some(rx), Some(back)) = (self.rx.take(), self.back.take()) {
+        if !self.taken
+            && let (Some(rx), Some(back)) = (self.rx.take(), self.back.take())
+        {
             let _ = back.send(rx);
         }
     }
@@ -90,7 +101,8 @@ impl<T> Drop for Lent<T> {
 
 /// Runs `call` with `rx` lent as a request stream, and opens it once more on the same receiver
 /// when the first attempt was never sent and dropped its stream within `RETURN_WAIT`. Any other
-/// outcome, and the outcome of the second attempt, is returned as is.
+/// outcome, and the outcome of the second attempt, is returned as is. An attempt that took an
+/// item is not reopened and the first refusal is returned.
 pub async fn stream_once_more<T, R, F, Fut>(rx: mpsc::Receiver<T>, mut call: F) -> Result<R, Status>
 where
     F: FnMut(Lent<T>) -> Fut,
@@ -100,6 +112,7 @@ where
     let first = Lent {
         rx: Some(rx),
         back: Some(back_tx),
+        taken: false,
     };
     match call(first).await {
         Err(status) if unsent(&status) => {
@@ -113,6 +126,7 @@ where
             call(Lent {
                 rx: Some(rx),
                 back: None,
+                taken: false,
             })
             .await
         }
@@ -305,6 +319,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stream_once_more_keeps_a_polled_stream_closed() {
+        let status = unsent_status().await;
+        tokio::time::pause();
+        let start = tokio::time::Instant::now();
+        let (tx, rx) = mpsc::channel::<u32>(4);
+        tx.send(1).await.expect("first item");
+        tx.send(2).await.expect("second item");
+        let attempts = AtomicU32::new(0);
+        let result = stream_once_more(rx, |mut events| {
+            let n = attempts.fetch_add(1, Ordering::SeqCst);
+            let status = status.clone();
+            async move {
+                if n == 0 {
+                    assert_eq!(events.next().await, Some(1));
+                }
+                drop(events);
+                Err::<u32, _>(status)
+            }
+        })
+        .await;
+        assert!(unsent(&result.expect_err("polled stream not reopened")));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+        assert!(start.elapsed() < RETURN_WAIT);
+    }
+
+    #[tokio::test]
     async fn lent_hands_its_receiver_back_on_drop() {
         let (tx, rx) = mpsc::channel::<u32>(2);
         tx.send(42).await.expect("send before lend");
@@ -312,9 +352,43 @@ mod tests {
         let lent = Lent {
             rx: Some(rx),
             back: Some(back_tx),
+            taken: false,
         };
         drop(lent);
         let mut returned = back_rx.await.expect("receiver handed back");
         assert_eq!(returned.recv().await, Some(42));
+    }
+
+    #[tokio::test]
+    async fn lent_keeps_its_receiver_once_an_item_was_taken() {
+        let (tx, rx) = mpsc::channel::<u32>(2);
+        tx.send(1).await.expect("first item");
+        tx.send(2).await.expect("second item");
+        let (back_tx, back_rx) = oneshot::channel();
+        let mut lent = Lent {
+            rx: Some(rx),
+            back: Some(back_tx),
+            taken: false,
+        };
+        assert_eq!(lent.next().await, Some(1));
+        drop(lent);
+        assert!(back_rx.await.is_err(), "receiver not handed back");
+    }
+
+    #[tokio::test]
+    async fn lent_hands_back_after_an_empty_poll() {
+        let (tx, rx) = mpsc::channel::<u32>(2);
+        let (back_tx, back_rx) = oneshot::channel();
+        let mut lent = Lent {
+            rx: Some(rx),
+            back: Some(back_tx),
+            taken: false,
+        };
+        let poll = tokio::time::timeout(Duration::from_millis(10), lent.next()).await;
+        assert!(poll.is_err(), "empty open channel stays pending");
+        drop(lent);
+        let mut returned = back_rx.await.expect("receiver handed back");
+        tx.send(99).await.expect("send after return");
+        assert_eq!(returned.recv().await, Some(99));
     }
 }
