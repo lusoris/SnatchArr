@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "findings": [
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": ".config/lefthook/scripts/checkpoint.py",
+      "functionName": "",
+      "value": 1243,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1243 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/config/config_test.go",
+      "functionName": "",
+      "value": 1374,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1374 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/config/registry.go",
+      "functionName": "",
+      "value": 1084,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1084 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/httpapi/handlers_integration_test.go",
+      "functionName": "",
+      "value": 2481,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 2481 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/httpapi/handlers_jellyfin_integration_test.go",
+      "functionName": "",
+      "value": 1125,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1125 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/httpapi/handlers_notifications_integration_test.go",
+      "functionName": "",
+      "value": 1003,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1003 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/httpapi/router_integration_test.go",
+      "functionName": "",
+      "value": 3345,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 3345 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/llm/tools.go",
+      "functionName": "",
+      "value": 1259,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1259 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/llm/tools_r3c_integration_test.go",
+      "functionName": "",
+      "value": 1372,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1372 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/store/migrations_integration_test.go",
+      "functionName": "",
+      "value": 1576,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1576 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "api/internal/watchaware/gatepass_integration_test.go",
+      "functionName": "",
+      "value": 1025,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1025 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "tools/apicompat/gate/main.go",
+      "functionName": "",
+      "value": 2162,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 2162 lines of code over Codacy's 1000 limit; this locked engine asset is not edited here, and issue 1179 closes it upstream before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "web/e2e/layout.test.ts",
+      "functionName": "",
+      "value": 1008,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1008 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "worker/crates/arr-client/src/lib.rs",
+      "functionName": "",
+      "value": 1474,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1474 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "worker/crates/snatch-core/src/lib.rs",
+      "functionName": "",
+      "value": 1346,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1346 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_file-nloc-medium",
+      "filePath": "worker/crates/snatch-worker/src/executor/executor_tests.rs",
+      "functionName": "",
+      "value": 1456,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 1456 lines of code over Codacy's 1000 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_parameter-count-medium",
+      "filePath": "api/internal/httpapi/handlers_integration_test.go",
+      "functionName": "buildHandlers",
+      "value": 14,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 14 parameters over Codacy's 12 limit; issue 1179 reduces it before expiry."
+    },
+    {
+      "patternId": "Lizard_parameter-count-medium",
+      "filePath": "api/internal/workergrpc/server.go",
+      "functionName": "New",
+      "value": 14,
+      "entered": "2026-11-16",
+      "expires": "2027-03-16",
+      "category": "D",
+      "issue": "1179",
+      "reason": "Lizard 1.24.0 measures 14 parameters over Codacy's 12 limit; issue 1179 reduces it before expiry."
+    }
+  ]
+}
