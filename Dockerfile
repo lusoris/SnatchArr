@@ -9,9 +9,9 @@
 FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS web
 WORKDIR /src/web
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
-# Node 25+ ships no corepack; install pnpm from npm at the packageManager version.
-RUN pm=$(node -p 'require("./package.json").packageManager') \
-    && npm install --global --no-audit --no-fund --loglevel=error "${pm%%+*}"
+COPY web/scripts/install-pnpm.sh ./scripts/install-pnpm.sh
+# Node 25+ ships no corepack; install pnpm from npm at the packageManager version and verify any declared digest.
+RUN bash scripts/install-pnpm.sh
 # patchedDependencies in pnpm-workspace.yaml points here; install fails without it.
 COPY web/patches/ ./patches/
 RUN pnpm install --frozen-lockfile

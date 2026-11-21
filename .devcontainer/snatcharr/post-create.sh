@@ -27,9 +27,8 @@ cargo install --locked cargo-deny@0.21.0
 cargo install --locked cargo-watch@8.5.3
 
 # Node
-# pnpm comes from npm at the packageManager version of web/package.json; Node 25+ ships no corepack.
-(cd web && pm=$(node -p 'require("./package.json").packageManager') \
-  && npm install --global --no-audit --no-fund --loglevel=error "${pm%%+*}")
+# Install pnpm from npm into $HOME/.local at the packageManager version of web/package.json, verifying any declared digest; Node 25+ ships no corepack.
+(cd web && bash scripts/install-pnpm.sh --prefix "$HOME/.local")
 
 # Kubernetes tooling (kubectl and helm come from the kubectl-helm-minikube feature in devcontainer.json)
 go install github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0
