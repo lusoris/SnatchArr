@@ -4,11 +4,13 @@
 #
 # Planted cases for workflow-check.sh. Accepted: a commit pin whose comment names its tag,
 # a commit pin whose comment names a branch (printed as a note), a go install pinned to a
-# release, and a go install pinned by a variable. Refused: a tag pin, a comment that names
+# release, a go install pinned by a variable, and go install text in composite action
+# descriptions (go-install-description). Refused: a tag pin, a comment that names
 # another tag, a missing comment, a broken workflow, a missing token, a repository without
 # workflow files, a zizmor run that fails or writes no report, a gate image without a digest,
-# a zizmor requirements file without hashes, a go install at @latest, at @main or without a
-# package, and azure/setup-helm without a version, at latest, or with the version in the next
+# a zizmor requirements file without hashes, a go install at @latest, at @main, without a
+# package, or at @latest in a composite action step (go-install-action-latest), and
+# azure/setup-helm without a version, at latest, or with the version in the next
 # step, and a ${{ }} expression expanded into a run script (accepted: setup-helm pinned to a
 # release). Last: Renovate reads all three workflow-gate image
 # pins, zizmor-requirements.txt, every go install pin and every setup-helm version in the
@@ -268,6 +270,74 @@ expect_accepted go-install-pinned "no version comment names another tag"
 
 plant_install go-install-variable "go install \"github.com/cordanaLLM/praetor/cmd/standardsctl@\${PRAETOR_REF}\""
 expect_accepted go-install-variable "no version comment names another tag"
+
+# go install text in top-level or input descriptions of a composite action is not run and passes.
+mkdir -p "$WORK/go-install-description/.github/workflows" "$WORK/go-install-description/.github/actions/planted"
+cat > "$WORK/go-install-description/.github/actions/planted/action.yml" <<'YAML'
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: planted
+description: >-
+  go install golang.org/x/vuln/cmd/govulncheck@latest
+inputs:
+  tool:
+    description: go install golang.org/x/vuln/cmd/govulncheck@latest
+    required: false
+    default: ok
+runs:
+  using: composite
+  steps:
+    - name: noop
+      shell: bash
+      run: echo ok
+YAML
+cat > "$WORK/go-install-description/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/planted
+YAML
+expect_accepted go-install-description "no version comment names another tag"
+
+# An unpinned go install in a composite action step run is refused naming the action file and line.
+mkdir -p "$WORK/go-install-action-latest/.github/workflows" "$WORK/go-install-action-latest/.github/actions/planted"
+cat > "$WORK/go-install-action-latest/.github/actions/planted/action.yml" <<'YAML'
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: planted
+description: planted action
+runs:
+  using: composite
+  steps:
+    - name: install
+      shell: bash
+      run: go install golang.org/x/vuln/cmd/govulncheck@latest
+YAML
+cat > "$WORK/go-install-action-latest/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/planted
+YAML
+expect_refusal go-install-action-latest "refused .github/actions/planted/action.yml:10: go install not pinned to a version"
 
 plant_install template-injection "echo \${{ github.event.inputs.tag }}"
 expect_refusal template-injection "refused .github/workflows/planted.yml:14: template-injection"

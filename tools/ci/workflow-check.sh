@@ -99,19 +99,29 @@ go_install_pinned() {
 
 # A Go tool installed at a floating version changes under an unchanged workflow; Renovate moves
 # the pinned ones (renovate.json, manager for go install in workflows).
+if ! "$PYTHON" -I "$HERE/workflow_uses.py" --step-text "$ROOT" -- "${FILES[@]}" "${ACTION_FILES[@]}" > "$WORK/step-text.tsv"; then
+  exit 1
+fi
+MAX_STEP_LINES=262144
+step_line_count=0
 floating=0
-for file in "${FILES[@]}" "${ACTION_FILES[@]}"; do
-  lineno=0
-  while IFS= read -r line || [ -n "$line" ]; do
-    lineno=$((lineno + 1))
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ "$line" =~ (^|[;\&|[:space:]])go[[:space:]]+install([[:space:]]+(.*)|$) ]] || continue
-    if ! go_install_pinned "${BASH_REMATCH[3]}"; then
-      echo "refused $file:$lineno: go install not pinned to a version" >&2
-      floating=1
-    fi
-  done < "$ROOT/$file"
-done
+while IFS= read -r record || [ -n "$record" ]; do
+  step_line_count=$((step_line_count + 1))
+  if [ "$step_line_count" -gt "$MAX_STEP_LINES" ]; then
+    echo "error: more than $MAX_STEP_LINES step text lines under $ROOT" >&2
+    exit 1
+  fi
+  loc="${record%%$'\t'*}"
+  line="${record#*$'\t'}"
+  file="${loc%:*}"
+  lineno="${loc##*:}"
+  [[ "$line" =~ ^[[:space:]]*# ]] && continue
+  [[ "$line" =~ (^|[;\&|[:space:]])go[[:space:]]+install([[:space:]]+(.*)|$) ]] || continue
+  if ! go_install_pinned "${BASH_REMATCH[3]}"; then
+    echo "refused $file:$lineno: go install not pinned to a version" >&2
+    floating=1
+  fi
+done < "$WORK/step-text.tsv"
 
 # Actions that install a tool and fall back to a floating default when `with: version` is
 # missing. azure/setup-helm asks the GitHub API for the newest release and, when that call

@@ -5,21 +5,25 @@
 # Offline planted cases for workflow_refs.sh and workflow_uses.py (no Docker, no network, stub
 # GraphQL curl on every call, fixed placeholder token).
 # Accepted: one current repository (clean), two current repositories across a workflow and a
-# composite action (two-current), uses-shaped text inside a run script block (run-block-uses), and
-# three distinct repositories batched into one GraphQL POST (three-repos).
+# composite action (two-current), uses-shaped text inside a run script block (run-block-uses), a
+# Docker-only local action directory holding only Dockerfile (docker-local-action), and three
+# distinct repositories batched into one GraphQL POST (three-repos).
 # Refused: a reusable workflow under a moved repository name (moved-workflow), a composite action
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
-# flow-style step under a moved repository name (moved-flow), a nested composite action under a
-# moved repository name (moved-nested-action), a composite action outside .github/actions reached
-# via `uses: ./tools/actions/x` (moved-outside-action), a composite action nested 9 directories
-# under .github/actions (moved-deep-action), a missing local action `uses: ./missing`
+# flow-style step under a moved repository name (moved-flow), an unquoted boolean job id `yes`
+# under a moved repository name (moved-bool-job-id), a nested composite action under a moved
+# repository name (moved-nested-action), a composite action outside .github/actions reached via
+# `uses: ./tools/actions/x` (moved-outside-action), a composite action reached via self-repository
+# `uses: $/.github/actions/planted` under a moved repository name (moved-self-repo-action), a
+# self-repository reference carrying `@ref` (self-repo-with-ref), a composite action nested 9
+# directories under .github/actions (moved-deep-action), a missing local action `uses: ./missing`
 # (missing-local-action), a local action escaping ROOT `uses: ./../outside` (escape-local-action),
-# an unreadable directory under .github/actions (unreadable-actions-dir), a GraphQL errors array
-# (gql-errors), a null GraphQL alias for a private or missing repository (null-alias), 101
-# repositories split across 2 GraphQL POSTs with a moved repository in the second batch
-# (over-100-repos), a missing token (missing-token), and workflow_uses.py without PyYAML
-# (no-pyyaml).
+# an unreadable directory under .github/actions when unprivileged (unreadable-actions-dir), a
+# GraphQL errors array (gql-errors), a null GraphQL alias for a private or missing repository
+# (null-alias), 101 repositories split across 2 GraphQL POSTs with a moved repository in the
+# second batch (over-100-repos), a missing token (missing-token), and workflow_uses.py without
+# PyYAML (no-pyyaml).
 #
 #   tools/ci/workflow_refs_test.sh
 #
@@ -281,6 +285,22 @@ jobs:
 YAML
 expect_refusal moved-flow "refused .github/workflows/planted.yml:10: moved/repo moved to current/repo" env CURL_BIN="$WORK/curl-moved"
 
+# An unquoted boolean job id `yes` is kept and its moved step reference is refused.
+mkdir -p "$WORK/moved-bool-job-id/.github/workflows"
+cat > "$WORK/moved-bool-job-id/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  yes:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: moved/repo@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da
+YAML
+expect_refusal moved-bool-job-id "refused .github/workflows/planted.yml:10: moved/repo moved to current/repo" env CURL_BIN="$WORK/curl-moved"
+
 # A moved reference in a nested composite action `.github/actions/group/inner/action.yml` is refused.
 plant_action moved-nested-action "moved/repo@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # v1.0.0" "group/inner"
 expect_refusal moved-nested-action "refused .github/actions/group/inner/action.yml:8: moved/repo moved to current/repo" env CURL_BIN="$WORK/curl-moved"
@@ -339,9 +359,62 @@ jobs:
 YAML
 expect_refusal moved-deep-action "refused .github/actions/$deep_dir/action.yml:6: moved/deep-repo moved to current/deep-repo" env CURL_BIN="$WORK/curl-moved"
 
-# A step `uses: ./missing` with neither action.yml nor action.yaml is refused naming path:line.
+# A composite action reached via `uses: $/.github/actions/planted` is scanned and refused.
+mkdir -p "$WORK/moved-self-repo-action/.github/workflows" "$WORK/moved-self-repo-action/.github/actions/planted"
+cat > "$WORK/moved-self-repo-action/.github/actions/planted/action.yml" <<'YAML'
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: planted
+description: planted action
+runs:
+  using: composite
+  steps:
+    - uses: moved/repo@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # v1.0.0
+YAML
+cat > "$WORK/moved-self-repo-action/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: \$/.github/actions/planted
+YAML
+expect_refusal moved-self-repo-action "refused .github/actions/planted/action.yml:8: moved/repo moved to current/repo" env CURL_BIN="$WORK/curl-moved"
+
+# A self-repository reference carrying `@ref` is refused before any directory lookup.
+plant self-repo-with-ref '$/.github/actions/planted@v1'
+expect_refusal self-repo-with-ref "error: .github/workflows/planted.yml:10: self-repository reference '\$/.github/actions/planted@v1' must not include @ref" env CURL_BIN="$WORK/curl-moved"
+
+# A Docker-only local action directory holding only Dockerfile is accepted and not listed.
+mkdir -p "$WORK/docker-local-action/.github/workflows" "$WORK/docker-local-action/docker-action"
+printf 'FROM scratch\n' > "$WORK/docker-local-action/docker-action/Dockerfile"
+cat > "$WORK/docker-local-action/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./docker-action
+YAML
+expect_accepted docker-local-action "all 1 used by name are under their current name" env CURL_BIN="$WORK/curl-moved"
+
+# A step `uses: ./missing` with no action.yml, action.yaml or Dockerfile is refused naming path:line.
 plant missing-local-action "./missing"
-expect_refusal missing-local-action "error: .github/workflows/planted.yml:10: local action './missing' has neither action.yml nor action.yaml" env CURL_BIN="$WORK/curl-moved"
+expect_refusal missing-local-action "error: .github/workflows/planted.yml:10: local action './missing' has no action.yml, action.yaml or Dockerfile" env CURL_BIN="$WORK/curl-moved"
 
 # A step `uses: ./../outside` escaping ROOT is refused naming path:line even when ../outside/action.yml exists.
 mkdir -p "$WORK/outside"
@@ -358,10 +431,15 @@ expect_refusal escape-local-action "error: .github/workflows/planted.yml:10: loc
 
 # An unreadable directory under .github/actions is refused rather than silently skipped.
 plant unreadable-actions-dir "$CHECKOUT # v7.0.1"
-mkdir -p "$WORK/unreadable-actions-dir/.github/actions/locked"
-chmod 000 "$WORK/unreadable-actions-dir/.github/actions/locked"
-expect_refusal unreadable-actions-dir "error: .github/actions:" env CURL_BIN="$WORK/curl-moved"
-chmod 700 "$WORK/unreadable-actions-dir/.github/actions/locked"
+locked_dir="$WORK/unreadable-actions-dir/.github/actions/locked"
+mkdir -p "$locked_dir"
+chmod 000 "$locked_dir"
+if ls "$locked_dir" > /dev/null 2>&1; then
+  echo "skip unreadable-actions-dir: process reads mode-000 directories (root or CAP_DAC_OVERRIDE)"
+else
+  expect_refusal unreadable-actions-dir "error: .github/actions:" env CURL_BIN="$WORK/curl-moved"
+fi
+chmod 700 "$locked_dir"
 
 # GraphQL answer with an `errors` member is refused naming path:line.
 plant gql-errors "$CHECKOUT # v7.0.1"
