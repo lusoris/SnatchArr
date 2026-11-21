@@ -11,27 +11,27 @@ require (
 	github.com/go-faster/errors v0.8.0
 	github.com/go-faster/jx v1.2.0
 	github.com/go-jose/go-jose/v4 v4.1.6
-	github.com/golusoris/goenvoy/arr/lidarr v1.6.4
-	github.com/golusoris/goenvoy/arr/prowlarr/v2 v2.1.8
-	github.com/golusoris/goenvoy/arr/radarr v1.5.7
-	github.com/golusoris/goenvoy/arr/readarr v1.5.4
-	github.com/golusoris/goenvoy/arr/seerr v1.6.3
-	github.com/golusoris/goenvoy/arr/sonarr v1.6.1
+	github.com/golusoris/goenvoy/arr/lidarr v1.6.5
+	github.com/golusoris/goenvoy/arr/prowlarr/v2 v2.1.9
+	github.com/golusoris/goenvoy/arr/radarr v1.5.8
+	github.com/golusoris/goenvoy/arr/readarr v1.5.5
+	github.com/golusoris/goenvoy/arr/seerr v1.6.4
+	github.com/golusoris/goenvoy/arr/sonarr v1.6.2
 	github.com/golusoris/goenvoy/arr/v2 v2.6.3
-	github.com/golusoris/goenvoy/arr/whisparr v1.6.1
+	github.com/golusoris/goenvoy/arr/whisparr v1.6.2
 	github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.6
 	github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.5
 	github.com/golusoris/goenvoy/downloadclient/qbit/v2 v2.1.2
 	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.1.4
-	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.1.2
+	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.1.3
 	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.4
 	github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.2.2
 	github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.3.1
 	github.com/golusoris/goenvoy/mediaserver/stash/v2 v2.1.1
-	github.com/golusoris/goenvoy/metadata v1.4.4
-	github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.2.1
-	github.com/golusoris/goenvoy/metadata/video/tvdb v1.3.7
-	github.com/golusoris/golusoris v0.22.1
+	github.com/golusoris/goenvoy/metadata v1.4.5
+	github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.2.2
+	github.com/golusoris/goenvoy/metadata/video/tvdb v1.3.8
+	github.com/golusoris/golusoris v0.22.3
 	github.com/golusoris/golusoris/core v0.12.3
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
