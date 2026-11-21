@@ -142,6 +142,7 @@ def rule_ids(root):
 
 
 def fixtures(root, ids):
+    """Return sorted root-relative POSIX fixture paths; raise ScanError on count outside 1..MAX_FIXTURES, missing leading build constraint, unknown rule, or missing ruleid/ok line."""
     files = sorted((root / FIXTURES).glob("*.go"))
     if not files or len(files) > MAX_FIXTURES:
         raise ScanError(

@@ -91,6 +91,7 @@ echo "$*" >> "$STUB_LOG"
 # Called as a native binary (no docker "run"): Semgrep state must sit in the scan's temporary
 # directory, as it would fail on a read-only home.
 if [ "$1" != run ]; then
+  # check_state_var NAME VALUE: check that VALUE matches */semgrep-state-*, or print an error and exit 3.
   check_state_var() {
     case "$2" in
       */semgrep-state-*) ;;
@@ -321,17 +322,23 @@ import yaml
 source = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 destination = pathlib.Path(sys.argv[2])
 line = source["required_by_stage"]["impl"][0]
+if not isinstance(line, str) or not line.endswith(" semgrep"):
+    raise AssertionError(f"expected ' semgrep' suffix, got {line!r}")
+prefix = line.removesuffix(" semgrep")
 review_only = {"required_by_stage": {"impl": [], "fix": [], "review": [line]}}
 missing_fix = {"required_by_stage": {"impl": [line], "fix": []}}
+prefix_only = {"required_by_stage": {"impl": [prefix], "fix": [prefix]}}
 (destination / "review-only.yaml").write_text(yaml.safe_dump(review_only), encoding="utf-8")
 (destination / "missing-fix.yaml").write_text(yaml.safe_dump(missing_fix), encoding="utf-8")
+(destination / "prefix-only.yaml").write_text(yaml.safe_dump(prefix_only), encoding="utf-8")
 PY
-for case_name in review-only missing-fix; do
+for case_name in review-only missing-fix prefix-only; do
   wiring_rc=0
   wiring_out="$(python3 -I "$WIRING" "$WORK/$case_name.yaml" 2>&1)" || wiring_rc=$?
   case "$case_name" in
     review-only) missing_stage=impl ;;
     missing-fix) missing_stage=fix ;;
+    prefix-only) missing_stage=impl ;;
   esac
   check_case "lane brief $case_name" 1 "$wiring_rc" "missing $missing_stage:" "$wiring_out"
   echo "ok   lane brief $case_name"
