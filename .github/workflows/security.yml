@@ -31,6 +31,9 @@ jobs:
       - name: govulncheck
         # The target make api-verify runs: the tools/go/go.mod pin, its version printed first (#161).
         run: make -C .. api-vuln
+      - name: govulncheck (metadata-proxy)
+        working-directory: ${{ github.workspace }}
+        run: make metadata-proxy-vuln
       - name: gosec (zero exclusions)
         # From the module root: started in api/, gosec loads no package and passes on zero files.
         working-directory: ${{ github.workspace }}
