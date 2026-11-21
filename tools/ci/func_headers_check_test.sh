@@ -620,6 +620,27 @@ edit_86() {
     printf '%s\n' '# line_overflow_doc is documented.' 'line_overflow_doc() { :; }' >>line-overflow.sh
 }
 
+# edit_87: a documented function followed by && passes.
+edit_87() {
+    printf '%s\n' '# and_doc is documented.' 'and_doc() {' '    :' '} && and_doc' >and-call.sh
+}
+
+# edit_88: a documented function followed by || passes.
+edit_88() {
+    printf '%s\n' '# or_doc is documented.' 'or_doc() {' '    :' '} || or_doc' >or-call.sh
+}
+
+# edit_89: a documented function followed by a pipe passes.
+edit_89() {
+    printf '%s\n' '# pipe_doc is documented.' 'pipe_doc() {' '    :' '} | cat' >pipe-call.sh
+}
+
+# edit_90: a nested function on the header line does not inherit the outer header.
+edit_90() {
+    printf '%s\n' '# outer_doc is documented.' \
+        'outer_doc() { inner_bare() { :; } && inner_bare; } && outer_doc' >nested-and.sh
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -713,6 +734,10 @@ expect "bare hash line above header passes" 0 "ok (" edit_83
 expect "anonymous subshell function fails closed" 2 "anon-sub.sh:2" edit_84
 expect "shell function at shfmt line limit passes" 0 "ok (" edit_85
 expect "shell function past shfmt line limit fails closed" 2 "missing or overflowed" edit_86
+expect "documented function followed by && passes" 0 "ok (" edit_87
+expect "documented function followed by || passes" 0 "ok (" edit_88
+expect "documented function followed by a pipe passes" 0 "ok (" edit_89
+expect "nested function on header line does not inherit outer header" 1 "shell function inner_bare has no header comment" edit_90
 
 if [ "$failed" -ne 0 ]; then
     exit 1
