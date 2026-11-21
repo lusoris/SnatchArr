@@ -94,9 +94,16 @@ SPDX-License-Identifier = "GPL-3.0-only"
 
 # Unmodified upstream logo from https://github.com/Whisparr/Whisparr at commit c55fdc66a410ad94f2d09261ed2fbb5e00dbc8c0; trademark owner: Whisparr project
 [[annotations]]
-path = ["web/static/logos/whisparr_v2.svg", "web/static/logos/whisparr_v3.svg"]
+path = ["web/static/logos/whisparr_v2.svg"]
 precedence = "override"
 SPDX-FileCopyrightText = "2010-2022 Whisparr Contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Unmodified upstream logo from https://github.com/Whisparr/Whisparr at commit b4c184ba48e083c2f3126cce94e7f6458fdc3871 (branch eros, Whisparr v3); trademark owner: Whisparr project
+[[annotations]]
+path = ["web/static/logos/whisparr_v3.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2010-2025 Whisparr Contributors"
 SPDX-License-Identifier = "GPL-3.0-or-later"
 
 # Unmodified upstream logo from https://github.com/stashapp/stash at commit 9e9ad972643320e737c711884f10e4285f0f3a88; trademark owner: Stash project

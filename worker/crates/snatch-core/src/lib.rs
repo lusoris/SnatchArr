@@ -49,12 +49,15 @@ pub struct PagePlan {
     pub next_cursor: u32,
 }
 
-/// Upper bound on pages fetched per cycle regardless of policy (HISS-02 loop bound).
+/// Upper bound on distinct wanted-page requests a run sends per cycle, the page-1 metadata read
+/// for the total included (HISS-02 loop bound).
 pub const MAX_PAGES_PER_CYCLE: u32 = 8;
 
 impl PagePlan {
     /// Plans which pages to fetch so that roughly `want * 2` candidates are seen before
-    /// filtering, without ever reading the whole list.
+    /// filtering, without ever reading the whole list. Reserves one slot when page 1 is not
+    /// in the plan so a run sends at most [`MAX_PAGES_PER_CYCLE`] distinct wanted-page
+    /// requests, the page-1 metadata read included.
     #[must_use]
     pub fn plan<R: RngExt>(
         total_records: u32,
@@ -78,8 +81,25 @@ impl PagePlan {
             .clamp(1, MAX_PAGES_PER_CYCLE);
         let count = needed.min(total_pages);
         match selection {
-            Selection::Random => Self::random(total_pages, count, rng),
-            Selection::Sequential => Self::sequential(total_pages, count, cursor),
+            Selection::Random => {
+                let mut plan = Self::random(total_pages, count, rng);
+                if u32::try_from(plan.pages.len()).unwrap_or(u32::MAX) == MAX_PAGES_PER_CYCLE
+                    && !plan.pages.contains(&1)
+                {
+                    plan.pages.pop();
+                }
+                plan
+            }
+            Selection::Sequential => {
+                let plan = Self::sequential(total_pages, count, cursor);
+                if u32::try_from(plan.pages.len()).unwrap_or(u32::MAX) == MAX_PAGES_PER_CYCLE
+                    && !plan.pages.contains(&1)
+                {
+                    Self::sequential(total_pages, count.saturating_sub(1), cursor)
+                } else {
+                    plan
+                }
+            }
             // Recency needs a wide pool to sort, so it always reads from the front with the
             // full page allowance.
             Selection::Recent => {
@@ -102,6 +122,51 @@ impl PagePlan {
         Self::sequential(total_pages, MAX_PAGES_PER_CYCLE.min(total_pages), 1)
     }
 
+    /// Plans additional pages after the planned pages yielded too few eligible candidates,
+    /// keeping the run within [`MAX_PAGES_PER_CYCLE`] distinct wanted-page requests, the
+    /// page-1 metadata read included.
+    #[must_use]
+    pub fn refill<R: RngExt>(
+        &self,
+        total_records: u32,
+        page_size: u32,
+        selection: Selection,
+        rng: &mut R,
+    ) -> Self {
+        let total_pages = total_records.div_ceil(page_size.max(1));
+        if total_pages == 0 {
+            return Self {
+                pages: Vec::new(),
+                next_cursor: self.next_cursor,
+            };
+        }
+        let mut read_set: BTreeSet<u32> = self
+            .pages
+            .iter()
+            .copied()
+            .filter(|&p| (1..=total_pages).contains(&p))
+            .collect();
+        let prepend_first = read_set.insert(1);
+        let read_count = u32::try_from(read_set.len()).unwrap_or(u32::MAX);
+        let budget = MAX_PAGES_PER_CYCLE
+            .min(total_pages)
+            .saturating_sub(read_count);
+        let mut pages = Vec::new();
+        if prepend_first {
+            pages.push(1);
+        }
+        let (new_pages, next_cursor) = if selection == Selection::Sequential {
+            Self::sequential_excluding(total_pages, budget, self.next_cursor, &read_set)
+        } else {
+            (
+                Self::sample_unread(total_pages, budget, &read_set, rng),
+                self.next_cursor,
+            )
+        };
+        pages.extend(new_pages);
+        Self { pages, next_cursor }
+    }
+
     fn random<R: RngExt>(total_pages: u32, count: u32, rng: &mut R) -> Self {
         let mut pages = Vec::with_capacity(count as usize);
         // Bounded rejection sampling: at most 8 * count draws.
@@ -118,6 +183,65 @@ impl PagePlan {
             pages,
             next_cursor: 1,
         }
+    }
+
+    fn sample_unread<R: RngExt>(
+        total_pages: u32,
+        budget: u32,
+        read_set: &BTreeSet<u32>,
+        rng: &mut R,
+    ) -> Vec<u32> {
+        let total_len = usize::try_from(total_pages).unwrap_or(usize::MAX);
+        let unread_len = total_len.saturating_sub(read_set.len());
+        let amount = usize::try_from(budget)
+            .unwrap_or(usize::MAX)
+            .min(unread_len);
+        if amount == 0 {
+            return Vec::new();
+        }
+        if total_pages <= MAX_PAGES_PER_CYCLE.saturating_mul(2) {
+            let unread: Vec<u32> = (1..=total_pages)
+                .filter(|p| !read_set.contains(p))
+                .collect();
+            return rand::seq::index::sample(rng, unread.len(), amount)
+                .into_iter()
+                .filter_map(|idx| unread.get(idx).copied())
+                .collect();
+        }
+        let draw = amount.saturating_add(read_set.len()).min(total_len);
+        rand::seq::index::sample(rng, total_len, draw)
+            .into_iter()
+            .filter_map(|idx| u32::try_from(idx).ok()?.checked_add(1))
+            .filter(|page| !read_set.contains(page))
+            .take(amount)
+            .collect()
+    }
+
+    fn sequential_excluding(
+        total_pages: u32,
+        budget: u32,
+        cursor: u32,
+        read_set: &BTreeSet<u32>,
+    ) -> (Vec<u32>, u32) {
+        let mut cur = if cursor == 0 || cursor > total_pages {
+            1
+        } else {
+            cursor
+        };
+        let mut pages = Vec::with_capacity(usize::try_from(budget).unwrap_or(0));
+        for _ in 0..total_pages {
+            if u32::try_from(pages.len()).unwrap_or(u32::MAX) >= budget {
+                break;
+            }
+            if !read_set.contains(&cur) {
+                pages.push(cur);
+            }
+            cur = wrap_page(cur, total_pages);
+        }
+        let next = pages
+            .last()
+            .map_or(cursor, |last| wrap_page(*last, total_pages));
+        (pages, next)
     }
 
     fn sequential(total_pages: u32, count: u32, cursor: u32) -> Self {
@@ -840,9 +964,43 @@ mod tests {
                 prop_assert_eq!(set.len(), plan.pages.len(), "pages must be distinct");
                 prop_assert!(plan.pages.len() as u32 <= MAX_PAGES_PER_CYCLE.min(total_pages));
                 prop_assert!(plan.pages.iter().all(|p| (1..=total_pages).contains(p)));
+                if total_pages >= 1 {
+                    let mut requests = set.clone();
+                    requests.insert(1);
+                    prop_assert!(requests.len() as u32 <= MAX_PAGES_PER_CYCLE.min(total_pages));
+                }
                 if want > 0 && total_pages > 0 { prop_assert!(!plan.pages.is_empty()); }
                 prop_assert!(plan.next_cursor >= 1);
             }
+        }
+
+        #[test]
+        fn refill_pages_are_disjoint_bounded_and_complete(total in 0u32..5000, size in 1u32..250, want in 1u32..100, cursor in 0u32..60, seed in any::<u64>()) {
+            let total_pages = total.div_ceil(size);
+            let bound = MAX_PAGES_PER_CYCLE.min(total_pages) as usize;
+            for selection in [Selection::Random, Selection::Sequential, Selection::Recent] {
+                let mut rng = SmallRng::seed_from_u64(seed);
+                let plan = PagePlan::plan(total, size, want, selection, cursor, &mut rng);
+                let refill = plan.refill(total, size, selection, &mut rng);
+                let all: BTreeSet<u32> = plan.pages.iter().chain(&refill.pages).copied().collect();
+                prop_assert_eq!(all.len(), plan.pages.len() + refill.pages.len());
+                prop_assert!(all.iter().all(|page| (1..=total_pages).contains(page)));
+                prop_assert!(all.len() <= bound);
+                let mut requests = all.clone();
+                if total_pages >= 1 {
+                    requests.insert(1);
+                }
+                prop_assert!(requests.len() <= bound);
+                if matches!(selection, Selection::Random | Selection::Sequential) {
+                    prop_assert_eq!(requests.len(), bound);
+                }
+                if total_pages > 0 && total_pages <= MAX_PAGES_PER_CYCLE {
+                    prop_assert_eq!(all, (1..=total_pages).collect());
+                }
+            }
+            let sweep = PagePlan::sweep(total, size);
+            let mut rng = SmallRng::seed_from_u64(seed);
+            prop_assert!(sweep.refill(total, size, Selection::Random, &mut rng).pages.is_empty());
         }
 
         #[test]
@@ -1036,6 +1194,53 @@ mod tests {
             before.sort_unstable();
             after.sort_unstable();
             prop_assert_eq!(before, after);
+        }
+    }
+
+    #[test]
+    fn refill_continues_and_preserves_sequential_cursor() {
+        let mut rng = SmallRng::seed_from_u64(11);
+        let random = PagePlan::plan(1084, 100, 10, Selection::Random, 1, &mut rng);
+        let refill = random.refill(1084, 100, Selection::Random, &mut rng);
+        let pages: BTreeSet<u32> = random.pages.iter().chain(&refill.pages).copied().collect();
+        assert_eq!(random.pages.len(), 1);
+        assert_eq!(refill.pages.len(), 7);
+        assert_eq!(pages.len(), 8);
+
+        let sequential = PagePlan::plan(50, 10, 2, Selection::Sequential, 1, &mut rng);
+        let refill = sequential.refill(50, 10, Selection::Sequential, &mut rng);
+        assert_eq!(sequential.pages, [1]);
+        assert_eq!(refill.pages, [2, 3, 4, 5]);
+        assert_eq!(refill.next_cursor, 1);
+    }
+
+    #[test]
+    fn refill_handles_empty_single_page_and_full_recent_plan() {
+        let mut rng = SmallRng::seed_from_u64(12);
+        for total in [0, 1] {
+            let plan = PagePlan::plan(total, 10, 2, Selection::Random, 1, &mut rng);
+            assert!(
+                plan.refill(total, 10, Selection::Random, &mut rng)
+                    .pages
+                    .is_empty()
+            );
+        }
+        let recent = PagePlan::plan(200, 10, 2, Selection::Recent, 1, &mut rng);
+        assert!(
+            recent
+                .refill(200, 10, Selection::Recent, &mut rng)
+                .pages
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn refill_never_returns_a_planned_page_across_seeds() {
+        for seed in 0..200 {
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let plan = PagePlan::plan(20_000, 100, 10, Selection::Random, 1, &mut rng);
+            let refill = plan.refill(20_000, 100, Selection::Random, &mut rng);
+            assert!(refill.pages.iter().all(|page| !plan.pages.contains(page)));
         }
     }
 

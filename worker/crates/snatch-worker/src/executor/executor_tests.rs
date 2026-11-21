@@ -16,6 +16,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 mod completion;
 mod logship_grpc;
+mod paging_refill;
 mod readarr_forks;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

@@ -204,6 +204,34 @@ struct Collected {
     priority_groups: Vec<i64>,
 }
 
+impl Collected {
+    fn merge(&mut self, mut other: Self) {
+        for candidate in other.keep.drain(..) {
+            if !self.keep.iter().any(|kept| kept.id == candidate.id) {
+                self.keep.push(candidate);
+            }
+        }
+        self.busy = self.busy.saturating_add(other.busy);
+        self.unavailable = self.unavailable.saturating_add(other.unavailable);
+        self.priority_ids.append(&mut other.priority_ids);
+        self.priority_ids.sort_unstable();
+        self.priority_ids.dedup();
+        self.priority_groups.append(&mut other.priority_groups);
+        self.priority_groups.sort_unstable();
+        self.priority_groups.dedup();
+    }
+
+    fn drop_busy(&mut self, busy: &[i64]) {
+        let before = self.keep.len();
+        self.keep.retain(|c| busy.binary_search(&c.id).is_err());
+        self.busy = self
+            .busy
+            .saturating_add(before.saturating_sub(self.keep.len()));
+        self.priority_ids
+            .retain(|id| busy.binary_search(id).is_err());
+    }
+}
+
 /// Everything derived from the lease before any I/O.
 struct Prepared {
     kind: Kind,
@@ -580,7 +608,7 @@ async fn snatch(
     events
         .emit(Ev::run(Level::Debug, EventType::PageFetched, page_msg))
         .await;
-    let c = collect_candidates(client, &p, run, &plan.pages, first).await?;
+    let (c, cursor) = collect_with_refill(client, &p, run, &plan, &first, &mut rng, events).await?;
     let eligible = u32::try_from(c.keep.len()).unwrap_or(u32::MAX);
     let filter_msg = format!(
         "{} candidate(s) after filters and afterglow; {} skipped as queued or grabbed within {} h; {} skipped as not yet available; {} requested via Seerr",
@@ -613,7 +641,7 @@ async fn snatch(
         preview_all(&p, &dispatch, &by_id, events).await;
         return Ok(Outcome::at(p.policy.cursor.clone(), eligible));
     }
-    let mut outcome = Outcome::at(plan.next_cursor.to_string(), eligible);
+    let mut outcome = Outcome::at(cursor.to_string(), eligible);
     dispatch_all(&p, &dispatch, &by_id, events, &mut outcome, health).await;
     Ok(outcome)
 }
@@ -772,20 +800,15 @@ async fn plan_pages(p: &Prepared, rng: &mut SmallRng) -> Result<(PagePlan, Wante
     Ok((plan, first))
 }
 
-/// Fetches the planned pages, applies the local filters, drops what is already queued or
-/// freshly grabbed, and asks the API which ids are not in afterglow. Returns the
-/// candidates and how many were skipped as busy.
-async fn collect_candidates(
-    client: &mut Client,
+async fn fetch_unique_candidates(
     p: &Prepared,
-    run: &Run,
     pages: &[u32],
-    first: WantedPage,
-) -> Result<Collected, ExecError> {
+    first: &WantedPage,
+) -> Result<Vec<Candidate>, ExecError> {
     let mut candidates = Vec::new();
     for page in pages {
         let fetched = if *page == 1 {
-            first.clone()
+            (*first).clone()
         } else {
             p.arr
                 .wanted_page(p.wanted, *page, p.page_size, release_of(&p.policy))
@@ -793,13 +816,30 @@ async fn collect_candidates(
         };
         candidates.extend(fetched.records);
     }
+    let mut seen = BTreeSet::new();
+    candidates.retain(|c| seen.insert(c.id));
+    Ok(candidates)
+}
+
+/// Fetches the planned pages, deduplicates shifted records, applies the local filters, drops
+/// what is already queued or freshly grabbed, and asks the API which ids are not in afterglow.
+/// Reuses `first` for page 1 so a run sends at most [`snatch_core::MAX_PAGES_PER_CYCLE`]
+/// distinct wanted-page requests, the page-1 metadata read included.
+async fn collect_candidates(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    pages: &[u32],
+    first: &WantedPage,
+    busy: &[i64],
+) -> Result<Collected, ExecError> {
+    let mut candidates = fetch_unique_candidates(p, pages, first).await?;
     if let Some(focus) = p.focus {
         candidates.retain(|c| focus.matches(c));
     }
     let filter = filter_of(&p.policy, OffsetDateTime::now_utc().unix_timestamp());
     let filtered = snatch_core::filter(&candidates, &filter);
     let unavailable = snatch_core::unavailable_count(&candidates, &filter);
-    let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
     let before = filtered.len();
     let filtered: Vec<Candidate> = filtered
         .into_iter()
@@ -829,6 +869,81 @@ async fn collect_candidates(
         priority_ids: resp.priority_ids,
         priority_groups: resp.priority_group_ids,
     })
+}
+
+async fn refresh_busy(p: &Prepared, run: &Run, collected: &mut Collected, events: &Events) {
+    match p.arr.busy_ids(p.policy.recent_grab_hours).await {
+        Ok(fresh) => collected.drop_busy(&fresh),
+        Err(err) => {
+            tracing::warn!(
+                run = %run.run_id,
+                error = %err,
+                "busy re-read after refill failed; keeping initial snapshot"
+            );
+            let msg = format!("busy re-read after refill failed ({err}); keeping initial snapshot");
+            events
+                .emit(Ev::run(Level::Warn, EventType::CandidatesFiltered, msg))
+                .await;
+        }
+    }
+}
+
+/// Collects candidates across planned and refill pages so a run sends at most
+/// [`snatch_core::MAX_PAGES_PER_CYCLE`] distinct wanted-page requests, the page-1 metadata
+/// read included.
+async fn collect_with_refill(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    plan: &PagePlan,
+    first: &WantedPage,
+    rng: &mut SmallRng,
+    events: &Events,
+) -> Result<(Collected, u32), ExecError> {
+    let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
+    let mut collected = collect_candidates(client, p, run, &plan.pages, first, &busy).await?;
+    if collected.keep.len() >= p.policy.per_cycle as usize {
+        return Ok((collected, plan.next_cursor));
+    }
+    let selection = selection_of(&p.policy);
+    let more = plan.refill(first.total_records, p.page_size, selection, rng);
+    if more.pages.is_empty() {
+        return Ok((collected, plan.next_cursor));
+    }
+    let page_msg = format!(
+        "{} candidate(s) on {} page(s); fetching {} more page(s)",
+        collected.keep.len(),
+        plan.pages.len(),
+        more.pages.len()
+    );
+    events
+        .emit(Ev::run(Level::Debug, EventType::PageFetched, page_msg))
+        .await;
+    let additional = match collect_candidates(client, p, run, &more.pages, first, &busy).await {
+        Ok(additional) => additional,
+        Err(err) => {
+            let kept = collected.keep.len();
+            tracing::warn!(
+                run = %run.run_id,
+                error = %err,
+                kept,
+                "refill failed; keeping collected candidates"
+            );
+            let msg = format!("refill failed ({err}); keeping {kept} candidate(s)");
+            events
+                .emit(Ev::run(Level::Warn, EventType::PageFetched, msg))
+                .await;
+            return Ok((collected, plan.next_cursor));
+        }
+    };
+    collected.merge(additional);
+    refresh_busy(p, run, &mut collected, events).await;
+    let cursor = if selection == Selection::Sequential {
+        more.next_cursor
+    } else {
+        plan.next_cursor
+    };
+    Ok((collected, cursor))
 }
 
 /// Asks the API for stamina per target and keeps what was granted: a target searched item by
