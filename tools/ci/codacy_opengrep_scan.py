@@ -19,6 +19,11 @@ the normalised source text of the finding, so a line shift keeps its key: whites
 string literals collapse to one space, whitespace inside a literal stays as written. Its count is
 how many findings share that key; one more is a new finding.
 
+The live mode first asks the pinned CLI (`info --output-format json`) which Opengrep version its
+plugin wants and refuses a mismatch with tools/ci/tool-versions.env before downloading anything:
+when those versions differ, the CLI sees the verified binary under CODACY_GLOBAL_DIR as outdated,
+downloads its own unverified release over it, and drops the --taint-intrafile wrapper.
+
 Codacy cloud runs Opengrep with --taint-intrafile, so taint follows values across functions of one
 file; the CLI's Opengrep plugin does not pass that flag. The scan therefore puts a wrapper script in
 front of the verified binary that adds the flag to every `scan` call.
@@ -113,6 +118,7 @@ MAX_BASELINE_ENTRIES = 512
 MAX_CONTENT_CHARS = 64 * 1024
 MAX_FILES = 4096
 GIT_TIMEOUT_SECONDS = 30
+INFO_TIMEOUT_SECONDS = 60
 CLI_TIMEOUT_SECONDS = 240
 TOOL_TIMEOUT_MS = 210_000
 DOWNLOAD_TIMEOUT_SECONDS = 60
@@ -626,6 +632,68 @@ def cli_env(environ: Mapping[str, str], home: Path) -> dict[str, str]:
     return {**{key: value for key, value in environ.items() if not key.startswith("CODACY_")}, "CODACY_GLOBAL_DIR": str(home)}
 
 
+def semgrep_tool(info: object) -> dict[str, object]:
+    """Return the single Semgrep entry from CLI INFO, else raise ScanError."""
+    if not isinstance(info, dict):
+        raise ScanError("CLI info: top level is not a JSON object")
+    tools = info.get("tools")
+    if not isinstance(tools, list):
+        raise ScanError("CLI info: tools missing or not a list")
+    semgrep = [
+        item for item in tools if isinstance(item, dict) and item.get("id") == "Semgrep"
+    ]
+    if not semgrep:
+        raise ScanError("CLI info: no Semgrep entry")
+    if len(semgrep) > 1:
+        raise ScanError(f"CLI info: {len(semgrep)} Semgrep entries, want 1")
+    return semgrep[0]
+
+
+def info_opengrep_version(info: object) -> str:
+    """Return the Semgrep preferredVersion in CLI INFO, else raise ScanError."""
+    entry = semgrep_tool(info)
+    if "preferredVersion" not in entry:
+        raise ScanError("CLI info: Semgrep preferredVersion missing")
+    preferred = entry["preferredVersion"]
+    if not isinstance(preferred, str):
+        raise ScanError("CLI info: Semgrep preferredVersion is not a string")
+    if VERSION_RE.fullmatch(preferred) is None:
+        raise ScanError(
+            f"CLI info: Semgrep preferredVersion {preferred!r} is not x.y.z"
+        )
+    return preferred
+
+
+def pin_problem(wanted: str, pinned: str) -> str | None:
+    """Return None when WANTED equals PINNED, else a pin mismatch message."""
+    if wanted == pinned:
+        return None
+    return (
+        f"{CLI_PACKAGE} wants Opengrep {wanted}, {TOOL_VERSIONS} pins {pinned}: "
+        "move OPENGREP_VERSION, OPENGREP_SHA256 and OPENGREP_URL with the CLI"
+    )
+
+
+def check_cli_opengrep(root: Path, pinned: str) -> None:
+    """Refuse a CLI whose wanted Opengrep version differs from PINNED."""
+    cli = cli_path(root)
+    command = [str(cli), "info", "--output-format", "json", "--no-update-notifier"]
+    with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-info-") as temporary:
+        env = cli_env(os.environ, Path(temporary))
+        result = run_capture(command, root, INFO_TIMEOUT_SECONDS, env)
+    if result.returncode != 0:
+        lines = result.stderr.strip().splitlines()
+        tail = lines[-1] if lines else ""
+        raise ScanError(f"Codacy CLI info failed (exit {result.returncode}): {tail}")
+    try:
+        info = json.loads(result.stdout)
+    except json.JSONDecodeError as err:
+        raise ScanError(f"Codacy CLI info did not print JSON: {err}") from err
+    problem = pin_problem(info_opengrep_version(info), pinned)
+    if problem is not None:
+        raise ScanError(problem)
+
+
 def live_report(root: Path, cwd: Path, home: Path) -> dict[str, object]:
     """Run the pinned CLI over every file of the scan copy CWD with the verified Opengrep under HOME; return its report.
 
@@ -697,9 +765,10 @@ def canary_check(root: Path, home: Path, baseline: Counter[str], version: str, r
 
 
 def scan(root: Path, today: date, report_out: Path | None) -> list[str]:
-    """Run the canary first, then scan every tracked Python file; return the failures."""
+    """Verify the CLI Opengrep pin, run the canary, then scan every tracked Python file."""
     versions = tool_versions(root)
     version = versions["OPENGREP_VERSION"]
+    check_cli_opengrep(root, version)
     baseline = baseline_counts(load_baseline(root, today))
     targets = tracked_files(root)
     with codacy_home(versions) as home:
@@ -1254,6 +1323,86 @@ def shrink_cases(entries: dict[str, dict[str, str]], sample: dict[str, str]) -> 
     ]
 
 
+def with_semgrep_version(
+    recorded: object, value: object, *, drop: bool = False
+) -> object:
+    """Copy RECORDED and drop or set preferredVersion on its Semgrep entry."""
+    copy = json.loads(json.dumps(recorded))
+    for item in copy["tools"]:
+        if item.get("id") == "Semgrep":
+            if drop:
+                item.pop("preferredVersion", None)
+            else:
+                item["preferredVersion"] = value
+    return copy
+
+
+def malformed_info_cases(recorded: object) -> list[tuple[str, object]]:
+    """Build planted malformed CLI info documents from deep copies of RECORDED."""
+    no_semgrep = json.loads(json.dumps(recorded))
+    no_semgrep["tools"] = [
+        item for item in no_semgrep["tools"] if item.get("id") != "Semgrep"
+    ]
+    two_semgrep = json.loads(json.dumps(recorded))
+    two_semgrep["tools"] += [
+        dict(item) for item in two_semgrep["tools"] if item.get("id") == "Semgrep"
+    ]
+    tools_dict = json.loads(json.dumps(recorded))
+    tools_dict["tools"] = {item["id"]: item for item in tools_dict["tools"]}
+    return [
+        ("CLI info without Semgrep entry refused", no_semgrep),
+        ("CLI info with two Semgrep entries refused", two_semgrep),
+        (
+            "CLI info with preferredVersion '1.33' refused",
+            with_semgrep_version(recorded, "1.33"),
+        ),
+        (
+            "CLI info without preferredVersion refused",
+            with_semgrep_version(recorded, None, drop=True),
+        ),
+        (
+            "CLI info with int preferredVersion refused",
+            with_semgrep_version(recorded, 1331),
+        ),
+        ("CLI info with tools as a dict refused", tools_dict),
+        (
+            "CLI info with top level as a list refused",
+            json.loads(json.dumps(recorded))["tools"],
+        ),
+    ]
+
+
+def info_cases(root: Path, pinned: str) -> list[tuple[str, bool]]:
+    """Return (name, held) for the CLI info reader and Opengrep pin mismatch check."""
+    recorded = load_json(root / FIXTURES / "cli-info.json")
+    wanted = info_opengrep_version(recorded)
+    mismatch = pin_problem("1.33.1", "1.30.0") or ""
+    required = (
+        "1.33.1",
+        "1.30.0",
+        "OPENGREP_VERSION",
+        "OPENGREP_SHA256",
+        "OPENGREP_URL",
+        CLI_PACKAGE,
+        TOOL_VERSIONS,
+    )
+    cases = [
+        (
+            "recorded CLI info matches the committed Opengrep pin",
+            wanted == "1.33.1" and pin_problem(wanted, pinned) is None,
+        ),
+        (
+            "Opengrep pin mismatch names both versions and all three variables",
+            all(token in mismatch for token in required),
+        ),
+    ]
+    cases += [
+        (name, raises(lambda data=data: info_opengrep_version(data)))
+        for name, data in malformed_info_cases(recorded)
+    ]
+    return cases
+
+
 def run_self_test(root: Path, today: date) -> int:
     """Replay recorded reports and planted baseline cases; return 1 when any case does not hold."""
     version = tool_versions(root)["OPENGREP_VERSION"]
@@ -1263,7 +1412,7 @@ def run_self_test(root: Path, today: date) -> int:
         scratch = Path(temporary)
         cases = report_cases(root, baseline_counts(entries), version) + fingerprint_cases() + guard_cases(scratch) + download_cases(scratch) + request_cases(scratch)
         cases += spec_cases(root, scratch) + redirect_cases()
-    cases += entry_cases(sample, set(config_ids(root))) + shrink_cases(entries, sample) + live_cases(config_ids(root))
+    cases += entry_cases(sample, set(config_ids(root))) + shrink_cases(entries, sample) + live_cases(config_ids(root)) + info_cases(root, version)
     cases.append(("empty baseline: the shrink cases still run", all(held for _name, held in shrink_cases({}, sample))))
     failed = [name for name, held in cases if not held]
     for name, held in cases:
