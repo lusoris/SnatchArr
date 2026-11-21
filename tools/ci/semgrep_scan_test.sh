@@ -16,6 +16,7 @@ set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/ci/test_lib.sh
+# shellcheck disable=SC1091 # shellcheck without -x does not follow this local helper.
 . "$HERE/test_lib.sh"
 SCAN="$HERE/semgrep_scan.py"
 ROOT="${SEMGREP_WIRING_ROOT:-$(cd "$HERE/../.." && pwd)}"
@@ -90,10 +91,16 @@ echo "$*" >> "$STUB_LOG"
 # Called as a native binary (no docker "run"): Semgrep state must sit in the scan's temporary
 # directory, as it would fail on a read-only home.
 if [ "$1" != run ]; then
-  case "${XDG_CONFIG_HOME:-}" in
-    */semgrep-state-*) ;;
-    *) echo "state file under the home directory"; exit 3 ;;
-  esac
+  check_state_var() {
+    case "$2" in
+      */semgrep-state-*) ;;
+      *) echo "$1 is outside semgrep-state directory"; exit 3 ;;
+    esac
+  }
+  check_state_var XDG_CONFIG_HOME "${XDG_CONFIG_HOME:-}"
+  check_state_var SEMGREP_SETTINGS_FILE "${SEMGREP_SETTINGS_FILE:-}"
+  check_state_var SEMGREP_LOG_FILE "${SEMGREP_LOG_FILE:-}"
+  check_state_var SEMGREP_VERSION_CACHE_PATH "${SEMGREP_VERSION_CACHE_PATH:-}"
 fi
 if [ "$1" = --version ]; then echo "semgrep stub"; echo "9.9.9"; exit 0; fi
 for arg in "$@"; do
@@ -108,6 +115,10 @@ while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
 shift
 case "$STUB_MODE" in
   clean) jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@" ;;
+  adds-file)
+    printf 'package main\n' > added.go
+    jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"
+    ;;
   finding) jq -n '{results: [{path: "main.go", start: {line: 1}, check_id: "demo-rule",
                    extra: {message: "planted"}}], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@" ;;
   skipped) jq -n '{results: [], errors: [], paths: {scanned: []}}' ;;
@@ -143,6 +154,8 @@ fresh() {
   printf '%s' "$RULES" > "$1/.semgrep.yml"
   printf '%s' "$FIXTURE" > "$1/tools/ci/semgrep/testdata/demo-rule.go"
   printf 'package main\n\nfunc main() {}\n' > "$1/main.go"
+  mkdir -p "$1/tools/ci"
+  printf 'SEMGREP_IMAGE=%s\n' "$IMAGE" > "$1/tools/ci/tool-versions.env"
   git -C "$1" init --quiet
   git -C "$1" add -A
 }
@@ -160,8 +173,8 @@ expect() {
   : > "$WORK/calls"
   got=0
   if [ -n "${NATIVE:-}" ]; then
-    out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" python3 -I "$SCAN" --root "$root" --semgrep "$NATIVE" \
-      2>&1)" || got=$?
+    out="$(cd "${NATIVE_CWD:-$PWD}" && STUB_MODE="$mode" STUB_LOG="$WORK/calls" \
+      python3 -I "$SCAN" --root "$root" --semgrep "$NATIVE" 2>&1)" || got=$?
   else
     out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" python3 -I "$SCAN" --root "$root" --docker "$STUB" \
       --image "$image" 2>&1)" || got=$?
@@ -223,10 +236,32 @@ expect 0 "ignored Go file is left out" clean yes "Semgrep: 1 files scanned, 0 fi
   'printf "ignored.go\n" > .gitignore && printf "package main\n" > ignored.go'
 expect 0 "deleted tracked file is left out" clean yes "Semgrep: 1 files scanned, 0 findings" \
   'printf "package main\n" > gone.go && git add gone.go && rm gone.go'
+expect 1 "target added during scan" adds-file yes \
+  "target set changed during the scan: 1 added, 0 removed: ['added.go']"
 
 # Native binary (--semgrep): same replay and scanned-file check, state outside the home directory.
 NATIVE="$STUB" expect 0 "native binary, clean repository" clean yes \
   "Semgrep native: $STUB version 9.9.9; CI runs the pinned image"
+CI_TAG="${IMAGE%@*}"
+CI_TAG="${CI_TAG##*:}"
+check_case "native version differs from CI pin" 0 0 \
+  "Semgrep native version 9.9.9 differs from the CI pin $CI_TAG; the CI scan decides" "$out"
+echo "ok   native version differs from CI pin"
+NATIVE=./docker NATIVE_CWD="$WORK" expect 0 "relative native binary with separate root" clean yes \
+  "Semgrep native: $STUB version 9.9.9; CI runs the pinned image"
+mkdir -p "$WORK/xdg/git"
+printf 'ignored.go\n' > "$WORK/xdg/git/ignore"
+XDG_CONFIG_HOME="$WORK/xdg" NATIVE="$STUB" expect 0 \
+  "native preserves caller Git excludes" clean yes "Semgrep: 1 files scanned, 0 findings" \
+  'printf "package main\n" > ignored.go'
+if grep -q 'ignored.go' "$WORK/calls"; then
+  echo 'FAIL native preserves caller Git excludes: ignored.go reached stub' >&2
+  exit 1
+fi
+NATIVE="$STUB" expect 0 "native without CI pin" clean yes "CI pin unknown" \
+  'rm tools/ci/tool-versions.env'
+NATIVE="$STUB" expect 0 "native with missing CI tag" clean yes "CI pin unknown" \
+  "sed -i 's/:[^:@]*@/@/' tools/ci/tool-versions.env"
 NATIVE="$STUB" expect 1 "native binary, scan skips a file" skipped yes \
   "report scanned 0 of 1 files; not scanned: ['main.go']"
 NATIVE="$STUB" expect 1 "native binary, scan reports a finding" finding yes "1 finding(s), 0 error(s)"
@@ -253,8 +288,7 @@ for wired in \
   "lefthook.yml:make semgrep-scan" \
   ".github/workflows/ci.yml#semgrep:tools/ci/tool-versions.env" \
   ".github/workflows/ci.yml#semgrep:python3 -I tools/ci/semgrep_scan.py --image" \
-  "renovate.json:SEMGREP_IMAGE=" \
-  ".config/lane-brief.yaml:python3 -I tools/ci/semgrep_scan.py --semgrep"; do
+  "renovate.json:SEMGREP_IMAGE="; do
   label="${wired%%:*}"
   pattern="${wired#*:}"
   case "$label" in
@@ -273,6 +307,34 @@ for wired in \
     printf "FAIL wiring: %s runs no '%s'\n" "$label" "${wired#*:}" >&2
     exit 1
   fi
+done
+WIRING="$HERE/lane_brief_wiring.py"
+wiring_rc=0
+wiring_out="$(python3 -I "$WIRING" "$ROOT/.config/lane-brief.yaml" 2>&1)" || wiring_rc=$?
+check_case "lane brief impl and fix wiring" 0 "$wiring_rc" "" "$wiring_out"
+python3 -I - "$ROOT/.config/lane-brief.yaml" "$WORK" <<'PY'
+import pathlib
+import sys
+
+import yaml
+
+source = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+destination = pathlib.Path(sys.argv[2])
+line = source["required_by_stage"]["impl"][0]
+review_only = {"required_by_stage": {"impl": [], "fix": [], "review": [line]}}
+missing_fix = {"required_by_stage": {"impl": [line], "fix": []}}
+(destination / "review-only.yaml").write_text(yaml.safe_dump(review_only), encoding="utf-8")
+(destination / "missing-fix.yaml").write_text(yaml.safe_dump(missing_fix), encoding="utf-8")
+PY
+for case_name in review-only missing-fix; do
+  wiring_rc=0
+  wiring_out="$(python3 -I "$WIRING" "$WORK/$case_name.yaml" 2>&1)" || wiring_rc=$?
+  case "$case_name" in
+    review-only) missing_stage=impl ;;
+    missing-fix) missing_stage=fix ;;
+  esac
+  check_case "lane brief $case_name" 1 "$wiring_rc" "missing $missing_stage:" "$wiring_out"
+  echo "ok   lane brief $case_name"
 done
 echo "ok   Makefile (verify-all, semgrep-scan), lefthook pre-push, CI semgrep job, Renovate and lane briefs wire semgrep_scan.py and SEMGREP_IMAGE"
 

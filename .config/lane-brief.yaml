@@ -5,7 +5,7 @@
 # lane brief that only lists vet, lint and tests lets a lane draft reach
 # the gate with a finding the lane never saw (PR 1244 round r14: rule
 # no-unbounded-http-body-read at api/internal/metadata/tvdb/transport.go:71).
-# Every implementation and fix brief therefore runs the same rules locally.
+# Every implementation and fix brief therefore carries a runnable local scan command.
 #
 # The brief names the repository's scan script, not a bare `semgrep scan`:
 # a hand-written scan of a directory skips every *_test.go file without a
@@ -15,6 +15,6 @@
 # sandboxes have no docker, so the brief uses its native-binary mode.
 required_by_stage:
   impl:
-    - "python3 -I tools/ci/semgrep_scan.py --semgrep"
+    - "python3 -I tools/ci/semgrep_scan.py --semgrep semgrep"
   fix:
-    - "python3 -I tools/ci/semgrep_scan.py --semgrep"
+    - "python3 -I tools/ci/semgrep_scan.py --semgrep semgrep"
