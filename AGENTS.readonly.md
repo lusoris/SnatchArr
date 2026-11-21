@@ -151,4 +151,6 @@ make dev                       # postgres via compose, then api (air), worker (c
 APP_SNATCHARR_PROFILE=dev      # relaxed cookies + built-in dev secrets; still Postgres
 ```
 
-Reference sources: remote only. golusoris, goenvoy, sveltesentio (github.com/plurano); praetor (github.com/tekmora). Verify symbol against remote tree before use.
+Reference sources: remote only. golusoris, goenvoy, sveltesentio
+(github.com/plurano); praetor (github.com/tekmora). Verify symbol against
+remote tree before use.
