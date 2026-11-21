@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
-"""Count Jellyfin movie naming mismatches from NUL-delimited path records."""
+r"""Count Jellyfin movie naming mismatches from NUL-delimited path records.
+
+Input: find LIBRARY -mindepth 1 \( -type f -name .ignore -empty -printf 'e\t%P\0' \) -o -printf '%y\t%P\0'
+Records use e for empty regular files, f for other files, d for directories,
+and l for symlinks. Without e records, every .ignore is reported as
+dot_ignore_rules_unverified because its contents cannot be read here.
+"""
 
 from __future__ import annotations
 
@@ -161,30 +167,48 @@ STACK_RULES = (
 )
 YEAR_RE = re.compile(r"(?:19|20)[0-9]{2}")
 DATE_ONLY_RE = re.compile(r"^(?:19|20)[0-9]{2}[._ -][0-9]{2}[._ -][0-9]{2}(?:$|[ _.-])")
-PROVIDER_RE = re.compile(r"\[(?:imdbid|tmdbid|tvdbid)-[^\]]+\]", re.IGNORECASE)
+PROVIDER_TAG = r"(?:imdbid|tmdbid|tvdbid|imdb|tmdb|tvdb)[=-]"
+PROVIDER_RE = re.compile(
+    r"\[" + PROVIDER_TAG + r"(?=[^]]*[^]\s])[^]]+\]"
+    r"|\(" + PROVIDER_TAG + r"(?=[^)]*[^)\s])[^)]+\)"
+    r"|\{" + PROVIDER_TAG + r"(?=[^}]*[^}\s])[^}]+\}",
+    re.IGNORECASE,
+)
 RELEASE_WORDS_RE = re.compile(
     r"(?:^|[ ._-])(?:2160p|1080p|720p|480p|4k|uhd|bluray|blu-ray|web-dl|h\.?26[45]|x26[45])(?:$|[ ._-])",
     re.IGNORECASE,
 )
 
 
-def parse_records(data: bytes) -> list[tuple[str, str]]:
+# These scalar caps bound input reading, record parsing, and downstream loops (HISS-02).
+MAX_INPUT_BYTES = 256 * 1024 * 1024
+MAX_RECORDS = 2_000_000
+MAX_PATH_BYTES = 4096
+
+
+def parse_records(
+    data: bytes, *, max_records: int = MAX_RECORDS, max_path_bytes: int = MAX_PATH_BYTES
+) -> list[tuple[str, str]]:
     """Parse find-style records without ever including names in errors."""
-    chunks = data.split(b"\0")
+    chunks = data.split(b"\0", max_records + 1)
     if chunks and chunks[-1] == b"":
         chunks.pop()
     records: list[tuple[str, str]] = []
     for index, chunk in enumerate(chunks, 1):
+        if index > max_records:
+            raise ValueError(f"input exceeds {max_records} records")
         if b"\t" not in chunk:
             raise ValueError(f"record {index}: missing type separator")
         raw_type, raw_path = chunk.split(b"\t", 1)
         if len(raw_type) != 1 or not raw_path:
             raise ValueError(f"record {index}: invalid type or empty path")
+        if len(raw_path) > max_path_bytes:
+            raise ValueError(f"record {index}: path exceeds {max_path_bytes} bytes")
         path = raw_path.decode("utf-8", errors="surrogateescape")
         if path.startswith("/") or ".." in path.split("/"):
             raise ValueError(f"record {index}: path is not relative")
         kind = raw_type.decode("ascii", errors="replace")
-        records.append((kind if kind in {"f", "d", "l"} else "other", path))
+        records.append((kind if kind in {"e", "f", "d", "l"} else "other", path))
     return records
 
 
@@ -288,6 +312,7 @@ def _mark_extras(
     stem: str,
     containing: str,
     ignored_dirs: set[str],
+    unverified_dirs: set[str],
     affected: dict[str, set[str]],
     folders: dict[str, set[str]],
 ) -> tuple[bool, bool]:
@@ -316,15 +341,20 @@ def _mark_extras(
     ):
         _mark("sample_marker", path, affected, folders)
         is_extra = True
-    # `.ignore` excludes a directory and descendants, docs, Excluding whole directories.
-    # https://github.com/jellyfin/jellyfin.org/blob/38b0cda4ad0f2a43662aea94f026decf8a5b4990/docs/general/server/media/excluding-directory.md#excluding-whole-directories
-    is_ignored = any(
-        path == directory or path.startswith(directory + "/")
-        for directory in ignored_dirs
-    )
+    # Empty or invalid `.ignore` excludes its nearest directory; rules may be selective.
+    # https://github.com/jellyfin/jellyfin/blob/83d0d0e7f76e23e2e085c8ff67d28b772d35967d/Emby.Server.Implementations/Library/DotIgnoreIgnoreRule.cs#L68-L88
+    # https://github.com/jellyfin/jellyfin/blob/83d0d0e7f76e23e2e085c8ff67d28b772d35967d/Emby.Server.Implementations/Library/DotIgnoreIgnoreRule.cs#L248-L310
+    is_ignored = any(_within(path, directory) for directory in ignored_dirs)
     if is_ignored:
         _mark("dot_ignore", path, affected, folders)
+    if any(_within(path, directory) for directory in unverified_dirs):
+        _mark("dot_ignore_rules_unverified", path, affected, folders)
     return is_extra, is_ignored
+
+
+def _within(path: str, directory: str) -> bool:
+    """Test a relative path against a directory, including the library root."""
+    return not directory or path == directory or path.startswith(directory + "/")
 
 
 def _mark_video(
@@ -343,7 +373,7 @@ def _mark_video(
         _mark("multiversion", path, affected, folders)
     # MovieResolver.cs:252-280 processes a folder's direct video children.
     # https://github.com/jellyfin/jellyfin/blob/83d0d0e7f76e23e2e085c8ff67d28b772d35967d/Emby.Server.Implementations/Library/Resolvers/Movies/MovieResolver.cs#L252-L280
-    peers = video_folders[containing]
+    peers = video_folders.get(containing, [])
     if (
         path in peers
         and len(peers) > 1
@@ -364,8 +394,9 @@ def _mark_video(
     name = Path(path).stem
     if not YEAR_RE.search(name) or DATE_ONLY_RE.match(name):
         _mark("missing_year_or_date_title", path, affected, folders)
-    # Parsed provider tags: MovieResolver.cs:372-402 (TMDb, TVDb, IMDb).
-    # https://github.com/jellyfin/jellyfin/blob/83d0d0e7f76e23e2e085c8ff67d28b772d35967d/Emby.Server.Implementations/Library/Resolvers/Movies/MovieResolver.cs#L372-L402
+    # Bracketed provider tags only; bare IMDb ids are outside this class.
+    # PathExtensions.cs:33-100 defines names, aliases, delimiters and values.
+    # https://github.com/jellyfin/jellyfin/blob/83d0d0e7f76e23e2e085c8ff67d28b772d35967d/Emby.Server.Implementations/Library/PathExtensions.cs#L33-L100
     if PROVIDER_RE.search(path):
         _mark("provider_id_tags", path, affected, folders)
 
@@ -401,6 +432,7 @@ def _extension_counts(paths: set[str]) -> dict[str, int]:
 def _prepare_video_groups(
     videos: set[str],
     ignored_dirs: set[str],
+    unverified_dirs: set[str],
     affected: dict[str, set[str]],
     affected_folders: dict[str, set[str]],
 ) -> VideoGroups:
@@ -413,6 +445,7 @@ def _prepare_video_groups(
             Path(path).stem.casefold(),
             parent(path),
             ignored_dirs,
+            unverified_dirs,
             affected,
             affected_folders,
         )
@@ -438,16 +471,32 @@ def _prepare_video_groups(
     }
 
 
+def _ignore_directories(records: list[tuple[str, str]]) -> tuple[set[str], set[str]]:
+    """Separate known empty ignore markers from markers with unknown contents."""
+    ignored_dirs = {
+        parent(path)
+        for kind, path in records
+        if kind == "e" and Path(path).name == ".ignore"
+    }
+    unverified_dirs = {
+        parent(path)
+        for kind, path in records
+        if kind in {"f", "l"} and Path(path).name == ".ignore"
+    }
+    return ignored_dirs, unverified_dirs
+
+
 def census(records: list[tuple[str, str]]) -> CensusResult:
     """Summarize naming mismatch classes without opening the listed paths."""
-    files = {path for kind, path in records if kind == "f"}
+    files = {path for kind, path in records if kind in {"f", "e", "l"}}
     folders_on_disk = {path for kind, path in records if kind == "d"}
     videos = {path for path in files if extension(path) in VIDEO_EXTENSIONS}
-    ignored_dirs = {parent(path) for path in files if Path(path).name == ".ignore"}
-    ignored_dirs.update(path for path in folders_on_disk if f"{path}/.ignore" in files)
+    ignored_dirs, unverified_dirs = _ignore_directories(records)
     affected: dict[str, set[str]] = defaultdict(set)
     affected_folders: dict[str, set[str]] = defaultdict(set)
-    groups = _prepare_video_groups(videos, ignored_dirs, affected, affected_folders)
+    groups = _prepare_video_groups(
+        videos, ignored_dirs, unverified_dirs, affected, affected_folders
+    )
     for path in groups["scanned"]:
         _mark_video(
             path,
@@ -467,6 +516,7 @@ def census(records: list[tuple[str, str]]) -> CensusResult:
         "extra_suffix",
         "sample_marker",
         "dot_ignore",
+        "dot_ignore_rules_unverified",
         "stacking",
         "multiversion",
         "multiple_videos_per_folder",
@@ -565,9 +615,38 @@ SELF_TEST_CASES = [
     ("sample-underscore-positive", [("f", "film/X_sample.mkv")], "sample_marker", 1),
     (
         "ignore-positive",
-        [("d", "film"), ("f", "film/.ignore"), ("f", "film/video.mp4")],
+        [("d", "film"), ("e", "film/.ignore"), ("f", "film/video.mp4")],
         "dot_ignore",
         1,
+    ),
+    (
+        "ignore-rules-positive",
+        [("d", "film"), ("f", "film/.ignore"), ("f", "film/video.mp4")],
+        "dot_ignore_rules_unverified",
+        1,
+    ),
+    (
+        "ignore-rules-not-excluded",
+        [("d", "film"), ("f", "film/.ignore"), ("f", "film/video.mp4")],
+        "dot_ignore",
+        0,
+    ),
+    (
+        "root-ignore-positive",
+        [("e", ".ignore"), ("d", "film"), ("f", "film/Film (2001).mkv")],
+        "dot_ignore",
+        1,
+    ),
+    (
+        "root-ignore-boundary",
+        [
+            ("e", "film/.ignore"),
+            ("d", "film"),
+            ("d", "other"),
+            ("f", "other/Other (2001).mkv"),
+        ],
+        "dot_ignore",
+        0,
     ),
     ("ignore-negative", [("d", "film"), ("f", "film/video.mp4")], "dot_ignore", 0),
     (
@@ -576,7 +655,7 @@ SELF_TEST_CASES = [
             ("d", "film"),
             ("d", "film/ignored"),
             ("d", "film/other"),
-            ("f", "film/ignored/.ignore"),
+            ("e", "film/ignored/.ignore"),
             ("f", "film/other/video.mp4"),
         ],
         "dot_ignore",
@@ -666,6 +745,12 @@ SELF_TEST_CASES = [
         0,
     ),
     (
+        "extra-only-folder-boundary",
+        [("d", "film"), ("d", "film/trailers"), ("f", "film/trailers/one.mp4")],
+        "multiple_videos_per_folder",
+        0,
+    ),
+    (
         "stacked-with-trailer",
         [
             ("d", "No"),
@@ -692,12 +777,24 @@ SELF_TEST_CASES = [
         [
             ("d", "library"),
             ("d", "library/ignored"),
-            ("f", "library/ignored/.ignore"),
+            ("e", "library/ignored/.ignore"),
             ("f", "library/ignored/Film (2020).mkv"),
             ("f", "library/Film (2020).mkv"),
         ],
         "clean_title_year_collision",
         0,
+    ),
+    (
+        "ignore-rules-collision",
+        [
+            ("d", "library"),
+            ("d", "library/ignored"),
+            ("f", "library/ignored/.ignore"),
+            ("f", "library/ignored/Film (2020).mkv"),
+            ("f", "library/Film (2020).mkv"),
+        ],
+        "clean_title_year_collision",
+        2,
     ),
     (
         "mixed-positive",
@@ -716,6 +813,24 @@ SELF_TEST_CASES = [
         [("d", "f"), ("f", "f/a.mkv"), ("f", "f/a-cd1.mkv"), ("f", "f/a-cd2.mkv")],
         "multiple_videos_per_folder",
         1,
+    ),
+    (
+        "symlink-video-positive",
+        [("d", "film"), ("l", "film/a.mkv"), ("l", "film/b.mkv")],
+        "multiple_videos_per_folder",
+        2,
+    ),
+    (
+        "symlink-video-negative",
+        [("d", "film"), ("l", "film/a.nfo")],
+        "multiple_videos_per_folder",
+        0,
+    ),
+    (
+        "symlink-mixed-boundary",
+        [("d", "film"), ("f", "film/a.mkv"), ("l", "film/b.mkv")],
+        "multiple_videos_per_folder",
+        2,
     ),
     ("root-positive", [("f", "a.mkv")], "library_root_video", 1),
     ("root-negative", [("d", "a"), ("f", "a/a.mkv")], "library_root_video", 0),
@@ -800,6 +915,47 @@ SELF_TEST_CASES = [
     ),
     ("provider-negative", [("f", "Film (2024).mkv")], "provider_id_tags", 0),
     ("provider-boundary", [("f", "Film imdbid-tt123.mkv")], "provider_id_tags", 0),
+    (
+        "provider-equals-positive",
+        [("f", "Film (2001) [tmdbid=12].mkv")],
+        "provider_id_tags",
+        1,
+    ),
+    (
+        "provider-alias-positive",
+        [("f", "Film (2001) [tmdb-12].mkv")],
+        "provider_id_tags",
+        1,
+    ),
+    (
+        "provider-brace-positive",
+        [("f", "Film (2001) {imdbid=tt0000012}.mkv")],
+        "provider_id_tags",
+        1,
+    ),
+    (
+        "provider-mismatched-negative",
+        [("f", "Film (2001) [tmdbid=12).mkv")],
+        "provider_id_tags",
+        0,
+    ),
+    (
+        "provider-blank-boundary",
+        [("f", "Film (2001) [tmdbid= ].mkv")],
+        "provider_id_tags",
+        0,
+    ),
+    (
+        "provider-equals-collision-positive",
+        [
+            ("d", "a"),
+            ("f", "a/Film (2001) [tmdbid=1].mkv"),
+            ("d", "b"),
+            ("f", "b/Film (2001).mkv"),
+        ],
+        "clean_title_year_collision",
+        2,
+    ),
 ]
 
 
@@ -808,6 +964,8 @@ def self_test() -> None:
     try:
         for name, records, label, expected in SELF_TEST_CASES:
             _case(name, records, label, expected)
+        _mark_video_missing_folder_test()
+        _limit_test()
         _privacy_test()
     except (AssertionError, ValueError, OSError) as error:
         name = (
@@ -820,22 +978,101 @@ def self_test() -> None:
     print(f"ok   naming_census self-test ({len(SELF_TEST_CASES)} cases plus privacy)")
 
 
+def _mark_video_missing_folder_test() -> None:
+    """Exercise an extra-only folder with a plain video-folder dictionary."""
+    try:
+        _mark_video(
+            "film/trailers/one.mp4",
+            {},
+            set(),
+            set(),
+            defaultdict(set),
+            defaultdict(set),
+        )
+    except KeyError as error:
+        raise AssertionError("mark-video-missing-folder") from error
+
+
+def _limit_test() -> None:
+    """Check inclusive byte, record and path limits with small fixtures."""
+    try:
+        if _read_input(io.BytesIO(b"abc"), max_bytes=3) != b"abc":
+            raise AssertionError("bytes-at-limit")
+        records = parse_records(b"f\ta\0d\tb\0", max_records=2, max_path_bytes=4)
+        if len(records) != 2:
+            raise AssertionError("records-at-limit")
+        if parse_records(b"f\tabcd\0", max_path_bytes=4) != [("f", "abcd")]:
+            raise AssertionError("path-at-limit")
+    except ValueError as error:
+        raise AssertionError("records-at-limit") from error
+    over_limit = (
+        (
+            "bytes-over-limit",
+            lambda: _read_input(io.BytesIO(b"abcd"), max_bytes=3),
+            "input exceeds 3 bytes",
+        ),
+        (
+            "records-over-limit",
+            lambda: parse_records(b"f\ta\0d\tb\0", max_records=1),
+            "input exceeds 1 records",
+        ),
+        (
+            "path-over-limit",
+            lambda: parse_records(b"f\tabcde\0", max_path_bytes=4),
+            "record 1: path exceeds 4 bytes",
+        ),
+    )
+    for name, check, message in over_limit:
+        try:
+            check()
+        except ValueError as error:
+            if str(error) != message:
+                raise AssertionError(name) from error
+        else:
+            raise AssertionError(name)
+
+
 def _privacy_test() -> None:
     """Verify that input path tokens never appear in captured CLI output."""
-    tokens = [secrets.token_hex(16) for _ in range(4)]
+    tokens = [secrets.token_hex(16) for _ in range(6)]
+    byte_limited = f"f\t{tokens[4]}\0".encode()
     inputs = (
-        (f"f\t{tokens[0]}/{tokens[1]}.mkv\0d\t{tokens[2]}\0".encode(), 0, ""),
+        (
+            f"f\t{tokens[0]}/{tokens[1]}.mkv\0d\t{tokens[2]}\0".encode(),
+            0,
+            "",
+            MAX_INPUT_BYTES,
+            MAX_RECORDS,
+        ),
         (
             f"f\t{tokens[3]}.mkv\0{tokens[1]}-malformed\0".encode(),
             2,
             "record 2: missing type separator\n",
+            MAX_INPUT_BYTES,
+            MAX_RECORDS,
+        ),
+        (
+            byte_limited,
+            2,
+            f"input exceeds {len(byte_limited) - 1} bytes\n",
+            len(byte_limited) - 1,
+            MAX_RECORDS,
+        ),
+        (
+            f"f\t{tokens[4]}\0f\t{tokens[5]}\0".encode(),
+            2,
+            "input exceeds 1 records\n",
+            MAX_INPUT_BYTES,
+            1,
         ),
     )
-    for input_data, expected_exit, expected_error in inputs:
+    for input_data, expected_exit, expected_error, max_bytes, max_records in inputs:
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            exit_code = main([], io.BytesIO(input_data))
+            exit_code = main(
+                [], io.BytesIO(input_data), max_bytes=max_bytes, max_records=max_records
+            )
         rendered = stdout.getvalue() + stderr.getvalue()
         if (
             exit_code != expected_exit
@@ -845,7 +1082,21 @@ def _privacy_test() -> None:
             raise AssertionError("privacy-check")
 
 
-def main(argv: list[str], stdin: BinaryIO) -> int:
+def _read_input(stdin: BinaryIO, *, max_bytes: int = MAX_INPUT_BYTES) -> bytes:
+    """Read no more than one byte beyond the configured input limit."""
+    data = stdin.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise ValueError(f"input exceeds {max_bytes} bytes")
+    return data
+
+
+def main(
+    argv: list[str],
+    stdin: BinaryIO,
+    *,
+    max_bytes: int = MAX_INPUT_BYTES,
+    max_records: int = MAX_RECORDS,
+) -> int:
     """Run the self-test or emit a privacy-preserving census as JSON."""
     if argv == ["--self-test"]:
         self_test()
@@ -854,7 +1105,11 @@ def main(argv: list[str], stdin: BinaryIO) -> int:
         print("usage: naming_census.py [--self-test]", file=sys.stderr)
         return 2
     try:
-        result = census(parse_records(stdin.read()))
+        result = census(
+            parse_records(
+                _read_input(stdin, max_bytes=max_bytes), max_records=max_records
+            )
+        )
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
