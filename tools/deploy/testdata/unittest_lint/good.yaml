@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: safe notContains assertions
+tests:
+  - it: mapping content matches any containing entry
+    asserts:
+      - notContains:
+          path: spec.containers[0].env
+          content:
+            name: EXAMPLE
+          any: true
+      - notContains:
+          path: spec.containers[0].env
+          content: {}
+          any: true
+  - it: scalar and list content may use whole-item matching
+    asserts:
+      - notContains:
+          path: spec.args
+          content: example
+      - notContains:
+          path: spec.args
+          content: [example]
+      - contains:
+          path: spec.containers[0].env
+          content:
+            name: EXAMPLE

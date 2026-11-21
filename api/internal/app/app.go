@@ -16,6 +16,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/bootstrap"
+	cachemem "github.com/golusoris/golusoris/cache/memory"
 	"github.com/golusoris/golusoris/core/clock"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
@@ -33,6 +34,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/configarr"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/events"
+	"github.com/lusoris/SnatchArr/api/internal/foreigntitles"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
@@ -71,6 +73,9 @@ var Module = fx.Options(
 	golusorisDB,
 	bootstrap.HTTP,
 	otel.Module,
+	// Shared in-process L1 pool (cache.memory.*); each outbound metadata provider
+	// builds its own twotier view with its own TTL over it (ADR-0048).
+	cachemem.Module,
 	// CSRF protection of cookie traffic that stays on without http.csrf.secret.
 	fx.Provide(httpapi.CrossOrigin),
 	grpcx.Module,
@@ -85,6 +90,7 @@ var Module = fx.Options(
 	arrclient.Module,
 	instances.Module,
 	policies.Module,
+	foreigntitles.Module,
 	modules.Module,
 	settings.Module,
 	requests.Module,

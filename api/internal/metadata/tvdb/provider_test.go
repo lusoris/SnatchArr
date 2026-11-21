@@ -1,0 +1,808 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
+package tvdbprovider
+
+import (
+	"bytes"
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	tvdb "github.com/golusoris/goenvoy/metadata/video/tvdb"
+	"golang.org/x/time/rate"
+
+	"github.com/golusoris/golusoris/cache/memory"
+	"github.com/golusoris/golusoris/core/clock"
+
+	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/foreigntitle"
+)
+
+const (
+	plantedKey = "plantedplantedplanted"
+	plantedPIN = "planted-pin-4c2d08"
+)
+
+// stub is a TVDB API double. Every route counts its hits.
+type stub struct {
+	t         *testing.T
+	srv       *httptest.Server
+	tlsConfig *tls.Config
+	total     atomic.Int64
+	logins    atomic.Int64
+	loginRC   int
+	dataRC    int // when non-zero every data route answers with this status
+	series    map[int]string
+	noTr      map[int]bool     // series ids whose deu translation answers 404
+	aliases   map[int][]string // series id -> deu aliases
+	movies    map[string]int   // remote id -> movie id
+	movieAli  map[int][]string
+	delay     time.Duration
+	agent     atomic.Value  // last User-Agent header seen
+	started   chan struct{} // signals a held series request
+	release   <-chan struct{}
+	redirect  func(http.ResponseWriter, *http.Request) bool
+}
+
+func newStub(t *testing.T) *stub {
+	t.Helper()
+	return newStubWithServer(t, httptest.NewServer)
+}
+
+func newTLSStub(t *testing.T) *stub {
+	t.Helper()
+	return newStubWithServer(t, httptest.NewTLSServer)
+}
+
+func newStubWithServer(t *testing.T, newServer func(http.Handler) *httptest.Server) *stub {
+	t.Helper()
+	s := &stub{
+		t: t, loginRC: http.StatusOK,
+		series:   map[int]string{81189: "Breaking Bad DE"},
+		aliases:  map[int][]string{81189: {"Breaking Bad Alias"}},
+		movies:   map[string]int{"tt0111161": 439},
+		movieAli: map[int][]string{439: {"Die Verurteilten Alias"}},
+	}
+	s.srv = newServer(http.HandlerFunc(s.serve))
+	if transport, ok := s.srv.Client().Transport.(*http.Transport); ok {
+		s.tlsConfig = transport.TLSClientConfig
+	}
+	t.Cleanup(s.srv.Close)
+	return s
+}
+
+func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
+	s.total.Add(1)
+	s.agent.Store(r.Header.Get("User-Agent"))
+	if s.redirect != nil && s.redirect(w, r) {
+		return
+	}
+	if s.delay > 0 {
+		time.Sleep(s.delay)
+	}
+	if r.URL.Path == "/login" {
+		s.login(w, r)
+		return
+	}
+	if r.Header.Get("Authorization") != "Bearer stub-token" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if s.dataRC != 0 {
+		w.WriteHeader(s.dataRC)
+		_, _ = w.Write([]byte(`{"message":"` + plantedKey + `"}`))
+		return
+	}
+	if s.release != nil && r.URL.Path == "/series/81189" {
+		s.started <- struct{}{}
+		select {
+		case <-s.release:
+		case <-r.Context().Done():
+			return
+		}
+	}
+	s.data(w, r.URL.Path)
+}
+
+func (s *stub) login(w http.ResponseWriter, r *http.Request) {
+	s.logins.Add(1)
+	var body struct{ APIKey, PIN string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if s.loginRC != http.StatusOK || body.APIKey != plantedKey || (body.PIN != "" && body.PIN != plantedPIN) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"Invalid credentials ` + plantedKey + `"}`))
+		return
+	}
+	_, _ = w.Write([]byte(`{"status":"success","data":{"token":"stub-token"}}`))
+}
+
+func (s *stub) data(w http.ResponseWriter, path string) {
+	var id int
+	switch {
+	case strings.HasPrefix(path, "/search/remoteid/"):
+		mid, ok := s.movies[strings.TrimPrefix(path, "/search/remoteid/")]
+		if !ok {
+			fmt.Fprint(w, `{"status":"success","data":[]}`)
+			return
+		}
+		fmt.Fprintf(w, `{"status":"success","data":[{"movie":{"id":%d,"name":"x"}}]}`, mid)
+	case strings.HasSuffix(path, "/translations/deu") && strings.HasPrefix(path, "/series/"):
+		_, _ = fmt.Sscanf(path, "/series/%d/translations/deu", &id)
+		name, ok := s.series[id]
+		if !ok || s.noTr[id] {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		fmt.Fprintf(w, `{"status":"success","data":{"name":%q,"language":"deu","aliases":[]}}`, name)
+	case strings.HasPrefix(path, "/series/"):
+		_, _ = fmt.Sscanf(path, "/series/%d", &id)
+		if _, ok := s.series[id]; !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		fmt.Fprintf(w, `{"status":"success","data":{"id":%d,"name":"en","aliases":%s}}`, id, aliasJSON(s.aliases[id]))
+	case strings.HasSuffix(path, "/translations/deu") && strings.HasPrefix(path, "/movies/"):
+		_, _ = fmt.Sscanf(path, "/movies/%d/translations/deu", &id)
+		fmt.Fprint(w, `{"status":"success","data":{"name":"Die Verurteilten","language":"deu"}}`)
+	case strings.HasPrefix(path, "/movies/"):
+		_, _ = fmt.Sscanf(path, "/movies/%d", &id)
+		fmt.Fprintf(w, `{"status":"success","data":{"id":%d,"name":"en","aliases":%s}}`, id, aliasJSON(s.movieAli[id]))
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func aliasJSON(names []string) string {
+	items := make([]string, 0, len(names)+1)
+	for _, n := range names {
+		items = append(items, fmt.Sprintf(`{"language":"deu","name":%q}`, n))
+	}
+	items = append(items, `{"language":"fra","name":"Ignore Moi"}`)
+	return "[" + strings.Join(items, ",") + "]"
+}
+
+func (s *stub) provider(t *testing.T, key, pin string, logs *bytes.Buffer) *Provider {
+	t.Helper()
+	logger := slog.New(slog.DiscardHandler)
+	if logs != nil {
+		logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	}
+	opts := []Option{WithBaseURL(s.srv.URL), WithRetryWait(time.Millisecond), WithRate(rate.Inf, 1)}
+	if s.tlsConfig != nil {
+		opts = append(opts, withTLSConfig(s.tlsConfig))
+	}
+	p, err := New(key, pin, testPool(t), clock.NewFake(), logger, opts...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	return p
+}
+
+// testPool stands in for the process-wide L1 pool the fx graph provides.
+func testPool(t *testing.T) *memory.Cache {
+	t.Helper()
+	l1, err := memory.NewForTest(1024, 0)
+	if err != nil {
+		t.Fatalf("memory.NewForTest() error = %v", err)
+	}
+	return l1
+}
+
+func sonarrRef() Ref { return Ref{Kind: domain.KindSonarr, TVDBID: 81189} }
+
+func titlesOf(list []foreigntitle.LanguageTitle) []string {
+	out := make([]string, 0, len(list))
+	for _, l := range list {
+		out = append(out, l.Title)
+	}
+	return out
+}
+
+func TestTitlesForSeries(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, plantedPIN, nil)
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil {
+		t.Fatalf("TitlesFor() error = %v", err)
+	}
+	want := []foreigntitle.LanguageTitle{
+		{Language: "de", Title: "Breaking Bad DE", Source: Source},
+		{Language: "de", Title: "Breaking Bad Alias", Source: Source},
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("TitlesFor() = %+v, want %+v (fra alias must be dropped)", got, want)
+	}
+}
+
+func TestTitlesForMovieRemoteID(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, "", nil)
+	both := []string{"Die Verurteilten", "Die Verurteilten Alias"}
+	cases := []struct {
+		name string
+		ref  Ref
+		want []string
+	}{
+		{"imdb id", Ref{Kind: domain.KindRadarr, IMDBID: "tt0111161"}, both},
+		{"tmdb id falls back after unknown imdb", Ref{Kind: domain.KindRadarr, IMDBID: "tt9999999", TMDBID: 5}, both},
+	}
+	s.movies["5"] = 439
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := p.TitlesFor(t.Context(), tc.ref, "de")
+			if err != nil {
+				t.Fatalf("TitlesFor() error = %v", err)
+			}
+			if g := strings.Join(titlesOf(got), "|"); g != strings.Join(tc.want, "|") {
+				t.Fatalf("TitlesFor() = %q, want %q", g, strings.Join(tc.want, "|"))
+			}
+		})
+	}
+}
+
+func TestDisabledMakesNoRequest(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	for _, p := range []*Provider{nil, s.provider(t, "", plantedPIN, nil)} {
+		got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+		if err != nil || got != nil {
+			t.Fatalf("TitlesFor() = %v, %v, want nil, nil", got, err)
+		}
+		if p.Enabled() || p.Failed() {
+			t.Fatal("disabled provider reports enabled or failed")
+		}
+	}
+	if n := s.total.Load(); n != 0 {
+		t.Fatalf("requests = %d, want 0", n)
+	}
+}
+
+func TestOtherKindsMakeNoRequest(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, "", nil)
+	for _, ref := range []Ref{
+		{Kind: domain.KindLidarr, TVDBID: 1},
+		{Kind: domain.KindReadarr, TVDBID: 1},
+		{Kind: domain.KindWhisparrV2, TVDBID: 1},
+		{Kind: domain.KindStash, TVDBID: 1},
+		{Kind: domain.KindSonarr},
+		{Kind: domain.KindRadarr},
+	} {
+		if got, err := p.TitlesFor(t.Context(), ref, "de"); err != nil || len(got) != 0 {
+			t.Fatalf("TitlesFor(%+v) = %v, %v, want empty", ref, got, err)
+		}
+	}
+	if n := s.total.Load(); n != 0 {
+		t.Fatalf("requests = %d, want 0", n)
+	}
+}
+
+func TestWrongCredentialsLatch(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ name, key, pin string }{
+		{"wrong key", "refusedrefusedrefused", "refused-pin-93aa10"},
+		{"right key, wrong PIN", plantedKey, "refused-pin-93aa10"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			var logs bytes.Buffer
+			p := s.provider(t, tc.key, tc.pin, &logs)
+			_, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+			if !errors.Is(err, ErrUnauthorized) {
+				t.Fatalf("TitlesFor() error = %v, want ErrUnauthorized", err)
+			}
+			if !p.Failed() {
+				t.Fatal("Failed() = false after a refused login")
+			}
+			first := s.total.Load()
+			_, err = p.TitlesFor(t.Context(), sonarrRef(), "de")
+			if !errors.Is(err, ErrUnauthorized) {
+				t.Fatalf("second TitlesFor() error = %v, want ErrUnauthorized", err)
+			}
+			if n := s.total.Load(); n != first {
+				t.Fatalf("second call made %d requests, want 0", n-first)
+			}
+			assertNoSecret(t, err.Error(), logs.String(), fmt.Sprintf("%+v", err))
+		})
+	}
+}
+
+func TestRateLimitedBoundedAttempts(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.dataRC = http.StatusTooManyRequests
+	var logs bytes.Buffer
+	p := s.provider(t, plantedKey, plantedPIN, &logs)
+	_, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("TitlesFor() error = %v, want ErrRateLimited", err)
+	}
+	// 1 login + (1 try + retryMax retries) on the first data route.
+	if n, want := s.total.Load(), int64(1+1+retryMax); n != want {
+		t.Fatalf("requests = %d, want %d", n, want)
+	}
+	assertNoSecret(t, err.Error(), logs.String())
+}
+
+func TestNotFoundIsEmptyAndNegativeCached(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, "", nil)
+	ref := Ref{Kind: domain.KindSonarr, TVDBID: 424242}
+	for range 3 {
+		got, err := p.TitlesFor(t.Context(), ref, "de")
+		if err != nil || len(got) != 0 {
+			t.Fatalf("TitlesFor() = %v, %v, want empty, nil", got, err)
+		}
+	}
+	if n, want := s.total.Load(), int64(2); n != want { // login + series 404
+		t.Fatalf("requests = %d, want %d (negative cache)", n, want)
+	}
+	unknown := Ref{Kind: domain.KindRadarr, IMDBID: "tt0000000"}
+	if got, err := p.TitlesFor(t.Context(), unknown, "de"); err != nil || len(got) != 0 {
+		t.Fatalf("unknown remote id = %v, %v, want empty, nil", got, err)
+	}
+}
+
+func TestNegativeEntryExpires(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	clk := clock.NewFake()
+	p, err := New(plantedKey, "", testPool(t), clk, slog.New(slog.DiscardHandler), WithBaseURL(s.srv.URL), WithRate(rate.Inf, 1), WithRetryWait(time.Millisecond))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
+	if got, ferr := p.TitlesFor(t.Context(), ref, "de"); ferr != nil || len(got) != 0 {
+		t.Fatalf("first = %v, %v", got, ferr)
+	}
+	s.series[7] = "Sieben"
+	clk.Advance(NegativeTTL - time.Second)
+	if got, _ := p.TitlesFor(t.Context(), ref, "de"); len(got) != 0 {
+		t.Fatalf("before expiry = %v, want still empty", got)
+	}
+	clk.Advance(2 * time.Second)
+	got, err := p.TitlesFor(t.Context(), ref, "de")
+	if err != nil || len(got) == 0 || got[0].Title != "Sieben" {
+		t.Fatalf("after expiry = %v, %v, want Sieben", got, err)
+	}
+}
+
+func TestNegativeRefreshPreservesSentinel(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		dataRC     int
+		wantErr    error
+		wantTitles int
+	}{
+		{"working stub", 0, nil, 1},
+		{"unauthorized data request", http.StatusUnauthorized, ErrUnauthorized, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			p := s.provider(t, plantedKey, "", nil)
+			clk := clock.NewFake()
+			p.clk = clk
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
+			if got, err := p.TitlesFor(ctx, ref, "de"); err != nil || len(got) != 0 {
+				t.Fatalf("first lookup = %v, %v, want empty, nil", got, err)
+			}
+			s.series[7] = "Sieben"
+			s.dataRC = tc.dataRC
+			clk.Advance(NegativeTTL + time.Second)
+			got, err := p.TitlesFor(ctx, ref, "de")
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("refresh error = %v, want %v", err, tc.wantErr)
+			}
+			if len(got) != tc.wantTitles {
+				t.Fatalf("refresh titles = %v, want %d titles", got, tc.wantTitles)
+			}
+		})
+	}
+}
+
+// staleReadClock holds callers after each has read the same stale cache entry.
+type staleReadClock struct {
+	clock.Clock
+	reads   chan struct{}
+	release <-chan struct{}
+}
+
+func (c *staleReadClock) Since(at time.Time) time.Duration {
+	age := c.Clock.Since(at)
+	if age >= NegativeTTL {
+		select {
+		case c.reads <- struct{}{}:
+		case <-c.release:
+		}
+		<-c.release
+	}
+	return age
+}
+
+func TestConcurrentNegativeRefresh(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, "", nil)
+	clk := clock.NewFake()
+	p.clk = clk
+	ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
+	if got, err := p.TitlesFor(t.Context(), ref, "de"); err != nil || len(got) != 0 {
+		t.Fatalf("first lookup = %v, %v, want empty, nil", got, err)
+	}
+	clk.Advance(NegativeTTL + time.Second)
+	release := make(chan struct{})
+	reads := make(chan struct{}, 16)
+	p.clk = &staleReadClock{Clock: clk, reads: reads, release: release}
+	negativeRefreshBurst(t, p, ref, reads, release)
+	if n := s.total.Load() - s.logins.Load(); n != 2 {
+		t.Fatalf("data requests = %d, want 2 (initial lookup + one refresh)", n)
+	}
+}
+
+func negativeRefreshBurst(t *testing.T, p *Provider, ref Ref, reads <-chan struct{}, release chan struct{}) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	p.slot <- struct{}{}
+	releaseReads := sync.OnceFunc(func() { close(release) })
+	releaseSlot := sync.OnceFunc(func() { <-p.slot })
+	var wg sync.WaitGroup
+	defer func() { releaseReads(); releaseSlot(); wg.Wait() }()
+	start := make(chan struct{})
+	errs := make(chan error, 16)
+	for range 16 {
+		wg.Go(func() {
+			<-start
+			got, err := p.TitlesFor(ctx, ref, "de")
+			if err == nil && len(got) != 0 {
+				err = fmt.Errorf("refresh got %v, want empty", got)
+			}
+			errs <- err
+		})
+	}
+	close(start)
+	for range 16 {
+		select {
+		case <-reads:
+		case <-ctx.Done():
+			t.Fatal("callers did not all read the stale entry")
+		}
+	}
+	releaseReads()
+	// Keep loads queued until every stale reader can enter the refresh path.
+	time.Sleep(100 * time.Millisecond)
+	releaseSlot()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+func TestCacheHitMakesNoRequest(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, "", nil)
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+		t.Fatal(err)
+	}
+	before := s.total.Load()
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("cached = %v, %v", got, err)
+	}
+	if n := s.total.Load(); n != before {
+		t.Fatalf("cache hit made %d requests", n-before)
+	}
+}
+
+func TestAliasCapAndEmpty(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	many := make([]string, 0, 300)
+	for i := range 300 {
+		many = append(many, fmt.Sprintf("Alias %d", i))
+	}
+	s.aliases[81189] = many
+	p := s.provider(t, plantedKey, "", nil)
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil || len(got) != maxAliases {
+		t.Fatalf("len = %d, err = %v, want %d", len(got), err, maxAliases)
+	}
+	s.aliases[81190], s.series[81190] = nil, ""
+	got, err = p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81190}, "de")
+	if err != nil || len(got) != 0 {
+		t.Fatalf("empty translation and aliases = %v, %v, want empty", got, err)
+	}
+}
+
+func TestFirstMovieID(t *testing.T) {
+	t.Parallel()
+	results := func(count int) []tvdb.SearchByRemoteIDResult {
+		out := make([]tvdb.SearchByRemoteIDResult, 0, count)
+		for range count {
+			out = append(out, tvdb.SearchByRemoteIDResult{})
+		}
+		return out
+	}
+	tests := []struct {
+		name    string
+		results []tvdb.SearchByRemoteIDResult
+		wantID  int
+		wantOK  bool
+	}{
+		{
+			name:    "movie after output cap",
+			results: append(results(maxAliases+50), tvdb.SearchByRemoteIDResult{Movie: &tvdb.MovieBase{ID: 42}}),
+			wantID:  42,
+			wantOK:  true,
+		},
+		{
+			name:    "no movie",
+			results: results(maxAliases + 50),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotID, gotOK := firstMovieID(tt.results)
+			if gotID != tt.wantID || gotOK != tt.wantOK {
+				t.Fatalf("firstMovieID() = %d, %t, want %d, %t", gotID, gotOK, tt.wantID, tt.wantOK)
+			}
+		})
+	}
+}
+
+type collectAliasScanCase struct {
+	name           string
+	translation    *tvdb.Translation
+	aliases        []tvdb.Alias
+	wantLen        int
+	wantTitle      string
+	wantTitleIndex int
+}
+
+var collectAliasScanCases = []collectAliasScanCase{
+	{
+		name:      "matching alias after output cap",
+		aliases:   append(aliasScanAliases("eng", maxAliases+50), tvdb.Alias{Language: "deu", Name: "German title"}),
+		wantLen:   1,
+		wantTitle: "German title",
+	},
+	{
+		name:    "accepted titles remain capped",
+		aliases: aliasScanAliases("deu", maxAliases+50),
+		wantLen: maxAliases,
+	},
+	{
+		name: "empty aliases",
+	},
+	{
+		name:    "no matching aliases",
+		aliases: aliasScanAliases("eng", maxAliases+50),
+	},
+	{
+		name: "translation duplicate aliases do not consume output cap",
+		translation: &tvdb.Translation{
+			Name:    "Titel",
+			Aliases: append(aliasScanDuplicateAliases("  tItEl  ", maxAliases+50), "Anderer Titel"),
+		},
+		wantLen:        2,
+		wantTitle:      "Anderer Titel",
+		wantTitleIndex: 1,
+	},
+	{
+		name: "translation aliases remain capped",
+		translation: &tvdb.Translation{
+			Aliases: aliasScanTranslationAliases("Titel", maxAliases+50),
+		},
+		wantLen: maxAliases,
+	},
+	{
+		name: "translation name duplicates add no titles",
+		translation: &tvdb.Translation{
+			Name:    "Titel",
+			Aliases: []string{"Titel", " titel ", "TITEL"},
+		},
+		wantLen: 1,
+	},
+}
+
+func aliasScanAliases(language string, count int) []tvdb.Alias {
+	out := make([]tvdb.Alias, 0, count)
+	for i := range count {
+		out = append(out, tvdb.Alias{Language: language, Name: fmt.Sprintf("Alias %d", i)})
+	}
+	return out
+}
+
+func aliasScanTranslationAliases(name string, count int) []string {
+	out := make([]string, 0, count)
+	for i := range count {
+		out = append(out, fmt.Sprintf("%s %d", name, i))
+	}
+	return out
+}
+
+func aliasScanDuplicateAliases(title string, count int) []string {
+	out := make([]string, 0, count)
+	for range count {
+		out = append(out, title)
+	}
+	return out
+}
+
+func TestCollectAliasScan(t *testing.T) {
+	t.Parallel()
+	for _, tt := range collectAliasScanCases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := collect("de", "deu", tt.translation, tt.aliases)
+			if len(got) != tt.wantLen {
+				t.Fatalf("len(collect()) = %d, want %d", len(got), tt.wantLen)
+			}
+			if tt.wantTitle != "" && got[tt.wantTitleIndex].Title != tt.wantTitle {
+				t.Fatalf("collect()[%d].Title = %q, want %q", tt.wantTitleIndex, got[tt.wantTitleIndex].Title, tt.wantTitle)
+			}
+		})
+	}
+}
+
+// TestMissingTranslationKeepsAliases covers a series that exists but has no translation in
+// the language: TVDB answers 404 for the translation, and the aliases still come back.
+func TestMissingTranslationKeepsAliases(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.noTr = map[int]bool{81189: true}
+	p := s.provider(t, plantedKey, "", nil)
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil {
+		t.Fatalf("TitlesFor() error = %v, want nil for a missing translation", err)
+	}
+	want := foreigntitle.LanguageTitle{Language: "de", Title: "Breaking Bad Alias", Source: Source}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("TitlesFor() = %+v, want only %+v", got, want)
+	}
+	if n, want := s.total.Load(), int64(3); n != want { // login, series, translation 404
+		t.Fatalf("requests = %d, want %d", n, want)
+	}
+}
+
+func TestLanguageCodeCoversEveryRule(t *testing.T) {
+	t.Parallel()
+	rules, err := foreigntitle.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(rules) == 0 {
+		t.Fatal("no embedded rules")
+	}
+	want := map[string]string{"de": "deu", "fr": "fra"}
+	for code := range rules {
+		got, err := LanguageCode(code)
+		if err != nil || len(got) != 3 {
+			t.Fatalf("LanguageCode(%q) = %q, %v", code, got, err)
+		}
+		if w, ok := want[code]; ok && got != w {
+			t.Fatalf("LanguageCode(%q) = %q, want %q", code, got, w)
+		}
+	}
+	for _, bad := range []string{"", "!!", "zzzzzz"} {
+		if _, err := LanguageCode(bad); !errors.Is(err, ErrLanguage) {
+			t.Fatalf("LanguageCode(%q) error = %v, want ErrLanguage", bad, err)
+		}
+	}
+}
+
+func TestOversizeBodyIsUnavailable(t *testing.T) {
+	t.Parallel()
+	big := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			_, _ = w.Write([]byte(`{"data":{"token":"stub-token"}}`))
+			return
+		}
+		_, _ = w.Write(bytes.Repeat([]byte("a"), maxBodyBytes+10))
+	}))
+	t.Cleanup(big.Close)
+	p, err := New(plantedKey, "", testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler), WithBaseURL(big.URL), WithRate(rate.Inf, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("error = %v, want ErrUnavailable", err)
+	}
+}
+
+func TestServerErrorKeepsSecretsOut(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.dataRC = http.StatusInternalServerError
+	var logs bytes.Buffer
+	p := s.provider(t, plantedKey, plantedPIN, &logs)
+	_, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("error = %v, want ErrUnavailable", err)
+	}
+	assertNoSecret(t, err.Error(), logs.String())
+}
+
+// assertNoSecret fails when any text holds a planted credential or the stub token. The
+// text values come first; the trailing secrets are extra values the call sent.
+func assertNoSecret(t *testing.T, texts ...string) {
+	t.Helper()
+	secrets := []string{plantedKey, plantedPIN, "stub-token", "refusedrefusedrefused", "refused-pin-93aa10"}
+	for _, text := range texts {
+		for _, secret := range secrets {
+			if strings.Contains(text, secret) {
+				t.Fatalf("secret leaked into output: %q", text)
+			}
+		}
+	}
+}
+
+func TestNewWithoutPool(t *testing.T) {
+	t.Parallel()
+	if _, err := New(plantedKey, "", nil, clock.NewFake(), nil); !errors.Is(err, errNoCache) {
+		t.Fatalf("enabled without pool: error = %v, want errNoCache", err)
+	}
+	p, err := New("", "", nil, clock.NewFake(), nil)
+	if err != nil || p.Enabled() {
+		t.Fatalf("disabled without pool: enabled = %v, error = %v; want false, nil", p.Enabled(), err)
+	}
+}
+
+func TestUserAgentHeader(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, ua string }{
+		{"configured", "SnatchArr/test (+probe)"},
+		{"unset keeps the client default", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			p, err := New(plantedKey, "", testPool(t), clock.NewFake(), nil, WithBaseURL(s.srv.URL), WithRate(rate.Inf, 1), WithUserAgent(tc.ua))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+				t.Fatal(err)
+			}
+			got, _ := s.agent.Load().(string)
+			if tc.ua != "" && got != tc.ua {
+				t.Fatalf("User-Agent = %q, want %q", got, tc.ua)
+			}
+			if got == "" {
+				t.Fatal("User-Agent empty")
+			}
+		})
+	}
+}

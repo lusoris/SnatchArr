@@ -37,12 +37,12 @@ import (
 
 const (
 	// Image is the Postgres golusoris testutil/pg pins, of major Major.
-	Image = "postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
+	Image = "postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015"
 	// Major is the server major version of Image.
 	Major = 18
 	// PreviousMajorImage is the major before it, which installed databases may still run;
 	// the upgrade test moves a database from it to Image (renovate.json holds it on 17).
-	PreviousMajorImage = "postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b"
+	PreviousMajorImage = "postgres:17-alpine@sha256:a77aa70e641402a21411b92b721c58d10f23b50ae5fdd2333efd22d166e1e5f7"
 	// PreviousMajor is the server major version of PreviousMajorImage.
 	PreviousMajor = 17
 	templateName  = "snatcharr_template"

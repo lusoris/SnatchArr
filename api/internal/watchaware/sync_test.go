@@ -8,13 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lusoris/SnatchArr/api/internal/testkit/refuse"
 	"github.com/lusoris/SnatchArr/api/internal/watchaware"
 )
 
@@ -63,38 +62,25 @@ func (s *staticSource) Watches(_ context.Context) ([]watchaware.Watch, error) {
 	return s.watches, nil
 }
 
+// TestSyncAll_FirstSourceFailsSecondStored checks that a failed source does not
+// prevent the next source from storing its watches.
 func TestSyncAll_FirstSourceFailsSecondStored(t *testing.T) {
 	t.Parallel()
 
-	// Source 1: server created and immediately closed to guarantee connection failure
-	unreachableServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	unreachableServer.Close()
-
-	src1, err := watchaware.NewJellyfin(unreachableServer.URL, "token", 100*time.Millisecond, "SnatchArr-test")
+	src1, err := watchaware.NewJellyfin(refuse.Listener(t), "token", 100*time.Millisecond, "SnatchArr-test")
 	if err != nil {
 		t.Fatalf("NewJellyfin src1: %v", err)
 	}
 
-	// Source 2: working static source
-	src2 := &staticSource{
-		kind: watchaware.KindEmby,
-		watches: []watchaware.Watch{
-			{
-				UserID:        "user-2",
-				UserName:      "Bob",
-				ItemID:        "item-42",
-				ItemType:      "Movie",
-				Played:        true,
-				PositionTicks: 123456,
-			},
-		},
-	}
-
 	sources := []watchaware.Named{
 		{ID: "src-1", Source: src1},
-		{ID: "src-2", Source: src2},
+		{ID: "src-2", Source: &staticSource{
+			kind: watchaware.KindEmby,
+			watches: []watchaware.Watch{{
+				UserID: "user-2", UserName: "Bob", ItemID: "item-42",
+				ItemType: "Movie", Played: true, PositionTicks: 123456,
+			}},
+		}},
 	}
 
 	sink := &mockSink{}

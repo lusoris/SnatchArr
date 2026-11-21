@@ -31,6 +31,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/configarr"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/foreigntitles"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
@@ -61,6 +62,7 @@ type Handlers struct {
 	queue           *queue.Store
 	queueSvc        queueService
 	options         *policies.Options
+	foreignTitles   foreignTitleSource
 	logs            *logring.Ring
 	runs            *snatch.Runs
 	workers         *snatch.Workers
@@ -115,6 +117,7 @@ type Deps struct {
 	Adult           *adult.Service
 	Jellyfin        jellyfin.Authenticator
 	Options         *policies.Options
+	ForeignTitles   *foreigntitles.Service
 	Logs            *logring.Ring
 	Queue           *queue.Store
 	QueueSvc        *queue.Service
@@ -135,7 +138,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 	}
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, apiKeys: apiKeys, sessions: sessions, instances: inst, policies: pol,
-		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, priorityPlans: plans, settings: d.Settings, requests: d.Requests, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, adult: d.Adult, jellyfin: jf, options: d.Options, logs: d.Logs, runtimeSettings: d.RuntimeSettings, logger: logger,
+		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, priorityPlans: plans, settings: d.Settings, requests: d.Requests, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, adult: d.Adult, jellyfin: jf, options: d.Options, foreignTitles: foreignTitleResolver(d.ForeignTitles), logs: d.Logs, runtimeSettings: d.RuntimeSettings, logger: logger,
 	}
 }
 
