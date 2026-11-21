@@ -6,6 +6,7 @@ package config
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -38,6 +39,8 @@ type applySettingCase struct {
 	val     string
 	wantErr bool
 	errIs   error
+	errAlso error
+	setup   func(*Options)
 	check   func(t *testing.T, o Options)
 }
 
@@ -133,6 +136,57 @@ var applySettingCases = []applySettingCase{
 		},
 	},
 	{
+		name: "positive metadata cache l2 none",
+		key:  "snatcharr.metadata.cache.l2",
+		val:  "none",
+		setup: func(o *Options) {
+			o.Metadata.Cache.L2 = MetadataCacheL2Redis
+		},
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if o.Metadata.Cache.L2 != MetadataCacheL2None {
+				t.Errorf("metadata cache l2 = %q, want %q", o.Metadata.Cache.L2, MetadataCacheL2None)
+			}
+		},
+	},
+	{
+		name: "positive metadata cache l2 redis",
+		key:  "snatcharr.metadata.cache.l2",
+		val:  "redis",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if o.Metadata.Cache.L2 != MetadataCacheL2Redis {
+				t.Errorf("metadata cache l2 = %q, want %q", o.Metadata.Cache.L2, MetadataCacheL2Redis)
+			}
+		},
+	},
+	{
+		name:    "negative invalid metadata cache l2",
+		key:     "snatcharr.metadata.cache.l2",
+		val:     "disk",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+	},
+	{
+		name: "positive metadata Redis plaintext opt-in",
+		key:  "snatcharr.metadata.cache.redis_plaintext",
+		val:  "true",
+		check: func(t *testing.T, o Options) {
+			t.Helper()
+			if !o.Metadata.Cache.RedisPlaintext {
+				t.Fatal("metadata Redis plaintext opt-in = false, want true")
+			}
+		},
+	},
+	{
+		name:    "negative invalid metadata Redis plaintext opt-in",
+		key:     "snatcharr.metadata.cache.redis_plaintext",
+		val:     "invalid",
+		wantErr: true,
+		errIs:   domain.ErrInvalid,
+		errAlso: strconv.ErrSyntax,
+	},
+	{
 		name:    "negative unknown tvdb option",
 		key:     "snatcharr.metadata.tvdb.unknown",
 		val:     "x",
@@ -159,6 +213,9 @@ func TestApplySettingTableDriven(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			o := Default()
+			if tc.setup != nil {
+				tc.setup(&o)
+			}
 			err := ApplySetting(&o, tc.key, tc.val)
 			if tc.wantErr {
 				if err == nil {
@@ -166,6 +223,9 @@ func TestApplySettingTableDriven(t *testing.T) {
 				}
 				if tc.errIs != nil && !errors.Is(err, tc.errIs) {
 					t.Fatalf("expected error %v, got %v", tc.errIs, err)
+				}
+				if tc.errAlso != nil && !errors.Is(err, tc.errAlso) {
+					t.Fatalf("expected error %v, got %v", tc.errAlso, err)
 				}
 				return
 			}

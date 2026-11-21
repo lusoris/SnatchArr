@@ -15,57 +15,67 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/golusoris/goenvoy/metadata"
 	tvdb "github.com/golusoris/goenvoy/metadata/video/tvdb"
+	"github.com/redis/rueidis"
 	"golang.org/x/text/language"
-	"golang.org/x/time/rate"
 
 	"github.com/golusoris/golusoris/cache/memory"
-	"github.com/golusoris/golusoris/cache/singleflight"
+	rediscache "github.com/golusoris/golusoris/cache/redis"
 	"github.com/golusoris/golusoris/cache/twotier"
 	"github.com/golusoris/golusoris/core/clock"
 	httpclient "github.com/golusoris/golusoris/httpx/client"
+	"github.com/golusoris/golusoris/httpx/httpcache"
+	"github.com/golusoris/golusoris/httpx/ratelimit"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/foreigntitle"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
 )
 
 // Source names TVDB as the origin of a LanguageTitle.
 const Source = "tvdb"
 
 const (
-	// PositiveTTL is how long a found title set stays cached.
+	// PositiveTTL is the freshness of every storable TVDB response.
 	PositiveTTL = 24 * time.Hour
-	// NegativeTTL is how long an unknown item stays cached before TVDB is asked again.
-	NegativeTTL = time.Hour
 
 	maxAliases  = 200
 	callTimeout = 20 * time.Second
-	// lookupTimeout bounds one load from its start: the wait for the slot plus at most
-	// four calls (two remote-id searches, the movie, its translation) of callTimeout each.
-	lookupTimeout = 4*callTimeout + 10*time.Second
-	maxBodyBytes  = 4 << 20
+	// lookupTimeout bounds one load from its start and at most four upstream calls
+	// of callTimeout each.
+	lookupTimeout    = 4*callTimeout + 10*time.Second
+	closeWaitTimeout = 1500 * time.Millisecond
+	// maxDetached bounds lookups that continue after their caller leaves.
+	maxDetached = 16
+	// storeTimeout bounds Redis I/O and stays below closeWaitTimeout so shutdown can settle it.
+	storeTimeout = time.Second
+	maxBodyBytes = 4 << 20
 	// maxScan bounds scans without truncating a decodable response: an array of N smallest
 	// {} entries needs 3N+1 bytes ([{},{},…]), so maxBodyBytes cannot hold more than maxScan.
 	maxScan = maxBodyBytes / 3
 	// TVDB publishes no rate limit (api docs, checked 2026-11-13); this is a conservative
 	// ceiling on every real HTTP request, retries and logins included.
-	defaultRate  = rate.Limit(2)
-	defaultBurst = 4
-	retryMax     = 2
+	defaultRate = "2-S"
+	retryMax    = 2
 
 	// loginFailedMessage is the fixed text goenvoy puts on a refused /login answer. goenvoy
 	// exports no sentinel for it yet (https://github.com/golusoris/goenvoy/issues/323);
 	// switch to errors.Is once it does.
 	loginFailedMessage = "login failed"
-	// cachePrefix namespaces this provider's keys in the shared L1 pool.
-	cachePrefix = "metadata.tvdb"
+	cachePrefix        = "metadata.tvdb.http"
+	defaultBaseURL     = "https://api4.thetvdb.com/v4"
+	maxRedisAddresses  = 16
+	redisPlaintextKey  = "snatcharr.metadata.cache.redis_plaintext"
 )
 
 var (
@@ -82,6 +92,8 @@ var (
 	errNoCache = errors.New("tvdb: no cache pool")
 	// errRedirect keeps redirect destinations and credentials out of error text.
 	errRedirect = errors.New("tvdb: redirect refused")
+	// errRedisNotLoopback rejects plaintext credentialed Redis connections outside loopback.
+	errRedisNotLoopback = errors.New("tvdb: Redis plaintext connection is not loopback")
 )
 
 // Ref identifies one item by the IDs its *arr app holds.
@@ -96,21 +108,24 @@ type Ref struct {
 type Option func(*config)
 
 type config struct {
-	baseURL   string
-	limit     rate.Limit
-	burst     int
-	retryWait time.Duration
-	userAgent string
-	tlsConfig *tls.Config
+	baseURL        string
+	rate           string
+	retryWait      time.Duration
+	userAgent      string
+	tlsConfig      *tls.Config
+	l2             string
+	redis          rediscache.Options
+	redisClient    rueidis.Client
+	redisPlaintext bool
+	shared         bool
+	metrics        *metrics.Metrics
 }
 
 // WithBaseURL points the provider at another API root (tests).
 func WithBaseURL(u string) Option { return func(c *config) { c.baseURL = u } }
 
-// WithRate replaces the request-rate ceiling (tests).
-func WithRate(limit rate.Limit, burst int) Option {
-	return func(c *config) { c.limit, c.burst = limit, burst }
-}
+// WithRate replaces the outbound rate string (tests); empty means unlimited.
+func WithRate(formatted string) Option { return func(c *config) { c.rate = formatted } }
 
 // WithRetryWait replaces the first retry back-off (tests).
 func WithRetryWait(d time.Duration) Option { return func(c *config) { c.retryWait = d } }
@@ -122,29 +137,47 @@ func withTLSConfig(tlsConfig *tls.Config) Option {
 	return func(c *config) { c.tlsConfig = tlsConfig }
 }
 
-// entry is one cached lookup result; NotFound entries expire after NegativeTTL.
-type entry struct {
-	Titles   []foreigntitle.LanguageTitle
-	NotFound bool
-	At       time.Time
+// WithL2 selects the metadata cache L2 and supplies the shared cache.redis.* options.
+func WithL2(mode string, opts rediscache.Options) Option {
+	return func(c *config) { c.l2, c.redis = mode, opts }
 }
+
+// WithRedisPlaintext explicitly permits a password over an unencrypted remote Redis connection.
+func WithRedisPlaintext(allowed bool) Option {
+	return func(c *config) { c.redisPlaintext = allowed }
+}
+
+// WithMetrics records cache response statuses.
+func WithMetrics(m *metrics.Metrics) Option { return func(c *config) { c.metrics = m } }
+
+func withRedisClient(client rueidis.Client) Option {
+	return func(c *config) { c.redisClient = client }
+}
+
+func withSharedHost(shared bool) Option { return func(c *config) { c.shared = shared } }
 
 // Provider reads translated titles from TheTVDB. A nil or disabled Provider answers every
 // call with no titles and makes no network request.
 type Provider struct {
 	enabled   bool
 	client    *tvdb.Client
-	clk       clock.Clock
+	http      *http.Client
+	transport *http.Transport
 	logger    *slog.Logger
-	cache     *twotier.Typed[entry]
-	refreshes *singleflight.Group[string, entry]
-	// slot is a one-request semaphore around goenvoy calls: the client rewrites its
-	// request auth in shared state on every call (https://github.com/golusoris/goenvoy/issues/321).
-	// A channel instead of a mutex lets a waiting lookup give up at its context deadline.
-	slot chan struct{}
+	cache     *httpcache.Cache
+	redis     rueidis.Client
+	loginMu   sync.Mutex
+	loggedIn  bool
+	detached  chan struct{}
 	// lookup is lookupTimeout; a field so a test can wait on it without the full bound.
 	lookup time.Duration
-	failed atomic.Bool
+	// fetchStart is a test hook called as fetch starts; it is nil in production.
+	fetchStart   func(context.Context)
+	lifetimeDone <-chan struct{}
+	cancel       context.CancelFunc
+	failed       atomic.Bool
+	closed       sync.Once
+	closeErr     error
 }
 
 // New builds the provider over l1, the process-wide in-process cache pool. An empty apiKey
@@ -160,25 +193,54 @@ func New(apiKey, pin string, l1 *memory.Cache, clk clock.Clock, logger *slog.Log
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	cfg := config{limit: defaultRate, burst: defaultBurst}
+	cfg := config{
+		rate: defaultRate, l2: twotier.L2None, shared: true,
+		redis: rediscache.Options{Addr: "localhost:6379"},
+	}
 	for _, o := range opts {
 		o(&cfg)
 	}
-	tt, err := twotier.New(l1, twotier.Options{L1TTL: PositiveTTL, L2: twotier.L2None}, logger)
+	host, err := cacheHost(cfg.baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("tvdb: cache: %w", err)
+		return nil, err
 	}
+	basePath, err := cacheBasePath(cfg.baseURL)
+	if err != nil {
+		return nil, err
+	}
+	outbound, err := ratelimit.NewOutbound(ratelimit.TransportOptions{Rate: cfg.rate, MaxWait: callTimeout}, clk)
+	if err != nil {
+		return nil, fmt.Errorf("tvdb: rate limit: %w", err)
+	}
+	lifetime, cancel := context.WithCancel(context.Background())
+	p := &Provider{
+		detached: make(chan struct{}, maxDetached), lookup: lookupTimeout,
+		lifetimeDone: lifetime.Done(), cancel: cancel,
+	}
+	bounds := redisBounds{lifetime: func() context.Context { return lifetime }}
+	cache, redisClient, err := newHTTPCache(l1, logger, host, cfg, bounds)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	baseTransport, ownedTransport := ownTransport(cfg.tlsConfig)
+	transport := cache.Wrap(&originGuard{next: outbound.Wrap(&capTransport{next: baseTransport, max: maxBodyBytes}), basePath: basePath})
+	transport = &cacheMetricsTransport{next: transport, metrics: cfg.metrics}
 	hc := httpclient.New(httpclient.Options{
-		Name:    "snatcharr.metadata.tvdb",
-		Timeout: callTimeout,
-		Retry:   httpclient.RetryOptions{Max: retryMax, Wait: cfg.retryWait, MaxWait: 8 * time.Second},
-		Logger:  logger,
-		Transport: &limitTransport{
-			next:    &capTransport{next: ownTransport(cfg.tlsConfig), max: maxBodyBytes},
-			limiter: rate.NewLimiter(cfg.limit, cfg.burst),
-		},
+		Name:      "snatcharr.metadata.tvdb",
+		Timeout:   callTimeout,
+		Retry:     httpclient.RetryOptions{Max: retryMax, Wait: cfg.retryWait, MaxWait: 8 * time.Second},
+		Logger:    logger,
+		Transport: transport,
 	})
 	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirect }
+	client := newTVDBClient(apiKey, pin, cfg, hc)
+	p.enabled, p.client, p.http, p.transport, p.logger = true, client, hc, ownedTransport, logger
+	p.cache, p.redis = cache, redisClient
+	return p, nil
+}
+
+func newTVDBClient(apiKey, pin string, cfg config, hc *http.Client) *tvdb.Client {
 	mopts := []metadata.Option{metadata.WithHTTPClient(hc)}
 	if cfg.userAgent != "" {
 		mopts = append(mopts, metadata.WithUserAgent(cfg.userAgent))
@@ -186,18 +248,283 @@ func New(apiKey, pin string, l1 *memory.Cache, clk clock.Clock, logger *slog.Log
 	if cfg.baseURL != "" {
 		mopts = append(mopts, metadata.WithBaseURL(cfg.baseURL))
 	}
-	var client *tvdb.Client
 	if pin != "" {
-		client = tvdb.NewWithPIN(apiKey, pin, mopts...)
-	} else {
-		client = tvdb.New(apiKey, mopts...)
+		return tvdb.NewWithPIN(apiKey, pin, mopts...)
 	}
-	return &Provider{
-		enabled: true, client: client, clk: clk, logger: logger,
-		cache: twotier.NewTyped[entry](tt, cachePrefix), slot: make(chan struct{}, 1),
-		lookup:    lookupTimeout,
-		refreshes: singleflight.New[string, entry](),
-	}, nil
+	return tvdb.New(apiKey, mopts...)
+}
+
+func cacheHost(baseURL string) (string, error) {
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Scheme == "" || u.Hostname() == "" {
+		return "", errors.New("tvdb: invalid base URL")
+	}
+	return strings.ToLower(u.Hostname()), nil
+}
+
+func cacheBasePath(baseURL string) (string, error) {
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Scheme == "" || u.Hostname() == "" {
+		return "", errors.New("tvdb: invalid base URL")
+	}
+	return strings.TrimRight(u.Path, "/"), nil
+}
+
+func newHTTPCache(l1 *memory.Cache, logger *slog.Logger, host string, cfg config, bounds redisBounds) (*httpcache.Cache, rueidis.Client, error) {
+	store, redisClient, err := newCacheStore(l1, logger, cfg, bounds)
+	if err != nil {
+		return nil, nil, err
+	}
+	opts := httpCacheOptions(host, cfg)
+	cache, err := httpcache.New(opts, store, logger)
+	if err != nil {
+		if redisClient != nil {
+			redisClient.Close()
+		}
+		return nil, nil, fmt.Errorf("tvdb: HTTP cache: %w", err)
+	}
+	return cache, redisClient, nil
+}
+
+func httpCacheOptions(host string, cfg config) httpcache.Options {
+	opts := httpcache.DefaultOptions()
+	opts.Prefix = cachePrefix
+	opts.MaxBodyBytes = maxBodyBytes
+	opts.StoreTimeout = storeTimeout
+	opts.StaleIfError = 0
+	opts.StaleWhileRevalidate = 0
+	opts.Store.Retention = PositiveTTL
+	opts.Store.L2 = cfg.l2
+	opts.Hosts = []httpcache.HostOptions{{Host: host, TTL: PositiveTTL, Shared: cfg.shared}}
+	return opts
+}
+
+func newCacheStore(l1 *memory.Cache, logger *slog.Logger, cfg config, bounds redisBounds) (*twotier.TwoTier, rueidis.Client, error) {
+	if cfg.l2 != twotier.L2None && cfg.l2 != twotier.L2Redis {
+		return nil, nil, fmt.Errorf("tvdb: cache store: unsupported L2 %q", cfg.l2)
+	}
+	ttl := 30 * time.Second
+	var options []twotier.Option
+	client := cfg.redisClient
+	if cfg.l2 == twotier.L2None {
+		ttl = PositiveTTL
+	} else {
+		var err error
+		client, err = redisForCache(cfg, logger)
+		if err != nil {
+			return nil, nil, err
+		}
+		client = newBoundRedis(client, bounds)
+	}
+	if cfg.l2 != twotier.L2None {
+		options = append(options, twotier.WithRedis(client))
+	}
+	store, err := twotier.New(l1, twotier.Options{L1TTL: ttl, L2TTL: PositiveTTL, L2: cfg.l2}, logger, options...)
+	if err != nil {
+		if client != nil {
+			client.Close()
+		}
+		return nil, nil, fmt.Errorf("tvdb: cache store: %w", err)
+	}
+	return store, client, nil
+}
+
+func redisForCache(cfg config, logger *slog.Logger) (rueidis.Client, error) {
+	clientOpts, err := redisClientOptionForCache(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("tvdb: Redis options: %w", err)
+	}
+	if cfg.redisClient != nil {
+		return cfg.redisClient, nil
+	}
+	client, err := rueidis.NewClient(clientOpts)
+	if err != nil {
+		return nil, fmt.Errorf("tvdb: Redis client: %w", err)
+	}
+	return client, nil
+}
+
+func redisClientOptionForCache(cfg config, logger *slog.Logger) (rueidis.ClientOption, error) {
+	clientOpts, err := redisClientOption(cfg.redis)
+	if err != nil {
+		return rueidis.ClientOption{}, err
+	}
+	guarded := redisNeedsLoopbackGuard(cfg)
+	remote := hasRemoteRedisAddress(clientOpts.InitAddress)
+	if guarded && remote {
+		return rueidis.ClientOption{}, fmt.Errorf("redis password requires TLS or %s", redisPlaintextKey)
+	}
+	if redisPlaintextWarning(cfg, remote) {
+		logger.Warn("tvdb: plaintext Redis password explicitly allowed", "option", redisPlaintextKey)
+	}
+	if guarded {
+		clientOpts.DialCtxFn = loopbackOnlyDial
+	}
+	return clientOpts, nil
+}
+
+func redisNeedsLoopbackGuard(cfg config) bool {
+	return cfg.redis.Password != "" && !cfg.redis.TLS && !cfg.redisPlaintext
+}
+
+func redisPlaintextWarning(cfg config, remote bool) bool {
+	return cfg.redis.Password != "" && !cfg.redis.TLS && cfg.redisPlaintext && remote
+}
+
+func redisClientOption(opts rediscache.Options) (rueidis.ClientOption, error) {
+	if opts.Addr == "" || strings.Count(opts.Addr, ",")+1 > maxRedisAddresses {
+		return rueidis.ClientOption{}, fmt.Errorf("redis address count must be 1..%d", maxRedisAddresses)
+	}
+	addrs := strings.Split(opts.Addr, ",")
+	for i := range addrs {
+		addrs[i] = strings.TrimSpace(addrs[i])
+		if addrs[i] == "" {
+			return rueidis.ClientOption{}, errors.New("empty Redis address")
+		}
+	}
+	clientOpts := rueidis.ClientOption{
+		InitAddress: addrs, Username: opts.Username, Password: opts.Password, SelectDB: opts.DB,
+		DisableCache: true, // Redis is a plain L2 store; SnatchArr does not use client-side tracking.
+	}
+	if opts.TLS {
+		clientOpts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	return clientOpts, nil
+}
+
+func hasRemoteRedisAddress(addrs []string) bool {
+	for _, addr := range addrs {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil || !isLoopbackHost(host) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func loopbackOnlyDial(ctx context.Context, dst string, dialer *net.Dialer, tlsConfig *tls.Config) (net.Conn, error) {
+	if tlsConfig != nil {
+		return nil, fmt.Errorf("%w: TLS configuration is not plaintext", errRedisNotLoopback)
+	}
+	dstHost, _, err := net.SplitHostPort(dst)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid Redis destination: %w", errRedisNotLoopback, err)
+	}
+	if !isLoopbackHost(dstHost) {
+		return nil, fmt.Errorf("%w: destination is not loopback", errRedisNotLoopback)
+	}
+	conn, err := dialer.DialContext(ctx, "tcp", dst)
+	if err != nil {
+		return nil, fmt.Errorf("tvdb: dial loopback Redis: %w", err)
+	}
+	if !isLoopbackPeer(conn.RemoteAddr()) {
+		if closeErr := conn.Close(); closeErr != nil {
+			return nil, errors.Join(errRedisNotLoopback, fmt.Errorf("tvdb: close rejected Redis connection: %w", closeErr))
+		}
+		return nil, fmt.Errorf("%w: peer is not loopback", errRedisNotLoopback)
+	}
+	return conn, nil
+}
+
+func isLoopbackPeer(addr net.Addr) bool {
+	peer, ok := addr.(*net.TCPAddr)
+	return ok && peer.IP.IsLoopback()
+}
+
+type redisBounds struct {
+	lifetime func() context.Context
+}
+
+// boundRedis preserves the store driver's background context, bounded by storeTimeout and the
+// provider lifetime so Redis I/O is independent of any caller lookup context.
+type boundRedis struct {
+	rueidis.Client
+	bounds redisBounds
+}
+
+func newBoundRedis(client rueidis.Client, bounds redisBounds) rueidis.Client {
+	return &boundRedis{Client: client, bounds: bounds}
+}
+
+func (r *boundRedis) Do(ctx context.Context, cmd rueidis.Completed) rueidis.RedisResult {
+	ctx, cancel := r.bound(ctx)
+	defer cancel()
+	return r.Client.Do(ctx, cmd)
+}
+
+func (r *boundRedis) DoMulti(ctx context.Context, multi ...rueidis.Completed) []rueidis.RedisResult {
+	ctx, cancel := r.bound(ctx)
+	defer cancel()
+	return r.Client.DoMulti(ctx, multi...)
+}
+
+func (r *boundRedis) bound(ctx context.Context) (context.Context, context.CancelFunc) {
+	merged, mergedCancel := context.WithCancel(ctx)
+	stopLifetime := context.AfterFunc(r.bounds.lifetime(), mergedCancel)
+	stopBounds := context.AfterFunc(merged, func() {
+		stopLifetime()
+	})
+	cancel := func() {
+		stopBounds()
+		stopLifetime()
+		mergedCancel()
+	}
+	return merged, cancel
+}
+
+// Close cancels every lookup, waits for detached lookups, then releases the HTTP cache, idle
+// connections and Redis client. Its timeout handles only I/O that ignores its context; cache and
+// Redis still close so shutdown remains bounded.
+func (p *Provider) Close() error {
+	if p == nil {
+		return nil
+	}
+	p.closed.Do(func() {
+		if p.cancel != nil {
+			p.cancel()
+		}
+		p.closeErr = p.waitDetached()
+		if p.transport != nil {
+			p.transport.CloseIdleConnections()
+		}
+		if p.cache != nil {
+			p.closeErr = errors.Join(p.closeErr, p.cache.Close())
+		}
+		if p.redis != nil {
+			p.redis.Close()
+		}
+	})
+	return p.closeErr
+}
+
+func (p *Provider) waitDetached() error {
+	if p.detached == nil {
+		return nil
+	}
+	wait, cancel := context.WithTimeout(context.Background(), closeWaitTimeout)
+	defer cancel()
+	for range cap(p.detached) {
+		select {
+		case p.detached <- struct{}{}:
+		case <-wait.Done():
+			return fmt.Errorf("tvdb: close wait for lookup: %w", wait.Err())
+		}
+	}
+	return nil
 }
 
 // Enabled reports whether the provider holds credentials. A provider TVDB locked out stays
@@ -228,8 +555,7 @@ func (p *Provider) TitlesFor(ctx context.Context, ref Ref, ruleCode string) ([]f
 	if !p.Enabled() {
 		return nil, nil
 	}
-	key, ok := cacheKey(ref)
-	if !ok {
+	if !hasLookup(ref) {
 		return nil, nil
 	}
 	lang, err := LanguageCode(ruleCode)
@@ -240,128 +566,123 @@ func (p *Provider) TitlesFor(ctx context.Context, ref Ref, ruleCode string) ([]f
 		return nil, ErrUnauthorized
 	}
 	rule := strings.ToLower(strings.TrimSpace(ruleCode))
-	loader := func(ctx context.Context) (entry, error) { return p.load(ctx, ref, lang, rule) }
-	k := key + ":" + lang
-	e, err := p.cached(ctx, k, loader)
-	if err == nil && p.staleNegative(e) {
-		e, err = p.refreshed(ctx, k, loader)
-	}
-	if err != nil {
-		return nil, unwrapLoad(err)
-	}
-	return append([]foreigntitle.LanguageTitle(nil), e.Titles...), nil
+	return p.load(ctx, ref, lang, rule)
 }
 
-func (p *Provider) staleNegative(e entry) bool {
-	return e.NotFound && p.clk.Since(e.At) >= NegativeTTL
-}
-
-func (p *Provider) cached(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
-	return waitEntry(ctx, p.lookup, func(ctx context.Context) (entry, error) { return p.cache.Get(ctx, key, loader) })
-}
-
-func (p *Provider) refreshed(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
-	return waitEntry(ctx, 2*p.lookup, func(ctx context.Context) (entry, error) {
-		e, _, err := p.refreshes.Do(ctx, key, func(ctx context.Context) (entry, error) {
-			return p.refreshNegative(ctx, key, loader)
-		})
-		if err != nil {
-			return e, fmt.Errorf("tvdb: refresh %s: %w", key, err)
-		}
-		return e, nil
-	})
-}
-
-// refreshNegative rechecks inside the flight so a late stale reader cannot evict a
-// refreshed entry. twotier v0.20.0 Delete advances its flight epoch (twotier.go:278-295),
-// so eviction and reload must share this separate per-key flight.
-func (p *Provider) refreshNegative(ctx context.Context, key string, loader func(context.Context) (entry, error)) (entry, error) {
-	e, err := p.cache.Get(ctx, key, loader)
-	if err != nil {
-		return e, fmt.Errorf("tvdb: recheck %s: %w", key, err)
-	}
-	if !p.staleNegative(e) {
-		return e, nil
-	}
-	if deleteErr := p.cache.Delete(ctx, key); deleteErr != nil {
-		p.logger.WarnContext(ctx, "tvdb: drop stale negative entry", slog.String("key", key))
-	}
-	e, err = p.cache.Get(ctx, key, loader)
-	if err != nil {
-		return e, fmt.Errorf("tvdb: reload %s: %w", key, err)
-	}
-	return e, nil
-}
-
-// waitEntry lets a waiter stop at its own deadline. In golusoris v0.20.0,
-// cache/twotier/twotier.go:131-157 calls group.Do; cache/singleflight/singleflight.go:52-63
-// calls x/sync singleflight.Group.Do synchronously without checking a waiter's context.
-// The shared lookup is detached from any one waiter's cancellation and keeps its own
-// explicit bound: an early departure never fails the lookup for others, and its result
-// still reaches the cache. The buffered result lets it finish after this caller leaves.
-func waitEntry(ctx context.Context, bound time.Duration, fn func(context.Context) (entry, error)) (entry, error) {
-	type result struct {
-		value entry
-		err   error
-	}
-	done := make(chan result, 1)
-	go func() {
-		shared, cancel := context.WithTimeout(context.WithoutCancel(ctx), bound)
-		defer cancel()
-		value, err := fn(shared)
-		done <- result{value: value, err: err}
-	}()
-	select {
-	case r := <-done:
-		return r.value, r.err
-	case <-ctx.Done():
-		return entry{}, fmt.Errorf("%w: %w", ErrUnavailable, ctx.Err())
-	}
-}
-
-// unwrapLoad strips the cache layer's "loader:" prefix so callers match the sentinels.
-func unwrapLoad(err error) error {
-	for _, s := range []error{ErrUnauthorized, ErrRateLimited, ErrUnavailable} {
-		if errors.Is(err, s) {
-			return s
-		}
-	}
-	return ErrUnavailable
-}
-
-// cacheKey is kind:id for the item, or false when the kind or the IDs give nothing to ask.
-func cacheKey(ref Ref) (string, bool) {
+// hasLookup reports whether the kind and identifiers give TVDB something to ask.
+func hasLookup(ref Ref) bool {
 	switch ref.Kind {
 	case domain.KindSonarr:
 		if ref.TVDBID > 0 {
-			return "series:" + strconv.Itoa(ref.TVDBID), true
+			return true
 		}
 	case domain.KindRadarr:
 		if id := strings.TrimSpace(ref.IMDBID); id != "" {
-			return "movie:imdb-" + id, true
+			return true
 		}
 		if ref.TMDBID > 0 {
-			return "movie:tmdb-" + strconv.Itoa(ref.TMDBID), true
+			return true
 		}
 	case domain.KindLidarr, domain.KindReadarr, domain.KindWhisparrV2, domain.KindWhisparrV3, domain.KindStash:
 		// TVDB holds no music, books or adult items.
 	}
-	return "", false
+	return false
 }
 
-// load runs once per key (singleflight) while holding the provider slot. Its deadline
-// starts before the slot wait, so a caller without one still gives up (HISS-02).
-func (p *Provider) load(ctx context.Context, ref Ref, lang, rule string) (entry, error) {
-	ctx, cancel := context.WithTimeout(ctx, p.lookup)
-	defer cancel()
-	select {
-	case p.slot <- struct{}{}:
-	case <-ctx.Done():
-		return entry{}, fmt.Errorf("%w: %w", ErrUnavailable, ctx.Err())
+// load starts a lookup immediately. A caller can leave while an admitted detached lookup fills
+// the shared cache; the detached channel bounds those background lookups.
+func (p *Provider) load(ctx context.Context, ref Ref, lang, rule string) ([]foreigntitle.LanguageTitle, error) {
+	if p.isClosed() {
+		return nil, fmt.Errorf("%w: provider closed", ErrUnavailable)
 	}
-	defer func() { <-p.slot }()
+	lookupCtx, cancel, detached, err := p.beginLookup(ctx)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		select {
+		case <-p.lifetimeDone:
+			cancel()
+		case <-lookupCtx.Done():
+		}
+	}()
+	result := make(chan lookupResult, 1)
+	go func() {
+		defer cancel()
+		if detached {
+			defer func() { <-p.detached }()
+		}
+		titles, err := p.fetch(lookupCtx, ref, lang, rule)
+		result <- lookupResult{titles: titles, err: err}
+	}()
+	select {
+	case done := <-result:
+		return done.titles, done.err
+	case <-p.lifetimeDone:
+		return nil, fmt.Errorf("%w: provider closed", ErrUnavailable)
+	case <-ctx.Done():
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, ctx.Err())
+	}
+}
+
+func (p *Provider) beginLookup(ctx context.Context) (context.Context, context.CancelFunc, bool, error) {
+	detached := false
+	select {
+	case p.detached <- struct{}{}:
+		detached = true
+	default:
+	}
+	lookupBase := ctx
+	if detached {
+		lookupBase = context.WithoutCancel(ctx)
+	}
+	lookupCtx, cancel := context.WithTimeout(lookupBase, p.lookup)
+	if err := p.lookupStopped(ctx, lookupCtx); err != nil {
+		cancel()
+		if detached {
+			<-p.detached
+		}
+		return nil, nil, false, err
+	}
+	return lookupCtx, cancel, detached, nil
+}
+
+func (p *Provider) lookupStopped(ctx, lookupCtx context.Context) error {
+	if p.isClosed() {
+		return fmt.Errorf("%w: provider closed", ErrUnavailable)
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if err := lookupCtx.Err(); err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	return nil
+}
+
+func (p *Provider) isClosed() bool {
+	select {
+	case <-p.lifetimeDone:
+		return true
+	default:
+		return false
+	}
+}
+
+type lookupResult struct {
+	titles []foreigntitle.LanguageTitle
+	err    error
+}
+
+func (p *Provider) fetch(ctx context.Context, ref Ref, lang, rule string) ([]foreigntitle.LanguageTitle, error) {
+	if p.fetchStart != nil {
+		p.fetchStart(ctx)
+	}
 	if p.failed.Load() {
-		return entry{}, ErrUnauthorized
+		return nil, ErrUnauthorized
+	}
+	if err := p.call(ctx, p.login); err != nil {
+		return nil, err
 	}
 	var titles []foreigntitle.LanguageTitle
 	var err error
@@ -370,14 +691,23 @@ func (p *Provider) load(ctx context.Context, ref Ref, lang, rule string) (entry,
 	} else {
 		titles, err = p.movieTitles(ctx, ref, lang, rule)
 	}
-	switch {
-	case err == nil:
-		return entry{Titles: titles, At: p.clk.Now()}, nil
-	case errors.Is(err, errNotFound):
-		return entry{NotFound: true, At: p.clk.Now()}, nil
-	default:
-		return entry{}, err
+	if errors.Is(err, errNotFound) {
+		return nil, nil
 	}
+	return titles, err
+}
+
+func (p *Provider) login(ctx context.Context) error {
+	p.loginMu.Lock()
+	defer p.loginMu.Unlock()
+	if p.loggedIn {
+		return nil
+	}
+	if err := p.client.Login(ctx); err != nil {
+		return fmt.Errorf("tvdb: login: %w", err)
+	}
+	p.loggedIn = true
+	return nil
 }
 
 var errNotFound = errors.New("tvdb: not found")
@@ -520,13 +850,13 @@ func collect(rule, lang string, tr *tvdb.Translation, aliases []tvdb.Alias) []fo
 
 // ownTransport is a private clone of the default transport, so closing idle connections
 // elsewhere in the process cannot break an in-flight TVDB request.
-func ownTransport(tlsConfig *tls.Config) http.RoundTripper {
+func ownTransport(tlsConfig *tls.Config) (http.RoundTripper, *http.Transport) {
 	if base, ok := http.DefaultTransport.(*http.Transport); ok {
 		transport := base.Clone()
 		if tlsConfig != nil {
 			transport.TLSClientConfig = tlsConfig.Clone()
 		}
-		return transport
+		return transport, transport
 	}
-	return http.DefaultTransport
+	return http.DefaultTransport, nil
 }

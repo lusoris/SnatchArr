@@ -13,8 +13,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,13 +25,17 @@ import (
 	"time"
 
 	tvdb "github.com/golusoris/goenvoy/metadata/video/tvdb"
-	"golang.org/x/time/rate"
+	"github.com/jonboulle/clockwork"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/redis/rueidis"
 
 	"github.com/golusoris/golusoris/cache/memory"
+	rediscache "github.com/golusoris/golusoris/cache/redis"
 	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/foreigntitle"
+	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 )
 
 const (
@@ -38,23 +45,36 @@ const (
 
 // stub is a TVDB API double. Every route counts its hits.
 type stub struct {
-	t         *testing.T
-	srv       *httptest.Server
-	tlsConfig *tls.Config
-	total     atomic.Int64
-	logins    atomic.Int64
-	loginRC   int
-	dataRC    int // when non-zero every data route answers with this status
-	series    map[int]string
-	noTr      map[int]bool     // series ids whose deu translation answers 404
-	aliases   map[int][]string // series id -> deu aliases
-	movies    map[string]int   // remote id -> movie id
-	movieAli  map[int][]string
-	delay     time.Duration
-	agent     atomic.Value  // last User-Agent header seen
-	started   chan struct{} // signals a held series request
-	release   <-chan struct{}
-	redirect  func(http.ResponseWriter, *http.Request) bool
+	t                      *testing.T
+	srv                    *httptest.Server
+	tlsConfig              *tls.Config
+	total                  atomic.Int64
+	logins                 atomic.Int64
+	loginRC                int
+	dataRC                 int // when non-zero every data route answers with this status
+	series                 map[int]string
+	noTr                   map[int]bool     // series ids whose deu translation answers 404
+	aliases                map[int][]string // series id -> deu aliases
+	movies                 map[string]int   // remote id -> movie id
+	movieAli               map[int][]string
+	delay                  time.Duration
+	age                    int64
+	agent                  atomic.Value  // last User-Agent header seen
+	started                chan struct{} // signals a held series request
+	release                <-chan struct{}
+	canceled               chan struct{} // signals cancellation of the held series request
+	otherStarted           chan struct{}
+	otherRelease           <-chan struct{}
+	otherCanceled          chan time.Time
+	pathMu                 sync.Mutex
+	pathHits               map[string]int
+	requestTimes           [16]time.Time
+	requestCount           int
+	redirect               func(http.ResponseWriter, *http.Request) bool
+	numericTranslationOnce atomic.Bool
+	emptySeriesOnce        atomic.Bool
+	staleWhileRevalidate   bool
+	statusHeader           string
 }
 
 func newStub(t *testing.T) *stub {
@@ -85,7 +105,18 @@ func newStubWithServer(t *testing.T, newServer func(http.Handler) *httptest.Serv
 }
 
 func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
+	s.pathMu.Lock()
+	if s.pathHits == nil {
+		s.pathHits = make(map[string]int)
+	}
+	s.pathHits[r.URL.Path]++
+	if s.requestCount < len(s.requestTimes) {
+		s.requestTimes[s.requestCount] = time.Now()
+		s.requestCount++
+	}
+	// Record the arrival before publishing its count to concurrent readers.
 	s.total.Add(1)
+	s.pathMu.Unlock()
 	s.agent.Store(r.Header.Get("User-Agent"))
 	if s.redirect != nil && s.redirect(w, r) {
 		return
@@ -96,6 +127,15 @@ func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/login" {
 		s.login(w, r)
 		return
+	}
+	if s.age > 0 {
+		w.Header().Set("Age", strconv.FormatInt(s.age, 10))
+	}
+	if s.staleWhileRevalidate {
+		w.Header().Set("Cache-Control", "stale-while-revalidate=3600")
+	}
+	if s.statusHeader != "" {
+		w.Header().Set(cacheStatusHeader, s.statusHeader)
 	}
 	if r.Header.Get("Authorization") != "Bearer stub-token" {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -111,10 +151,33 @@ func (s *stub) serve(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-s.release:
 		case <-r.Context().Done():
+			if s.canceled != nil {
+				s.canceled <- struct{}{}
+			}
+			return
+		}
+	}
+	if s.otherRelease != nil && r.URL.Path == "/series/81200" {
+		s.otherStarted <- struct{}{}
+		select {
+		case <-s.otherRelease:
+		case <-r.Context().Done():
+			if s.otherCanceled != nil {
+				s.otherCanceled <- time.Now()
+			}
 			return
 		}
 	}
 	s.data(w, r.URL.Path)
+}
+
+func (s *stub) requestArrival(index int) (time.Time, bool) {
+	s.pathMu.Lock()
+	defer s.pathMu.Unlock()
+	if index < 0 || index >= s.requestCount {
+		return time.Time{}, false
+	}
+	return s.requestTimes[index], true
 }
 
 func (s *stub) login(w http.ResponseWriter, r *http.Request) {
@@ -149,11 +212,20 @@ func (s *stub) data(w http.ResponseWriter, path string) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		if s.numericTranslationOnce.Swap(false) {
+			fmt.Fprint(w, `{"status":"success","data":{"name":123}}`)
+			return
+		}
 		fmt.Fprintf(w, `{"status":"success","data":{"name":%q,"language":"deu","aliases":[]}}`, name)
+	case strings.HasSuffix(path, "/translations/eng") && strings.HasPrefix(path, "/series/"):
+		fmt.Fprint(w, `{"status":"success","data":{"name":"English","language":"eng","aliases":[]}}`)
 	case strings.HasPrefix(path, "/series/"):
 		_, _ = fmt.Sscanf(path, "/series/%d", &id)
 		if _, ok := s.series[id]; !ok {
 			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if s.emptySeriesOnce.Swap(false) {
 			return
 		}
 		fmt.Fprintf(w, `{"status":"success","data":{"id":%d,"name":"en","aliases":%s}}`, id, aliasJSON(s.aliases[id]))
@@ -179,19 +251,39 @@ func aliasJSON(names []string) string {
 
 func (s *stub) provider(t *testing.T, key, pin string, logs *bytes.Buffer) *Provider {
 	t.Helper()
+	return s.providerWith(t, key, pin, logs, testPool(t))
+}
+
+func (s *stub) providerWith(t *testing.T, key, pin string, logs *bytes.Buffer, l1 *memory.Cache, extra ...Option) *Provider {
+	t.Helper()
 	logger := slog.New(slog.DiscardHandler)
 	if logs != nil {
 		logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
-	opts := []Option{WithBaseURL(s.srv.URL), WithRetryWait(time.Millisecond), WithRate(rate.Inf, 1)}
+	opts := []Option{WithBaseURL(s.srv.URL), WithRetryWait(time.Millisecond), WithRate("")}
 	if s.tlsConfig != nil {
 		opts = append(opts, withTLSConfig(s.tlsConfig))
 	}
-	p, err := New(key, pin, testPool(t), clock.NewFake(), logger, opts...)
+	for _, option := range extra {
+		if option != nil {
+			opts = append(opts, option)
+		}
+	}
+	p, err := New(key, pin, l1, clock.NewFake(), logger, opts...)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
+	closeInCleanup(t, p)
 	return p
+}
+
+func closeInCleanup(t *testing.T, p *Provider) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := p.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	})
 }
 
 // testPool stands in for the process-wide L1 pool the fx graph provides.
@@ -346,7 +438,102 @@ func TestRateLimitedBoundedAttempts(t *testing.T) {
 	assertNoSecret(t, err.Error(), logs.String())
 }
 
-func TestNotFoundIsEmptyAndNegativeCached(t *testing.T) {
+func TestOutboundRateLimit(t *testing.T) {
+	t.Parallel()
+	const (
+		// The limiter window starts at the first request, so the two-request burst stays within it.
+		burstCeiling = 900 * time.Millisecond
+		// The limiter window starts at the first request, so the third request waits for the next window.
+		windowFloor = 900 * time.Millisecond
+	)
+	for _, tc := range []struct {
+		name         string
+		deadline     time.Duration
+		wantErr      error
+		wantRequests int64
+		wantPrompt   bool
+	}{
+		{"burst waits", 0, nil, 3, false},
+		{"caller deadline does not stop outbound wait", 50 * time.Millisecond, nil, 3, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			p, err := New(
+				plantedKey,
+				plantedPIN,
+				testPool(t),
+				clockwork.NewRealClock(),
+				slog.New(slog.DiscardHandler),
+				WithBaseURL(s.srv.URL),
+				WithRetryWait(time.Millisecond),
+				WithRate("2-S"),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			closeInCleanup(t, p)
+			ctx := t.Context()
+			if tc.deadline > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.deadline)
+				defer cancel()
+			}
+			started := time.Now()
+			_, err = p.TitlesFor(ctx, sonarrRef(), "de")
+			switch {
+			case tc.wantPrompt:
+				if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.DeadlineExceeded) {
+					t.Fatalf("TitlesFor() error = %v, want ErrUnavailable and context.DeadlineExceeded", err)
+				}
+				callerElapsed := time.Since(started)
+				if callerElapsed >= 400*time.Millisecond {
+					t.Fatalf("caller return elapsed = %v, want less than 400ms", callerElapsed)
+				}
+				const maxPolls = 100
+				pollStarted := time.Now()
+				for range maxPolls {
+					if s.total.Load() >= tc.wantRequests {
+						break
+					}
+					time.Sleep(50 * time.Millisecond)
+				}
+				pollElapsed := time.Since(pollStarted)
+				if got := s.total.Load(); got != tc.wantRequests {
+					t.Fatalf("requests = %d, want %d", got, tc.wantRequests)
+				}
+				t.Logf("caller return = %v, request-count poll = %v", callerElapsed, pollElapsed)
+			default:
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("TitlesFor() error = %v, want %v", err, tc.wantErr)
+				}
+				if got := s.total.Load(); got != tc.wantRequests {
+					t.Fatalf("requests = %d, want %d", got, tc.wantRequests)
+				}
+			}
+			firstArrival, ok := s.requestArrival(0)
+			if !ok {
+				t.Fatal("request arrival 1 was not recorded")
+			}
+			secondArrival, ok := s.requestArrival(1)
+			if !ok {
+				t.Fatal("request arrival 2 was not recorded")
+			}
+			thirdArrival, ok := s.requestArrival(2)
+			if !ok {
+				t.Fatal("request arrival 3 was not recorded")
+			}
+			if burstGap := secondArrival.Sub(firstArrival); burstGap >= burstCeiling {
+				t.Fatalf("request 2 - request 1 = %v, want less than %v", burstGap, burstCeiling)
+			}
+			if windowGap := thirdArrival.Sub(firstArrival); windowGap < windowFloor {
+				t.Fatalf("request 3 - request 1 = %v, want at least %v", windowGap, windowFloor)
+			}
+		})
+	}
+}
+
+func TestNotFoundResponseIsCached(t *testing.T) {
 	t.Parallel()
 	s := newStub(t)
 	p := s.provider(t, plantedKey, "", nil)
@@ -358,153 +545,11 @@ func TestNotFoundIsEmptyAndNegativeCached(t *testing.T) {
 		}
 	}
 	if n, want := s.total.Load(), int64(2); n != want { // login + series 404
-		t.Fatalf("requests = %d, want %d (negative cache)", n, want)
+		t.Fatalf("requests = %d, want %d (cached 404)", n, want)
 	}
 	unknown := Ref{Kind: domain.KindRadarr, IMDBID: "tt0000000"}
 	if got, err := p.TitlesFor(t.Context(), unknown, "de"); err != nil || len(got) != 0 {
 		t.Fatalf("unknown remote id = %v, %v, want empty, nil", got, err)
-	}
-}
-
-func TestNegativeEntryExpires(t *testing.T) {
-	t.Parallel()
-	s := newStub(t)
-	clk := clock.NewFake()
-	p, err := New(plantedKey, "", testPool(t), clk, slog.New(slog.DiscardHandler), WithBaseURL(s.srv.URL), WithRate(rate.Inf, 1), WithRetryWait(time.Millisecond))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
-	if got, ferr := p.TitlesFor(t.Context(), ref, "de"); ferr != nil || len(got) != 0 {
-		t.Fatalf("first = %v, %v", got, ferr)
-	}
-	s.series[7] = "Sieben"
-	clk.Advance(NegativeTTL - time.Second)
-	if got, _ := p.TitlesFor(t.Context(), ref, "de"); len(got) != 0 {
-		t.Fatalf("before expiry = %v, want still empty", got)
-	}
-	clk.Advance(2 * time.Second)
-	got, err := p.TitlesFor(t.Context(), ref, "de")
-	if err != nil || len(got) == 0 || got[0].Title != "Sieben" {
-		t.Fatalf("after expiry = %v, %v, want Sieben", got, err)
-	}
-}
-
-func TestNegativeRefreshPreservesSentinel(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name       string
-		dataRC     int
-		wantErr    error
-		wantTitles int
-	}{
-		{"working stub", 0, nil, 1},
-		{"unauthorized data request", http.StatusUnauthorized, ErrUnauthorized, 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			s := newStub(t)
-			p := s.provider(t, plantedKey, "", nil)
-			clk := clock.NewFake()
-			p.clk = clk
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-			defer cancel()
-			ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
-			if got, err := p.TitlesFor(ctx, ref, "de"); err != nil || len(got) != 0 {
-				t.Fatalf("first lookup = %v, %v, want empty, nil", got, err)
-			}
-			s.series[7] = "Sieben"
-			s.dataRC = tc.dataRC
-			clk.Advance(NegativeTTL + time.Second)
-			got, err := p.TitlesFor(ctx, ref, "de")
-			if !errors.Is(err, tc.wantErr) {
-				t.Fatalf("refresh error = %v, want %v", err, tc.wantErr)
-			}
-			if len(got) != tc.wantTitles {
-				t.Fatalf("refresh titles = %v, want %d titles", got, tc.wantTitles)
-			}
-		})
-	}
-}
-
-// staleReadClock holds callers after each has read the same stale cache entry.
-type staleReadClock struct {
-	clock.Clock
-	reads   chan struct{}
-	release <-chan struct{}
-}
-
-func (c *staleReadClock) Since(at time.Time) time.Duration {
-	age := c.Clock.Since(at)
-	if age >= NegativeTTL {
-		select {
-		case c.reads <- struct{}{}:
-		case <-c.release:
-		}
-		<-c.release
-	}
-	return age
-}
-
-func TestConcurrentNegativeRefresh(t *testing.T) {
-	t.Parallel()
-	s := newStub(t)
-	p := s.provider(t, plantedKey, "", nil)
-	clk := clock.NewFake()
-	p.clk = clk
-	ref := Ref{Kind: domain.KindSonarr, TVDBID: 7}
-	if got, err := p.TitlesFor(t.Context(), ref, "de"); err != nil || len(got) != 0 {
-		t.Fatalf("first lookup = %v, %v, want empty, nil", got, err)
-	}
-	clk.Advance(NegativeTTL + time.Second)
-	release := make(chan struct{})
-	reads := make(chan struct{}, 16)
-	p.clk = &staleReadClock{Clock: clk, reads: reads, release: release}
-	negativeRefreshBurst(t, p, ref, reads, release)
-	if n := s.total.Load() - s.logins.Load(); n != 2 {
-		t.Fatalf("data requests = %d, want 2 (initial lookup + one refresh)", n)
-	}
-}
-
-func negativeRefreshBurst(t *testing.T, p *Provider, ref Ref, reads <-chan struct{}, release chan struct{}) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	p.slot <- struct{}{}
-	releaseReads := sync.OnceFunc(func() { close(release) })
-	releaseSlot := sync.OnceFunc(func() { <-p.slot })
-	var wg sync.WaitGroup
-	defer func() { releaseReads(); releaseSlot(); wg.Wait() }()
-	start := make(chan struct{})
-	errs := make(chan error, 16)
-	for range 16 {
-		wg.Go(func() {
-			<-start
-			got, err := p.TitlesFor(ctx, ref, "de")
-			if err == nil && len(got) != 0 {
-				err = fmt.Errorf("refresh got %v, want empty", got)
-			}
-			errs <- err
-		})
-	}
-	close(start)
-	for range 16 {
-		select {
-		case <-reads:
-		case <-ctx.Done():
-			t.Fatal("callers did not all read the stale entry")
-		}
-	}
-	releaseReads()
-	// Keep loads queued until every stale reader can enter the refresh path.
-	time.Sleep(100 * time.Millisecond)
-	releaseSlot()
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		if err != nil {
-			t.Error(err)
-		}
 	}
 }
 
@@ -522,6 +567,864 @@ func TestCacheHitMakesNoRequest(t *testing.T) {
 	}
 	if n := s.total.Load(); n != before {
 		t.Fatalf("cache hit made %d requests", n-before)
+	}
+}
+
+func TestCacheTTLUsesOriginAgeBoundary(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		age      int64
+		wantData int64
+	}{
+		{"positive before expiry", int64((PositiveTTL - time.Hour) / time.Second), 2},
+		{"boundary at expiry", int64(PositiveTTL / time.Second), 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			s.age = tc.age
+			p := s.provider(t, plantedKey, "", nil)
+			for range 2 {
+				if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+					t.Fatalf("TitlesFor() error = %v", err)
+				}
+			}
+			if got := s.total.Load() - s.logins.Load(); got != tc.wantData {
+				t.Fatalf("data requests = %d, want %d", got, tc.wantData)
+			}
+		})
+	}
+}
+
+func TestUndecodableTranslationIsNotCached(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.numericTranslationOnce.Store(true)
+	p := s.provider(t, plantedKey, "", nil)
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err == nil {
+		t.Fatal("first translation unexpectedly succeeded")
+	}
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil {
+		t.Fatalf("second TitlesFor() error = %v", err)
+	}
+	if titles := titlesOf(got); len(titles) != 2 || titles[0] != "Breaking Bad DE" {
+		t.Fatalf("second TitlesFor() = %v, want corrected translation", titles)
+	}
+	s.pathMu.Lock()
+	translationHits := s.pathHits["/series/81189/translations/deu"]
+	s.pathMu.Unlock()
+	if translationHits != 2 {
+		t.Fatalf("translation requests = %d, want 2", translationHits)
+	}
+}
+
+func TestEmptySeriesBodyIsNotCached(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.emptySeriesOnce.Store(true)
+	p := s.provider(t, plantedKey, "", nil)
+	_, _ = p.TitlesFor(t.Context(), sonarrRef(), "de")
+
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil {
+		t.Fatalf("second TitlesFor() error = %v", err)
+	}
+	if titles := titlesOf(got); !slices.Contains(titles, "Breaking Bad Alias") {
+		t.Fatalf("second TitlesFor() = %v, want Breaking Bad Alias", titles)
+	}
+	s.pathMu.Lock()
+	seriesHits := s.pathHits["/series/81189"]
+	s.pathMu.Unlock()
+	if seriesHits != 2 {
+		t.Fatalf("series requests = %d, want 2", seriesHits)
+	}
+}
+
+func TestOriginStaleWhileRevalidateIsIgnored(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.age = int64(PositiveTTL / time.Second)
+	s.staleWhileRevalidate = true
+	p := s.provider(t, plantedKey, "", nil)
+	for range 2 {
+		resp, err := p.http.Do(authorizedRequest(t, s, "/series/81189"))
+		if err != nil {
+			t.Fatalf("Do() error = %v", err)
+		}
+		if status := resp.Header.Get(cacheStatusHeader); status == "STALE" {
+			t.Fatalf("cache status = STALE, want synchronous re-fetch")
+		}
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}
+	s.pathMu.Lock()
+	hits := s.pathHits["/series/81189"]
+	s.pathMu.Unlock()
+	if hits != 2 {
+		t.Fatalf("series requests = %d, want 2", hits)
+	}
+}
+
+func TestCredentialedResponsesNeedSharedHost(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		new   func(t *testing.T, p *Provider, s *stub) *http.Request
+		extra Option
+	}{
+		{
+			name: "login POST",
+			new: func(t *testing.T, _ *Provider, s *stub) *http.Request {
+				t.Helper()
+				body := strings.NewReader(`{"apikey":"` + plantedKey + `","pin":"` + plantedPIN + `"}`)
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.srv.URL+"/login", body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return req
+			},
+		},
+		{
+			name:  "bearer GET without shared host",
+			extra: withSharedHost(false),
+			new: func(t *testing.T, _ *Provider, s *stub) *http.Request {
+				t.Helper()
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.srv.URL+"/series/81189", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Header.Set("Authorization", "Bearer stub-token")
+				return req
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			p := s.providerWith(t, plantedKey, plantedPIN, nil, testPool(t), tc.extra)
+			for range 2 {
+				resp, err := p.http.Do(tc.new(t, p, s))
+				if err != nil {
+					t.Fatalf("Do() error = %v", err)
+				}
+				if err := resp.Body.Close(); err != nil {
+					t.Fatalf("Close() error = %v", err)
+				}
+			}
+			if got := s.total.Load(); got != 2 {
+				t.Fatalf("upstream requests = %d, want 2", got)
+			}
+		})
+	}
+}
+
+func TestCacheKeysContainNoCredential(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	l1 := testPool(t)
+	p := s.providerWith(t, plantedKey, plantedPIN, nil, l1)
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+		t.Fatal(err)
+	}
+	if count := len(slices.Collect(l1.Keys())); count == 0 {
+		t.Fatalf("cache key count = %d, want at least one", count)
+	}
+	for key := range l1.Keys() {
+		assertNoSecret(t, fmt.Sprint(key))
+	}
+}
+
+func TestRedisPlaintextRequiresOptIn(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, addr string
+		password   string
+		tls, optIn bool
+		wantError  bool
+		wantWarn   bool
+	}{
+		{"remote credential", "cache.example:6379", "planted-password", false, false, true, false},
+		{"remote opted in", "cache.example:6379", "planted-password", false, true, false, true},
+		{"remote TLS", "cache.example:6379", "planted-password", true, false, false, false},
+		{"remote no password", "cache.example:6379", "", false, false, false, false},
+		{"localhost", "localhost:6379", "planted-password", false, false, false, false},
+		{"127 range", "127.0.0.2:6379", "planted-password", false, false, false, false},
+		{"IPv6 loopback", "[::1]:6379", "planted-password", false, false, false, false},
+		{"mixed list", "127.0.0.1:6379,cache.example:6379", "planted-password", false, false, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&logs, nil))
+			p, err := New(plantedKey, "", testPool(t), clock.NewFake(), logger,
+				WithL2("redis", rediscache.Options{Addr: tc.addr, Password: tc.password, TLS: tc.tls}),
+				WithRedisPlaintext(tc.optIn), withRedisClient(&closeOnlyRedisClient{}))
+			if tc.wantError {
+				if err == nil || !strings.Contains(err.Error(), redisPlaintextKey) {
+					t.Fatalf("New() error = %v, want %s", err, redisPlaintextKey)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("New() error = %v", err)
+				}
+				closeInCleanup(t, p)
+			}
+			if got := strings.Count(logs.String(), "level=WARN"); (got == 1) != tc.wantWarn || got > 1 {
+				t.Fatalf("Warn records = %d, want one = %t", got, tc.wantWarn)
+			}
+			if tc.wantWarn && !strings.Contains(logs.String(), redisPlaintextKey) {
+				t.Fatal("Warn missing opt-in key")
+			}
+			if strings.Contains(logs.String(), tc.addr) || (tc.password != "" && strings.Contains(logs.String(), tc.password)) {
+				t.Fatal("Warn exposed Redis address or password")
+			}
+		})
+	}
+}
+
+func TestRedisAddressLimit(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, addr string
+		wantError  bool
+	}{
+		{"sixteen", strings.Repeat("a:1,", maxRedisAddresses-1) + "a:1", false},
+		{"seventeen", strings.Repeat("a:1,", maxRedisAddresses) + "a:1", true},
+		{"empty entry", "a:1,,b:2", true},
+		{"empty address", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := redisClientOption(rediscache.Options{Addr: tc.addr})
+			if (err != nil) != tc.wantError {
+				t.Fatalf("redisClientOption() error = %v, want error = %t", err, tc.wantError)
+			}
+			if tc.name == "seventeen" && !strings.Contains(err.Error(), "16") {
+				t.Fatalf("address cap error = %v, want 16", err)
+			}
+		})
+	}
+}
+
+func TestRedisClientOptionDisablesClientCache(t *testing.T) {
+	t.Parallel()
+	got, err := redisClientOption(rediscache.Options{Addr: "localhost:6379"})
+	if err != nil {
+		t.Fatalf("redisClientOption() error = %v", err)
+	}
+	if !got.DisableCache {
+		t.Fatal("DisableCache = false, want true for the plain L2 client")
+	}
+}
+
+func TestCallerCancelKeepsSharedLookup(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.started = make(chan struct{}, 2)
+	release := make(chan struct{})
+	s.release = release
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	p := s.provider(t, plantedKey, "", nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, err := p.TitlesFor(ctx, sonarrRef(), "de"); result <- err }()
+	deadline, stop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stop()
+	select {
+	case <-s.started:
+	case <-deadline.Done():
+		t.Fatal("series request did not start")
+	}
+	cancel()
+	resultErr := error(nil)
+	select {
+	case resultErr = <-result:
+	case <-deadline.Done():
+		t.Fatal("first lookup did not finish")
+	}
+	if !errors.Is(resultErr, ErrUnavailable) || !errors.Is(resultErr, context.Canceled) {
+		t.Fatalf("first lookup error = %v, want ErrUnavailable and context.Canceled", resultErr)
+	}
+	close(release)
+	for len(p.detached) != 0 {
+		select {
+		case <-deadline.Done():
+			t.Fatal("detached lookup did not finish")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	got, err := p.TitlesFor(deadline, sonarrRef(), "de")
+	if err != nil || len(got) == 0 {
+		t.Fatalf("second lookup = %v, %v, want titles", got, err)
+	}
+	s.pathMu.Lock()
+	series, translation := s.pathHits["/series/81189"], s.pathHits["/series/81189/translations/deu"]
+	s.pathMu.Unlock()
+	if series != 1 || translation != 1 {
+		t.Fatalf("upstream series/translation requests = %d/%d, want 1/1", series, translation)
+	}
+}
+
+func TestWarmHitDuringColdLookup(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	s.started = make(chan struct{}, 1)
+	release := make(chan struct{})
+	s.release = release
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	p := s.provider(t, plantedKey, "", nil)
+	ref := Ref{Kind: domain.KindSonarr, TVDBID: 81200}
+	got, err := p.TitlesFor(t.Context(), ref, "de")
+	if err != nil || len(got) == 0 || titlesOf(got)[0] != "Other Series DE" {
+		t.Fatalf("prime TitlesFor() = %v, %v", got, err)
+	}
+	cold := make(chan error, 1)
+	go func() { _, coldErr := p.TitlesFor(t.Context(), sonarrRef(), "de"); cold <- coldErr }()
+	select {
+	case <-s.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("cold series request did not start")
+	}
+	before := s.total.Load()
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	got, err = p.TitlesFor(ctx, ref, "de")
+	if err != nil || len(got) == 0 {
+		t.Fatalf("warm TitlesFor() = %v, %v", got, err)
+	}
+	if after := s.total.Load(); after != before {
+		t.Fatalf("warm cache hit made %d requests", after-before)
+	}
+	close(release)
+	select {
+	case err := <-cold:
+		if err != nil {
+			t.Fatalf("cold TitlesFor() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("cold lookup did not finish")
+	}
+}
+
+func TestConcurrentColdLookups(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	p := s.provider(t, plantedKey, "", nil)
+	if _, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 424242}, "de"); err != nil {
+		t.Fatalf("token prime TitlesFor() error = %v", err)
+	}
+	cases := []struct {
+		ref  Ref
+		lang string
+	}{
+		{Ref{Kind: domain.KindSonarr, TVDBID: 81189}, "de"},
+		{Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de"},
+		{Ref{Kind: domain.KindRadarr, IMDBID: "tt0111161"}, "de"},
+		{Ref{Kind: domain.KindSonarr, TVDBID: 81189}, "en"},
+	}
+	results := make(chan error, len(cases))
+	var wg sync.WaitGroup
+	for _, tc := range cases {
+		wg.Go(func() {
+			_, err := p.TitlesFor(t.Context(), tc.ref, tc.lang)
+			results <- err
+		})
+	}
+	wg.Wait()
+	close(results)
+	for err := range results {
+		if err != nil {
+			t.Errorf("concurrent TitlesFor() error = %v", err)
+		}
+	}
+}
+
+func TestDetachedLookupsBounded(t *testing.T) {
+	t.Parallel()
+	t.Run("cap-1", func(t *testing.T) {
+		t.Parallel()
+		s := newStub(t)
+		s.started = make(chan struct{}, 1)
+		s.canceled = make(chan struct{}, 1)
+		release := make(chan struct{})
+		s.release = release
+		p := s.provider(t, plantedKey, "", nil)
+		for range cap(p.detached) - 1 {
+			p.detached <- struct{}{}
+		}
+		t.Cleanup(func() {
+			for range cap(p.detached) - 1 {
+				<-p.detached
+			}
+		})
+		t.Cleanup(func() {
+			select {
+			case <-release:
+			default:
+				close(release)
+			}
+		})
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		result := make(chan error, 1)
+		go func() { _, err := p.TitlesFor(ctx, sonarrRef(), "de"); result <- err }()
+		select {
+		case <-s.started:
+			cancel()
+		case <-time.After(5 * time.Second):
+			t.Fatal("detached series request did not start")
+		}
+		select {
+		case err := <-result:
+			if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("detached caller error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("detached caller did not return")
+		}
+		select {
+		case <-s.canceled:
+			t.Fatal("detached lookup observed caller cancellation")
+		case <-time.After(300 * time.Millisecond):
+		}
+		close(release)
+		deadline := time.After(2 * time.Second)
+		for len(p.detached) != cap(p.detached)-1 {
+			select {
+			case <-deadline:
+				t.Fatal("detached lookup did not release its token")
+			default:
+				time.Sleep(time.Millisecond)
+			}
+		}
+		before := s.total.Load()
+		got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+		if err != nil || len(got) == 0 {
+			t.Fatalf("cached detached lookup = %v, %v", got, err)
+		}
+		if after := s.total.Load(); after != before {
+			t.Fatalf("cache fill made %d requests", after-before)
+		}
+	})
+	t.Run("cap", func(t *testing.T) {
+		t.Parallel()
+		s := newStub(t)
+		s.started = make(chan struct{}, 1)
+		s.canceled = make(chan struct{}, 1)
+		release := make(chan struct{})
+		s.release = release
+		p := s.provider(t, plantedKey, "", nil)
+		for range cap(p.detached) {
+			p.detached <- struct{}{}
+		}
+		t.Cleanup(func() {
+			for range cap(p.detached) {
+				<-p.detached
+			}
+		})
+		t.Cleanup(func() {
+			select {
+			case <-release:
+			default:
+				close(release)
+			}
+		})
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		result := make(chan error, 1)
+		go func() { _, err := p.TitlesFor(ctx, sonarrRef(), "de"); result <- err }()
+		select {
+		case <-s.started:
+			cancel()
+		case <-time.After(5 * time.Second):
+			t.Fatal("attached series request did not start")
+		}
+		select {
+		case err := <-result:
+			if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("attached caller error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("attached caller did not return")
+		}
+		select {
+		case <-s.canceled:
+		case <-time.After(2 * time.Second):
+			t.Fatal("attached lookup did not observe caller cancellation")
+		}
+	})
+}
+
+func TestLookupSingleDeadline(t *testing.T) {
+	t.Parallel()
+	const deadlineTolerance = 100 * time.Millisecond
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	s.otherStarted = make(chan struct{}, 1)
+	s.otherCanceled = make(chan time.Time, 1)
+	otherRelease := make(chan struct{})
+	s.otherRelease = otherRelease
+	t.Cleanup(func() { close(otherRelease) })
+	p := s.provider(t, plantedKey, "", nil)
+	p.lookup = 900 * time.Millisecond
+	deadline, stop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stop()
+	fetchDeadline := make(chan time.Time, 1)
+	p.fetchStart = func(ctx context.Context) {
+		value, _ := ctx.Deadline()
+		fetchDeadline <- value
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
+		result <- err
+	}()
+	var startedDeadline time.Time
+	select {
+	case startedDeadline = <-fetchDeadline:
+	case <-deadline.Done():
+		t.Fatal("fetch did not start")
+	}
+	select {
+	case <-s.otherStarted:
+	case <-deadline.Done():
+		t.Fatal("series request did not start")
+	}
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("lookup error = %v, want context.DeadlineExceeded", err)
+		}
+	case <-deadline.Done():
+		t.Fatal("lookup did not finish")
+	}
+	var canceledAt time.Time
+	select {
+	case canceledAt = <-s.otherCanceled:
+	case <-deadline.Done():
+		t.Fatal("series request did not observe its lookup deadline")
+	}
+	lowerBound := startedDeadline.Add(-deadlineTolerance)
+	upperBound := startedDeadline.Add(p.lookup / 2)
+	if canceledAt.Before(lowerBound) || !canceledAt.Before(upperBound) {
+		t.Fatalf("upstream cancellation = %v, want [%v, %v)", canceledAt, lowerBound, upperBound)
+	}
+}
+
+func TestCloseClosesOwnedIdleConnections(t *testing.T) {
+	t.Parallel()
+	const closeObservationTimeout = 2 * time.Second
+	closed := make(chan struct{}, 4)
+	s := newConnStateStub(t, func(_ net.Conn, state http.ConnState) {
+		if state == http.StateClosed {
+			select {
+			case closed <- struct{}{}:
+			default:
+			}
+		}
+	})
+	p := s.provider(t, plantedKey, "", nil)
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+		t.Fatalf("TitlesFor() error = %v", err)
+	}
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	deadline, cancel := context.WithTimeout(t.Context(), closeObservationTimeout)
+	defer cancel()
+	select {
+	case <-closed:
+	case <-deadline.Done():
+		t.Fatal("owned idle connection did not close")
+	}
+}
+
+func newConnStateStub(t *testing.T, connState func(net.Conn, http.ConnState)) *stub {
+	t.Helper()
+	s := &stub{
+		t: t, loginRC: http.StatusOK,
+		series:   map[int]string{81189: "Breaking Bad DE"},
+		aliases:  map[int][]string{81189: {"Breaking Bad Alias"}},
+		movies:   map[string]int{"tt0111161": 439},
+		movieAli: map[int][]string{439: {"Die Verurteilten Alias"}},
+	}
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(s.serve))
+	srv.Config.ConnState = connState
+	srv.Start()
+	s.srv = srv
+	t.Cleanup(srv.Close)
+	return s
+}
+
+func TestCloseStopsDetachedLookup(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.started = make(chan struct{}, 1)
+	s.canceled = make(chan struct{}, 1)
+	release := make(chan struct{})
+	s.release = release
+	t.Cleanup(func() { close(release) })
+	p := s.provider(t, plantedKey, "", nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	first := make(chan error, 1)
+	go func() { _, err := p.TitlesFor(ctx, sonarrRef(), "de"); first <- err }()
+	startDeadline, stopStart := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stopStart()
+	select {
+	case <-s.started:
+	case <-startDeadline.Done():
+		t.Fatal("series request did not start")
+	}
+	deadline, stop := context.WithTimeout(t.Context(), 2*time.Second)
+	defer stop()
+	cancel()
+	select {
+	case err := <-first:
+		if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled lookup error = %v", err)
+		}
+	case <-deadline.Done():
+		t.Fatal("cancelled caller did not return")
+	}
+	start := time.Now()
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed >= 2*time.Second {
+		t.Fatalf("Close() elapsed = %v, want less than 2s", elapsed)
+	}
+	select {
+	case <-s.canceled:
+	case <-deadline.Done():
+		t.Fatal("held series request did not observe cancellation")
+	}
+	before := s.total.Load()
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("lookup after Close error = %v, want ErrUnavailable", err)
+	}
+	if got := s.total.Load(); got != before {
+		t.Fatalf("requests after Close = %d, want %d", got, before)
+	}
+}
+
+func TestCloseWaitsForDetachedLookups(t *testing.T) {
+	t.Parallel()
+	t.Run("held lookups", testCloseWaitsForHeldLookups)
+	t.Run("close wait bound", testCloseWaitBound)
+}
+
+func testCloseWaitsForHeldLookups(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	s.started = make(chan struct{}, 1)
+	s.canceled = make(chan struct{}, 1)
+	s.otherStarted = make(chan struct{}, 1)
+	s.otherCanceled = make(chan time.Time, 1)
+	release, otherRelease := make(chan struct{}), make(chan struct{})
+	s.release, s.otherRelease = release, otherRelease
+	p := s.provider(t, plantedKey, "", nil)
+	t.Cleanup(func() { close(release); close(otherRelease) })
+	firstCtx, cancelFirst := context.WithCancel(t.Context())
+	secondCtx, cancelSecond := context.WithCancel(t.Context())
+	first, second := make(chan error, 1), make(chan error, 1)
+	go func() { _, err := p.TitlesFor(firstCtx, sonarrRef(), "de"); first <- err }()
+	go func() {
+		_, err := p.TitlesFor(secondCtx, Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
+		second <- err
+	}()
+	for _, started := range []<-chan struct{}{s.started, s.otherStarted} {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("held upstream request did not start")
+		}
+	}
+	cancelFirst()
+	cancelSecond()
+	for _, result := range []<-chan error{first, second} {
+		select {
+		case err := <-result:
+			if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled caller error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("canceled caller did not return")
+		}
+	}
+	select {
+	case <-s.canceled:
+		t.Fatal("first detached lookup observed caller cancellation")
+	case <-s.otherCanceled:
+		t.Fatal("second detached lookup observed caller cancellation")
+	case <-time.After(300 * time.Millisecond):
+	}
+	start := time.Now()
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed >= 2*time.Second {
+		t.Fatalf("Close() elapsed = %v, want less than 2s", elapsed)
+	}
+	select {
+	case <-s.canceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first held upstream request did not observe Close cancellation")
+	}
+	select {
+	case <-s.otherCanceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second held upstream request did not observe Close cancellation")
+	}
+}
+
+func testCloseWaitBound(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p, err := New(plantedKey, "", testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler), WithBaseURL(s.srv.URL), WithRate(""))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	p.detached <- struct{}{}
+	start := time.Now()
+	err = p.Close()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Close() error = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed < closeWaitTimeout-100*time.Millisecond || elapsed >= 3*time.Second {
+		t.Fatalf("Close() elapsed = %v, want close wait bound", elapsed)
+	}
+}
+
+func TestCacheMetrics(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	m, reg := metricstest.New(t)
+	p := s.providerWith(t, plantedKey, plantedPIN, nil, testPool(t), WithMetrics(m))
+	for range 2 {
+		if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		status string
+		want   float64
+	}{{"MISS", 2}, {"HIT", 2}} {
+		got, ok := metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
+			"provider": Source,
+			"status":   tc.status,
+		})
+		if !ok || got != tc.want {
+			t.Fatalf("cache metric %s = %v (present %t), want %v", tc.status, got, ok, tc.want)
+		}
+	}
+}
+
+func TestCacheMetricsNormalizesUncachedStatuses(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	m, reg := metricstest.New(t)
+	p := s.providerWith(t, plantedKey, plantedPIN, nil, testPool(t), WithMetrics(m))
+	s.dataRC = http.StatusTooManyRequests
+	doPassThrough(t, p, s)
+	after429 := noneCacheRequests(t, reg)
+	if after429 < 1 {
+		t.Fatalf("cache metric NONE after 429 = %v, want at least 1 (one per attempt)", after429)
+	}
+	// golusoris returns a 429 unchanged, so an origin status header reaches the metric as sent.
+	s.statusHeader = "planted"
+	doPassThrough(t, p, s)
+	if got := noneCacheRequests(t, reg); got != 2*after429 {
+		t.Fatalf("cache metric NONE after planted status = %v, want %v", got, 2*after429)
+	}
+	if got, ok := metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
+		"provider": Source,
+		"status":   "planted",
+	}); ok {
+		t.Fatalf("cache metric status planted = %v, want no series", got)
+	}
+}
+
+func doPassThrough(t *testing.T, p *Provider, s *stub) {
+	t.Helper()
+	resp, err := p.http.Do(authorizedRequest(t, s, "/series/81189"))
+	if err != nil && resp == nil {
+		t.Fatalf("429 Do() error = %v", err)
+	}
+	if resp != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Fatalf("Close(429) error = %v", closeErr)
+		}
+	}
+}
+
+func noneCacheRequests(t *testing.T, reg prometheus.Gatherer) float64 {
+	t.Helper()
+	got, _ := metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
+		"provider": Source,
+		"status":   cacheStatusNone,
+	})
+	return got
+}
+
+func authorizedRequest(t *testing.T, s *stub, path string) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.srv.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer stub-token")
+	return req
+}
+
+type closeOnlyRedisClient struct {
+	rueidis.Client
+	closed atomic.Bool
+}
+
+func (c *closeOnlyRedisClient) Close() { c.closed.Store(true) }
+
+func TestRedisL2UsesInjectedClientAndClosesIt(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	client := &closeOnlyRedisClient{}
+	p := s.providerWith(
+		t,
+		plantedKey,
+		plantedPIN,
+		nil,
+		testPool(t),
+		WithL2("redis", rediscache.Options{Addr: "dragonfly.test:6379"}),
+		withRedisClient(client),
+	)
+	if _, ok := p.redis.(*boundRedis); !ok {
+		t.Fatalf("Redis L2 client type = %T, want *boundRedis", p.redis)
+	}
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if !client.closed.Load() {
+		t.Fatal("Close() did not close the injected Redis client")
 	}
 }
 
@@ -692,8 +1595,12 @@ func TestMissingTranslationKeepsAliases(t *testing.T) {
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("TitlesFor() = %+v, want only %+v", got, want)
 	}
+	got, err = p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil || len(got) != 1 || got[0] != want {
+		t.Fatalf("cached TitlesFor() = %+v, %v, want only %+v", got, err, want)
+	}
 	if n, want := s.total.Load(), int64(3); n != want { // login, series, translation 404
-		t.Fatalf("requests = %d, want %d", n, want)
+		t.Fatalf("requests = %d, want %d (translation 404 cached)", n, want)
 	}
 }
 
@@ -733,10 +1640,11 @@ func TestOversizeBodyIsUnavailable(t *testing.T) {
 		_, _ = w.Write(bytes.Repeat([]byte("a"), maxBodyBytes+10))
 	}))
 	t.Cleanup(big.Close)
-	p, err := New(plantedKey, "", testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler), WithBaseURL(big.URL), WithRate(rate.Inf, 1))
+	p, err := New(plantedKey, "", testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler), WithBaseURL(big.URL), WithRate(""))
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeInCleanup(t, p)
 	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("error = %v, want ErrUnavailable", err)
 	}
@@ -789,10 +1697,11 @@ func TestUserAgentHeader(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := newStub(t)
-			p, err := New(plantedKey, "", testPool(t), clock.NewFake(), nil, WithBaseURL(s.srv.URL), WithRate(rate.Inf, 1), WithUserAgent(tc.ua))
+			p, err := New(plantedKey, "", testPool(t), clock.NewFake(), nil, WithBaseURL(s.srv.URL), WithRate(""), WithUserAgent(tc.ua))
 			if err != nil {
 				t.Fatal(err)
 			}
+			closeInCleanup(t, p)
 			if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); err != nil {
 				t.Fatal(err)
 			}

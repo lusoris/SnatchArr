@@ -30,6 +30,8 @@ func ApplySetting(o *Options, key, val string) error {
 		return applyJellyfin(o, key, val)
 	case strings.HasPrefix(key, "snatcharr.metadata.tvdb."):
 		return applyTVDB(o, key, val)
+	case strings.HasPrefix(key, "snatcharr.metadata.cache."):
+		return applyMetadataCache(o, key, val)
 	case strings.HasPrefix(key, "snatcharr.configarr."):
 		return applyConfigarr(o, key, val)
 	case strings.HasPrefix(key, "snatcharr.prowlarr."):
@@ -269,6 +271,27 @@ func applyTVDB(o *Options, key, val string) error {
 	default:
 		return fmt.Errorf("%w: unknown tvdb option %q", domain.ErrInvalid, key)
 	}
+	return nil
+}
+
+func applyMetadataCache(o *Options, key, val string) error {
+	switch key {
+	case "snatcharr.metadata.cache.redis_plaintext":
+		allowed, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("%w: invalid bool for %s: %w", domain.ErrInvalid, key, err)
+		}
+		o.Metadata.Cache.RedisPlaintext = allowed
+		return nil
+	case "snatcharr.metadata.cache.l2":
+	default:
+		return fmt.Errorf("%w: unknown metadata cache option %q", domain.ErrInvalid, key)
+	}
+	l2 := strings.ToLower(strings.TrimSpace(val))
+	if err := (MetadataCacheOptions{L2: l2}).Validate(); err != nil {
+		return fmt.Errorf("%w: %w", domain.ErrInvalid, err)
+	}
+	o.Metadata.Cache.L2 = l2
 	return nil
 }
 
