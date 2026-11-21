@@ -20,7 +20,6 @@ use snatch_proto::{
 };
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::Channel;
 use tonic::{Code, Request, Status};
@@ -374,11 +373,13 @@ pub(crate) async fn execute_with(
     health: &Health,
 ) {
     let (tx, rx) = mpsc::channel::<ReportEventsRequest>(MAX_EVENTS_BUFFER);
-    let mut reporter = client.clone();
+    let reporter = client.clone();
     let report = tokio::spawn(async move {
-        reporter
-            .report_events(Request::new(ReceiverStream::new(rx)))
-            .await
+        resend::stream_once_more(rx, |events| {
+            let mut c = reporter.clone();
+            async move { c.report_events(Request::new(events)).await }
+        })
+        .await
     });
     let events = Events {
         tx,
