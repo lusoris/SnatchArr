@@ -64,6 +64,7 @@ func (t *originGuard) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tvdb: origin round trip: %w", err)
 	}
+	resp.Header.Del(cacheStatusHeader)
 	removeStaleWhileRevalidate(resp.Header)
 	if req.Method != http.MethodGet || resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return resp, nil

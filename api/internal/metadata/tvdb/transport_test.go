@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -50,15 +51,15 @@ func TestOriginGuardRemovesStaleWhileRevalidate(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			resp := newOriginResponse(http.StatusNoContent, "", tc.in)
-			defer resp.Body.Close()
-			guard := originGuard{next: staticRoundTripper(resp)}
-			got, err := guard.RoundTrip(newRequest(t, http.MethodPost, "/other"))
+			guard := originGuard{next: newOriginRoundTripper(t, http.StatusNoContent, "", tc.in)}
+			got, err := roundTripGuard(t, guard, newRequest(t, http.MethodPost, "/other"))
 			if err != nil {
 				t.Fatalf("RoundTrip() error = %v", err)
 			}
-			defer got.Body.Close()
-			if values := got.Header.Values("Cache-Control"); !reflect.DeepEqual(values, tc.want) {
+			if got.status != http.StatusNoContent {
+				t.Fatalf("status = %d, want %d", got.status, http.StatusNoContent)
+			}
+			if values := got.header.Values("Cache-Control"); !reflect.DeepEqual(values, tc.want) {
 				t.Fatalf("Cache-Control = %q, want %q", values, tc.want)
 			}
 		})
@@ -80,17 +81,17 @@ func TestOriginGuardValidTVDBPaths(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			resp := newOriginResponse(http.StatusOK, tc.body, nil)
-			defer resp.Body.Close()
-			guard := originGuard{next: staticRoundTripper(resp), basePath: "/v4"}
-			got, err := guard.RoundTrip(newRequest(t, http.MethodGet, tc.path))
+			guard := originGuard{next: newOriginRoundTripper(t, http.StatusOK, tc.body, nil), basePath: "/v4"}
+			got, err := roundTripGuard(t, guard, newRequest(t, http.MethodGet, tc.path))
 			if err != nil {
 				t.Fatalf("RoundTrip() error = %v", err)
 			}
-			defer got.Body.Close()
-			assertBody(t, got, tc.body)
-			if got.Header.Get("Cache-Control") != "" {
-				t.Fatalf("Cache-Control = %q, want empty", got.Header.Get("Cache-Control"))
+			if got.status != http.StatusOK {
+				t.Fatalf("status = %d, want %d", got.status, http.StatusOK)
+			}
+			assertBody(t, got.body, tc.body)
+			if got.header.Get("Cache-Control") != "" {
+				t.Fatalf("Cache-Control = %q, want empty", got.header.Get("Cache-Control"))
 			}
 		})
 	}
@@ -99,33 +100,39 @@ func TestOriginGuardValidTVDBPaths(t *testing.T) {
 func TestOriginGuardAddsNoStoreForUncacheableResponses(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name   string
-		method string
-		path   string
-		status int
-		body   string
-		want   bool
+		name         string
+		method       string
+		path         string
+		status       int
+		cacheControl []string
+		body         string
+		want         bool
 	}{
 		{name: "numeric translation name", method: http.MethodGet, path: "/v4/series/81189/translations/deu", status: http.StatusOK, body: `{"status":"success","data":{"name":123}}`, want: true},
 		{name: "unknown path", method: http.MethodGet, path: "/v4/unknown", status: http.StatusOK, body: `{"not":"tvdb"}`, want: true},
 		{name: "not found", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusNotFound, body: `{"message":"missing"}`},
+		{name: "lookalike directive", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusNotFound, cacheControl: []string{"x-no-store, max-age=no-store"}, body: `{"message":"missing"}`},
 		{name: "post", method: http.MethodPost, path: "/v4/unknown", status: http.StatusOK, body: `not json`},
 		{name: "empty body", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusOK, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			resp := newOriginResponse(tc.status, tc.body, []string{"max-age=60"})
-			defer resp.Body.Close()
-			guard := originGuard{next: staticRoundTripper(resp), basePath: "/v4"}
-			got, err := guard.RoundTrip(newRequest(t, tc.method, tc.path))
+			inCC := tc.cacheControl
+			if inCC == nil {
+				inCC = []string{"max-age=60"}
+			}
+			guard := originGuard{next: newOriginRoundTripper(t, tc.status, tc.body, inCC), basePath: "/v4"}
+			got, err := roundTripGuard(t, guard, newRequest(t, tc.method, tc.path))
 			if err != nil {
 				t.Fatalf("RoundTrip() error = %v", err)
 			}
-			defer got.Body.Close()
-			assertBody(t, got, tc.body)
-			hasNoStore := strings.Contains(strings.ToLower(got.Header.Get("Cache-Control")), "no-store")
+			if got.status != tc.status {
+				t.Fatalf("status = %d, want %d", got.status, tc.status)
+			}
+			assertBody(t, got.body, tc.body)
+			hasNoStore := slices.Contains(cacheControlDirectiveNames(got.header), "no-store")
 			if hasNoStore != tc.want {
-				t.Fatalf("no-store = %t, want %t; Cache-Control = %q", hasNoStore, tc.want, got.Header.Get("Cache-Control"))
+				t.Fatalf("no-store = %t, want %t; Cache-Control = %q", hasNoStore, tc.want, got.header.Values("Cache-Control"))
 			}
 		})
 	}
@@ -135,13 +142,10 @@ func TestOriginGuardReturnsBodyReadError(t *testing.T) {
 	t.Parallel()
 	wantErr := errors.New("planted body read error")
 	body := &errorReadCloser{err: wantErr}
+	assertOriginBodyClosedOnce(t, &body.closes)
 	resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: body}
-	defer resp.Body.Close()
 	guard := originGuard{next: staticRoundTripper(resp), basePath: "/v4"}
-	got, err := guard.RoundTrip(newRequest(t, http.MethodGet, "/v4/series/81189"))
-	if got != nil {
-		defer got.Body.Close()
-	}
+	_, err := roundTripGuard(t, guard, newRequest(t, http.MethodGet, "/v4/series/81189"))
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("RoundTrip() error = %v, want %v", err, wantErr)
 	}
@@ -164,13 +168,11 @@ func TestOriginGuardBoundsResponseBody(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			body := &trackingBody{Reader: bytes.NewReader(bytes.Repeat([]byte{'x'}, tc.size))}
+			assertOriginBodyClosedOnce(t, &body.closes)
 			resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: body}
 			guard := originGuard{next: staticRoundTripper(resp), basePath: "/v4"}
-			got, err := guard.RoundTrip(newRequest(t, http.MethodGet, "/v4/series/81189"))
+			got, err := roundTripGuard(t, guard, newRequest(t, http.MethodGet, "/v4/series/81189"))
 			if tc.wantErr {
-				if got != nil {
-					got.Body.Close()
-				}
 				if !errors.Is(err, errBodyTooLarge) {
 					t.Fatalf("RoundTrip() error = %v, want errBodyTooLarge", err)
 				}
@@ -185,8 +187,7 @@ func TestOriginGuardBoundsResponseBody(t *testing.T) {
 			if err != nil {
 				t.Fatalf("RoundTrip() error = %v", err)
 			}
-			defer got.Body.Close()
-			assertBody(t, got, string(bytes.Repeat([]byte{'x'}, tc.size)))
+			assertBody(t, got.body, string(bytes.Repeat([]byte{'x'}, tc.size)))
 			if !body.closed {
 				t.Fatal("body was not closed")
 			}
@@ -194,16 +195,75 @@ func TestOriginGuardBoundsResponseBody(t *testing.T) {
 	}
 }
 
+type guardResponse struct {
+	status int
+	header http.Header
+	body   []byte
+}
+
+func roundTripGuard(t *testing.T, guard originGuard, req *http.Request) (guardResponse, error) {
+	t.Helper()
+	resp, err := guard.RoundTrip(req)
+	if resp == nil {
+		return guardResponse{}, err
+	}
+	var body []byte
+	var readErr error
+	if err == nil {
+		body, readErr = io.ReadAll(resp.Body)
+	}
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		t.Errorf("Close() error = %v", closeErr)
+	}
+	if err != nil {
+		return guardResponse{}, err
+	}
+	if readErr != nil {
+		t.Fatalf("ReadAll() error = %v", readErr)
+	}
+	return guardResponse{
+		status: resp.StatusCode,
+		header: resp.Header,
+		body:   body,
+	}, nil
+}
+
 func staticRoundTripper(resp *http.Response) roundTripFunc {
 	return func(*http.Request) (*http.Response, error) { return resp, nil }
 }
 
-func newOriginResponse(status int, body string, cacheControl []string) *http.Response {
-	resp := &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
+func newOriginRoundTripper(t *testing.T, status int, body string, cacheControl []string) roundTripFunc {
+	t.Helper()
+	origin := &trackingBody{Reader: bytes.NewReader([]byte(body))}
+	assertOriginBodyClosedOnce(t, &origin.closes)
+	header := make(http.Header)
 	for _, value := range cacheControl {
-		resp.Header.Add("Cache-Control", value)
+		header.Add("Cache-Control", value)
 	}
-	return resp
+	return staticRoundTripper(&http.Response{StatusCode: status, Header: header, Body: origin})
+}
+
+func assertOriginBodyClosedOnce(t *testing.T, closes *int) {
+	t.Helper()
+	t.Cleanup(func() {
+		if *closes != 1 {
+			t.Errorf("origin body Close count = %d, want 1", *closes)
+		}
+	})
+}
+
+func cacheControlDirectiveNames(header http.Header) []string {
+	var names []string
+	for _, value := range header.Values("Cache-Control") {
+		for directive := range strings.SplitSeq(value, ",") {
+			name, _, _ := strings.Cut(directive, "=")
+			name = strings.ToLower(strings.TrimSpace(name))
+			if name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
 }
 
 func newRequest(t *testing.T, method, path string) *http.Request {
@@ -215,12 +275,8 @@ func newRequest(t *testing.T, method, path string) *http.Request {
 	return &http.Request{Method: method, URL: u, Header: make(http.Header)}
 }
 
-func assertBody(t *testing.T, resp *http.Response, want string) {
+func assertBody(t *testing.T, got []byte, want string) {
 	t.Helper()
-	got, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("ReadAll() error = %v", err)
-	}
 	if string(got) != want {
 		t.Fatalf("body = %q, want %q", got, want)
 	}
@@ -229,21 +285,25 @@ func assertBody(t *testing.T, resp *http.Response, want string) {
 type errorReadCloser struct {
 	err    error
 	closed bool
+	closes int
 }
 
 func (b *errorReadCloser) Read([]byte) (int, error) { return 0, b.err }
 
 func (b *errorReadCloser) Close() error {
 	b.closed = true
+	b.closes++
 	return nil
 }
 
 type trackingBody struct {
 	*bytes.Reader
 	closed bool
+	closes int
 }
 
 func (b *trackingBody) Close() error {
 	b.closed = true
+	b.closes++
 	return nil
 }

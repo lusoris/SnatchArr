@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -32,6 +33,7 @@ import (
 	"github.com/golusoris/golusoris/cache/memory"
 	rediscache "github.com/golusoris/golusoris/cache/redis"
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/httpx/ratelimit"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/foreigntitle"
@@ -70,6 +72,7 @@ type stub struct {
 	pathHits               map[string]int
 	requestTimes           [16]time.Time
 	requestCount           int
+	loginHandler           func(http.ResponseWriter, *http.Request) bool
 	redirect               func(http.ResponseWriter, *http.Request) bool
 	numericTranslationOnce atomic.Bool
 	emptySeriesOnce        atomic.Bool
@@ -182,12 +185,20 @@ func (s *stub) requestArrival(index int) (time.Time, bool) {
 
 func (s *stub) login(w http.ResponseWriter, r *http.Request) {
 	s.logins.Add(1)
+	if s.loginHandler != nil && s.loginHandler(w, r) {
+		return
+	}
 	var body struct{ APIKey, PIN string }
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if s.loginRC != http.StatusOK || body.APIKey != plantedKey || (body.PIN != "" && body.PIN != plantedPIN) {
+	if s.loginRC != http.StatusOK {
+		w.WriteHeader(s.loginRC)
+		_, _ = w.Write([]byte(`{"message":"login failed"}`))
+		return
+	}
+	if body.APIKey != plantedKey || (body.PIN != "" && body.PIN != plantedPIN) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"message":"Invalid credentials ` + plantedKey + `"}`))
 		return
@@ -856,14 +867,7 @@ func TestCallerCancelKeepsSharedLookup(t *testing.T) {
 		t.Fatalf("first lookup error = %v, want ErrUnavailable and context.Canceled", resultErr)
 	}
 	close(release)
-	for len(p.detached) != 0 {
-		select {
-		case <-deadline.Done():
-			t.Fatal("detached lookup did not finish")
-		default:
-			time.Sleep(time.Millisecond)
-		}
-	}
+	waitDetached(t, p, 0, deadline.Done(), "detached lookup did not finish")
 	got, err := p.TitlesFor(deadline, sonarrRef(), "de")
 	if err != nil || len(got) == 0 {
 		t.Fatalf("second lookup = %v, %v, want titles", got, err)
@@ -1007,15 +1011,7 @@ func TestDetachedLookupsBounded(t *testing.T) {
 		case <-time.After(300 * time.Millisecond):
 		}
 		close(release)
-		deadline := time.After(2 * time.Second)
-		for len(p.detached) != cap(p.detached)-1 {
-			select {
-			case <-deadline:
-				t.Fatal("detached lookup did not release its token")
-			default:
-				time.Sleep(time.Millisecond)
-			}
-		}
+		waitDetached(t, p, cap(p.detached)-1, time.After(2*time.Second), "detached lookup did not release its token")
 		before := s.total.Load()
 		got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
 		if err != nil || len(got) == 0 {
@@ -1316,6 +1312,480 @@ func testCloseWaitBound(t *testing.T) {
 	}
 }
 
+const maxDetachedPollAttempts = 5000
+
+func waitDetached[T any](t *testing.T, p *Provider, want int, deadline <-chan T, message string) {
+	t.Helper()
+	for attempt := range maxDetachedPollAttempts {
+		if len(p.detached) == want {
+			return
+		}
+		if attempt+1 == maxDetachedPollAttempts {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal(message)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	t.Fatal(message)
+}
+
+func TestLoginGateRespectsLookupDeadline(t *testing.T) {
+	t.Parallel()
+	const (
+		shortLookup = 60 * time.Millisecond
+		waitBound   = 600 * time.Millisecond
+	)
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	loginStarted := make(chan struct{}, 1)
+	loginRelease := make(chan struct{})
+	closeRelease := sync.OnceFunc(func() { close(loginRelease) })
+	t.Cleanup(closeRelease)
+	s.loginHandler = func(_ http.ResponseWriter, r *http.Request) bool {
+		select {
+		case loginStarted <- struct{}{}:
+		default:
+		}
+		select {
+		case <-loginRelease:
+		case <-r.Context().Done():
+		}
+		return false
+	}
+	p := s.provider(t, plantedKey, plantedPIN, nil)
+	first := make(chan error, 1)
+	go func() {
+		_, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+		first <- err
+	}()
+	backstop, stopBackstop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stopBackstop()
+	select {
+	case <-loginStarted:
+	case <-backstop.Done():
+		t.Fatal("first login did not start")
+	}
+	callerCtx := t.Context()
+	if _, hasDeadline := callerCtx.Deadline(); hasDeadline {
+		t.Fatal("caller context unexpectedly carries a deadline")
+	}
+	p.lookup = shortLookup
+	second := make(chan error, 1)
+	started := time.Now()
+	go func() {
+		_, err := p.TitlesFor(callerCtx, Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
+		second <- err
+	}()
+	select {
+	case err := <-second:
+		if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("second TitlesFor() error = %v, want ErrUnavailable and context.DeadlineExceeded", err)
+		}
+		if elapsed := time.Since(started); elapsed >= waitBound {
+			t.Fatalf("second TitlesFor() elapsed = %v, want less than %v", elapsed, waitBound)
+		}
+	case <-time.After(waitBound):
+		closeRelease()
+		t.Fatalf("second TitlesFor() did not stop on lookup deadline within %v", waitBound)
+	}
+	p.lookup = lookupTimeout
+	closeRelease()
+	select {
+	case err := <-first:
+		if err != nil {
+			t.Fatalf("first TitlesFor() error = %v", err)
+		}
+	case <-backstop.Done():
+		t.Fatal("first lookup did not finish after login release")
+	}
+	got, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
+	if err != nil || len(got) == 0 {
+		t.Fatalf("third TitlesFor() = %v, %v, want titles", got, err)
+	}
+	if logins := s.logins.Load(); logins != 1 {
+		t.Fatalf("logins = %d, want 1", logins)
+	}
+}
+
+func TestLoginGateClassifiesBeforeRelease(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		t.Run(fmt.Sprintf("refused_%d", status), func(t *testing.T) {
+			t.Parallel()
+			s := newStub(t)
+			loginStarted := make(chan struct{}, 2)
+			loginRelease := make(chan struct{})
+			closeRelease := sync.OnceFunc(func() { close(loginRelease) })
+			t.Cleanup(closeRelease)
+			s.loginHandler = func(w http.ResponseWriter, r *http.Request) bool {
+				select {
+				case loginStarted <- struct{}{}:
+				default:
+				}
+				select {
+				case <-loginRelease:
+				case <-r.Context().Done():
+					return true
+				}
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(`{"message":"login failed"}`))
+				return true
+			}
+			p := s.provider(t, plantedKey, plantedPIN, nil)
+			gateWaiting := make(chan struct{}, 1)
+			p.loginWait = func() {
+				select {
+				case gateWaiting <- struct{}{}:
+				default:
+				}
+			}
+			first, second := make(chan error, 1), make(chan error, 1)
+			go func() { _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); first <- err }()
+			backstop, stopBackstop := context.WithTimeout(t.Context(), 5*time.Second)
+			defer stopBackstop()
+			select {
+			case <-loginStarted:
+			case <-backstop.Done():
+				t.Fatal("first login did not start")
+			}
+			go func() { _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); second <- err }()
+			select {
+			case <-gateWaiting:
+			case <-backstop.Done():
+				t.Fatal("second lookup did not wait at the login gate")
+			}
+			closeRelease()
+			for i, ch := range []<-chan error{first, second} {
+				select {
+				case err := <-ch:
+					if !errors.Is(err, ErrUnauthorized) {
+						t.Fatalf("lookup %d error = %v, want ErrUnauthorized", i+1, err)
+					}
+				case <-backstop.Done():
+					t.Fatalf("lookup %d did not finish", i+1)
+				}
+			}
+			if !p.Failed() {
+				t.Fatal("Failed() = false, want true")
+			}
+			if logins := s.logins.Load(); logins != 1 {
+				t.Fatalf("logins = %d, want 1", logins)
+			}
+		})
+	}
+	t.Run("transient_500_then_success", func(t *testing.T) {
+		t.Parallel()
+		s := newStub(t)
+		var failOnce atomic.Bool
+		failOnce.Store(true)
+		s.loginHandler = func(w http.ResponseWriter, _ *http.Request) bool {
+			if failOnce.Swap(false) {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"message":"temporary failure"}`))
+				return true
+			}
+			return false
+		}
+		p := s.provider(t, plantedKey, plantedPIN, nil)
+		if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("first TitlesFor() error = %v, want ErrUnavailable", err)
+		}
+		if p.Failed() {
+			t.Fatal("Failed() = true after transient 500 login")
+		}
+		got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+		if err != nil || len(got) == 0 {
+			t.Fatalf("second TitlesFor() = %v, %v, want titles", got, err)
+		}
+		if p.Failed() {
+			t.Fatal("Failed() = true after recovered login")
+		}
+		if logins := s.logins.Load(); logins != 2 {
+			t.Fatalf("logins = %d, want 2", logins)
+		}
+	})
+}
+
+func TestCallMapsErrors(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, plantedPIN, nil)
+	for _, tc := range []struct {
+		name        string
+		expired     bool
+		fnErr       error
+		wantErr     error
+		wantWrapped error
+		forbidErr   error
+	}{
+		{
+			name: "positive_nil",
+		},
+		{
+			name:      "positive_rate_limited",
+			fnErr:     fmt.Errorf("httpx/ratelimit: api4.thetvdb.com: %w", ratelimit.ErrLimited),
+			wantErr:   ErrRateLimited,
+			forbidErr: ErrUnavailable,
+		},
+		{
+			name:        "boundary_expired_context",
+			expired:     true,
+			fnErr:       fmt.Errorf("dial: %w", context.DeadlineExceeded),
+			wantErr:     ErrUnavailable,
+			wantWrapped: context.DeadlineExceeded,
+		},
+		{
+			name:      "boundary_live_context_inner_deadline",
+			fnErr:     fmt.Errorf("inner: %w", context.DeadlineExceeded),
+			wantErr:   ErrUnavailable,
+			forbidErr: context.DeadlineExceeded,
+		},
+		{
+			name:      "negative_plain_error",
+			fnErr:     errors.New("transport boom " + plantedKey),
+			wantErr:   ErrUnavailable,
+			forbidErr: ErrRateLimited,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			if tc.expired {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithDeadline(ctx, time.Now().Add(-time.Second))
+				defer cancel()
+			}
+			err := p.call(ctx, func(context.Context) error { return tc.fnErr })
+			if tc.wantErr == nil {
+				if err != nil {
+					t.Fatalf("call() error = %v, want nil", err)
+				}
+				return
+			}
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("call() error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantWrapped != nil && !errors.Is(err, tc.wantWrapped) {
+				t.Fatalf("call() error = %v, want wrapped %v", err, tc.wantWrapped)
+			}
+			if tc.forbidErr != nil && errors.Is(err, tc.forbidErr) {
+				t.Fatalf("call() error = %v, must not match %v", err, tc.forbidErr)
+			}
+			assertNoSecret(t, err.Error())
+		})
+	}
+}
+
+var errCacheOpenProbe = errors.New("cache open probe")
+
+func isCacheOpen(p *Provider) bool {
+	probe := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errCacheOpenProbe
+	})
+	req := &http.Request{
+		Method: http.MethodPost,
+		URL:    &url.URL{Scheme: "https", Host: "api4.thetvdb.com", Path: "/login"},
+		Header: make(http.Header),
+	}
+	resp, err := p.cache.Wrap(probe).RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	return errors.Is(err, errCacheOpenProbe)
+}
+
+func TestCloseWaitsForAttachedLookup(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	s.started = make(chan struct{}, maxDetached)
+	releaseDetached := make(chan struct{})
+	closeDetached := sync.OnceFunc(func() { close(releaseDetached) })
+	s.release = releaseDetached
+	p := s.provider(t, plantedKey, "", nil)
+	t.Cleanup(closeDetached)
+	if _, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 424242}, "de"); err != nil {
+		t.Fatalf("prime TitlesFor() error = %v", err)
+	}
+	attachedStarted := make(chan struct{}, 1)
+	attachedCanceled := make(chan struct{}, 1)
+	releaseAttached := make(chan struct{})
+	closeAttached := sync.OnceFunc(func() { close(releaseAttached) })
+	t.Cleanup(closeAttached)
+	var cacheOpenDuringWorker atomic.Bool
+	origTransport := p.http.Transport
+	p.http.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/series/81200" {
+			attachedStarted <- struct{}{}
+			<-req.Context().Done()
+			attachedCanceled <- struct{}{}
+			<-releaseAttached
+			cacheOpenDuringWorker.Store(isCacheOpen(p))
+		}
+		return origTransport.RoundTrip(req)
+	})
+	detachedEntered := make(chan struct{}, maxDetached)
+	p.fetchStart = func(context.Context) {
+		select {
+		case detachedEntered <- struct{}{}:
+		default:
+		}
+	}
+	backstop, stopBackstop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stopBackstop()
+	detachedResults := make(chan error, maxDetached)
+	cancels := make([]context.CancelFunc, 0, maxDetached)
+	for range maxDetached {
+		dctx, cancel := context.WithCancel(t.Context())
+		cancels = append(cancels, cancel)
+		go func() {
+			_, err := p.TitlesFor(dctx, sonarrRef(), "de")
+			detachedResults <- err
+		}()
+	}
+	for range maxDetached {
+		select {
+		case <-detachedEntered:
+		case <-backstop.Done():
+			t.Fatal("detached lookup did not enter fetch")
+		}
+	}
+	select {
+	case <-s.started:
+	case <-backstop.Done():
+		t.Fatal("detached upstream request did not start")
+	}
+	for _, cancel := range cancels {
+		cancel()
+	}
+	for range maxDetached {
+		select {
+		case err := <-detachedResults:
+			if !errors.Is(err, ErrUnavailable) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("detached caller error = %v, want ErrUnavailable and context.Canceled", err)
+			}
+		case <-backstop.Done():
+			t.Fatal("detached caller did not return")
+		}
+	}
+	if got := len(p.detached); got != maxDetached {
+		t.Fatalf("held detached slots = %d, want %d", got, maxDetached)
+	}
+	attachedDone := make(chan error, 1)
+	go func() {
+		_, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
+		attachedDone <- err
+	}()
+	select {
+	case <-attachedStarted:
+	case <-backstop.Done():
+		t.Fatal("attached lookup did not start")
+	}
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- p.Close() }()
+	select {
+	case <-attachedCanceled:
+	case <-backstop.Done():
+		t.Fatal("attached lookup did not observe Close cancellation")
+	}
+	select {
+	case err := <-closeDone:
+		t.Fatalf("Close() returned (%v) before attached lookup finished", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if !isCacheOpen(p) {
+		t.Fatal("cache closed before attached lookup finished")
+	}
+	closeAttached()
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	case <-backstop.Done():
+		t.Fatal("Close() did not return after attached lookup finished")
+	}
+	select {
+	case err := <-attachedDone:
+		if !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("attached TitlesFor() error = %v, want ErrUnavailable", err)
+		}
+	case <-backstop.Done():
+		t.Fatal("attached caller did not return")
+	}
+	if !cacheOpenDuringWorker.Load() {
+		t.Fatal("cache was closed while attached worker was still running")
+	}
+	if isCacheOpen(p) {
+		t.Fatal("cache remained open after Close() returned")
+	}
+}
+
+func TestCloseStopsAdmittedLookupBeforeFetch(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	p := s.provider(t, plantedKey, "", nil)
+	admitted := make(chan struct{})
+	allowFetch := make(chan struct{})
+	closeAllow := sync.OnceFunc(func() { close(allowFetch) })
+	t.Cleanup(closeAllow)
+	var admitOnce sync.Once
+	p.admitted = func() {
+		admitOnce.Do(func() { close(admitted) })
+		<-allowFetch
+	}
+	var fetchCalled atomic.Bool
+	p.fetchStart = func(context.Context) {
+		fetchCalled.Store(true)
+	}
+	lookupDone := make(chan error, 1)
+	go func() {
+		_, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+		lookupDone <- err
+	}()
+	backstop, stopBackstop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stopBackstop()
+	select {
+	case <-admitted:
+	case <-backstop.Done():
+		t.Fatal("lookup was not admitted")
+	}
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- p.Close() }()
+	select {
+	case <-p.lifetimeDone:
+	case <-backstop.Done():
+		t.Fatal("Close() did not cancel lifetime")
+	}
+	closeAllow()
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	case <-backstop.Done():
+		t.Fatal("Close() did not finish")
+	}
+	select {
+	case err := <-lookupDone:
+		if !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("TitlesFor() error = %v, want ErrUnavailable", err)
+		}
+	case <-backstop.Done():
+		t.Fatal("TitlesFor() did not return")
+	}
+	if fetchCalled.Load() {
+		t.Fatal("admitted lookup called fetchStart after Close started")
+	}
+	if got := s.total.Load(); got != 0 {
+		t.Fatalf("upstream requests = %d, want 0", got)
+	}
+}
+
 func TestCacheMetrics(t *testing.T) {
 	t.Parallel()
 	s := newStub(t)
@@ -1346,22 +1816,33 @@ func TestCacheMetricsNormalizesUncachedStatuses(t *testing.T) {
 	m, reg := metricstest.New(t)
 	p := s.providerWith(t, plantedKey, plantedPIN, nil, testPool(t), WithMetrics(m))
 	s.dataRC = http.StatusTooManyRequests
-	doPassThrough(t, p, s)
-	after429 := noneCacheRequests(t, reg)
-	if after429 < 1 {
-		t.Fatalf("cache metric NONE after 429 = %v, want at least 1 (one per attempt)", after429)
-	}
-	// golusoris returns a 429 unchanged, so an origin status header reaches the metric as sent.
+	assertPassThroughCountedAsNone(t, p, s, reg, "bare 429")
+	// golusoris returns a 429 unchanged; originGuard removes any origin cache status header so pass-throughs count as NONE.
 	s.statusHeader = "planted"
-	doPassThrough(t, p, s)
-	if got := noneCacheRequests(t, reg); got != 2*after429 {
-		t.Fatalf("cache metric NONE after planted status = %v, want %v", got, 2*after429)
-	}
-	if got, ok := metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
-		"provider": Source,
-		"status":   "planted",
-	}); ok {
+	assertPassThroughCountedAsNone(t, p, s, reg, "planted status")
+	if got, ok := cacheRequestsLabel(t, reg, "planted"); ok {
 		t.Fatalf("cache metric status planted = %v, want no series", got)
+	}
+	beforeHit, hadHit := cacheRequestsLabel(t, reg, "HIT")
+	s.statusHeader = "HIT"
+	assertPassThroughCountedAsNone(t, p, s, reg, "origin HIT on 429")
+	if afterHit, hasHit := cacheRequestsLabel(t, reg, "HIT"); hasHit != hadHit || afterHit != beforeHit {
+		t.Fatalf("cache metric HIT = (%v, %t), want (%v, %t)", afterHit, hasHit, beforeHit, hadHit)
+	}
+}
+
+func assertPassThroughCountedAsNone(t *testing.T, p *Provider, s *stub, reg prometheus.Gatherer, label string) {
+	t.Helper()
+	beforeTotal := s.total.Load()
+	beforeNone, _ := cacheRequestsLabel(t, reg, cacheStatusNone)
+	doPassThrough(t, p, s)
+	attempts := s.total.Load() - beforeTotal
+	if attempts < 1 {
+		t.Fatalf("%s: upstream attempts = %d, want at least 1", label, attempts)
+	}
+	afterNone, _ := cacheRequestsLabel(t, reg, cacheStatusNone)
+	if got, want := afterNone-beforeNone, float64(attempts); got != want {
+		t.Fatalf("%s: cache metric NONE delta = %v, want %v", label, got, want)
 	}
 }
 
@@ -1378,13 +1859,12 @@ func doPassThrough(t *testing.T, p *Provider, s *stub) {
 	}
 }
 
-func noneCacheRequests(t *testing.T, reg prometheus.Gatherer) float64 {
+func cacheRequestsLabel(t *testing.T, reg prometheus.Gatherer, status string) (float64, bool) {
 	t.Helper()
-	got, _ := metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
+	return metricstest.ValueLabels(t, reg, "snatcharr_metadata_cache_requests_total", map[string]string{
 		"provider": Source,
-		"status":   cacheStatusNone,
+		"status":   status,
 	})
-	return got
 }
 
 func authorizedRequest(t *testing.T, s *stub, path string) *http.Request {
