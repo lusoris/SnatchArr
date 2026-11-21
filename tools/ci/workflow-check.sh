@@ -2,14 +2,15 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Lints every workflow file and refuses an action that is not pinned to a commit, or whose
-# version comment names a tag that is not that commit. Adapted from tools/workflow-check.sh
-# of github.com/golusoris/goenvoy.
+# Lints every workflow file and refuses an action that is not pinned to a commit, whose
+# version comment names a tag that is not that commit, or whose repository has moved to
+# another name. Adapted from tools/workflow-check.sh of github.com/golusoris/goenvoy (now
+# github.com/plurano/goenvoy).
 #
 #   tools/ci/workflow-check.sh [ROOT]      (default: this repository)
 #
 # Exit status: 0 clean, 1 a finding or a failed run, 2 usage.
-# Needs docker (actionlint), python3 with venv, jq, network, token.
+# Needs docker (actionlint), python3 with venv, jq, curl, network, token.
 set -euo pipefail
 
 if [ $# -gt 1 ]; then
@@ -138,6 +139,51 @@ done
 if [ "$floating" -ne 0 ]; then
   exit 1
 fi
+
+# A renamed or transferred repository keeps answering its old name with a redirect. git, the
+# REST API and zizmor follow it; GitHub Actions does not. A reusable workflow called by the old
+# name stops the whole run before any job starts ("workflow was not found"), and an action named
+# the old way fails its step. golusoris/sveltesentio moved to plurano/sveltesentio, and from
+# 2026-11-20 every pull request run of ci.yml failed that way. Each remote `uses:` therefore
+# names its repository the way the API reports it. The token goes to curl on stdin, not argv.
+CURL="${CURL_BIN:-curl}"
+API_URL="${GITHUB_API_URL:-https://api.github.com}"
+USES_RE='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*([A-Za-z0-9_-][A-Za-z0-9_.-]*)/([A-Za-z0-9_.-]+)[^@[:space:]]*@'
+declare -A FIRST_USE=()
+for file in "${FILES[@]}" "${ACTION_FILES[@]}"; do
+  lineno=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    lineno=$((lineno + 1))
+    line="${line//[\"\']/}"
+    [[ "$line" =~ $USES_RE ]] || continue
+    repo="${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+    [ -n "${FIRST_USE[$repo]:-}" ] || FIRST_USE[$repo]="$file:$lineno"
+  done < "$ROOT/$file"
+done
+moved=0
+checked=0
+while IFS= read -r repo; do
+  [ -n "$repo" ] || continue
+  if ! body="$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" |
+    "$CURL" -K - -fsSL --max-time 20 --retry 2 -H 'Accept: application/vnd.github+json' \
+      "$API_URL/repos/$repo")"; then
+    echo "error: ${FIRST_USE[$repo]}: cannot read repository $repo from $API_URL" >&2
+    exit 1
+  fi
+  if ! name="$(jq -r '.full_name // empty' <<< "$body" 2> /dev/null)" || [ -z "$name" ]; then
+    echo "error: ${FIRST_USE[$repo]}: $API_URL names no repository for $repo" >&2
+    exit 1
+  fi
+  checked=$((checked + 1))
+  if [ "${name,,}" != "${repo,,}" ]; then
+    echo "refused ${FIRST_USE[$repo]}: $repo moved to $name; GitHub Actions does not follow the redirect" >&2
+    moved=1
+  fi
+done < <(printf '%s\n' "${!FIRST_USE[@]}" | sort)
+if [ "$moved" -ne 0 ]; then
+  exit 1
+fi
+echo "repositories: all $checked used by name are under their current name"
 
 "$DOCKER" run --rm -v "$ROOT:/repo:ro" -w /repo \
   -v "$REPO_ROOT/.github/actionlint.yaml:/actionlint.yaml:ro" \

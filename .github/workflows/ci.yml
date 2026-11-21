@@ -757,7 +757,7 @@ jobs:
     name: web (SvelteKit)
     needs: changes
     if: needs.changes.outputs.web == 'true'
-    uses: golusoris/sveltesentio/.github/workflows/ci-sveltekit.yml@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # main 2026-09-21
+    uses: plurano/sveltesentio/.github/workflows/ci-sveltekit.yml@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # main 2026-09-21
     with:
       node-version: '24'
       working-directory: web
