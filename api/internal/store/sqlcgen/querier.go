@@ -139,6 +139,7 @@ type Querier interface {
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
 	GetPriorityPreset(ctx context.Context, id uuid.UUID) (PriorityPreset, error)
 	GetProwlarrLink(ctx context.Context, id uuid.UUID) (ProwlarrLink, error)
+	GetQueueOutputCursor(ctx context.Context, instanceID uuid.UUID) (QueueOutputCursor, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetQueuePolicy(ctx context.Context, instanceID uuid.UUID) (QueuePolicy, error)
@@ -358,6 +359,7 @@ type Querier interface {
 	// here would push the generated function past the HISS-04 length limit.
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) error
 	UpsertPriorityOwnershipPriority(ctx context.Context, arg UpsertPriorityOwnershipPriorityParams) error
+	UpsertQueueOutputCursor(ctx context.Context, arg UpsertQueueOutputCursorParams) error
 	UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyParams) error
 	UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikesParams) error
 	UpsertRequestsSettings(ctx context.Context, arg UpsertRequestsSettingsParams) (RequestsSetting, error)

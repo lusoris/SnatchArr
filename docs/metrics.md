@@ -119,6 +119,12 @@ The API serves these metrics on `/metrics`:
 | `snatcharr_seerr_requests_pending` | gauge | none | yes | Current count of active/pending processing Seerr requests across enabled links. |
 | `snatcharr_run_lease_wait_seconds` | histogram | `kind` | no | Seconds elapsed between run enqueue and worker lease acquisition, by kind. |
 | `snatcharr_planner_deferrals_total` | counter | `reason` | no | Planner decisions not to enqueue a run, by classified reason enum. |
+| `snatcharr_queue_strikes_total` | counter | `arr_instance`, `rule`, `mode` | no | Queue items struck, by instance, rule (`stalled`, `metadata_stuck`, `slow`, `failed`, `id_matched`, `import_fixable`, `import_broken`, `import_not_wanted`, `import_blocked`, `unwanted_score`, `not_an_upgrade`, `duplicate`, `unwanted_unmonitored`) and evaluation mode (`observe`, `act`). See [Queue Management](queue-management.md) for rule semantics. |
+| `snatcharr_queue_removals_total` | counter | `arr_instance`, `rule`, `result` | no | Queue items removed from *arr instances, by instance, rule and result (`ok`, `error`). See [Queue Management](queue-management.md) for rule semantics. |
+| `snatcharr_queue_skipped_total` | counter | `arr_instance`, `reason` | no | Queue sweeps skipped, by instance and reason (`disabled`, `unsupported`). |
+| `snatcharr_queue_imports_total` | counter | `arr_instance`, `result` | no | Force imports of ID-matched queue items and their read-back, by instance and result (`ok`, `error`, `no_clean_candidate`, `still_id_matched`, `would_import`). |
+| `snatcharr_queue_output_checks_total` | counter | `arr_instance`, `result` | no | Queue output path visibility checks, by instance and result (`listed`, `not_visible`, `error`, `no_path`, `over_budget`). |
+| `snatcharr_queue_output_not_visible_last_timestamp_seconds` | gauge | `arr_instance` | no | Unix time of the last queue sweep or inspection that found an output path not visible to an *arr instance, by instance name. |
 
 ### Label Values (API)
 

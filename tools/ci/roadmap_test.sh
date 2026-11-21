@@ -16,6 +16,13 @@
 #      a script without the trailer is refused before any write, and one that also skips the
 #      policy check sends a message this test refuses. An author other than the signed-off
 #      account, an unknown account id and a bad APP_SLUG fail the run.
+#   4. Pull request body: a new pull request renders .github/pull_request_template.md with the
+#      Description summary, the Conventional Commits item ticked and bot notes appended; an open
+#      pull request whose body lacks `## Description` is healed via `gh pr edit` while one that
+#      already carries `## Description` (LF or CRLF) is not edited (and a failed view or edit
+#      fails the run); a missing template fails before any write (including closing a stale open
+#      pull request, while an unchanged doc with no open pull request still exits 0), and planted
+#      `pr create --body`, close-without-template and CRLF-unstripped mutants are caught.
 #
 #   tools/ci/roadmap_test.sh
 #
@@ -35,8 +42,18 @@ cat >"$WORK/bin/gh" <<'EOF'
 printf '%s\n' "$*" | tr '\n' ' ' >>"$STUB_LOG"
 echo >>"$STUB_LOG"
 [ -z "${STUB_DOWN:-}" ] || exit 1
+prev=""
 for arg in "$@"; do
-  case "$arg" in message=*) printf '%s\n' "${arg#message=}" >"$STUB_MSG" ;; esac
+  if [ "$prev" = "--body-file" ]; then
+    cp "$arg" "$STUB_BODY"
+    prev=""
+    continue
+  fi
+  case "$arg" in
+    message=*) printf '%s\n' "${arg#message=}" >"$STUB_MSG" ;;
+    --body-file) prev="--body-file" ;;
+    --body-file=*) cp "${arg#--body-file=}" "$STUB_BODY" ;;
+  esac
 done
 case "$*" in
   "api repos/o/r/pulls?"*) printf '%s\n' "${STUB_OPEN:-}" ;;
@@ -47,6 +64,12 @@ case "$*" in
   "api -X PUT"*)
     [ -z "${STUB_FAIL_PUT:-}" ] || exit 1
     echo "newsha ${STUB_AUTHOR:-7+snatcharr-test[bot]@users.noreply.github.com}" ;;
+  "pr view 42 --repo o/r --json body --jq .body")
+    [ -z "${STUB_HANG_VIEW:-}" ] || exec sleep 30
+    [ -z "${STUB_FAIL_VIEW:-}" ] || exit 1
+    printf '%s\n' "${STUB_PR_BODY:-}" ;;
+  "pr edit 42"*)
+    [ -z "${STUB_FAIL_EDIT:-}" ] || exit 1 ;;
 esac
 exit 0
 EOF
@@ -80,19 +103,33 @@ git -C "$repo" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=
 base="$(git -C "$repo" rev-parse HEAD)"
 
 # refresh_with <script> <name> <expect rc> [VAR=value ...]: runs a refresh script, log in
-# $WORK/<name>.log, the commit message it sent in $WORK/<name>.msg.
+# $WORK/<name>.log, commit message in $WORK/<name>.msg, pull request body in $WORK/<name>.body.
 refresh_with() {
   script="$1"; name="$2"; want="$3"; shift 3
   : >"$WORK/$name.log"
-  rm -f "$WORK/$name.msg"
+  rm -f "$WORK/$name.msg" "$WORK/$name.body"
   rc=0
-  (cd "$repo" && env STUB_LOG="$WORK/$name.log" STUB_MSG="$WORK/$name.msg" PATH="$WORK/bin:$PATH" \
+  (cd "$repo" && env STUB_LOG="$WORK/$name.log" STUB_MSG="$WORK/$name.msg" \
+    STUB_BODY="$WORK/$name.body" PATH="$WORK/bin:$PATH" \
     REPO=o/r BASE_SHA="$base" BASE_BRANCH=trunk RUN_ID=7 APP_SLUG=snatcharr-test "$@" \
     sh "$script" >"$WORK/$name.out" 2>&1) || rc=$?
   [ "$rc" -eq "$want" ]
 }
 # refresh <name> <expect rc> [VAR=value ...]: runs the repository's refresh script.
 refresh() { refresh_with "$HERE/roadmap_refresh_pr.sh" "$@"; }
+# refresh_with_timeout <script> <name> <expect rc> [VAR=value ...]: as refresh_with, with a
+# fixed outer bound. refresh_rc holds the command status for a mutant assertion.
+refresh_with_timeout() {
+  script="$1"; name="$2"; want="$3"; shift 3
+  : >"$WORK/$name.log"
+  rm -f "$WORK/$name.msg" "$WORK/$name.body"
+  refresh_rc=0
+  (cd "$repo" && env STUB_LOG="$WORK/$name.log" STUB_MSG="$WORK/$name.msg" \
+    STUB_BODY="$WORK/$name.body" PATH="$WORK/bin:$PATH" \
+    REPO=o/r BASE_SHA="$base" BASE_BRANCH=trunk RUN_ID=7 APP_SLUG=snatcharr-test "$@" \
+    timeout 15 sh "$script" >"$WORK/$name.out" 2>&1) || refresh_rc=$?
+  [ "$refresh_rc" -eq "$want" ]
+}
 signoff='Signed-off-by: snatcharr-test[bot] <7+snatcharr-test[bot]@users.noreply.github.com>'
 # signed_off <case>: the message sent in that case passes the commit-msg policy and its last line
 # is the sign-off of the stub App's bot account.
@@ -100,10 +137,28 @@ signed_off() {
   [ -f "$WORK/$1.msg" ] && sh "$ROOT/.config/hooks/commit-msg.sh" "$WORK/$1.msg" >/dev/null 2>&1 \
     && [ "$(sed -e '/^[[:space:]]*$/d' "$WORK/$1.msg" | tail -n 1)" = "$signoff" ]
 }
+desc_line='The scheduled Roadmap refresh workflow re-rendered the milestone table in docs/roadmap.md from the open GitHub milestones (tools/ci/roadmap_render.py --write). The table mirrors the forge milestones, so a moved open count or scope arrives here instead of as a hand edit.'
+notes_line='Bot notes: the bot ran only the commit-msg policy. The pull request CI runs make verify-all. The HISS, 3D test and agent context items do not apply: this change edits the generated milestone table in docs/roadmap.md only.'
+# valid_body <case>: the pull request body file sent in that case matches the filled template.
+valid_body() {
+  body="$WORK/$1.body"
+  [ -f "$body" ] || return 1
+  awk '/^## /' "$body" >"$WORK/$1.headings"
+  grep '^## ' "$ROOT/.github/pull_request_template.md" >"$WORK/template.headings"
+  want_unticked="$(awk '/^- \[ \]/ { n++ } END { print n - 1 }' "$ROOT/.github/pull_request_template.md")"
+  cmp -s "$WORK/$1.headings" "$WORK/template.headings" \
+    && grep -qxF "$desc_line" "$body" \
+    && grep -qxF "$notes_line" "$body" \
+    && awk '/^Bot notes:/ { ok = (prev == "") } { prev = $0 } END { exit !ok }' "$body" \
+    && grep -q '^- \[x\] .*Conventional Commits' "$body" \
+    && [ "$(awk '/^- \[x\]/ { n++ } END { print n + 0 }' "$body")" -eq 1 ] \
+    && [ "$(awk '/^- \[ \]/ { n++ } END { print n + 0 }' "$body")" -eq "$want_unticked" ] \
+    && ! grep -q '^<!-- Provide' "$body"
+}
 # called <case> <pattern>: the stub gh logged a matching call in that case.
 called() { grep -q -- "$2" "$WORK/$1.log"; }
 # writes <case>: prints how many write calls the stub gh logged in that case.
-writes() { awk '/-X |^pr c/ { n++ } END { print n + 0 }' "$WORK/$1.log"; }
+writes() { awk '/-X |^pr (c|edit )/ { n++ } END { print n + 0 }' "$WORK/$1.log"; }
 tmp_ref="repos/o/r/git/refs/heads/bot/roadmap-refresh-tmp-7"
 bot_ref="repos/o/r/git/refs/heads/bot/roadmap-refresh "
 
@@ -130,18 +185,58 @@ if refresh fresh 0 \
   && called fresh "-X PUT repos/o/r/contents/docs/roadmap.md .* -f branch=bot/roadmap-refresh-tmp-7" \
   && called fresh "-X POST repos/o/r/git/refs -f ref=refs/heads/bot/roadmap-refresh -f sha=newsha" \
   && called fresh "-X DELETE $tmp_ref" \
-  && called fresh "^pr create --repo o/r --base trunk" && signed_off fresh; then
-  pass "planted stale count: signed-off commit on a temporary branch, bot branch created at it, pull request opened"
+  && called fresh "^pr create --repo o/r --base trunk" && signed_off fresh && valid_body fresh; then
+  pass "planted stale count: signed-off commit on a temporary branch, bot branch created at it, pull request opened with template body"
 else
   fail "planted stale count, no bot branch"; cat "$WORK/fresh.out"
 fi
 
-if refresh update 0 STUB_BRANCH=1 STUB_OPEN=42 \
+if refresh update 0 STUB_BRANCH=1 STUB_OPEN=42 STUB_PR_BODY="one line" \
   && called update "-X PATCH ${bot_ref}-f sha=newsha" \
-  && ! called update "${bot_ref}-f sha=$base" && ! called update "^pr create"; then
-  pass "planted stale count, bot pull request open: bot branch moved to the new commit only, no second pull request"
+  && ! called update "${bot_ref}-f sha=$base" \
+  && called update "^pr view 42 --repo o/r --json body --jq \.body" \
+  && called update "^pr edit 42 --repo o/r --body-file " \
+  && valid_body update && ! called update "^pr create"; then
+  pass "planted stale count, open pull request without Description heading: bot branch moved, body healed via pr edit, no second pull request"
 else
-  fail "planted stale count, pull request open"; cat "$WORK/update.out"
+  fail "planted stale count, pull request open without Description heading"; cat "$WORK/update.out"
+fi
+
+described_body="$(printf '<!-- markdownlint-disable MD013 -->\n## Description\n\nFilled summary.\n')"
+if refresh update_described 0 STUB_BRANCH=1 STUB_OPEN=42 STUB_PR_BODY="$described_body" \
+  && called update_described "-X PATCH ${bot_ref}-f sha=newsha" \
+  && ! called update_described "${bot_ref}-f sha=$base" \
+  && called update_described "^pr view 42 --repo o/r --json body --jq \.body" \
+  && ! called update_described "^pr edit" && ! called update_described "^pr create"; then
+  pass "planted stale count, open pull request with Description heading: bot branch moved, body left untouched (no pr edit)"
+else
+  fail "planted stale count, pull request open with Description heading"; cat "$WORK/update_described.out"
+fi
+
+crlf_body="$(printf '%s\n' "$described_body" | awk '{ printf "%s\r\n", $0 }')"
+if refresh update_crlf 0 STUB_BRANCH=1 STUB_OPEN=42 STUB_PR_BODY="$crlf_body" \
+  && called update_crlf "-X PATCH ${bot_ref}-f sha=newsha" \
+  && ! called update_crlf "${bot_ref}-f sha=$base" \
+  && called update_crlf "^pr view 42 --repo o/r --json body --jq \.body" \
+  && ! called update_crlf "^pr edit" && ! called update_crlf "^pr create"; then
+  pass "planted stale count, open pull request with CRLF Description heading: bot branch moved, body left untouched (no pr edit)"
+else
+  fail "planted stale count, pull request open with CRLF Description heading"; cat "$WORK/update_crlf.out"
+fi
+
+if refresh viewfail 1 STUB_BRANCH=1 STUB_OPEN=42 STUB_FAIL_VIEW=1 \
+  && ! called viewfail "^pr edit" \
+  && refresh editfail 1 STUB_BRANCH=1 STUB_OPEN=42 STUB_PR_BODY="one line" STUB_FAIL_EDIT=1; then
+  pass "failed open pull request view or edit fails the run"
+else
+  fail "failed open pull request view or edit"
+fi
+
+if refresh_with_timeout "$HERE/roadmap_refresh_pr.sh" hangview 1 STUB_BRANCH=1 STUB_OPEN=42 \
+  STUB_HANG_VIEW=1 ROADMAP_GH_TIMEOUT=1 && ! called hangview "^pr edit"; then
+  pass "hung open pull request view: deadline fails the run before pr edit"
+else
+  fail "hung open pull request view"; cat "$WORK/hangview.out"
 fi
 
 if refresh rerun 0 STUB_TMP_LEFT=1 \
@@ -173,7 +268,7 @@ else
   fail "bad input"
 fi
 
-# Planted unsigned bot commits: copies of the script in a scratch tree that carries the policy.
+# Planted mutations: copies of the script in a scratch tree that carries the commit-msg policy.
 mutants="$WORK/mutants"
 mkdir -p "$mutants/tools/ci" "$mutants/.config/hooks"
 cp "$ROOT/.config/hooks/commit-msg.sh" "$mutants/.config/hooks/"
@@ -182,10 +277,56 @@ mutant() {
   sed -e "$2" "$HERE/roadmap_refresh_pr.sh" >"$mutants/tools/ci/$1.sh"
   ! cmp -s "$HERE/roadmap_refresh_pr.sh" "$mutants/tools/ci/$1.sh"
 }
-# shellcheck disable=SC2016 # sed programs: the $title and $root text must stay literal
+no_template_copy='s|^# Proposes a refreshed|# Scratch copy without template: proposes a refreshed|'
+skip_close_template='/^    need_template$/d'
+keep_cr="s/tr -d '\\\\r' | //"
+# shellcheck disable=SC2016 # sed programs: literal $title, $root and $bodyfile text
 drop_trailer='s|^message=.*Signed-off-by.*$|message="$title"|'
 # shellcheck disable=SC2016 # same: literal sed program text
 skip_policy='s|^sh "$root/.config/hooks/commit-msg.sh" "$msgfile"|true|'
+# shellcheck disable=SC2016 # same: literal sed program text
+raw_body='/^send pr create/s|--body-file "$bodyfile"|--body "x"|'
+# shellcheck disable=SC2016 # sed program: literal $gh_timeout text
+no_gh_deadline='s/timeout "$gh_timeout" gh/gh/'
+
+if mutant notemplate "$no_template_copy" \
+  && refresh_with "$mutants/tools/ci/notemplate.sh" notemplate 1 && [ "$(writes notemplate)" -eq 0 ] \
+  && grep -q "roadmap_refresh:.*pull_request_template.md" "$WORK/notemplate.out"; then
+  pass "missing pull request template in scratch tree: refused before any write"
+else
+  fail "missing pull request template"; [ ! -f "$WORK/notemplate.out" ] || cat "$WORK/notemplate.out"
+fi
+
+git -C "$repo" checkout -q -- docs/roadmap.md
+
+if refresh_with "$mutants/tools/ci/notemplate.sh" notemplate_open 1 STUB_OPEN=42 \
+  && ! called notemplate_open "^pr close" && [ "$(writes notemplate_open)" -eq 0 ] \
+  && grep -q "roadmap_refresh:.*pull_request_template.md" "$WORK/notemplate_open.out"; then
+  pass "unchanged doc, bot pull request open, missing template: refused before closing"
+else
+  fail "unchanged doc, bot pull request open, missing template"; cat "$WORK/notemplate_open.out"
+fi
+
+if refresh_with "$mutants/tools/ci/notemplate.sh" notemplate_unchanged 0 \
+  && [ "$(writes notemplate_unchanged)" -eq 0 ]; then
+  pass "unchanged doc, no pull request, missing template: exits 0 without write"
+else
+  fail "unchanged doc, no pull request, missing template"; cat "$WORK/notemplate_unchanged.out"
+fi
+
+if mutant noclosecheck "$skip_close_template" \
+  && refresh_with "$mutants/tools/ci/noclosecheck.sh" noclosecheck 0 STUB_OPEN=42 \
+  && called noclosecheck "^pr close 42" && [ "$(writes noclosecheck)" -eq 1 ]; then
+  pass "planted stale close without need_template: closes the pull request when the template is missing, caught by the close check"
+else
+  fail "planted stale close without need_template went unnoticed"
+  if [ -f "$WORK/noclosecheck.out" ]; then cat "$WORK/noclosecheck.out"; fi
+fi
+
+cp "$WORK/stale" "$repo/docs/roadmap.md"
+
+mkdir -p "$mutants/.github"
+cp "$ROOT/.github/pull_request_template.md" "$mutants/.github/"
 
 if mutant unsigned "$drop_trailer" \
   && refresh_with "$mutants/tools/ci/unsigned.sh" unsigned 1 && [ "$(writes unsigned)" -eq 0 ] \
@@ -201,6 +342,35 @@ if mutant unchecked "$drop_trailer;$skip_policy" \
   pass "planted bot commit without Signed-off-by or policy check: the message it sends is refused here"
 else
   fail "planted bot commit without Signed-off-by or policy check went unnoticed"; cat "$WORK/unchecked.out"
+fi
+
+if mutant rawbody "$raw_body" \
+  && refresh_with "$mutants/tools/ci/rawbody.sh" rawbody 0 && called rawbody "^pr create" \
+  && ! valid_body rawbody; then
+  pass "planted pr create with --body instead of --body-file: refused by the fresh-body check"
+else
+  fail "planted pr create with --body instead of --body-file went unnoticed"
+  [ ! -f "$WORK/rawbody.out" ] || cat "$WORK/rawbody.out"
+fi
+
+if mutant keepcr "$keep_cr" \
+  && refresh_with "$mutants/tools/ci/keepcr.sh" keepcr 0 \
+    STUB_BRANCH=1 STUB_OPEN=42 STUB_PR_BODY="$crlf_body" \
+  && called keepcr "^pr edit 42 --repo o/r --body-file "; then
+  pass "planted open pull request check without CR strip: overwrites a CRLF body via pr edit, caught by the CRLF check"
+else
+  fail "planted open pull request check without CR strip went unnoticed"
+  if [ -f "$WORK/keepcr.out" ]; then cat "$WORK/keepcr.out"; fi
+fi
+
+if mutant no_gh_deadline "$no_gh_deadline" \
+  && ! refresh_with_timeout "$mutants/tools/ci/no_gh_deadline.sh" hangview_no_gh_deadline 1 \
+    STUB_BRANCH=1 STUB_OPEN=42 STUB_HANG_VIEW=1 ROADMAP_GH_TIMEOUT=1 \
+  && [ "$refresh_rc" -eq 124 ] && ! called hangview_no_gh_deadline "^pr edit"; then
+  pass "planted gh call without deadline: outer timeout kills the hung view"
+else
+  fail "planted gh call without deadline went unnoticed"
+  if [ -f "$WORK/hangview_no_gh_deadline.out" ]; then cat "$WORK/hangview_no_gh_deadline.out"; fi
 fi
 
 if refresh foreign 1 STUB_AUTHOR=someone@example.invalid && called foreign "-X DELETE $tmp_ref" \

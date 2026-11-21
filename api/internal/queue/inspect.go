@@ -71,7 +71,15 @@ func (s *Service) Inspect(ctx context.Context, instanceID uuid.UUID) (Inspection
 		return Inspection{}, fmt.Errorf("fetch queue for %s: %w", inst.Name, err)
 	}
 
-	decisions := Sweep(cfg, items, prev, s.clk.Now())
+	now := s.clk.Now()
+	cursor, err := s.store.OutputCursor(ctx, inst.ID)
+	if err != nil {
+		return Inspection{}, fmt.Errorf("queue output cursor for %s: %w", inst.Name, err)
+	}
+	var results []outputResult
+	items, results, _ = checkOutputs(ctx, s.arr, inst, cfg, items, now, cursor)
+	s.recordOutputResults(ctx, inst, results, now)
+	decisions := Sweep(cfg, items, prev, now)
 	inspected := make([]InspectedItem, 0, len(items))
 	for i, item := range items {
 		var d Decision
