@@ -16,4 +16,4 @@ jobs:
     name: Hooks
     permissions:
       contents: read
-    uses: plurano/horistes/.github/workflows/hook-copy.yml@c9632c6f9a06ccd560ffe4e1637649bcf19221db # main
+    uses: plurano/horistes/.github/workflows/hook-copy.yml@09547aa06b2cfa793a1dfb4b0906b1ed83b53891 # main
