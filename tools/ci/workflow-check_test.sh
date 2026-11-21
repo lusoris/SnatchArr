@@ -12,9 +12,9 @@
 # step, and a ${{ }} expression expanded into a run script (accepted: setup-helm pinned to a
 # release). Last: Renovate reads all three workflow-gate image
 # pins, zizmor-requirements.txt, every go install pin and every setup-helm version in the
-# workflows, and neither @latest, a variable nor a helm version of latest. A fake GitHub API
-# that reports golusoris/<repo> as plurano/<repo> refuses a reusable workflow and a composite
-# action step under the old name; an API that fails or names no repository is refused too.
+# workflows, and neither @latest, a variable nor a helm version of latest. A fake GitHub GraphQL
+# API that reports golusoris/<repo> as plurano/<repo> refuses a reusable workflow and a composite
+# action step under the old name (further repository-name cases live in workflow_refs_test.sh).
 # Adapted from github.com/golusoris/goenvoy (now github.com/plurano/goenvoy).
 #
 #   tools/ci/workflow-check_test.sh
@@ -31,6 +31,9 @@ trap 'rm -rf "$WORK"' EXIT
 CHECKOUT=actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 # The commit of the azure/setup-helm v5.0.1 tag.
 SETUP_HELM=azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
+
+accepted=0
+refused=0
 
 # plant CASE USES [RUNS_ON_KEY]: one workflow whose only step uses USES.
 plant() {
@@ -139,15 +142,19 @@ YAML
   } > "$WORK/$name/.github/workflows/planted.yml"
 }
 
-# expect_accepted CASE NEEDLE: the check must pass and its output must name NEEDLE.
+# expect_accepted CASE NEEDLE [COMMAND PREFIX...]: the check must pass and its output must name NEEDLE.
 expect_accepted() {
   local name="$1" needle="$2" out
-  if ! out="$(bash "$HERE/workflow-check.sh" "$WORK/$name" 2>&1)"; then
+  shift 2
+  if ! out="$("$@" bash "$HERE/workflow-check.sh" "$WORK/$name" 2>&1)"; then
     printf 'FAIL %s: refused\n%s\n' "$name" "$out" >&2
     exit 1
   fi
   case "$out" in
-    *"$needle"*) echo "ok   $name: accepted ($needle)" ;;
+    *"$needle"*)
+      accepted=$((accepted + 1))
+      echo "ok   $name: accepted ($needle)"
+      ;;
     *)
       printf 'FAIL %s: accepted without "%s"\n%s\n' "$name" "$needle" "$out" >&2
       exit 1
@@ -164,7 +171,10 @@ expect_refusal() {
     exit 1
   fi
   case "$out" in
-    *"$needle"*) echo "ok   $name: refused ($needle)" ;;
+    *"$needle"*)
+      refused=$((refused + 1))
+      echo "ok   $name: refused ($needle)"
+      ;;
     *)
       printf 'FAIL %s: refused without "%s"\n%s\n' "$name" "$needle" "$out" >&2
       exit 1
@@ -248,30 +258,53 @@ expect_refusal clean "zizmor exit 3" env ZIZMOR_BIN="$WORK/zizmor-fails"
 stub zizmor-silent 0
 expect_refusal clean "zizmor wrote no report" env ZIZMOR_BIN="$WORK/zizmor-silent"
 
-# A fake GitHub API: golusoris/<repo> moved to plurano/<repo>; any other repository answers its
-# own name. The check reads it before actionlint and zizmor run, so a refusal needs no network.
+# A fake GitHub GraphQL API: golusoris/<repo> moved to plurano/<repo> and moved/<repo> moved to
+# current/<repo>; any other repository answers its own name. Optionally counts invocations in
+# CURL_COUNT_FILE. Every stub runs under a 5 s bound with bounded argument loops.
 cat > "$WORK/curl-moved" <<'SH'
 #!/bin/sh
-cat > /dev/null
-for last; do :; done
-repo="${last#*/repos/}"
-case "$repo" in
-  golusoris/*) repo="plurano/${repo#golusoris/}" ;;
-esac
-printf '{"full_name":"%s"}\n' "$repo"
+set -eu
+timeout 5 head -c 65536 > /dev/null
+if [ -n "${CURL_COUNT_FILE:-}" ]; then
+  count=0
+  if [ -f "$CURL_COUNT_FILE" ]; then
+    read -r count < "$CURL_COUNT_FILE"
+  fi
+  printf '%s\n' "$((count + 1))" > "$CURL_COUNT_FILE"
+fi
+payload=""
+prev=""
+arg_n=0
+for arg in "$@"; do
+  arg_n=$((arg_n + 1))
+  [ "$arg_n" -le 64 ] || exit 2
+  if [ "$prev" = "--data-raw" ] || [ "$prev" = "-d" ]; then
+    payload="$arg"
+    break
+  fi
+  prev="$arg"
+done
+[ -n "$payload" ] || exit 22
+printf '%s\n' "$payload" | timeout 5 jq -c '
+  .query as $q
+  | reduce ([ $q | match("(?<a>r[0-9]+):\\s*repository\\(owner:\\s*\"(?<o>[A-Za-z0-9_.-]+)\",\\s*name:\\s*\"(?<n>[A-Za-z0-9_.-]+)\"\\)"; "g") ][:200][]) as $m (
+      {};
+      ($m.captures | map({(.name): .string}) | add) as $c
+      | (if $c.o == "golusoris" then "plurano/\($c.n)"
+         elif $c.o == "moved" then "current/\($c.n)"
+         else "\($c.o)/\($c.n)" end) as $full
+      | .[$c.a] = {nameWithOwner: $full}
+    )
+  | {data: .}
+'
 SH
-printf '#!/bin/sh\ncat > /dev/null\nexit 22\n' > "$WORK/curl-fails"
-printf '#!/bin/sh\ncat > /dev/null\necho "{}"\n' > "$WORK/curl-nameless"
-chmod +x "$WORK/curl-moved" "$WORK/curl-fails" "$WORK/curl-nameless"
+chmod +x "$WORK/curl-moved"
 
 plant_call moved-workflow "golusoris/sveltesentio/.github/workflows/ci-sveltekit.yml@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # main"
 expect_refusal moved-workflow "refused .github/workflows/planted.yml:8: golusoris/sveltesentio moved to plurano/sveltesentio" env CURL_BIN="$WORK/curl-moved"
 
 plant_action moved-action "golusoris/goenvoy/.github/actions/setup@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # main"
 expect_refusal moved-action "refused .github/actions/planted/action.yml:8: golusoris/goenvoy moved to plurano/goenvoy" env CURL_BIN="$WORK/curl-moved"
-
-expect_refusal clean "cannot read repository actions/checkout" env CURL_BIN="$WORK/curl-fails"
-expect_refusal clean "names no repository for actions/checkout" env CURL_BIN="$WORK/curl-nameless"
 
 # A copy of the check whose actionlint image carries no digest.
 mkdir -p "$WORK/copy/tools/ci" "$WORK/copy/.github"
@@ -426,4 +459,4 @@ if jq -e -n --arg file "tools/ci/zizmor.txt" --arg pat "$PIP_PATTERN" '$file | t
 fi
 echo "ok   renovate: pip_requirements reads tools/ci/zizmor-requirements.txt and ignores zizmor.txt"
 
-echo "workflow check: 7 accepted, 23 refused; Renovate reads 3 image pins, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
+echo "workflow check: $accepted accepted, $refused refused; Renovate reads 3 image pins, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"

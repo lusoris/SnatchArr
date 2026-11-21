@@ -18,7 +18,8 @@ if [ $# -gt 1 ]; then
   exit 2
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 ROOT="$(cd "${1:-$REPO_ROOT}" && pwd)"
 DOCKER="${DOCKER_BIN:-docker}"
 
@@ -61,10 +62,17 @@ if [ ${#FILES[@]} -eq 0 ]; then
   exit 1
 fi
 
+MAX_ACTION_FILES=4096
 ACTION_FILES=()
-for f in "$ROOT"/.github/actions/*/*.yml "$ROOT"/.github/actions/*/*.yaml; do
-  ACTION_FILES+=("${f#"$ROOT"/}")
-done
+if [ -d "$ROOT/.github/actions" ]; then
+  while IFS= read -r -d '' f; do
+    if [ "${#ACTION_FILES[@]}" -ge "$MAX_ACTION_FILES" ]; then
+      echo "error: more than $MAX_ACTION_FILES composite action files under $ROOT" >&2
+      exit 1
+    fi
+    ACTION_FILES+=("${f#"$ROOT"/}")
+  done < <(find "$ROOT/.github/actions" -maxdepth 8 -type f \( -name 'action.yml' -o -name 'action.yaml' \) -print0 | LC_ALL=C sort -z)
+fi
 
 # go_install_pinned ARGS: whether every package after `go install` names a release (v + semver)
 # or a workflow variable (${...}). @latest, a branch, or no version at all floats.
@@ -140,50 +148,9 @@ if [ "$floating" -ne 0 ]; then
   exit 1
 fi
 
-# A renamed or transferred repository keeps answering its old name with a redirect. git, the
-# REST API and zizmor follow it; GitHub Actions does not. A reusable workflow called by the old
-# name stops the whole run before any job starts ("workflow was not found"), and an action named
-# the old way fails its step. golusoris/sveltesentio moved to plurano/sveltesentio, and from
-# 2026-11-20 every pull request run of ci.yml failed that way. Each remote `uses:` therefore
-# names its repository the way the API reports it. The token goes to curl on stdin, not argv.
-CURL="${CURL_BIN:-curl}"
-API_URL="${GITHUB_API_URL:-https://api.github.com}"
-USES_RE='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*([A-Za-z0-9_-][A-Za-z0-9_.-]*)/([A-Za-z0-9_.-]+)[^@[:space:]]*@'
-declare -A FIRST_USE=()
-for file in "${FILES[@]}" "${ACTION_FILES[@]}"; do
-  lineno=0
-  while IFS= read -r line || [ -n "$line" ]; do
-    lineno=$((lineno + 1))
-    line="${line//[\"\']/}"
-    [[ "$line" =~ $USES_RE ]] || continue
-    repo="${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
-    [ -n "${FIRST_USE[$repo]:-}" ] || FIRST_USE[$repo]="$file:$lineno"
-  done < "$ROOT/$file"
-done
-moved=0
-checked=0
-while IFS= read -r repo; do
-  [ -n "$repo" ] || continue
-  if ! body="$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" |
-    "$CURL" -K - -fsSL --max-time 20 --retry 2 -H 'Accept: application/vnd.github+json' \
-      "$API_URL/repos/$repo")"; then
-    echo "error: ${FIRST_USE[$repo]}: cannot read repository $repo from $API_URL" >&2
-    exit 1
-  fi
-  if ! name="$(jq -r '.full_name // empty' <<< "$body" 2> /dev/null)" || [ -z "$name" ]; then
-    echo "error: ${FIRST_USE[$repo]}: $API_URL names no repository for $repo" >&2
-    exit 1
-  fi
-  checked=$((checked + 1))
-  if [ "${name,,}" != "${repo,,}" ]; then
-    echo "refused ${FIRST_USE[$repo]}: $repo moved to $name; GitHub Actions does not follow the redirect" >&2
-    moved=1
-  fi
-done < <(printf '%s\n' "${!FIRST_USE[@]}" | sort)
-if [ "$moved" -ne 0 ]; then
-  exit 1
-fi
-echo "repositories: all $checked used by name are under their current name"
+# Check that every remote `uses:` repository in workflows and composite actions still carries its
+# current owner/name (shared with .github/workflows/workflow-refs.yml).
+GH_TOKEN="$TOKEN" bash "$HERE/workflow_refs.sh" "$ROOT"
 
 "$DOCKER" run --rm -v "$ROOT:/repo:ro" -w /repo \
   -v "$REPO_ROOT/.github/actionlint.yaml:/actionlint.yaml:ro" \
