@@ -6,6 +6,6 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@codacy/analysis-cli": "0.29.0"
+    "@codacy/analysis-cli": "0.31.0"
   }
 }
