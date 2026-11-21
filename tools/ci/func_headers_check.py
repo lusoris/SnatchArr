@@ -152,6 +152,7 @@ def parse_shell(path: str, source: str) -> dict:
                 "--filename",
                 path,
             ],
+            cwd=root,
             input=source,
             capture_output=True,
             text=True,  # nosec B603  # pinned go tool argv, no shell
@@ -173,6 +174,30 @@ def parse_shell(path: str, source: str) -> dict:
     return tree
 
 
+def shell_line(node: dict, key: str, path: str) -> int:
+    """Read a 1-based line number from a shfmt position field, failing closed on overflow."""
+    pos = node.get(key)
+    line = pos.get("Line", 0) if isinstance(pos, dict) else 0
+    if line < 1:
+        raise CheckError(f"{path}: shfmt position {key} missing or overflowed")
+    return line
+
+
+def shell_func_entry(
+    node: dict, cmd: dict, path: str
+) -> tuple[str, int, int, list[dict]]:
+    """Read one FuncDecl statement node and fail closed on anonymous or overflowed nodes."""
+    start = shell_line(cmd, "Pos", path)
+    end = shell_line(cmd, "End", path)
+    name = cmd.get("Name")
+    if not isinstance(name, dict) or not name.get("Value"):
+        raise CheckError(f"{path}:{start}: anonymous functions are a zsh feature")
+    comments = node.get("Comments", [])
+    for comment in comments:
+        shell_line(comment, "Hash", path)
+    return name["Value"], start, end, comments
+
+
 def shell_functions(tree: dict, path: str) -> list[tuple[str, int, int, list[dict]]]:
     """Find every shell FuncDecl, including nested declarations, with statement comments."""
     found = []
@@ -190,21 +215,14 @@ def shell_functions(tree: dict, path: str) -> list[tuple[str, int, int, list[dic
         elif isinstance(node, dict):
             cmd = node.get("Cmd")
             if isinstance(cmd, dict) and cmd.get("Type") == "FuncDecl":
-                found.append(
-                    (
-                        cmd["Name"]["Value"],
-                        cmd["Pos"]["Line"],
-                        cmd["End"]["Line"],
-                        node.get("Comments", []),
-                    )
-                )
+                found.append(shell_func_entry(node, cmd, path))
             stack.extend(node.values())
     return found
 
 
 def shell_header_ok(comments: list[dict], first: int) -> bool:
     """Check attached comments immediately above a function, skipping shellcheck directives."""
-    by_line = {comment["Hash"]["Line"]: comment["Text"] for comment in comments}
+    by_line = {comment["Hash"]["Line"]: comment.get("Text", "") for comment in comments}
     line = first - 1
     for _ in range(len(comments) + 1):
         text = by_line.get(line)

@@ -27,18 +27,24 @@ seed_repo() {
     git -C "$dir" commit -q -m base
 }
 
-# expect NAME WANT_STATUS WANT_TEXT EDIT [BASE]: the function EDIT changes the repository in $repo, then the check runs.
+# expect NAME WANT_STATUS WANT_TEXT EDIT [BASE] [TOOL_PATH] [MORE_TEXT] [RUN_DIR]: the function EDIT
+# changes the repository in $repo, then the check runs (from RUN_DIR when non-empty).
 expect() {
-    local name=$1 want=$2 text=$3 edit=$4 base=${5:-main} tool_path=${6:-} more_text=${7:-} out status
+    local name=$1 want=$2 text=$3 edit=$4 base=${5:-main} tool_path=${6:-} more_text=${7:-} run_dir=${8:-} out status
     repo="$work/$(printf '%s' "$name" | tr -c 'a-z0-9' '-')"
     seed_repo "$repo"
     (cd "$repo" && "$edit")
     set +e
-    if [ -n "$tool_path" ]; then
-        out=$(PATH="$tool_path" python3 -I "$check" --root "$repo" "--base=$base" 2>&1)
-    else
-        out=$(python3 -I "$check" --root "$repo" "--base=$base" 2>&1)
-    fi
+    out=$(
+        if [ -n "$run_dir" ]; then
+            cd "$run_dir" 2>&1 || exit 2
+        fi
+        if [ -n "$tool_path" ]; then
+            PATH="$tool_path" python3 -I "$check" --root "$repo" "--base=$base" 2>&1
+        else
+            python3 -I "$check" --root "$repo" "--base=$base" 2>&1
+        fi
+    )
     status=$?
     set -e
     if [ "$status" -ne "$want" ] || ! printf '%s' "$out" | grep -qF -- "$text" ||
@@ -592,6 +598,28 @@ edit_82() {
     sed -i 's/return 1/return 4/' lib.py
 }
 
+# edit_83: a bare hash line above a header comment omits Text in shfmt JSON and still passes.
+edit_83() {
+    printf '%s\n' '' '#' '# bare_hash_doc is documented.' 'bare_hash_doc() { :; }' >>lib.sh
+}
+
+# edit_84: a zsh anonymous subshell function omits Name in shfmt JSON and fails closed.
+edit_84() {
+    printf '%s\n' '#!/usr/bin/env bash' '() ( : )' >anon-sub.sh
+}
+
+# edit_85: a documented function at shfmt's 18-bit line limit (262143) passes.
+edit_85() {
+    printf '\n%.0s' {1..262141} >line-max.sh
+    printf '%s\n' '# line_max_doc is documented.' 'line_max_doc() { :; }' >>line-max.sh
+}
+
+# edit_86: a function past shfmt's 18-bit line limit overflows Line to 0 and fails closed.
+edit_86() {
+    printf '\n%.0s' {1..262143} >line-overflow.sh
+    printf '%s\n' '# line_overflow_doc is documented.' 'line_overflow_doc() { :; }' >>line-overflow.sh
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -678,6 +706,13 @@ ln -s "$(command -v python3)" "$only_tools/python3"
 ln -s "$(command -v git)" "$only_tools/git"
 expect "missing go fails closed for shell" 2 "go tool" edit_81 main "$only_tools"
 expect "missing go allows Python-only change" 0 "ok (" edit_82 main "$only_tools"
+outside="$work/outside-go-mod"
+mkdir -p "$outside"
+expect "shell check from directory outside Go module" 0 "ok (" edit_1 main "" "" "$outside"
+expect "bare hash line above header passes" 0 "ok (" edit_83
+expect "anonymous subshell function fails closed" 2 "anon-sub.sh:2" edit_84
+expect "shell function at shfmt line limit passes" 0 "ok (" edit_85
+expect "shell function past shfmt line limit fails closed" 2 "missing or overflowed" edit_86
 
 if [ "$failed" -ne 0 ]; then
     exit 1
