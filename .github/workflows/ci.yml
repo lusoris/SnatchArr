@@ -111,11 +111,13 @@ jobs:
         run: |
           set -euo pipefail
           bash tools/ci/renovate_presets_test.sh
+          bash tools/ci/renovate_image_pull_test.sh
           . tools/ci/tool-versions.env
+          export RENOVATE_IMAGE
           digest="${RENOVATE_IMAGE##*@}"
           timeout 300 cosign verify --certificate-oidc-issuer "$RENOVATE_SIGNER_ISSUER" --certificate-identity "$RENOVATE_SIGNER" "$RENOVATE_SIGNED_REPO@$digest" > /dev/null
-          timeout 600 docker pull --quiet "$RENOVATE_IMAGE"
-          python3 -I tools/ci/renovate_presets.py
+          ref="$(bash tools/ci/renovate_image_pull.sh)"
+          python3 -I tools/ci/renovate_presets.py --image "$ref"
       - name: The release dogfood gate and pass recorder refuse their planted cases
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases

@@ -13,7 +13,7 @@ dump_mjs="$HERE/renovate_presets_dump.mjs"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-# shellcheck source=tools/ci/test_lib.sh
+# shellcheck source=/dev/null
 . "$HERE/test_lib.sh"
 
 DIGEST="$(printf '%064d' 0 | tr 0 a)"
@@ -641,6 +641,50 @@ tv_out="$(python3 -I "$check" --tool-versions "$BAD_TV" --repo-root "$BASE_REPO"
 check_case "unpinned-renovate-image" 3 "$tv_rc" "is not pinned by version and sha256 digest" "$tv_out"
 echo "ok   unpinned-renovate-image"
 
+IMG_DIR="$work/case-image-override"
+mkdir -p "$IMG_DIR"
+write_stub_fixtures "$IMG_DIR/dump.json" "$IMG_DIR/horistes.json"
+PINNED_TV="$IMG_DIR/tool-versions.env"
+printf '%s\n' "RENOVATE_IMAGE=mirror.gcr.io/renovate/renovate:44.234.0@sha256:${DIGEST}" > "$PINNED_TV"
+OTHER_DIGEST="$(printf '%064d' 0 | tr 0 b)"
+
+for same_ref in \
+  "ghcr.io/renovatebot/renovate@sha256:${DIGEST}" \
+  "mirror.gcr.io/renovate/renovate:44.234.0@sha256:${DIGEST}"; do
+  img_ok_rc=0
+  img_ok_out="$(run_bounded 10 python3 -I "$check" \
+    --dump "$IMG_DIR/dump.json" \
+    --horistes "$IMG_DIR/horistes.json" \
+    --repo-root "$BASE_REPO" \
+    --tool-versions "$PINNED_TV" \
+    --image "$same_ref" 2>&1)" || img_ok_rc=$?
+  check_case "image-override-same-digest" 0 "$img_ok_rc" \
+    "renovate_presets: ok (renovate=44.234.0, horistes=offline" "$img_ok_out"
+done
+echo "ok   image-override-same-digest"
+
+img_diff_rc=0
+img_diff_out="$(run_bounded 10 python3 -I "$check" \
+  --dump "$IMG_DIR/dump.json" \
+  --horistes "$IMG_DIR/horistes.json" \
+  --repo-root "$BASE_REPO" \
+  --tool-versions "$PINNED_TV" \
+  --image "ghcr.io/renovatebot/renovate@sha256:${OTHER_DIGEST}" 2>&1)" || img_diff_rc=$?
+check_case "image-override-different-digest" 3 "$img_diff_rc" "sha256:${OTHER_DIGEST}" "$img_diff_out"
+check_case "image-override-different-digest" 3 "$img_diff_rc" "sha256:${DIGEST}" "$img_diff_out"
+echo "ok   image-override-different-digest"
+
+img_unpinned_rc=0
+img_unpinned_out="$(run_bounded 10 python3 -I "$check" \
+  --dump "$IMG_DIR/dump.json" \
+  --horistes "$IMG_DIR/horistes.json" \
+  --repo-root "$BASE_REPO" \
+  --tool-versions "$PINNED_TV" \
+  --image "ghcr.io/renovatebot/renovate:latest" 2>&1)" || img_unpinned_rc=$?
+check_case "image-override-unpinned" 3 "$img_unpinned_rc" "sha256:${DIGEST}" "$img_unpinned_out"
+check_case "image-override-unpinned" 3 "$img_unpinned_rc" "<missing digest>" "$img_unpinned_out"
+echo "ok   image-override-unpinned"
+
 # 12. Local reads stay bounded, and a large stderr stream cannot block the Docker dump child.
 FAKE_BIN="$work/fake-bin"
 mkdir -p "$FAKE_BIN"
@@ -715,12 +759,20 @@ PY
 
 assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow \
   "python3 -I tools/ci/renovate_presets.py"
+assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow \
+  "python3 -I tools/ci/renovate_presets.py --image \"\$ref\""
 assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow "cosign verify"
+assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow "tools/ci/renovate_image_pull.sh"
+assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow "tools/ci/renovate_image_pull_test.sh"
 assert_wiring "$HERE/../../Makefile" makefile "python3 -I tools/ci/renovate_presets.py"
+assert_wiring "$HERE/../../Makefile" makefile \
+  "python3 -I tools/ci/renovate_presets.py --image \"\$\$ref\""
+assert_wiring "$HERE/../../Makefile" makefile "tools/ci/renovate_image_pull.sh"
+assert_wiring "$HERE/../../Makefile" makefile "tools/ci/renovate_image_pull_test.sh"
 
 # assert_workflow_timeout CI_YML [minimum]: require enough budget or print its ceiling in minutes.
 assert_workflow_timeout() {
-  python3 -I - "$1" "${2:-assert}" <<'PY'
+  python3 -I - "$1" "$HERE/renovate_image_pull.sh" "${2:-assert}" <<'PY'
 import pathlib
 import re
 import sys
@@ -740,9 +792,28 @@ step = re.search(
 )
 if step is None:
     raise SystemExit("presets workflow step is missing")
-required = sum(int(value) for value in re.findall(r"^\s*timeout ([0-9]+)\b", step.group("body"), re.M)) + 300
+pull_budget = 0
+if "tools/ci/renovate_image_pull.sh" in step.group("body"):
+    pull_text = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+    cfg = {
+        m.group(1): int(m.group(2))
+        for m in re.finditer(r"^readonly (PULL_[A-Z_]+)=([0-9]+)$", pull_text, re.M)
+    }
+    wait = cfg["PULL_BASE_WAIT_SECONDS"]
+    max_sleeps = 0
+    for _ in range(cfg["PULL_MAX_ATTEMPTS"] - 1):
+        max_sleeps += wait + (wait // 2)
+        wait *= 2
+    pull_budget = cfg["PULL_SOURCES"] * (
+        cfg["PULL_MAX_ATTEMPTS"] * cfg["PULL_TIMEOUT_SECONDS"] + max_sleeps
+    )
+required = (
+    sum(int(value) for value in re.findall(r"^\s*timeout ([0-9]+)\b", step.group("body"), re.M))
+    + pull_budget
+    + 300
+)
 available = int(minutes.group(1)) * 60
-if sys.argv[2] == "minimum":
+if sys.argv[3] == "minimum":
     print((required + 59) // 60)
 elif available < required:
     raise SystemExit(f"workflows timeout {available}s is below required {required}s")
@@ -823,6 +894,11 @@ fi
 sed '/cosign verify/d' "$HERE/../../.github/workflows/ci.yml" > "$work/ci-no-cosign.yml"
 if assert_wiring "$work/ci-no-cosign.yml" workflow "cosign verify"; then
   echo "FAIL wiring: workflow copy without cosign verification passed" >&2
+  exit 1
+fi
+sed '/renovate_image_pull\.sh/d' "$HERE/../../.github/workflows/ci.yml" > "$work/ci-no-pull.yml"
+if assert_wiring "$work/ci-no-pull.yml" workflow "tools/ci/renovate_image_pull.sh"; then
+  echo "FAIL wiring: workflow copy without renovate_image_pull.sh passed" >&2
   exit 1
 fi
 sed '/python3 -I tools\/ci\/renovate_presets.py/d' "$HERE/../../Makefile" \

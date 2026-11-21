@@ -742,7 +742,12 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 workflows-lint: ## actionlint + pinned actions (zizmor) on every workflow file, with planted cases, and live Renovate preset-closure coverage
 	bash tools/ci/workflow-check_test.sh
 	bash tools/ci/workflow-check.sh
-	python3 -I tools/ci/renovate_presets.py
+	bash tools/ci/renovate_image_pull_test.sh
+	. tools/ci/tool-versions.env
+	RENOVATE_SIGNED_REPO="$${RENOVATE_SIGNED_REPO:-ghcr.io/renovatebot/renovate}"
+	export RENOVATE_IMAGE RENOVATE_SIGNED_REPO
+	ref="$$(bash tools/ci/renovate_image_pull.sh)"
+	python3 -I tools/ci/renovate_presets.py --image "$$ref"
 
 hooks: ## Install git hooks
 	lefthook install
