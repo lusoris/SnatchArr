@@ -2,14 +2,15 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Lints every workflow file and refuses an action that is not pinned to a commit, or whose
-# version comment names a tag that is not that commit. Adapted from tools/workflow-check.sh
-# of github.com/golusoris/goenvoy.
+# Lints every workflow file and refuses an action that is not pinned to a commit, whose
+# version comment names a tag that is not that commit, or whose repository has moved to
+# another name. Adapted from tools/workflow-check.sh of github.com/golusoris/goenvoy (now
+# github.com/plurano/goenvoy).
 #
 #   tools/ci/workflow-check.sh [ROOT]      (default: this repository)
 #
 # Exit status: 0 clean, 1 a finding or a failed run, 2 usage.
-# Needs docker (actionlint), python3 with venv, jq, network, token.
+# Needs docker (actionlint), python3 with venv, jq, curl, network, token.
 set -euo pipefail
 
 if [ $# -gt 1 ]; then
@@ -17,7 +18,8 @@ if [ $# -gt 1 ]; then
   exit 2
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 ROOT="$(cd "${1:-$REPO_ROOT}" && pwd)"
 DOCKER="${DOCKER_BIN:-docker}"
 
@@ -60,10 +62,20 @@ if [ ${#FILES[@]} -eq 0 ]; then
   exit 1
 fi
 
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+PYTHON="${PYTHON_BIN:-python3}"
+if ! "$PYTHON" -I "$HERE/workflow_uses.py" --list-actions "$ROOT" -- "${FILES[@]}" > "$WORK/actions.nul"; then
+  exit 1
+fi
+MAX_ACTION_FILES=4096
 ACTION_FILES=()
-for f in "$ROOT"/.github/actions/*/*.yml "$ROOT"/.github/actions/*/*.yaml; do
-  ACTION_FILES+=("${f#"$ROOT"/}")
-done
+mapfile -d '' -n "$((MAX_ACTION_FILES + 1))" -t ACTION_FILES < "$WORK/actions.nul"
+if [ "${#ACTION_FILES[@]}" -gt "$MAX_ACTION_FILES" ]; then
+  echo "error: more than $MAX_ACTION_FILES composite action files under $ROOT" >&2
+  exit 1
+fi
 
 # go_install_pinned ARGS: whether every package after `go install` names a release (v + semver)
 # or a workflow variable (${...}). @latest, a branch, or no version at all floats.
@@ -139,13 +151,14 @@ if [ "$floating" -ne 0 ]; then
   exit 1
 fi
 
+# Check that every remote `uses:` repository in workflows and composite actions still carries its
+# current owner/name (shared with .github/workflows/workflow-refs.yml).
+GH_TOKEN="$TOKEN" bash "$HERE/workflow_refs.sh" "$ROOT"
+
 "$DOCKER" run --rm -v "$ROOT:/repo:ro" -w /repo \
   -v "$REPO_ROOT/.github/actionlint.yaml:/actionlint.yaml:ro" \
   "$ACTIONLINT_IMAGE" -no-color -config-file /actionlint.yaml "${FILES[@]}"
 echo "actionlint: ${#FILES[@]} workflow files passed"
-
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
 
 ZIZMOR="${ZIZMOR_BIN:-}"
 if [ -z "$ZIZMOR" ]; then

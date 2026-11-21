@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Standalone guard against renamed or transferred repositories in workflow and composite action
+# `uses:` references. Calls no reusable workflow and no action besides actions/checkout, so a
+# moved reference in ci.yml cannot block this workflow from starting, and the daily schedule
+# catches a repository move that happens with no pull request. Only public repositories are
+# supported: GITHUB_TOKEN cannot read private or missing repositories, so any such reference fails.
+name: Workflow references
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-refs:
+    name: Workflow repository references
+    # Linux only (HISS-21): the check reads repository files and the GitHub API, so its verdict
+    # does not depend on the runner OS, and the scripts need bash 4 or newer (mapfile, ${var,,}).
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Planted cases for the repository-name check
+        run: bash tools/ci/workflow_refs_test.sh
+      - name: Check workflow and composite action repository names
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash tools/ci/workflow_refs.sh
