@@ -62,16 +62,19 @@ if [ ${#FILES[@]} -eq 0 ]; then
   exit 1
 fi
 
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+PYTHON="${PYTHON_BIN:-python3}"
+if ! "$PYTHON" -I "$HERE/workflow_uses.py" --list-actions "$ROOT" -- "${FILES[@]}" > "$WORK/actions.nul"; then
+  exit 1
+fi
 MAX_ACTION_FILES=4096
 ACTION_FILES=()
-if [ -d "$ROOT/.github/actions" ]; then
-  while IFS= read -r -d '' f; do
-    if [ "${#ACTION_FILES[@]}" -ge "$MAX_ACTION_FILES" ]; then
-      echo "error: more than $MAX_ACTION_FILES composite action files under $ROOT" >&2
-      exit 1
-    fi
-    ACTION_FILES+=("${f#"$ROOT"/}")
-  done < <(find "$ROOT/.github/actions" -maxdepth 8 -type f \( -name 'action.yml' -o -name 'action.yaml' \) -print0 | LC_ALL=C sort -z)
+mapfile -d '' -n "$((MAX_ACTION_FILES + 1))" -t ACTION_FILES < "$WORK/actions.nul"
+if [ "${#ACTION_FILES[@]}" -gt "$MAX_ACTION_FILES" ]; then
+  echo "error: more than $MAX_ACTION_FILES composite action files under $ROOT" >&2
+  exit 1
 fi
 
 # go_install_pinned ARGS: whether every package after `go install` names a release (v + semver)
@@ -156,9 +159,6 @@ GH_TOKEN="$TOKEN" bash "$HERE/workflow_refs.sh" "$ROOT"
   -v "$REPO_ROOT/.github/actionlint.yaml:/actionlint.yaml:ro" \
   "$ACTIONLINT_IMAGE" -no-color -config-file /actionlint.yaml "${FILES[@]}"
 echo "actionlint: ${#FILES[@]} workflow files passed"
-
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
 
 ZIZMOR="${ZIZMOR_BIN:-}"
 if [ -z "$ZIZMOR" ]; then

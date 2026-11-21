@@ -5,12 +5,16 @@
 # Refuses a workflow or composite action `uses:` reference whose repository has moved to another
 # owner or name. Git, the REST API and zizmor follow repository redirects; GitHub Actions does
 # not. A reusable workflow called by its old name stops the whole run before any job starts
-# ("workflow was not found"), and an action named the old way fails its step.
+# ("workflow was not found"), and an action named the old way fails its step. Only public
+# repositories are supported: private and missing repositories cannot be read by the workflow
+# token and fail closed.
+# Platform (HISS-21): runs on Linux only in CI because it reads repository files and the GitHub
+# API (the verdict does not depend on the runner OS) and requires bash 4 or newer (mapfile, ${var,,}).
 #
 #   tools/ci/workflow_refs.sh [ROOT]      (default: this repository)
 #
 # Exit status: 0 clean, 1 a finding or a failed lookup, 2 usage.
-# Needs python3 with PyYAML, jq, curl, network, token (GH_TOKEN or GITHUB_TOKEN).
+# Needs bash 4+, python3 with PyYAML, jq, curl, network, token (GH_TOKEN or GITHUB_TOKEN).
 set -euo pipefail
 
 if [ $# -gt 1 ]; then
@@ -45,19 +49,21 @@ if [ ${#FILES[@]} -eq 0 ]; then
   exit 1
 fi
 
-ACTION_FILES=()
-if [ -d "$ROOT/.github/actions" ]; then
-  while IFS= read -r -d '' f; do
-    file_count=$((file_count + 1))
-    if [ "$file_count" -gt "$MAX_FILES" ]; then
-      echo "error: more than $MAX_FILES workflow and composite action files under $ROOT" >&2
-      exit 1
-    fi
-    ACTION_FILES+=("${f#"$ROOT"/}")
-  done < <(find "$ROOT/.github/actions" -maxdepth 8 -type f \( -name 'action.yml' -o -name 'action.yaml' \) -print0 | LC_ALL=C sort -z)
-fi
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
 
 PYTHON="${PYTHON_BIN:-python3}"
+if ! "$PYTHON" -I "$HERE/workflow_uses.py" --list-actions "$ROOT" -- "${FILES[@]}" > "$WORK/actions.nul"; then
+  exit 1
+fi
+ACTION_FILES=()
+mapfile -d '' -n "$((MAX_FILES + 1))" -t ACTION_FILES < "$WORK/actions.nul"
+file_count=$((file_count + ${#ACTION_FILES[@]}))
+if [ "$file_count" -gt "$MAX_FILES" ]; then
+  echo "error: more than $MAX_FILES workflow and composite action files under $ROOT" >&2
+  exit 1
+fi
+
 if ! uses_lines="$(cd "$ROOT" && "$PYTHON" -I "$HERE/workflow_uses.py" -- "${FILES[@]}" "${ACTION_FILES[@]}")"; then
   exit 1
 fi
@@ -161,7 +167,7 @@ query_batch() {
     repo="${chunk[$i]}"
     actual="${resolved[$i]:-}"
     if [ -z "$actual" ]; then
-      echo "error: ${FIRST_USE[$repo]}: names no repository for $repo ($API_URL/graphql)" >&2
+      echo "error: ${FIRST_USE[$repo]}: names no repository the token can read for $repo: private and missing repositories are not supported; reference a public repository ($API_URL/graphql)" >&2
       exit 1
     fi
     checked=$((checked + 1))

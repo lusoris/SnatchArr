@@ -11,10 +11,15 @@
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
 # flow-style step under a moved repository name (moved-flow), a nested composite action under a
-# moved repository name (moved-nested-action), a GraphQL errors array (gql-errors), a null GraphQL
-# alias (null-alias), 101 repositories split across 2 GraphQL POSTs with a moved repository in the
-# second batch (over-100-repos), a missing token (missing-token), and workflow_uses.py without
-# PyYAML (no-pyyaml).
+# moved repository name (moved-nested-action), a composite action outside .github/actions reached
+# via `uses: ./tools/actions/x` (moved-outside-action), a composite action nested 9 directories
+# under .github/actions (moved-deep-action), a missing local action `uses: ./missing`
+# (missing-local-action), a local action escaping ROOT `uses: ./../outside` (escape-local-action),
+# an unreadable directory under .github/actions (unreadable-actions-dir), a GraphQL errors array
+# (gql-errors), a null GraphQL alias for a private or missing repository (null-alias), 101
+# repositories split across 2 GraphQL POSTs with a moved repository in the second batch
+# (over-100-repos), a missing token (missing-token), and workflow_uses.py without PyYAML
+# (no-pyyaml).
 #
 #   tools/ci/workflow_refs_test.sh
 #
@@ -23,7 +28,14 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+cleanup() {
+  local locked="$WORK/unreadable-actions-dir/.github/actions/locked"
+  if [ -d "$locked" ] && ! chmod 700 "$locked"; then
+    printf 'cleanup: failed to restore mode on %s\n' "$locked" >&2
+  fi
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 # Supply a fixed placeholder token so no caller token ever reaches a stub.
 export GH_TOKEN=stub-token
@@ -209,7 +221,7 @@ plant_action moved-action "golusoris/goenvoy/.github/actions/setup@5b3b01ef8b0bd
 expect_refusal moved-action "refused .github/actions/planted/action.yml:8: golusoris/goenvoy moved to plurano/goenvoy" env CURL_BIN="$WORK/curl-moved"
 
 expect_refusal clean "cannot read repository actions/checkout" env CURL_BIN="$WORK/curl-fails"
-expect_refusal clean "names no repository for actions/checkout" env CURL_BIN="$WORK/curl-nameless"
+expect_refusal clean "names no repository the token can read for actions/checkout: private and missing repositories are not supported; reference a public repository" env CURL_BIN="$WORK/curl-nameless"
 
 # A `run: |` block whose script text contains `uses: moved/repo@<sha>` is ignored and passes.
 mkdir -p "$WORK/run-block-uses/.github/workflows"
@@ -272,13 +284,91 @@ expect_refusal moved-flow "refused .github/workflows/planted.yml:10: moved/repo 
 plant_action moved-nested-action "moved/repo@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # v1.0.0" "group/inner"
 expect_refusal moved-nested-action "refused .github/actions/group/inner/action.yml:8: moved/repo moved to current/repo" env CURL_BIN="$WORK/curl-moved"
 
+# A composite action outside .github/actions reached by `uses: ./tools/actions/x` is inspected and refused.
+mkdir -p "$WORK/moved-outside-action/.github/workflows" "$WORK/moved-outside-action/tools/actions/x"
+cat > "$WORK/moved-outside-action/tools/actions/x/action.yml" <<'YAML'
+name: outside-x
+description: composite action outside .github/actions
+runs:
+  using: composite
+  steps:
+    - uses: moved/outside-repo@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # v1.0.0
+YAML
+cat > "$WORK/moved-outside-action/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./tools/actions/x
+YAML
+expect_refusal moved-outside-action "refused tools/actions/x/action.yml:6: moved/outside-repo moved to current/outside-repo" env CURL_BIN="$WORK/curl-moved"
+
+# A composite action nested 9 directories under .github/actions is walked and refused.
+deep_dir="d1/d2/d3/d4/d5/d6/d7/d8/d9"
+mkdir -p "$WORK/moved-deep-action/.github/workflows" "$WORK/moved-deep-action/.github/actions/$deep_dir"
+cat > "$WORK/moved-deep-action/.github/actions/$deep_dir/action.yml" <<'YAML'
+name: deep-action
+description: composite action nested 9 directories under .github/actions
+runs:
+  using: composite
+  steps:
+    - uses: moved/deep-repo@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # v1.0.0
+YAML
+cat > "$WORK/moved-deep-action/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+YAML
+expect_refusal moved-deep-action "refused .github/actions/$deep_dir/action.yml:6: moved/deep-repo moved to current/deep-repo" env CURL_BIN="$WORK/curl-moved"
+
+# A step `uses: ./missing` with neither action.yml nor action.yaml is refused naming path:line.
+plant missing-local-action "./missing"
+expect_refusal missing-local-action "error: .github/workflows/planted.yml:10: local action './missing' has neither action.yml nor action.yaml" env CURL_BIN="$WORK/curl-moved"
+
+# A step `uses: ./../outside` escaping ROOT is refused naming path:line even when ../outside/action.yml exists.
+mkdir -p "$WORK/outside"
+cat > "$WORK/outside/action.yml" <<YAML
+name: outside
+description: action outside root
+runs:
+  using: composite
+  steps:
+    - uses: $CHECKOUT # v7.0.1
+YAML
+plant escape-local-action "./../outside"
+expect_refusal escape-local-action "error: .github/workflows/planted.yml:10: local action './../outside' escapes repository root" env CURL_BIN="$WORK/curl-moved"
+
+# An unreadable directory under .github/actions is refused rather than silently skipped.
+plant unreadable-actions-dir "$CHECKOUT # v7.0.1"
+mkdir -p "$WORK/unreadable-actions-dir/.github/actions/locked"
+chmod 000 "$WORK/unreadable-actions-dir/.github/actions/locked"
+expect_refusal unreadable-actions-dir "error: .github/actions:" env CURL_BIN="$WORK/curl-moved"
+chmod 700 "$WORK/unreadable-actions-dir/.github/actions/locked"
+
 # GraphQL answer with an `errors` member is refused naming path:line.
 plant gql-errors "$CHECKOUT # v7.0.1"
 expect_refusal gql-errors "error: .github/workflows/planted.yml:10: GraphQL returned errors for actions/checkout" env CURL_BIN="$WORK/curl-gql-errors"
 
-# GraphQL answer with a null alias is refused naming path:line.
+# GraphQL answer with a null alias is refused naming path:line and explaining public-only support.
 plant null-alias "$CHECKOUT # v7.0.1"
-expect_refusal null-alias "error: .github/workflows/planted.yml:10: names no repository for actions/checkout" env CURL_BIN="$WORK/curl-null-alias"
+expect_refusal null-alias "error: .github/workflows/planted.yml:10: names no repository the token can read for actions/checkout: private and missing repositories are not supported; reference a public repository" env CURL_BIN="$WORK/curl-null-alias"
 
 # 3 distinct repositories are looked up in a single GraphQL POST (1 stub call).
 mkdir -p "$WORK/three-repos/.github/workflows"
