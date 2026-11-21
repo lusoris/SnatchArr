@@ -158,6 +158,7 @@ govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
 # api-verify, ci.yml and security.yml scan through this target, so all three run the same pinned
 # scanner and print its version (#161). It calls the binary govulncheck-install wrote, never the
 # PATH lookup: a developer's older govulncheck earlier on the PATH does not take its place.
+# Modules are fetched first with bounded retries, so a transient proxy error does not fail the scan (issue 1208).
 # The scan runs on the official Go release the go.mod directive names, and
 # tools/ci/govulncheck_pinned.sh fails it unless that same scan reports exactly this release: a
 # distro build such as go1.27.3-X:nodwarf5 reports none of the standard-library advisories
@@ -168,7 +169,9 @@ GO_INSTALL_DIR = $(or $(shell go env GOBIN),$(firstword $(subst :, ,$(shell go e
 api-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over api/ on the go.mod Go release, version printed first
 	sh tools/ci/tmpdir_abs_test.sh
 	sh tools/ci/govulncheck_pinned_test.sh
+	sh tools/ci/go_mod_download_test.sh
 	cd api
+	sh ../tools/ci/go_mod_download.sh
 	exec sh ../tools/ci/govulncheck_pinned.sh "$(GO_INSTALL_DIR)/govulncheck"
 
 sqlc-install: ## Install sqlc at the tools/go/go.mod pin, the version go generate runs
