@@ -333,6 +333,7 @@ func appendItem(items []mappedItem, r arr.QueueRecord, x recordFacts) []mappedIt
 		Status:                r.Status,
 		TrackedDownloadStatus: r.TrackedDownloadStatus,
 		TrackedDownloadState:  r.TrackedDownloadState,
+		OutputPath:            r.OutputPath,
 		SizeLeft:              int64(max(r.SizeLeft, 0)),
 		CustomFormatScore:     int32(x.score),   // #nosec G115 -- score fits in int32
 		MediaID:               int32(x.mediaID), // #nosec G115 -- *arr ids are small integers

@@ -210,6 +210,31 @@ func (s *Store) Strikes(ctx context.Context, instanceID uuid.UUID) (map[string]S
 	return strikes, nil
 }
 
+// OutputCursor returns the last output parent checked for an instance.
+func (s *Store) OutputCursor(ctx context.Context, instanceID uuid.UUID) (string, error) {
+	row, err := s.st.Q().GetQueueOutputCursor(ctx, instanceID)
+	if err != nil {
+		if errors.Is(store.MapError(err), domain.ErrNotFound) {
+			return "", nil
+		}
+		return "", fmt.Errorf("queue: get output cursor: %w", store.MapError(err))
+	}
+	return row.LastParent, nil
+}
+
+// SetOutputCursor records the last output parent checked for an instance.
+func (s *Store) SetOutputCursor(ctx context.Context, instanceID uuid.UUID, lastParent string, at time.Time) error {
+	err := s.st.Q().UpsertQueueOutputCursor(ctx, sqlcgen.UpsertQueueOutputCursorParams{
+		InstanceID: instanceID,
+		LastParent: lastParent,
+		UpdatedAt:  at,
+	})
+	if err != nil {
+		return fmt.Errorf("queue: set output cursor: %w", store.MapError(err))
+	}
+	return nil
+}
+
 // Record persists updated strike states for a batch of sweep decisions in a single transaction.
 func (s *Store) Record(ctx context.Context, instanceID uuid.UUID, decisions []Decision) error {
 	if len(decisions) == 0 {

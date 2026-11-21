@@ -340,63 +340,35 @@ func TestClassifierNoFilesEligibleOverrides(t *testing.T) {
 	s.Grace = 15 * time.Minute
 	now := fixedNow
 
-	t.Run("broken_after_grace", func(t *testing.T) {
-		t.Parallel()
-		item := queue.Item{
-			Title:       "Title",
-			StatusLines: []string{"No files found are eligible for import in /downloads/path"},
-			Added:       now.Add(-20 * time.Minute), // past 15m grace
-		}
-		c, _, _ := queue.ClassifyImportItem(item, s, now)
-		if c != queue.ClassBroken {
-			t.Errorf("class = %q, want broken", c)
-		}
-	})
-
-	t.Run("unknown_within_grace", func(t *testing.T) {
-		t.Parallel()
-		item := queue.Item{
-			Title:       "Title",
-			StatusLines: []string{"No files found are eligible for import in /downloads/path"},
-			Added:       now.Add(-5 * time.Minute), // within 15m grace
-		}
-		c, _, _ := queue.ClassifyImportItem(item, s, now)
-		if c != queue.ClassUnknown {
-			t.Errorf("class = %q, want unknown", c)
-		}
-	})
-
-	t.Run("unknown_when_still_unpacking", func(t *testing.T) {
-		t.Parallel()
-		item := queue.Item{
-			Title: "Title",
-			StatusLines: []string{
-				"No files found are eligible for import in /downloads/path",
-				"File is still being unpacked",
-			},
-			Added: now.Add(-30 * time.Minute),
-		}
-		c, _, _ := queue.ClassifyImportItem(item, s, now)
-		if c != queue.ClassUnknown {
-			t.Errorf("class = %q, want unknown", c)
-		}
-	})
-
-	t.Run("unknown_when_locked_file", func(t *testing.T) {
-		t.Parallel()
-		item := queue.Item{
-			Title: "Title",
-			StatusLines: []string{
-				"No files found are eligible for import in /downloads/path",
-				"Locked file, try again later",
-			},
-			Added: now.Add(-30 * time.Minute),
-		}
-		c, _, _ := queue.ClassifyImportItem(item, s, now)
-		if c != queue.ClassUnknown {
-			t.Errorf("class = %q, want unknown", c)
-		}
-	})
+	tests := []struct {
+		name         string
+		lines        []string
+		added        time.Time
+		outputListed bool
+		want         queue.Class
+	}{
+		{"broken_after_grace_listed", []string{"No files found are eligible for import in /downloads/path"}, now.Add(-20 * time.Minute), true, queue.ClassBroken},
+		{"broken_after_grace_unlisted", []string{"No files found are eligible for import in /downloads/path"}, now.Add(-20 * time.Minute), false, queue.ClassUnknown},
+		{"unknown_within_grace_listed", []string{"No files found are eligible for import in /downloads/path"}, now.Add(-5 * time.Minute), true, queue.ClassUnknown},
+		{"unknown_within_grace_unlisted", []string{"No files found are eligible for import in /downloads/path"}, now.Add(-5 * time.Minute), false, queue.ClassUnknown},
+		{"unknown_when_still_unpacking_listed", []string{"No files found are eligible for import in /downloads/path", "File is still being unpacked"}, now.Add(-30 * time.Minute), true, queue.ClassUnknown},
+		{"unknown_when_still_unpacking_unlisted", []string{"No files found are eligible for import in /downloads/path", "File is still being unpacked"}, now.Add(-30 * time.Minute), false, queue.ClassUnknown},
+		{"unknown_when_locked_file_listed", []string{"No files found are eligible for import in /downloads/path", "Locked file, try again later"}, now.Add(-30 * time.Minute), true, queue.ClassUnknown},
+		{"unknown_when_locked_file_unlisted", []string{"No files found are eligible for import in /downloads/path", "Locked file, try again later"}, now.Add(-30 * time.Minute), false, queue.ClassUnknown},
+		{"broken_at_grace_boundary_listed", []string{"No files found are eligible for import in /downloads/path"}, now.Add(-s.Grace), true, queue.ClassBroken},
+		{"unknown_at_grace_boundary_unlisted", []string{"No files found are eligible for import in /downloads/path"}, now.Add(-s.Grace), false, queue.ClassUnknown},
+		{"unknown_inside_grace_by_one_nanosecond_listed", []string{"No files found are eligible for import in /downloads/path"}, now.Add(-s.Grace).Add(time.Nanosecond), true, queue.ClassUnknown},
+		{"unknown_inside_grace_by_one_nanosecond_unlisted", []string{"No files found are eligible for import in /downloads/path"}, now.Add(-s.Grace).Add(time.Nanosecond), false, queue.ClassUnknown},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			item := queue.Item{Title: "Title", StatusLines: tc.lines, Added: tc.added, OutputListed: tc.outputListed}
+			if got, _, _ := queue.ClassifyImportItem(item, s, now); got != tc.want {
+				t.Errorf("class = %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestClassifyRejection(t *testing.T) {
@@ -411,6 +383,7 @@ func TestClassifyRejection(t *testing.T) {
 		{"Not an upgrade for existing episode file(s)", queue.ClassNotWanted},
 		{"Sample", queue.ClassBroken},
 		{"Not enough free space", queue.ClassUnknown},
+		{"No files found are eligible for import in /data/job", queue.ClassUnknown},
 		{"Completely unknown error", queue.ClassUnknown},
 	}
 

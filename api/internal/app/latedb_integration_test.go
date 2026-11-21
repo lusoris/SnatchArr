@@ -30,34 +30,50 @@ import (
 )
 
 const (
-	lateDBDelay       = 1500 * time.Millisecond
-	lateDBTimeout     = 30 * time.Second
-	maxProxyAccepts   = 64
-	maxProxyPolls     = 120
-	proxyPollInterval = 250 * time.Millisecond
-	proxyDeadlineHold = 5 * time.Second
+	lateDBDelay        = 1500 * time.Millisecond
+	lateDBTimeout      = 30 * time.Second
+	lateDBConnectTime  = time.Second
+	lateDBRetryMax     = 250 * time.Millisecond
+	lateDBRetryInitial = 100 * time.Millisecond
+	maxLateDBAttempts  = 128
+	maxProxyAccepts    = 64
+	maxProxyPollCount  = 256
+	proxyPollInterval  = 250 * time.Millisecond
+	proxyDeadlineHold  = 5 * time.Second
+	// fixedLateDBAttempts is the fixed pool connect attempt count issue 1202 saw.
+	fixedLateDBAttempts = 10
 )
 
 // lateDatabaseProxyStats tracks early connection resets separately from database forwards.
 type lateDatabaseProxyStats struct {
 	rejected  atomic.Int32
 	forwarded atomic.Int32
+	polls     atomic.Int32
 }
 
 // lateDatabaseConfig preserves the shutdown test's full control-plane config while
 // pointing both database consumers at the delayed proxy and setting retry explicitly.
-func lateDatabaseConfig(t *testing.T, grpcAddr, proxyAddr string) *config.Config {
+func lateDatabaseConfig(t *testing.T, ctx context.Context, database testDatabase, grpcAddr, proxyAddr string) *config.Config {
 	t.Helper()
-	base := controlPlaneConfig(t, grpcAddr)
+	base := controlPlaneConfigForDatabase(t, grpcAddr, database)
 	dsn, err := url.Parse(base.Get("db.dsn"))
 	if err != nil {
 		t.Fatalf("parse test database DSN: %v", err)
 	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("late database start context has no deadline")
+	}
+	remaining := deadline.Sub(clockwork.NewRealClock().Now())
+	attempts, err := lateDBConnectAttempts(remaining, lateDBConnectTime, lateDBRetryMax, maxLateDBAttempts)
+	if err != nil {
+		t.Fatalf("derive late database retry attempts: %v", err)
+	}
 	dsn.Host = proxyAddr
 	raw, err := json.Marshal(map[string]any{
 		"snatcharr": map[string]any{"profile": base.Get("snatcharr.profile"), "worker": map[string]any{"token": workerToken}},
-		"db": map[string]any{"dsn": dsn.String(), "retry": map[string]any{
-			"attempts": 10, "initial": "100ms", "max": "1s",
+		"db": map[string]any{"dsn": dsn.String(), "connect_timeout": lateDBConnectTime.String(), "retry": map[string]any{
+			"attempts": attempts, "initial": lateDBRetryInitial.String(), "max": lateDBRetryMax.String(),
 		}},
 		"http": map[string]any{"addr": base.Get("http.addr")},
 		"grpc": map[string]any{"listen": grpcAddr},
@@ -76,14 +92,21 @@ func lateDatabaseConfig(t *testing.T, grpcAddr, proxyAddr string) *config.Config
 	return cfg
 }
 
-// startLateDatabaseProxy serves from a listener bound before app construction and closes
-// active forwards when the test context ends.
-func startLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListener, realAddr string) *lateDatabaseProxyStats {
+// startLateDatabaseProxy rejects until the window and minimum rejection count
+// are met, then forwards; it closes active forwards when the test context ends.
+func startLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListener, realAddr string, rejectWindow time.Duration, minRejected int32) *lateDatabaseProxyStats {
 	t.Helper()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("late database proxy context has no deadline")
+	}
+	polls := lateDBProxyPollCount(deadline.Sub(clockwork.NewRealClock().Now()), proxyPollInterval, maxProxyPollCount)
 	proxyCtx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	stats := &lateDatabaseProxyStats{}
-	go func() { done <- serveLateDatabaseProxy(t, proxyCtx, ln, realAddr, stats) }()
+	go func() {
+		done <- serveLateDatabaseProxy(t, proxyCtx, ln, realAddr, rejectWindow, minRejected, polls, stats)
+	}()
 	t.Cleanup(func() {
 		cancel()
 		if err := ln.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
@@ -101,10 +124,10 @@ func startLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListen
 	return stats
 }
 
-// serveLateDatabaseProxy resets early connections, forwards later ones after the delay
-// window opens at the first rejected connection, and waits for every bounded forwarder
-// after closing active connections on context cancellation.
-func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListener, realAddr string, stats *lateDatabaseProxyStats) error {
+// serveLateDatabaseProxy forwards only after the reject window and minimum count.
+// Timed-out polls and accepted connections have separate scalar bounds; active
+// forwarders finish after context cancellation closes their connections.
+func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListener, realAddr string, rejectWindow time.Duration, minRejected int32, pollLimit int, stats *lateDatabaseProxyStats) error {
 	t.Helper()
 	var delay <-chan time.Time
 	var timer *time.Timer
@@ -117,24 +140,26 @@ func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListen
 	defer active.Wait()
 	accepted := 0
 	delayElapsed := false
-	for range maxProxyPolls {
+	for range pollLimit + 2*maxProxyAccepts + 1 {
 		if ctx.Err() != nil {
 			return nil
 		}
-		if err := ln.SetDeadline(clockwork.NewRealClock().Now().Add(proxyPollInterval)); err != nil {
-			return fmt.Errorf("deadline on proxy listener: %w", err)
-		}
-		conn, acceptErr := ln.Accept()
+		conn, timedOut, acceptErr := acceptLateDatabaseConnection(ln)
 		if acceptErr != nil {
-			var netErr net.Error
-			if errors.As(acceptErr, &netErr) && netErr.Timeout() {
-				delayElapsed = lateDatabaseDelayElapsed(delay, delayElapsed)
-				continue
-			}
 			if ctx.Err() != nil && errors.Is(acceptErr, net.ErrClosed) {
 				return nil
 			}
-			return fmt.Errorf("accept database connection: %w", acceptErr)
+			return acceptErr
+		}
+		if timedOut {
+			if ctx.Err() != nil {
+				return nil
+			}
+			delayElapsed = lateDatabaseDelayElapsed(delay, delayElapsed)
+			if stats.polls.Add(1) >= int32(pollLimit) {
+				return fmt.Errorf("proxy accept loop reached %d polls", pollLimit)
+			}
+			continue
 		}
 		accepted++
 		if accepted > maxProxyAccepts*2 {
@@ -142,16 +167,32 @@ func serveLateDatabaseProxy(t *testing.T, ctx context.Context, ln *net.TCPListen
 			return fmt.Errorf("accepted %d database connections: bound reached", accepted)
 		}
 		delayElapsed = lateDatabaseDelayElapsed(delay, delayElapsed)
-		ready := lateDatabaseProxyForwards(delayElapsed, stats.rejected.Load())
+		ready := lateDatabaseProxyForwards(delayElapsed, stats.rejected.Load(), minRejected)
 		if err := handleLateDatabaseConnection(t, ctx, conn, ready, realAddr, stats, &active); err != nil {
 			return err
 		}
 		if timer == nil && stats.rejected.Load() > 0 {
-			timer = time.NewTimer(lateDBDelay)
+			timer = time.NewTimer(rejectWindow)
 			delay = timer.C
 		}
 	}
-	return fmt.Errorf("proxy accept loop reached %d polls", maxProxyPolls)
+	return fmt.Errorf("proxy accept loop reached total iteration bound of %d", pollLimit+2*maxProxyAccepts+1)
+}
+
+// acceptLateDatabaseConnection reports a deadline timeout separately from an accept.
+func acceptLateDatabaseConnection(ln *net.TCPListener) (net.Conn, bool, error) {
+	if err := ln.SetDeadline(clockwork.NewRealClock().Now().Add(proxyPollInterval)); err != nil {
+		return nil, false, fmt.Errorf("deadline on proxy listener: %w", err)
+	}
+	conn, err := ln.Accept()
+	if err != nil {
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return nil, true, nil
+		}
+		return nil, false, fmt.Errorf("accept database connection: %w", err)
+	}
+	return conn, false, nil
 }
 
 // lateDatabaseDelayElapsed reports whether the delay window opened at the first
@@ -168,10 +209,10 @@ func lateDatabaseDelayElapsed(delay <-chan time.Time, elapsed bool) bool {
 	}
 }
 
-// lateDatabaseProxyForwards reports whether the delay window opened at the first
-// rejected connection and at least one connection was rejected.
-func lateDatabaseProxyForwards(delayElapsed bool, rejected int32) bool {
-	return delayElapsed && rejected > 0
+// lateDatabaseProxyForwards requires both the reject window and minimum count.
+// The caller bounds accepted connections and timed-out polls separately.
+func lateDatabaseProxyForwards(delayElapsed bool, rejected, minRejected int32) bool {
+	return delayElapsed && rejected >= minRejected && minRejected >= 1
 }
 
 func TestLateDatabaseProxyForwards(t *testing.T) {
@@ -180,19 +221,20 @@ func TestLateDatabaseProxyForwards(t *testing.T) {
 		name         string
 		delayElapsed bool
 		rejected     int32
+		minRejected  int32
 		want         bool
 	}{
-		{name: "delay pending, none rejected", want: false},
-		{name: "delay elapsed, none rejected", delayElapsed: true, want: false},
-		{name: "delay pending, one rejected", rejected: 1, want: false},
-		{name: "delay elapsed, one rejected", delayElapsed: true, rejected: 1, want: true},
-		{name: "delay elapsed, maxProxyAccepts rejected", delayElapsed: true, rejected: maxProxyAccepts, want: true},
+		{name: "delay pending at minimum", rejected: 3, minRejected: 3},
+		{name: "below minimum", delayElapsed: true, rejected: 2, minRejected: 3},
+		{name: "at minimum", delayElapsed: true, rejected: 3, minRejected: 3, want: true},
+		{name: "above minimum", delayElapsed: true, rejected: 4, minRejected: 3, want: true},
+		{name: "zero minimum invalid", delayElapsed: true, rejected: 1},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			if got := lateDatabaseProxyForwards(test.delayElapsed, test.rejected); got != test.want {
-				t.Errorf("lateDatabaseProxyForwards(%v, %d) = %v, want %v", test.delayElapsed, test.rejected, got, test.want)
+			if got := lateDatabaseProxyForwards(test.delayElapsed, test.rejected, test.minRejected); got != test.want {
+				t.Errorf("lateDatabaseProxyForwards(%v, %d, %d) = %v, want %v", test.delayElapsed, test.rejected, test.minRejected, got, test.want)
 			}
 		})
 	}
@@ -444,9 +486,24 @@ func closeProxyConnection(t *testing.T, conn net.Conn) {
 // opens, even when PostgreSQL begins accepting connections after app creation.
 func TestLateDatabaseStart(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), lateDBTimeout)
-	defer cancel()
-	realAddr := newTestDatabase(t).host
+	runLateDatabaseStart(t, lateDBDelay, 1)
+}
+
+// TestLateDatabaseStartWithinRetryBudget requires the reject window and more than
+// the old fixed ten resets before forwarding; accepts and timed-out polls retain
+// separate bounds while startup stays within its deadline.
+func TestLateDatabaseStartWithinRetryBudget(t *testing.T) {
+	t.Parallel()
+	runLateDatabaseStart(t, 3*time.Second, fixedLateDBAttempts+1)
+}
+
+// runLateDatabaseStart requires the reject window and minimum reset count before
+// forwarding, then checks that count; accepted connections and timed-out polls
+// remain separately bounded by the proxy.
+func runLateDatabaseStart(t *testing.T, rejectWindow time.Duration, minRejected int32) {
+	t.Helper()
+	database := newTestDatabase(t)
+	realAddr := database.host
 	var startProxy sync.Once
 	var migrator *dbmigrate.Migrator
 	proxyListener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
@@ -459,9 +516,13 @@ func TestLateDatabaseStart(t *testing.T) {
 		}
 	})
 	var proxyStats *lateDatabaseProxyStats
+	ctx, cancel := context.WithTimeout(t.Context(), lateDBTimeout)
+	defer cancel()
 	app, _ := startOnFreePort(ctx, t, freeAddr, func(grpcAddr string) *fx.App {
-		cfg := lateDatabaseConfig(t, grpcAddr, proxyListener.Addr().String())
-		startProxy.Do(func() { proxyStats = startLateDatabaseProxy(t, ctx, proxyListener, realAddr) })
+		cfg := lateDatabaseConfig(t, ctx, database, grpcAddr, proxyListener.Addr().String())
+		startProxy.Do(func() {
+			proxyStats = startLateDatabaseProxy(t, ctx, proxyListener, realAddr, rejectWindow, minRejected)
+		})
 		return fx.New(
 			fx.Supply(buildinfo.Info{Version: "test"}), Module,
 			fx.Decorate(func(*config.Config) *config.Config { return cfg }),
@@ -479,7 +540,9 @@ func TestLateDatabaseStart(t *testing.T) {
 	if err != nil || dirty || version == 0 {
 		t.Errorf("migrated schema: version %d, dirty %v, error %v", version, dirty, err)
 	}
-	if proxyStats == nil || proxyStats.rejected.Load() == 0 {
-		t.Error("late database proxy did not reject a connection before forwarding")
+	if proxyStats == nil {
+		t.Error("late database proxy did not start")
+	} else if rejected := proxyStats.rejected.Load(); rejected < minRejected {
+		t.Errorf("late database proxy rejected %d connections, want at least %d", rejected, minRejected)
 	}
 }
