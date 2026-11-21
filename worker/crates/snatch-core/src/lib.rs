@@ -102,6 +102,30 @@ impl PagePlan {
         Self::sequential(total_pages, MAX_PAGES_PER_CYCLE.min(total_pages), 1)
     }
 
+    /// Plans additional pages after the planned pages yielded too few eligible candidates.
+    #[must_use]
+    pub fn refill<R: RngExt>(
+        &self,
+        total_records: u32,
+        page_size: u32,
+        selection: Selection,
+        rng: &mut R,
+    ) -> Self {
+        let total_pages = total_records.div_ceil(page_size.max(1));
+        let allowed = MAX_PAGES_PER_CYCLE.min(total_pages);
+        let remaining = allowed.saturating_sub(u32::try_from(self.pages.len()).unwrap_or(u32::MAX));
+        if remaining == 0 {
+            return Self {
+                pages: Vec::new(),
+                next_cursor: self.next_cursor,
+            };
+        }
+        if selection == Selection::Sequential {
+            return Self::sequential(total_pages, remaining, self.next_cursor);
+        }
+        Self::random_excluding(total_pages, remaining, &self.pages, self.next_cursor, rng)
+    }
+
     fn random<R: RngExt>(total_pages: u32, count: u32, rng: &mut R) -> Self {
         let mut pages = Vec::with_capacity(count as usize);
         // Bounded rejection sampling: at most 8 * count draws.
@@ -118,6 +142,34 @@ impl PagePlan {
             pages,
             next_cursor: 1,
         }
+    }
+
+    fn random_excluding<R: RngExt>(
+        total_pages: u32,
+        count: u32,
+        excluded: &[u32],
+        next_cursor: u32,
+        rng: &mut R,
+    ) -> Self {
+        let mut pages = Vec::with_capacity(count as usize);
+        if total_pages <= MAX_PAGES_PER_CYCLE {
+            for page in 1..=total_pages {
+                if !excluded.contains(&page) {
+                    pages.push(page);
+                }
+            }
+        } else {
+            let max_draws = count.saturating_mul(8);
+            let mut draws = 0;
+            while u32::try_from(pages.len()).unwrap_or(u32::MAX) < count && draws < max_draws {
+                draws = draws.saturating_add(1);
+                let page = rng.random_range(1..=total_pages);
+                if !excluded.contains(&page) && !pages.contains(&page) {
+                    pages.push(page);
+                }
+            }
+        }
+        Self { pages, next_cursor }
     }
 
     fn sequential(total_pages: u32, count: u32, cursor: u32) -> Self {
@@ -846,6 +898,26 @@ mod tests {
         }
 
         #[test]
+        fn refill_pages_are_disjoint_bounded_and_complete(total in 0u32..5000, size in 1u32..250, want in 1u32..100, cursor in 0u32..60, seed in any::<u64>()) {
+            let total_pages = total.div_ceil(size);
+            for selection in [Selection::Random, Selection::Sequential, Selection::Recent] {
+                let mut rng = SmallRng::seed_from_u64(seed);
+                let plan = PagePlan::plan(total, size, want, selection, cursor, &mut rng);
+                let refill = plan.refill(total, size, selection, &mut rng);
+                let all: BTreeSet<u32> = plan.pages.iter().chain(&refill.pages).copied().collect();
+                prop_assert_eq!(all.len(), plan.pages.len() + refill.pages.len());
+                prop_assert!(all.iter().all(|page| (1..=total_pages).contains(page)));
+                prop_assert!(all.len() <= MAX_PAGES_PER_CYCLE.min(total_pages) as usize);
+                if total_pages > 0 && total_pages <= MAX_PAGES_PER_CYCLE {
+                    prop_assert_eq!(all, (1..=total_pages).collect());
+                }
+            }
+            let sweep = PagePlan::sweep(total, size);
+            let mut rng = SmallRng::seed_from_u64(seed);
+            prop_assert!(sweep.refill(total, size, Selection::Random, &mut rng).pages.is_empty());
+        }
+
+        #[test]
         fn filter_never_keeps_future_or_unmonitored(cands in arb_candidates(), now in -1000i64..1000) {
             let f = Filter { monitored_only: true, skip_future: true, now_unix: now, ..Filter::default() };
             let kept = filter(&cands, &f);
@@ -1036,6 +1108,53 @@ mod tests {
             before.sort_unstable();
             after.sort_unstable();
             prop_assert_eq!(before, after);
+        }
+    }
+
+    #[test]
+    fn refill_continues_and_preserves_sequential_cursor() {
+        let mut rng = SmallRng::seed_from_u64(11);
+        let random = PagePlan::plan(1084, 100, 10, Selection::Random, 1, &mut rng);
+        let refill = random.refill(1084, 100, Selection::Random, &mut rng);
+        let pages: BTreeSet<u32> = random.pages.iter().chain(&refill.pages).copied().collect();
+        assert_eq!(random.pages.len(), 1);
+        assert_eq!(refill.pages.len(), 7);
+        assert_eq!(pages.len(), 8);
+
+        let sequential = PagePlan::plan(50, 10, 2, Selection::Sequential, 1, &mut rng);
+        let refill = sequential.refill(50, 10, Selection::Sequential, &mut rng);
+        assert_eq!(sequential.pages, [1]);
+        assert_eq!(refill.pages, [2, 3, 4, 5]);
+        assert_eq!(refill.next_cursor, 1);
+    }
+
+    #[test]
+    fn refill_handles_empty_single_page_and_full_recent_plan() {
+        let mut rng = SmallRng::seed_from_u64(12);
+        for total in [0, 1] {
+            let plan = PagePlan::plan(total, 10, 2, Selection::Random, 1, &mut rng);
+            assert!(
+                plan.refill(total, 10, Selection::Random, &mut rng)
+                    .pages
+                    .is_empty()
+            );
+        }
+        let recent = PagePlan::plan(200, 10, 2, Selection::Recent, 1, &mut rng);
+        assert!(
+            recent
+                .refill(200, 10, Selection::Recent, &mut rng)
+                .pages
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn refill_never_returns_a_planned_page_across_seeds() {
+        for seed in 0..200 {
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let plan = PagePlan::plan(20_000, 100, 10, Selection::Random, 1, &mut rng);
+            let refill = plan.refill(20_000, 100, Selection::Random, &mut rng);
+            assert!(refill.pages.iter().all(|page| !plan.pages.contains(page)));
         }
     }
 

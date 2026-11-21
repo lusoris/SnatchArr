@@ -38,8 +38,10 @@ the planner alone; leasing and the searches the workers send are not part of the
 single snatch goes after. Candidates are filtered **first** (monitored, released, not in
 afterglow, not already in the download queue, not grabbed within `recent_grab_window_h`,
 matching the tag and quality profile filters, released at least `release_delay_h` ago)
-and selected **after**, so a snatch is never short because it drew an unlucky page.
-Selection is `random` (a random page, then random items), `sequential` (a cursor that
+and selected **after**. When planned pages leave fewer candidates than the per-cycle count,
+the same run reads more pages (up to 8 in all) before selecting, so a snatch is short only
+when those pages hold too few eligible items.
+Selection is `random` (random pages, then random items), `sequential` (a cursor that
 walks the whole backlog) or `recent` (newest releases first, with one pick in five drawn
 from the older backlog so it never starves).
 
