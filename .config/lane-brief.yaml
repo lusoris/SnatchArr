@@ -1,0 +1,20 @@
+# Lines a lane brief must carry before praetor agy-run.sh launches it
+# (praetor tools/lanes/brief_stage.py, `required` + `required_by_stage`).
+#
+# Why: the repository gate runs the Semgrep rules in .semgrep.yml, but a
+# lane brief that only lists vet, lint and tests lets a lane draft reach
+# the gate with a finding the lane never saw (PR 1244 round r14: rule
+# no-unbounded-http-body-read at api/internal/metadata/tvdb/transport.go:71).
+# Every implementation and fix brief therefore runs the same rules locally.
+#
+# The brief names the repository's scan script, not a bare `semgrep scan`:
+# a hand-written scan of a directory skips every *_test.go file without a
+# word (PR 1244 round r16: 10 rules on 2 files instead of 14 rules on 9),
+# while the script lists the Go files itself, replays the rule fixtures
+# and fails when the report did not scan each file it was given. Lane
+# sandboxes have no docker, so the brief uses its native-binary mode.
+required_by_stage:
+  impl:
+    - "python3 -I tools/ci/semgrep_scan.py --semgrep"
+  fix:
+    - "python3 -I tools/ci/semgrep_scan.py --semgrep"
