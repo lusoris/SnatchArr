@@ -10,8 +10,9 @@
 # Dockerfile (docker-local-action), three distinct repositories batched into one GraphQL POST
 # (three-repos), GITHUB_GRAPHQL_URL overriding the REST v3 URL variable (graphql-url-override),
 # default GraphQL URL when only the REST v3 URL variable is set (graphql-url-ignores-v3-url),
-# workflow-refs.yml carrying no uses entry (guard-job-no-uses), and bash versions 4.4, 5.0 and 5.2
-# (bash-version-4-4, bash-version-5-0, bash-version-5-2).
+# workflow-refs.yml carrying no uses entry (guard-job-no-uses), bash versions 4.4, 5.0 and 5.2
+# (bash-version-4-4, bash-version-5-0, bash-version-5-2), and stubs in this file and in
+# workflow-check_test.sh that run no GNU timeout (stubs-no-gnu-timeout).
 # Refused: a reusable workflow under a moved repository name (moved-workflow), a composite action
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
@@ -39,31 +40,24 @@
 # bash-version-4-x, bash-version-empty).
 # Platform (HISS-21): runs on Linux and macOS with bash 4.4 or newer (workflow_refs.sh uses
 # mapfile -d, associative arrays and ${var,,}); skips with a stated reason and exits 0 on older
-# bash such as macOS stock bash 3.2 or when neither timeout nor gtimeout is installed.
+# bash such as macOS stock bash 3.2.
 #
 #   tools/ci/workflow_refs_test.sh
 #
 # Exit status: 0 every case behaved as recorded (or skipped on missing prerequisite), 1 otherwise.
-# Needs bash 4.4 or newer (mapfile -d), timeout or gtimeout (GNU coreutils), python3 (with PyYAML or venv + network for pyyaml_venv.sh) and jq.
+# Needs bash 4.4 or newer (mapfile -d), python3 (with PyYAML or venv + network for
+# pyyaml_venv.sh) and jq.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Stubs run their reads under this portable deadline runner instead of GNU timeout.
+export RUN_BOUNDED_PY="$HERE/run_bounded.py"
 # shellcheck source=tools/ci/bash_version.sh
 . "$HERE/bash_version.sh"
 if ! bash_version_supported "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"; then
   echo "skip workflow_refs_test.sh: needs bash 4.4 or newer (mapfile -d), found $BASH_VERSION"
   exit 0
 fi
-
-if command -v timeout > /dev/null 2>&1; then
-  STUB_TIMEOUT="timeout"
-elif command -v gtimeout > /dev/null 2>&1; then
-  STUB_TIMEOUT="gtimeout"
-else
-  echo "skip workflow_refs_test.sh: needs timeout or gtimeout (GNU coreutils), found neither"
-  exit 0
-fi
-export STUB_TIMEOUT
 
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
@@ -257,7 +251,7 @@ plant_guard_step() {
 cat > "$WORK/curl-moved" <<'SH'
 #!/bin/sh
 set -eu
-"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 if [ -n "${CURL_COUNT_FILE:-}" ]; then
   count=0
   if [ -f "$CURL_COUNT_FILE" ]; then
@@ -278,7 +272,7 @@ for arg in "$@"; do
   prev="$arg"
 done
 [ -n "$payload" ] || exit 22
-printf '%s\n' "$payload" | "$STUB_TIMEOUT" 5 jq -c '
+printf '%s\n' "$payload" | python3 -I "$RUN_BOUNDED_PY" 5 jq -c '
   .query as $q
   | reduce ([ $q | match("(?<a>r[0-9]+):\\s*repository\\(owner:\\s*\"(?<o>[A-Za-z0-9_.-]+)\",\\s*name:\\s*\"(?<n>[A-Za-z0-9_.-]+)\"\\)"; "g") ][:200][]) as $m (
       {};
@@ -302,7 +296,7 @@ for arg in "$@"; do
   last="$arg"
 done
 if [ -z "${STUB_WANT_URL:-}" ] || [ "$last" != "$STUB_WANT_URL" ]; then
-  "$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+  python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
   exit 22
 fi
 exec "$(dirname "$0")/curl-moved" "$@"
@@ -310,49 +304,49 @@ SH
 cat > "$WORK/curl-fails" <<'SH'
 #!/bin/sh
 set -eu
-"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 exit 22
 SH
 cat > "$WORK/curl-nameless" <<'SH'
 #!/bin/sh
 set -eu
-"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 echo "{}"
 SH
 cat > "$WORK/curl-gql-errors" <<'SH'
 #!/bin/sh
 set -eu
-"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 printf '%s\n' '{"data":{"r0":{"nameWithOwner":"actions/checkout"}},"errors":[{"message":"API rate limit exceeded"}]}'
 SH
 cat > "$WORK/curl-null-alias" <<'SH'
 #!/bin/sh
 set -eu
-"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 printf '%s\n' '{"data":{"r0":null}}'
 SH
 cat > "$WORK/curl-two-objects-errors" <<'SH'
 #!/bin/sh
 set -eu
-"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 printf '%s\n' '{"errors":[{"message":"boom"}],"data":{"r0":{"nameWithOwner":"actions/checkout"}}} {}'
 SH
 cat > "$WORK/curl-two-data-objects" <<'SH'
 #!/bin/sh
 set -eu
-"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 printf '%s\n' '{"data":{"r0":{"nameWithOwner":"actions/checkout"}}} {"data":{"r0":{"nameWithOwner":"actions/checkout"}}}'
 SH
 cat > "$WORK/curl-newline-name" <<'SH'
 #!/bin/sh
 set -eu
-"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 printf '%s\n' '{"data":{"r0":{"nameWithOwner":"actions/checkout\nother/repo"}}}'
 SH
 cat > "$WORK/curl-trailing-newline-name" <<'SH'
 #!/bin/sh
 set -eu
-"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 printf '%s\n' '{"data":{"r0":{"nameWithOwner":"actions/checkout\n"}}}'
 SH
 chmod +x "$WORK/curl-moved" "$WORK/curl-want-url" "$WORK/curl-fails" "$WORK/curl-nameless" \
@@ -830,5 +824,42 @@ for ((ver_i = 0; ver_i < 3 && ver_i < ${#bash_ver_accepted[@]}; ver_i++)); do
   accepted=$((accepted + 1))
   echo "ok   bash-version-$ver_label: accepted ($ver_desc)"
 done
+
+# stub_scripts_have_no_gnu_timeout FILE...: fail naming the first line of FILE (at most 4 files,
+# 65536 lines each) outside a comment that runs GNU timeout, gtimeout or the retired stub variable.
+stub_scripts_have_no_gnu_timeout() {
+  local re='(^|[|;&(]|[[:space:]])"?\$?\{?(g?time' file line n
+  re+='out|STUB_TIME'
+  re+='OUT)\}?"?[[:space:]]'
+  if [ "$#" -gt 4 ]; then
+    echo "stub_scripts_have_no_gnu_timeout: at most 4 files, got $#"
+    return 1
+  fi
+  for file in "$@"; do
+    n=0
+    while IFS= read -r line || [ -n "$line" ]; do
+      n=$((n + 1))
+      if [ "$n" -gt 65536 ]; then
+        echo "$file: more than 65536 lines"
+        return 1
+      fi
+      if [[ $line =~ ^[[:space:]]*# ]]; then
+        continue
+      fi
+      if [[ $line =~ $re ]]; then
+        echo "$file:$n: $line"
+        return 1
+      fi
+    done < "$file"
+  done
+}
+
+stub_files=("$HERE/workflow_refs_test.sh" "$HERE/workflow-check_test.sh")
+if ! hit="$(stub_scripts_have_no_gnu_timeout "${stub_files[@]}")"; then
+  printf 'FAIL stubs-no-gnu-timeout: %s\n' "$hit" >&2
+  exit 1
+fi
+accepted=$((accepted + 1))
+echo "ok   stubs-no-gnu-timeout: accepted (stubs read under run_bounded.py)"
 
 echo "workflow refs: $accepted accepted, $refused refused"
