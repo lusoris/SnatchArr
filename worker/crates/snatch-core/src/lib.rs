@@ -124,7 +124,9 @@ impl PagePlan {
 
     /// Plans additional pages after the planned pages yielded too few eligible candidates,
     /// keeping the run within [`MAX_PAGES_PER_CYCLE`] distinct wanted-page requests, the
-    /// page-1 metadata read included.
+    /// page-1 metadata read included. Sequential walks unread pages from `self.next_cursor`
+    /// and advances it; Recent walks unread pages in list order from page 1 and keeps
+    /// `self.next_cursor`; Random samples unread pages uniformly.
     #[must_use]
     pub fn refill<R: RngExt>(
         &self,
@@ -155,13 +157,18 @@ impl PagePlan {
         if prepend_first {
             pages.push(1);
         }
-        let (new_pages, next_cursor) = if selection == Selection::Sequential {
-            Self::sequential_excluding(total_pages, budget, self.next_cursor, &read_set)
-        } else {
-            (
+        let (new_pages, next_cursor) = match selection {
+            Selection::Sequential => {
+                Self::sequential_excluding(total_pages, budget, self.next_cursor, &read_set)
+            }
+            Selection::Recent => {
+                let (unread, _) = Self::sequential_excluding(total_pages, budget, 1, &read_set);
+                (unread, self.next_cursor)
+            }
+            Selection::Random => (
                 Self::sample_unread(total_pages, budget, &read_set, rng),
                 self.next_cursor,
-            )
+            ),
         };
         pages.extend(new_pages);
         Self { pages, next_cursor }
@@ -351,12 +358,12 @@ impl Filter {
     }
 }
 
-/// How many of `candidates` [`Filter`] drops only because they are not yet available: they
-/// pass every other rule. 0 when the filter does not skip unavailable items.
+/// Ids of `candidates` [`Filter`] drops only because they are not yet available: they pass
+/// every other rule. Empty when the filter does not skip unavailable items.
 #[must_use]
-pub fn unavailable_count(candidates: &[Candidate], f: &Filter) -> usize {
+pub fn unavailable_ids(candidates: &[Candidate], f: &Filter) -> Vec<i64> {
     if !f.skip_unavailable {
-        return 0;
+        return Vec::new();
     }
     let others = Filter {
         skip_unavailable: false,
@@ -365,7 +372,15 @@ pub fn unavailable_count(candidates: &[Candidate], f: &Filter) -> usize {
     candidates
         .iter()
         .filter(|c| c.available == Some(false) && others.admits(c))
-        .count()
+        .map(|c| c.id)
+        .collect()
+}
+
+/// How many of `candidates` [`Filter`] drops only because they are not yet available: they
+/// pass every other rule. 0 when the filter does not skip unavailable items.
+#[must_use]
+pub fn unavailable_count(candidates: &[Candidate], f: &Filter) -> usize {
+    unavailable_ids(candidates, f).len()
 }
 
 /// Applies [`Filter`], preserving order.
@@ -1207,11 +1222,24 @@ mod tests {
         assert_eq!(refill.pages.len(), 7);
         assert_eq!(pages.len(), 8);
 
-        let sequential = PagePlan::plan(50, 10, 2, Selection::Sequential, 1, &mut rng);
-        let refill = sequential.refill(50, 10, Selection::Sequential, &mut rng);
+        // 20 pages stops at page 8 (cursor 9) instead of wrapping to 1 like an unmoved cursor.
+        let sequential = PagePlan::plan(200, 10, 2, Selection::Sequential, 1, &mut rng);
+        let refill = sequential.refill(200, 10, Selection::Sequential, &mut rng);
         assert_eq!(sequential.pages, [1]);
-        assert_eq!(refill.pages, [2, 3, 4, 5]);
-        assert_eq!(refill.next_cursor, 1);
+        assert_eq!(refill.pages, [2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(refill.next_cursor, 9);
+    }
+
+    #[test]
+    fn recent_refill_reads_unread_pages_in_order() {
+        let mut rng = SmallRng::seed_from_u64(7);
+        let plan = PagePlan {
+            pages: vec![1, 2],
+            next_cursor: 3,
+        };
+        let refill = plan.refill(100, 10, Selection::Recent, &mut rng);
+        assert_eq!(refill.pages, [3, 4, 5, 6, 7, 8]);
+        assert_eq!(refill.next_cursor, 3);
     }
 
     #[test]

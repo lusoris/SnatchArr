@@ -153,13 +153,12 @@ fn wanted_pages_at(
     prefix: &str,
 ) -> Result<Vec<u32>, Box<dyn std::error::Error>> {
     let wanted = format!("{prefix}/wanted/missing");
-    let mut pages = requests
+    let pages = requests
         .iter()
         .filter(|request| request.method == "GET" && request.url.path() == wanted)
         .filter_map(|request| request.url.query_pairs().find(|(key, _)| key == "page"))
         .map(|(_, value)| value.parse::<u32>())
         .collect::<Result<Vec<_>, _>>()?;
-    pages.sort_unstable();
     Ok(pages)
 }
 
@@ -215,7 +214,9 @@ async fn sonarr_refills_random_pages_until_per_cycle_is_met() -> TestResult {
         run_short_polling(client, run).await;
         let requests = some(server.received_requests().await, "recorded requests")?;
         assert_eq!(dispatched_ids(&requests, "episodeIds")?, ids);
-        assert_eq!(wanted_pages(&requests)?, [1, 2, 3]);
+        let mut pages = wanted_pages(&requests)?;
+        pages.sort_unstable();
+        assert_eq!(pages, [1, 2, 3]);
     }
     Ok(())
 }
@@ -248,7 +249,9 @@ async fn radarr_refills_random_pages_until_per_cycle_is_met() -> TestResult {
     run_short_polling(client, run).await;
     let requests = some(server.received_requests().await, "recorded requests")?;
     assert_eq!(dispatched_ids(&requests, "movieIds")?, ids);
-    assert_eq!(wanted_pages(&requests)?, [1, 2, 3]);
+    let mut pages = wanted_pages(&requests)?;
+    pages.sort_unstable();
+    assert_eq!(pages, [1, 2, 3]);
     Ok(())
 }
 
@@ -329,7 +332,8 @@ async fn sequential_refill_persists_the_cursor_after_the_last_page() -> TestResu
     };
     let (client, _) = start_fake_api(api.clone()).await?;
     let server = MockServer::start().await;
-    let pages: Vec<_> = (1..=5)
+    // 20 pages stops at page 8 (cursor 9) instead of wrapping to 1 like an unmoved cursor.
+    let pages: Vec<_> = (1..=20)
         .map(|page| {
             let records = if page == 5 {
                 episodes(&[(50, 50)])
@@ -339,7 +343,7 @@ async fn sequential_refill_persists_the_cursor_after_the_last_page() -> TestResu
             (page, records)
         })
         .collect();
-    mount_paged(&server, &pages, 50).await;
+    mount_paged(&server, &pages, 200).await;
     let mut run = default_run(&server.uri());
     policy(&mut run, 2, CoreSelection::Sequential, "1")?;
     run_short_polling(client, run).await;
@@ -349,7 +353,7 @@ async fn sequential_refill_persists_the_cursor_after_the_last_page() -> TestResu
             "CompleteRun request"
         )?
         .cursor,
-        "1"
+        "9"
     );
     Ok(())
 }
@@ -382,12 +386,9 @@ async fn every_app_refills_until_per_cycle_is_met() -> TestResult {
         run_short_polling(client, run).await;
         let requests = some(server.received_requests().await, "recorded requests")?;
         assert_eq!(completed_searched_ids(&api).await?, ids, "{}", row.name);
-        assert_eq!(
-            wanted_pages_at(&requests, row.prefix)?,
-            [1, 2, 3],
-            "{}",
-            row.name
-        );
+        let mut pages = wanted_pages_at(&requests, row.prefix)?;
+        pages.sort_unstable();
+        assert_eq!(pages, [1, 2, 3], "{}", row.name);
     }
     Ok(())
 }
@@ -467,13 +468,14 @@ async fn every_app_persists_the_sequential_cursor() -> TestResult {
         };
         let (client, _) = start_fake_api(api.clone()).await?;
         let server = MockServer::start().await;
-        let pages: Vec<_> = (1..=5)
+        // 20 pages stops at page 8 (cursor 9) instead of wrapping to 1 like an unmoved cursor.
+        let pages: Vec<_> = (1..=20)
             .map(|page| {
                 let ids: &[i64] = if page == 5 { &[50] } else { &[] };
                 (page, row_records(row, ids))
             })
             .collect();
-        mount_paged_at(&server, row.prefix, &pages, 50).await;
+        mount_paged_at(&server, row.prefix, &pages, 200).await;
         let mut run = default_run(&server.uri());
         run.app = row.app as i32;
         policy(&mut run, 2, CoreSelection::Sequential, "1")?;
@@ -481,7 +483,7 @@ async fn every_app_persists_the_sequential_cursor() -> TestResult {
         let requests = some(server.received_requests().await, "recorded requests")?;
         assert_eq!(
             wanted_pages_at(&requests, row.prefix)?,
-            [1, 2, 3, 4, 5],
+            [1, 2, 3, 4, 5, 6, 7, 8],
             "{}",
             row.name
         );
@@ -492,7 +494,7 @@ async fn every_app_persists_the_sequential_cursor() -> TestResult {
         )?
         .cursor
         .clone();
-        assert_eq!(cursor, "1", "{}", row.name);
+        assert_eq!(cursor, "9", "{}", row.name);
     }
     Ok(())
 }
@@ -582,6 +584,184 @@ async fn refill_rereads_busy_items() -> TestResult {
     let title = &some(filtered, "CandidatesFiltered event")?.title;
     assert!(
         title.contains("1 skipped as queued or grabbed"),
+        "unexpected title: {title}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn filter_batches_stay_within_the_api_limit() -> TestResult {
+    let eligible: Vec<i64> = (1..=8000).collect();
+    let api = FakeApi {
+        filter_unprocessed: eligible.clone(),
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    let pages: Vec<_> = (1u32..=8)
+        .map(|page| {
+            let start = i64::from(page.saturating_sub(1))
+                .saturating_mul(1000)
+                .saturating_add(1);
+            let end = i64::from(page).saturating_mul(1000);
+            let rows: Vec<_> = (start..=end).map(|id| (id, id)).collect();
+            (page, episodes(&rows))
+        })
+        .collect();
+    mount_paged(&server, &pages, 8000).await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 10, CoreSelection::Recent, "1")?;
+    some(run.policy.as_mut(), "policy")?.page_size = 1000;
+    run_short_polling(client, run).await;
+    assert_eq!(completed_searched_ids(&api).await?.len(), 10);
+    let calls = api.filter_calls.lock().await;
+    assert!(!calls.is_empty(), "expected FilterCandidates calls");
+    assert!(
+        calls.iter().all(|batch| batch.len() <= MAX_FILTER_BATCH),
+        "a FilterCandidates batch exceeded {MAX_FILTER_BATCH}"
+    );
+    let sent: BTreeSet<i64> = calls.iter().flatten().copied().collect();
+    let expected: BTreeSet<i64> = eligible.into_iter().collect();
+    assert_eq!(sent, expected);
+    Ok(())
+}
+
+#[tokio::test]
+async fn revalidation_drops_items_processed_during_refill() -> TestResult {
+    let api = FakeApi {
+        filter_script: vec![vec![10], vec![20], vec![20]],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    mount_paged(
+        &server,
+        &[(1, episodes(&[(10, 100)])), (2, episodes(&[(20, 200)]))],
+        20,
+    )
+    .await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 2, CoreSelection::Sequential, "1")?;
+    run_short_polling(client, run).await;
+    let requests = some(server.received_requests().await, "recorded requests")?;
+    assert_eq!(dispatched_ids(&requests, "episodeIds")?, [20]);
+    assert_eq!(completed_searched_ids(&api).await?, [20]);
+    let events = api.reported_events.lock().await;
+    assert!(
+        events.iter().any(|ev| {
+            ev.level == Level::Debug as i32
+                && ev.r#type == EventType::CandidatesFiltered as i32
+                && ev.title.contains("dropped 1 candidate(s)")
+        }),
+        "expected CandidatesFiltered event naming the drop: {events:?}"
+    );
+    Ok(())
+}
+
+fn radarr_movie(id: i64, available: bool) -> serde_json::Value {
+    serde_json::json!({
+        "id": id, "title": format!("Film {id}"), "monitored": true, "isAvailable": available
+    })
+}
+
+#[tokio::test]
+async fn merge_counts_a_repeated_skip_once() -> TestResult {
+    let api = FakeApi {
+        filter_unprocessed: vec![1, 2, 3],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    let first = serde_json::json!([radarr_movie(1, true), radarr_movie(2, false)]);
+    let second = serde_json::json!([
+        radarr_movie(1, true),
+        radarr_movie(2, false),
+        radarr_movie(3, true)
+    ]);
+    for (page, records) in [(1u32, first), (2, second)] {
+        let body = serde_json::json!({"page": page, "pageSize": 10, "totalRecords": 20, "records": records});
+        Mock::given(method("GET"))
+            .and(path("/api/v3/wanted/missing"))
+            .and(query_param("page", page.to_string()))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .mount(&server)
+            .await;
+    }
+    let queue = serde_json::json!({"page": 1, "pageSize": 10, "totalRecords": 1, "records": [{"movieId": 1}]});
+    for (ep, body) in [
+        ("/api/v3/queue", queue),
+        ("/api/v3/history/since", serde_json::json!([])),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(ep))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .mount(&server)
+            .await;
+    }
+    mount_command(&server, queued_command()).await;
+    let mut run = default_run(&server.uri());
+    run.app = AppKind::Radarr as i32;
+    policy(&mut run, 2, CoreSelection::Sequential, "1")?;
+    some(run.policy.as_mut(), "policy")?.skip_unavailable_movies = true;
+    run_short_polling(client, run).await;
+    assert_eq!(completed_searched_ids(&api).await?, [3]);
+    let events = api.reported_events.lock().await;
+    let filtered = events
+        .iter()
+        .find(|ev| ev.r#type == EventType::CandidatesFiltered as i32);
+    let title = &some(filtered, "CandidatesFiltered event")?.title;
+    assert!(title.contains("1 skipped as queued or grabbed"), "{title}");
+    assert!(title.contains("1 skipped as not yet available"), "{title}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn partial_refill_keeps_fetched_pages() -> TestResult {
+    let api = FakeApi {
+        filter_unprocessed: vec![30, 31],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    mount_paged(
+        &server,
+        &[
+            (1, episodes(&[])),
+            (2, episodes(&[])),
+            (3, episodes(&[(30, 300), (31, 310)])),
+        ],
+        40,
+    )
+    .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v3/wanted/missing"))
+        .and(query_param("page", "4"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+        .mount(&server)
+        .await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 6, CoreSelection::Sequential, "1")?;
+    run_short_polling(client, run).await;
+    assert_eq!(completed_searched_ids(&api).await?, [30, 31]);
+    assert_eq!(
+        some(
+            api.completed_requests.lock().await.first(),
+            "CompleteRun request"
+        )?
+        .cursor,
+        "3"
+    );
+    let events = api.reported_events.lock().await;
+    let warn = events
+        .iter()
+        .find(|ev| ev.level == Level::Warn as i32 && ev.r#type == EventType::PageFetched as i32);
+    let title = &some(warn, "Warn PageFetched event")?.title;
+    assert!(
+        title.contains("refill page 4 failed"),
+        "unexpected title: {title}"
+    );
+    assert!(
+        title.contains("keeping 2 candidate(s) from 1 refill page(s)"),
         "unexpected title: {title}"
     );
     Ok(())

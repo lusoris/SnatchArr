@@ -195,11 +195,12 @@ impl Focus {
 const FOCUS_PAGE_SIZE: u32 = 500;
 
 /// What candidate collection hands to selection.
+#[derive(Default)]
 struct Collected {
     keep: Vec<Candidate>,
-    busy: usize,
+    busy_ids: BTreeSet<i64>,
     /// Dropped only because the app reports them as not yet available (#350).
-    unavailable: usize,
+    unavailable_ids: BTreeSet<i64>,
     priority_ids: Vec<i64>,
     priority_groups: Vec<i64>,
 }
@@ -211,8 +212,8 @@ impl Collected {
                 self.keep.push(candidate);
             }
         }
-        self.busy = self.busy.saturating_add(other.busy);
-        self.unavailable = self.unavailable.saturating_add(other.unavailable);
+        self.busy_ids.extend(other.busy_ids);
+        self.unavailable_ids.extend(other.unavailable_ids);
         self.priority_ids.append(&mut other.priority_ids);
         self.priority_ids.sort_unstable();
         self.priority_ids.dedup();
@@ -222,11 +223,15 @@ impl Collected {
     }
 
     fn drop_busy(&mut self, busy: &[i64]) {
-        let before = self.keep.len();
-        self.keep.retain(|c| busy.binary_search(&c.id).is_err());
-        self.busy = self
-            .busy
-            .saturating_add(before.saturating_sub(self.keep.len()));
+        let busy_ids = &mut self.busy_ids;
+        self.keep.retain(|c| {
+            if busy.binary_search(&c.id).is_ok() {
+                busy_ids.insert(c.id);
+                false
+            } else {
+                true
+            }
+        });
         self.priority_ids
             .retain(|id| busy.binary_search(id).is_err());
     }
@@ -613,9 +618,9 @@ async fn snatch(
     let filter_msg = format!(
         "{} candidate(s) after filters and afterglow; {} skipped as queued or grabbed within {} h; {} skipped as not yet available; {} requested via Seerr",
         c.keep.len(),
-        c.busy,
+        c.busy_ids.len(),
         p.policy.recent_grab_hours,
-        c.unavailable,
+        c.unavailable_ids.len(),
         c.priority_ids.len().saturating_add(c.priority_groups.len())
     );
     events
@@ -634,6 +639,7 @@ async fn snatch(
         &mut rng,
     );
     enrich_dynamic_seasons(&p, &c.keep, &mut selected, events).await;
+    let selected = revalidate_selected(client, &p, run, selected, events).await?;
     let targets = group(p.kind, &p.policy, &selected);
     let dispatch = acquire(client, run, targets, events).await?;
     let by_id: HashMap<i64, Candidate> = selected.iter().map(|c| (c.id, c.clone())).collect();
@@ -800,25 +806,155 @@ async fn plan_pages(p: &Prepared, rng: &mut SmallRng) -> Result<(PagePlan, Wante
     Ok((plan, first))
 }
 
-async fn fetch_unique_candidates(
+/// Maximum entity ids per `FilterCandidates` call (`MaxFilterBatch` in
+/// `api/internal/snatch/memory.go`, HISS-02).
+const MAX_FILTER_BATCH: usize = 5000;
+
+#[derive(Default)]
+struct FilterOutcome {
+    unprocessed_ids: Vec<i64>,
+    priority_ids: Vec<i64>,
+    priority_group_ids: Vec<i64>,
+}
+
+/// Asks the API which of `ids` are unprocessed, in batches of at most [`MAX_FILTER_BATCH`].
+async fn filter_unprocessed(
+    client: &mut Client,
+    run: &Run,
+    entity_type: &str,
+    ids: &[i64],
+) -> Result<FilterOutcome, ExecError> {
+    let mut outcome = FilterOutcome::default();
+    // Bounded by the chunk count: at most ceil(ids.len() / MAX_FILTER_BATCH) calls (HISS-02).
+    for chunk in ids.chunks(MAX_FILTER_BATCH) {
+        let req = FilterCandidatesRequest {
+            run_id: run.run_id.clone(),
+            entity_type: entity_type.to_owned(),
+            entity_ids: chunk.to_vec(),
+        };
+        let mut resp = resend::once_more(|| {
+            let mut c = client.clone();
+            let req = req.clone();
+            async move { c.filter_candidates(Request::new(req)).await }
+        })
+        .await?
+        .into_inner();
+        outcome.unprocessed_ids.append(&mut resp.unprocessed_ids);
+        outcome.priority_ids.append(&mut resp.priority_ids);
+        outcome
+            .priority_group_ids
+            .append(&mut resp.priority_group_ids);
+    }
+    outcome.unprocessed_ids.sort_unstable();
+    outcome.unprocessed_ids.dedup();
+    outcome.priority_ids.sort_unstable();
+    outcome.priority_ids.dedup();
+    outcome.priority_group_ids.sort_unstable();
+    outcome.priority_group_ids.dedup();
+    Ok(outcome)
+}
+
+/// Re-checks `selected` against processed memory before grouping so items processed while
+/// refilling or reading season totals are dropped before dispatch.
+async fn revalidate_selected(
+    client: &mut Client,
     p: &Prepared,
-    pages: &[u32],
-    first: &WantedPage,
+    run: &Run,
+    mut selected: Vec<Candidate>,
+    events: &Events,
 ) -> Result<Vec<Candidate>, ExecError> {
+    if selected.is_empty() {
+        return Ok(selected);
+    }
+    let ids: Vec<i64> = selected.iter().map(|c| c.id).collect();
+    let fresh = filter_unprocessed(client, run, p.kind.entity_type(), &ids).await?;
+    let before = selected.len();
+    selected.retain(|c| fresh.unprocessed_ids.binary_search(&c.id).is_ok());
+    let dropped = before.saturating_sub(selected.len());
+    if dropped > 0 {
+        let msg = format!("revalidation dropped {dropped} candidate(s) processed since filter");
+        events
+            .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+            .await;
+    }
+    Ok(selected)
+}
+
+struct FetchedPages {
+    candidates: Vec<Candidate>,
+    pages_fetched: usize,
+    error: Option<(u32, ExecError)>,
+}
+
+async fn fetch_unique_candidates(p: &Prepared, pages: &[u32], first: &WantedPage) -> FetchedPages {
     let mut candidates = Vec::new();
-    for page in pages {
-        let fetched = if *page == 1 {
+    let mut pages_fetched: usize = 0;
+    let mut error = None;
+    for &page in pages {
+        let fetched = if page == 1 {
             (*first).clone()
         } else {
-            p.arr
-                .wanted_page(p.wanted, *page, p.page_size, release_of(&p.policy))
-                .await?
+            match p
+                .arr
+                .wanted_page(p.wanted, page, p.page_size, release_of(&p.policy))
+                .await
+            {
+                Ok(fetched) => fetched,
+                Err(err) => {
+                    error = Some((page, ExecError::from(err)));
+                    break;
+                }
+            }
         };
+        pages_fetched = pages_fetched.saturating_add(1);
         candidates.extend(fetched.records);
     }
     let mut seen = BTreeSet::new();
     candidates.retain(|c| seen.insert(c.id));
-    Ok(candidates)
+    FetchedPages {
+        candidates,
+        pages_fetched,
+        error,
+    }
+}
+
+async fn filter_fetched_candidates(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    mut candidates: Vec<Candidate>,
+    busy: &[i64],
+) -> Result<Collected, ExecError> {
+    if let Some(focus) = p.focus {
+        candidates.retain(|c| focus.matches(c));
+    }
+    let filter = filter_of(&p.policy, OffsetDateTime::now_utc().unix_timestamp());
+    let filtered = snatch_core::filter(&candidates, &filter);
+    let unavailable_ids: BTreeSet<i64> = snatch_core::unavailable_ids(&candidates, &filter)
+        .into_iter()
+        .collect();
+    let mut busy_ids = BTreeSet::new();
+    let mut unbusy = Vec::with_capacity(filtered.len());
+    for candidate in filtered {
+        if busy.binary_search(&candidate.id).is_ok() {
+            busy_ids.insert(candidate.id);
+        } else {
+            unbusy.push(candidate);
+        }
+    }
+    let ids: Vec<i64> = unbusy.iter().map(|c| c.id).collect();
+    let outcome = filter_unprocessed(client, run, p.kind.entity_type(), &ids).await?;
+    let keep = unbusy
+        .into_iter()
+        .filter(|c| outcome.unprocessed_ids.binary_search(&c.id).is_ok())
+        .collect();
+    Ok(Collected {
+        keep,
+        busy_ids,
+        unavailable_ids,
+        priority_ids: outcome.priority_ids,
+        priority_groups: outcome.priority_group_ids,
+    })
 }
 
 /// Fetches the planned pages, deduplicates shifted records, applies the local filters, drops
@@ -833,42 +969,11 @@ async fn collect_candidates(
     first: &WantedPage,
     busy: &[i64],
 ) -> Result<Collected, ExecError> {
-    let mut candidates = fetch_unique_candidates(p, pages, first).await?;
-    if let Some(focus) = p.focus {
-        candidates.retain(|c| focus.matches(c));
+    let fetched = fetch_unique_candidates(p, pages, first).await;
+    if let Some((_, err)) = fetched.error {
+        return Err(err);
     }
-    let filter = filter_of(&p.policy, OffsetDateTime::now_utc().unix_timestamp());
-    let filtered = snatch_core::filter(&candidates, &filter);
-    let unavailable = snatch_core::unavailable_count(&candidates, &filter);
-    let before = filtered.len();
-    let filtered: Vec<Candidate> = filtered
-        .into_iter()
-        .filter(|c| busy.binary_search(&c.id).is_err())
-        .collect();
-    let skipped = before.saturating_sub(filtered.len());
-    let req = FilterCandidatesRequest {
-        run_id: run.run_id.clone(),
-        entity_type: p.kind.entity_type().to_owned(),
-        entity_ids: filtered.iter().map(|c| c.id).collect(),
-    };
-    let resp = resend::once_more(|| {
-        let mut c = client.clone();
-        let req = req.clone();
-        async move { c.filter_candidates(Request::new(req)).await }
-    })
-    .await?
-    .into_inner();
-    let keep = filtered
-        .into_iter()
-        .filter(|c| resp.unprocessed_ids.contains(&c.id))
-        .collect();
-    Ok(Collected {
-        keep,
-        busy: skipped,
-        unavailable,
-        priority_ids: resp.priority_ids,
-        priority_groups: resp.priority_group_ids,
-    })
+    filter_fetched_candidates(client, p, run, fetched.candidates, busy).await
 }
 
 async fn refresh_busy(p: &Prepared, run: &Run, collected: &mut Collected, events: &Events) {
@@ -884,6 +989,115 @@ async fn refresh_busy(p: &Prepared, run: &Run, collected: &mut Collected, events
             events
                 .emit(Ev::run(Level::Warn, EventType::CandidatesFiltered, msg))
                 .await;
+        }
+    }
+}
+
+enum RefillBatch {
+    Complete(Collected),
+    Partial {
+        collected: Collected,
+        pages_fetched: usize,
+        failed_page: u32,
+        error: ExecError,
+    },
+    FilterFailed(ExecError),
+}
+
+async fn collect_refill_batch(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    pages: &[u32],
+    first: &WantedPage,
+    busy: &[i64],
+) -> RefillBatch {
+    let fetched = fetch_unique_candidates(p, pages, first).await;
+    let collected = match filter_fetched_candidates(client, p, run, fetched.candidates, busy).await
+    {
+        Ok(collected) => collected,
+        Err(err) => return RefillBatch::FilterFailed(err),
+    };
+    match fetched.error {
+        None => RefillBatch::Complete(collected),
+        Some((failed_page, error)) => RefillBatch::Partial {
+            collected,
+            pages_fetched: fetched.pages_fetched,
+            failed_page,
+            error,
+        },
+    }
+}
+
+async fn emit_refill_page_warning(
+    run: &Run,
+    failed_page: u32,
+    pages_fetched: usize,
+    err: &ExecError,
+    kept: usize,
+    events: &Events,
+) {
+    tracing::warn!(
+        run = %run.run_id,
+        page = failed_page,
+        pages_fetched,
+        error = %err,
+        kept,
+        "refill page failed; keeping collected candidates"
+    );
+    let msg = format!(
+        "refill page {failed_page} failed ({err}); keeping {kept} candidate(s) from {pages_fetched} refill page(s)"
+    );
+    events
+        .emit(Ev::run(Level::Warn, EventType::PageFetched, msg))
+        .await;
+}
+
+async fn apply_refill_batch(
+    p: &Prepared,
+    run: &Run,
+    batch: RefillBatch,
+    (selection, plan_cursor, refill_cursor): (Selection, u32, u32),
+    collected: &mut Collected,
+    events: &Events,
+) -> u32 {
+    match batch {
+        RefillBatch::Complete(additional) => {
+            collected.merge(additional);
+            refresh_busy(p, run, collected, events).await;
+            if selection == Selection::Sequential {
+                refill_cursor
+            } else {
+                plan_cursor
+            }
+        }
+        RefillBatch::Partial {
+            collected: additional,
+            pages_fetched,
+            failed_page,
+            error,
+        } => {
+            collected.merge(additional);
+            if pages_fetched > 0 {
+                refresh_busy(p, run, collected, events).await;
+            }
+            let kept = collected.keep.len();
+            emit_refill_page_warning(run, failed_page, pages_fetched, &error, kept, events).await;
+            plan_cursor
+        }
+        RefillBatch::FilterFailed(err) => {
+            let kept = collected.keep.len();
+            tracing::warn!(
+                run = %run.run_id,
+                error = %err,
+                kept,
+                "refill failed; keeping collected candidates"
+            );
+            let msg = format!("refill failed ({err}); keeping {kept} candidate(s)");
+            events
+                .emit(Ev::run(Level::Warn, EventType::PageFetched, msg))
+                .await;
+            plan_cursor
         }
     }
 }
@@ -919,30 +1133,9 @@ async fn collect_with_refill(
     events
         .emit(Ev::run(Level::Debug, EventType::PageFetched, page_msg))
         .await;
-    let additional = match collect_candidates(client, p, run, &more.pages, first, &busy).await {
-        Ok(additional) => additional,
-        Err(err) => {
-            let kept = collected.keep.len();
-            tracing::warn!(
-                run = %run.run_id,
-                error = %err,
-                kept,
-                "refill failed; keeping collected candidates"
-            );
-            let msg = format!("refill failed ({err}); keeping {kept} candidate(s)");
-            events
-                .emit(Ev::run(Level::Warn, EventType::PageFetched, msg))
-                .await;
-            return Ok((collected, plan.next_cursor));
-        }
-    };
-    collected.merge(additional);
-    refresh_busy(p, run, &mut collected, events).await;
-    let cursor = if selection == Selection::Sequential {
-        more.next_cursor
-    } else {
-        plan.next_cursor
-    };
+    let batch = collect_refill_batch(client, p, run, &more.pages, first, &busy).await;
+    let cursors = (selection, plan.next_cursor, more.next_cursor);
+    let cursor = apply_refill_batch(p, run, batch, cursors, &mut collected, events).await;
     Ok((collected, cursor))
 }
 

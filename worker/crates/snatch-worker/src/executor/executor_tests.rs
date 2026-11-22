@@ -37,6 +37,11 @@ struct FakeApi {
     /// Every AcquireBudget call: the items asked for and the grants answered.
     pub budget_calls: Arc<Mutex<Vec<BudgetCall>>>,
     pub filter_unprocessed: Vec<i64>,
+    /// Per-call unprocessed allow-lists for `FilterCandidates`; calls past the list fall back to
+    /// `filter_unprocessed`.
+    pub filter_script: Vec<Vec<i64>>,
+    /// Every `FilterCandidates` call's `entity_ids`, in call order.
+    pub filter_calls: Arc<Mutex<Vec<Vec<i64>>>>,
     pub reported_events: Arc<Mutex<Vec<SnatchEvent>>>,
     pub completed_requests: Arc<Mutex<Vec<CompleteRunRequest>>>,
     /// True answers LeaseRun with no run; false refuses it as unimplemented.
@@ -64,6 +69,8 @@ impl Default for FakeApi {
             scripted_grants: None,
             budget_calls: Arc::new(Mutex::new(Vec::new())),
             filter_unprocessed: vec![1, 2, 3, 4, 5],
+            filter_script: Vec::new(),
+            filter_calls: Arc::new(Mutex::new(Vec::new())),
             reported_events: Arc::new(Mutex::new(Vec::new())),
             completed_requests: Arc::new(Mutex::new(Vec::new())),
             lease_empty: false,
@@ -140,12 +147,27 @@ impl WorkerService for FakeApi {
         request: tonic::Request<FilterCandidatesRequest>,
     ) -> Result<tonic::Response<FilterCandidatesResponse>, Status> {
         let req = request.into_inner();
-        let mut unprocessed = Vec::new();
-        for id in req.entity_ids {
-            if self.filter_unprocessed.contains(&id) {
-                unprocessed.push(id);
-            }
+        let call_index = {
+            let mut calls = self.filter_calls.lock().await;
+            let idx = calls.len();
+            calls.push(req.entity_ids.clone());
+            idx
+        };
+        if req.entity_ids.len() > super::MAX_FILTER_BATCH {
+            return Err(Status::invalid_argument("at most 5000 ids per filter call"));
         }
+        let allow: BTreeSet<i64> = self
+            .filter_script
+            .get(call_index)
+            .unwrap_or(&self.filter_unprocessed)
+            .iter()
+            .copied()
+            .collect();
+        let unprocessed = req
+            .entity_ids
+            .into_iter()
+            .filter(|id| allow.contains(id))
+            .collect();
         Ok(tonic::Response::new(FilterCandidatesResponse {
             unprocessed_ids: unprocessed,
             priority_ids: vec![],
