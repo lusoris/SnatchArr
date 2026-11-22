@@ -127,6 +127,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
         run: bash tools/ci/workflow-check_test.sh
+      - name: The merge-time guard check refuses its planted cases
+        env:
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
+        run: bash tools/ci/guard_definition_check_test.sh
       - name: Lint workflows and check action pins
         env:
           GH_TOKEN: ${{ github.token }}
