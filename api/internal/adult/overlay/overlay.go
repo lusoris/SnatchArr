@@ -284,9 +284,12 @@ func truncateTitle(title string) string {
 		_, size := utf8.DecodeLastRuneInString(title)
 		title = title[:len(title)-size]
 	}
-	// The first loop leaves at most maxTitleBytes bytes, so this loop drops at most that many runes.
-	for steps := 0; hfsUnits(title) > maxTitleUnits && steps < maxTitleBytes; steps++ {
-		_, size := utf8.DecodeLastRuneInString(title)
+	// The first loop leaves at most maxTitleBytes bytes, so this loop drops at most that many runes. It counts the
+	// title once and subtracts each dropped rune, so a long title costs one count rather than one per dropped rune.
+	units := hfsUnits(title)
+	for steps := 0; units > maxTitleUnits && steps < maxTitleBytes; steps++ {
+		char, size := utf8.DecodeLastRuneInString(title)
+		units -= runeHFSUnits(char)
 		title = title[:len(title)-size]
 	}
 	return title
@@ -300,9 +303,14 @@ func truncateTitle(title string) string {
 func hfsUnits(s string) int {
 	units := 0
 	for _, char := range s {
-		units += max(utf16.RuneLen(char), utf16Len(norm.NFD.String(string(char))))
+		units += runeHFSUnits(char)
 	}
 	return units
+}
+
+// runeHFSUnits is the HFS+ length hfsUnits counts for one rune.
+func runeHFSUnits(char rune) int {
+	return max(utf16.RuneLen(char), utf16Len(norm.NFD.String(string(char))))
 }
 
 func utf16Len(s string) int {
