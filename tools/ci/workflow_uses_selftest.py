@@ -644,7 +644,10 @@ def check_folded_missing_buffer() -> list[str]:
     """Verify scalar_value_lines refuses a folded ScalarNode whose mark buffer is None."""
     top = compose_top_mapping("run: >\n  echo hi\n", "nobuf.yml")
     val_node = top["run"][1]
-    assert isinstance(val_node, workflow_yaml.yaml.ScalarNode)
+    if not isinstance(val_node, workflow_yaml.yaml.ScalarNode):
+        return [
+            f"step-text-folded-missing-buffer: run value is {type(val_node).__name__}, want ScalarNode"
+        ]
     val_node.start_mark.buffer = None
     try:
         scalar_value_lines(val_node, "nobuf.yml")
