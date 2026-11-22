@@ -484,6 +484,7 @@ expect_refusal moved-action "refused .github/actions/planted/action.yml:8: golus
 # A copy of the check whose actionlint image carries no digest.
 mkdir -p "$WORK/copy/tools/ci" "$WORK/copy/.github"
 cp "$HERE/workflow-check.sh" "$WORK/copy/tools/ci/"
+cp "$HERE/bash_version.sh" "$WORK/copy/tools/ci/"
 cp "$HERE/zizmor-requirements.txt" "$WORK/copy/tools/ci/"
 sed 's/^\(ACTIONLINT_IMAGE=.*\)@sha256:.*$/\1/' "$HERE/tool-versions.env" > "$WORK/copy/tools/ci/tool-versions.env"
 HERE="$WORK/copy/tools/ci" expect_refusal clean "is not an image pinned by version and digest"
@@ -491,6 +492,7 @@ HERE="$WORK/copy/tools/ci" expect_refusal clean "is not an image pinned by versi
 # A copy of the check whose zizmor requirements carry no hashes.
 mkdir -p "$WORK/copy-nohash/tools/ci" "$WORK/copy-nohash/.github"
 cp "$HERE/workflow-check.sh" "$WORK/copy-nohash/tools/ci/"
+cp "$HERE/bash_version.sh" "$WORK/copy-nohash/tools/ci/"
 cp "$HERE/tool-versions.env" "$WORK/copy-nohash/tools/ci/"
 grep -v '^[[:space:]]*--hash=' "$HERE/zizmor-requirements.txt" > "$WORK/copy-nohash/tools/ci/zizmor-requirements.txt"
 HERE="$WORK/copy-nohash/tools/ci" expect_refusal clean "zizmor is not pinned by version and hash"

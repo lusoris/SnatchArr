@@ -1,16 +1,19 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
-"""YAML node, mapping, step, job and remote uses helpers for workflow_uses.py.
+"""YAML node, mapping, step, job and uses helpers for workflow_uses.py.
 
 Composes workflow and composite action YAML documents with yaml.compose so anchors,
 aliases, merge keys and flow collections resolve without recursion while every node
-retains its 1-based source line, enforcing fixed upper bounds on files, lines, jobs,
-steps, mapping entries, merge depth and uses references.
+retains its 1-based source line, enforcing fixed upper bounds on files, byte size,
+lines, YAML nesting depth, jobs, steps, mapping entries, merge depth and uses references.
 """
 
 from __future__ import annotations
 
+import contextlib
+import os
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 try:
@@ -28,7 +31,10 @@ DOCKER_FILENAMES = ("Dockerfile", "dockerfile")
 BAD_PATH_CHARS = ("\t", "\r", "\n", "\x00")
 
 MAX_FILES = 4096
+MAX_FILE_BYTES = 8 * 1024 * 1024
 MAX_FILE_LINES = 65536
+MAX_YAML_DEPTH = 64
+MAX_YAML_EVENTS = MAX_FILE_BYTES
 MAX_STEP_TEXT_LINES = 262144
 MAX_WALK_DIRS = 16384
 MAX_JOBS = 1024
@@ -191,6 +197,12 @@ def parse_uses_value(raw: str, path: str, line: int) -> str | None:
     return f"{owner}/{repo}"
 
 
+def keep_uses_value(raw: str, path: str, line: int) -> str:
+    """Return raw unchanged as the --all-uses decoder."""
+    _ = (path, line)
+    return raw
+
+
 def mapping_uses_scalar(
     mapping: yaml.MappingNode, path: str
 ) -> tuple[dict[str, tuple[yaml.ScalarNode, yaml.Node]], tuple[str, int] | None]:
@@ -256,18 +268,22 @@ def collect_steps_raw_uses(
 
 
 def collect_steps_uses(
-    steps_node: yaml.Node, path: str, budget: RefBudget
+    steps_node: yaml.Node,
+    path: str,
+    budget: RefBudget,
+    *,
+    decode: Callable[[str, str, int], str | None] = parse_uses_value,
 ) -> list[tuple[str, int]]:
-    """Collect remote (owner/repo, line) pairs from steps_node within budget."""
+    """Collect decoded (uses_value, line) pairs from steps_node within budget."""
     found: list[tuple[str, int]] = []
     for step_node in check_steps_sequence(steps_node, path):
         hit = step_uses_scalar(step_node, path)
         if hit is None:
             continue
-        repo = parse_uses_value(hit[0], path, hit[1])
-        if repo is not None:
+        decoded = decode(hit[0], path, hit[1])
+        if decoded is not None:
             budget.take(path, hit[1])
-            found.append((repo, hit[1]))
+            found.append((decoded, hit[1]))
     return found
 
 
@@ -295,27 +311,83 @@ def resolved_job_nodes(jobs_node: yaml.Node, path: str) -> list[yaml.MappingNode
 
 
 def collect_jobs_uses(
-    jobs_node: yaml.Node, path: str, budget: RefBudget
+    jobs_node: yaml.Node,
+    path: str,
+    budget: RefBudget,
+    *,
+    decode: Callable[[str, str, int], str | None] = parse_uses_value,
 ) -> list[tuple[str, int]]:
-    """Collect remote (owner/repo, line) pairs from jobs.<job> within budget."""
+    """Collect decoded (uses_value, line) pairs from jobs.<job> within budget."""
     found: list[tuple[str, int]] = []
     for job_node in resolved_job_nodes(jobs_node, path):
-        job_fields, hit = extract_mapping_uses(job_node, path)
-        if hit is not None:
-            budget.take(path, hit[1])
-            found.append(hit)
+        job_fields, raw_hit = mapping_uses_scalar(job_node, path)
+        if raw_hit is not None:
+            decoded = decode(raw_hit[0], path, raw_hit[1])
+            if decoded is not None:
+                budget.take(path, raw_hit[1])
+                found.append((decoded, raw_hit[1]))
         if "steps" in job_fields:
-            found.extend(collect_steps_uses(job_fields["steps"][1], path, budget))
+            found.extend(
+                collect_steps_uses(job_fields["steps"][1], path, budget, decode=decode)
+            )
     return found
+
+
+def check_line_limit(text: str, display: str, max_lines: int = MAX_FILE_LINES) -> None:
+    """Refuse text when its line count exceeds max_lines."""
+    if len(text.splitlines()) > max_lines:
+        raise UsesError(f"{display}: exceeds {max_lines} lines")
+
+
+def read_workflow_text(
+    path: Path, display: str, max_bytes: int = MAX_FILE_BYTES
+) -> str:
+    """Stat path against max_bytes, read UTF-8 text, and enforce MAX_FILE_LINES."""
+    try:
+        size = os.stat(path).st_size
+    except OSError as err:
+        raise UsesError(f"{display}: {err}") from err
+    if size > max_bytes:
+        raise UsesError(f"{display}: exceeds {max_bytes} bytes")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as err:
+        raise UsesError(f"{display}: {err}") from err
+    check_line_limit(text, display)
+    return text
+
+
+def check_yaml_depth(text: str, path: str, max_depth: int = MAX_YAML_DEPTH) -> None:
+    """Walk YAML parse events iteratively and refuse collection depth past max_depth."""
+    depth = 0
+    try:
+        with contextlib.closing(yaml.parse(text, Loader=yaml.SafeLoader)) as events:
+            for count, event in enumerate(events, start=1):
+                if count > MAX_YAML_EVENTS:
+                    raise UsesError(
+                        f"{path}:{event.start_mark.line + 1}: exceeds {MAX_YAML_EVENTS} YAML events"
+                    )
+                if isinstance(event, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
+                    depth += 1
+                    if depth > max_depth:
+                        raise UsesError(
+                            f"{path}:{event.start_mark.line + 1}: YAML nesting depth exceeds {max_depth}"
+                        )
+                elif isinstance(event, (yaml.MappingEndEvent, yaml.SequenceEndEvent)):
+                    depth -= 1
+    except yaml.YAMLError as err:
+        raise UsesError(f"{path}: {err}") from err
 
 
 def compose_top_mapping(
     text: str, path: str
 ) -> dict[str, tuple[yaml.ScalarNode, yaml.Node]]:
     """Compose YAML text for path and return its resolved root mapping."""
+    check_line_limit(text, path)
+    check_yaml_depth(text, path)
     try:
         root = yaml.compose(text, Loader=yaml.SafeLoader)
-    except yaml.YAMLError as err:
+    except (yaml.YAMLError, RecursionError) as err:
         raise UsesError(f"{path}: {err}") from err
     if not isinstance(root, yaml.MappingNode):
         raise UsesError(f"{path}: document root is not a YAML mapping")
@@ -342,41 +414,49 @@ def collect_text_uses(
     path: str,
     max_refs: int = MAX_REFS,
     budget: RefBudget | None = None,
+    *,
+    decode: Callable[[str, str, int], str | None] = parse_uses_value,
 ) -> list[tuple[str, int]]:
-    """Compose YAML text for path and return remote (owner/repo, line) pairs."""
+    """Compose YAML text for path and return decoded (uses_value, line) pairs."""
     active = budget if budget is not None else RefBudget(max_refs)
     top = compose_top_mapping(text, path)
     found: list[tuple[str, int]] = []
     if "jobs" in top:
-        found.extend(collect_jobs_uses(top["jobs"][1], path, active))
+        found.extend(collect_jobs_uses(top["jobs"][1], path, active, decode=decode))
     steps_node = runs_steps_node(top, path)
     if steps_node is not None:
-        found.extend(collect_steps_uses(steps_node, path, active))
+        found.extend(collect_steps_uses(steps_node, path, active, decode=decode))
     return found
 
 
 def collect_file_uses(
-    path: str, max_refs: int = MAX_REFS, budget: RefBudget | None = None
+    path: str,
+    max_refs: int = MAX_REFS,
+    budget: RefBudget | None = None,
+    *,
+    decode: Callable[[str, str, int], str | None] = parse_uses_value,
 ) -> list[tuple[str, int]]:
-    """Read path as UTF-8 and return remote (owner/repo, line) pairs."""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as err:
-        raise UsesError(f"{path}: {err}") from err
-    return collect_text_uses(text, path, max_refs=max_refs, budget=budget)
+    """Read path as UTF-8 and return decoded (uses_value, line) pairs."""
+    text = read_workflow_text(Path(path), path)
+    return collect_text_uses(
+        text, path, max_refs=max_refs, budget=budget, decode=decode
+    )
 
 
 def collect_files_uses(
-    files: list[str], max_refs: int = MAX_REFS
+    files: list[str],
+    max_refs: int = MAX_REFS,
+    *,
+    decode: Callable[[str, str, int], str | None] = parse_uses_value,
 ) -> list[tuple[str, str, int]]:
-    """Collect remote (owner/repo, file_path, line) triples across files within max_refs."""
+    """Collect decoded (uses_value, file_path, line) triples across files within max_refs."""
     if len(files) > MAX_FILES:
         raise UsesError(f"more than {MAX_FILES} workflow files")
     budget = RefBudget(max_refs)
     out: list[tuple[str, str, int]] = []
     for file_path in files:
-        for repo, line in collect_file_uses(file_path, budget=budget):
-            out.append((repo, file_path, line))
+        for value, line in collect_file_uses(file_path, budget=budget, decode=decode):
+            out.append((value, file_path, line))
     return out
 
 

@@ -8,21 +8,29 @@
 # ("workflow was not found"), and an action named the old way fails its step. Only public
 # repositories are supported: private and missing repositories cannot be read by the workflow
 # token and fail closed.
-# Platform (HISS-21): runs on Linux only in CI because it reads repository files and the GitHub
-# API (the verdict does not depend on the runner OS) and requires bash 4 or newer (mapfile, ${var,,}).
+# Platform (HISS-21): runs on Linux in CI (the verdict reads repository files and the GitHub API,
+# independent of runner OS) and on macOS/Linux hosts with bash 4 or newer (mapfile, associative
+# arrays, ${var,,}); exits 2 naming bash 4 on older bash such as macOS stock bash 3.2.
 #
 #   tools/ci/workflow_refs.sh [ROOT]      (default: this repository)
 #
-# Exit status: 0 clean, 1 a finding or a failed lookup, 2 usage.
+# Exit status: 0 clean, 1 a finding or a failed lookup, 2 usage or unsupported bash.
 # Needs bash 4+, python3 with PyYAML, jq, curl, network, token (GH_TOKEN or GITHUB_TOKEN).
 set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tools/ci/bash_version.sh
+. "$HERE/bash_version.sh"
+if ! bash_major_supported "${BASH_VERSINFO[0]}"; then
+  echo "error: ${0##*/} requires bash 4 or newer, found $BASH_VERSION" >&2
+  exit 2
+fi
 
 if [ $# -gt 1 ]; then
   echo "usage: ${0##*/} [ROOT]" >&2
   exit 2
 fi
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 ROOT="$(cd "${1:-$REPO_ROOT}" && pwd)"
 

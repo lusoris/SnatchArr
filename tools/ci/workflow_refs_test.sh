@@ -8,7 +8,8 @@
 # two current repositories across a workflow and a composite action (two-current), uses-shaped text
 # inside a run script block (run-block-uses), a Docker-only local action directory holding only
 # Dockerfile (docker-local-action), three distinct repositories batched into one GraphQL POST
-# (three-repos), and workflow-refs.yml carrying no uses entry (guard-job-no-uses).
+# (three-repos), workflow-refs.yml carrying no uses entry (guard-job-no-uses), and bash major
+# versions 4 and 5 (bash-major-4, bash-major-5).
 # Refused: a reusable workflow under a moved repository name (moved-workflow), a composite action
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
@@ -25,18 +26,51 @@
 # GraphQL errors array (gql-errors), a null GraphQL alias for a private or missing repository
 # (null-alias), 101 repositories split across 2 GraphQL POSTs with a moved repository in the
 # second batch (over-100-repos), a missing token (missing-token), workflow_uses.py without PyYAML
-# (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), and workflow-refs.yml
+# (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), workflow-refs.yml
 # copies with a planted block uses step (guard-job-block-uses), flow uses step
-# (guard-job-flow-uses), local ./ uses step (guard-job-local-uses), or escaped-key "\x75ses" step
-# (guard-job-escaped-key-uses).
+# (guard-job-flow-uses), local ./ uses step (guard-job-local-uses), escaped-key "\x75ses" step
+# (guard-job-escaped-key-uses), or escaped-key local uses step (guard-job-escaped-local-uses),
+# and bash major version 3 (bash-major-3).
+# Platform (HISS-21): runs on Linux and macOS with bash 4 or newer (workflow_refs.sh uses mapfile,
+# associative arrays and ${var,,}); skips with a stated reason and exits 0 on older bash such as
+# macOS stock bash 3.2.
 #
 #   tools/ci/workflow_refs_test.sh
 #
-# Exit status: 0 every case behaved as recorded, 1 otherwise. Needs python3 with PyYAML and jq.
+# Exit status: 0 every case behaved as recorded (or skipped on bash < 4), 1 otherwise.
+# Needs bash 4+, python3 (with PyYAML or venv + network for pyyaml_venv.sh) and jq.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tools/ci/bash_version.sh
+. "$HERE/bash_version.sh"
+if ! bash_major_supported "${BASH_VERSINFO[0]}"; then
+  echo "skip workflow_refs_test.sh: needs bash 4 or newer, found $BASH_VERSION"
+  exit 0
+fi
+
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+
+# ensure_pyyaml_python: export PYTHON_BIN to a PyYAML-capable python when unset and host python3 lacks yaml.
+ensure_pyyaml_python() {
+  local venv_dir="$REPO_ROOT/.cache/pyyaml-venv"
+  if [ -n "${PYTHON_BIN:-}" ]; then
+    export PYTHON_BIN
+    return 0
+  fi
+  if python3 -I -c 'import yaml' > /dev/null 2>&1; then
+    return 0
+  fi
+  if [ ! -x "$venv_dir/bin/python" ] || ! "$venv_dir/bin/python" -I -c 'import yaml' > /dev/null 2>&1; then
+    if ! bash "$HERE/pyyaml_venv.sh" "$venv_dir"; then
+      echo "error: failed to install PyYAML via tools/ci/pyyaml_venv.sh" >&2
+      exit 1
+    fi
+  fi
+  export PYTHON_BIN="$venv_dir/bin/python"
+}
+ensure_pyyaml_python
+
 WORK="$(mktemp -d)"
 # cleanup: restore the mode of the unreadable-actions-dir fixture when it exists (a failed restore goes to stderr), then remove $WORK.
 cleanup() {
@@ -165,11 +199,11 @@ expect_refusal() {
   esac
 }
 
-# guard_has_no_uses FILE: succeed when workflow_uses.py and a bounded line scan find no uses entry in FILE.
+# guard_has_no_uses FILE: succeed when workflow_uses.py --all-uses and a bounded line scan find no uses entry in FILE.
 guard_has_no_uses() {
   local file="$1" uses_out line line_n=0
   local uses_re="(^|[[:space:]{,-])[\"']?uses[\"']?[[:space:]]*:"
-  uses_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" "$file")" || return 1
+  uses_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" --all-uses "$file")" || return 1
   [ -z "$uses_out" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     line_n=$((line_n + 1))
@@ -619,8 +653,9 @@ guard_refused_cases=(
   "guard-job-flow-uses|flow uses|      - {uses: $CHECKOUT, with: {persist-credentials: false}}"
   "guard-job-local-uses|local uses|      - uses: ./.github/actions/planted"
   'guard-job-escaped-key-uses|escaped-key uses|      - {"\x75ses": '"$CHECKOUT"'}'
+  'guard-job-escaped-local-uses|escaped-key local uses|      - {"\x75ses": ./.github/actions/planted}'
 )
-for ((guard_i = 0; guard_i < 4 && guard_i < ${#guard_refused_cases[@]}; guard_i++)); do
+for ((guard_i = 0; guard_i < 5 && guard_i < ${#guard_refused_cases[@]}; guard_i++)); do
   guard_entry="${guard_refused_cases[$guard_i]}"
   guard_case="${guard_entry%%|*}"
   guard_rest="${guard_entry#*|}"
@@ -636,6 +671,33 @@ for ((guard_i = 0; guard_i < 4 && guard_i < ${#guard_refused_cases[@]}; guard_i+
   fi
   refused=$((refused + 1))
   echo "ok   $guard_case: refused ($guard_label)"
+done
+
+# bash_version.sh refuses bash major 3 and accepts bash major 4 (boundary) and 5 when sourced directly.
+if (
+  # shellcheck source=tools/ci/bash_version.sh
+  . "$HERE/bash_version.sh"
+  bash_major_supported 3
+); then
+  echo "FAIL bash-major-3: accepted bash major 3" >&2
+  exit 1
+fi
+refused=$((refused + 1))
+echo "ok   bash-major-3: refused (bash major 3)"
+
+bash_major_accepted=(4 5)
+for ((major_i = 0; major_i < 2 && major_i < ${#bash_major_accepted[@]}; major_i++)); do
+  major_val="${bash_major_accepted[$major_i]}"
+  if ! (
+    # shellcheck source=tools/ci/bash_version.sh
+    . "$HERE/bash_version.sh"
+    bash_major_supported "$major_val"
+  ); then
+    printf 'FAIL bash-major-%s: refused bash major %s\n' "$major_val" "$major_val" >&2
+    exit 1
+  fi
+  accepted=$((accepted + 1))
+  echo "ok   bash-major-$major_val: accepted (bash major $major_val)"
 done
 
 echo "workflow refs: $accepted accepted, $refused refused"

@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
+import os
 import sys
 import tempfile
 from collections.abc import Callable, Iterable
@@ -14,10 +17,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from workflow_actions import (
     collect_files_step_text,
     collect_files_version_inputs,
+    collect_text_step_lines,
     list_action_files,
     walk_github_actions,
 )
-from workflow_yaml import MAX_REFS, MAX_STEPS, UsesError, collect_text_uses
+from workflow_uses import main as uses_main
+from workflow_yaml import (
+    MAX_FILE_BYTES,
+    MAX_FILE_LINES,
+    MAX_REFS,
+    MAX_STEP_TEXT_LINES,
+    MAX_STEPS,
+    MAX_YAML_DEPTH,
+    UsesError,
+    collect_text_uses,
+    compose_top_mapping,
+    read_workflow_text,
+)
 
 
 def positive_cases_table() -> list[tuple[str, str, list[tuple[str, int]]]]:
@@ -464,6 +480,41 @@ def step_text_positive_table() -> list[
     ]
 
 
+def check_step_text_alias_dedup(root: Path) -> list[str]:
+    """Verify 64 steps aliasing one 4096-line block scalar expand once and yield 4096 records."""
+    rel = ".github/workflows/aliased_big.yml"
+    block = "".join(f"  echo line-{idx}\n" for idx in range(4096))
+    steps = "".join("      - run: *big\n" for _ in range(64))
+    doc = f"x-big: &big |\n{block}jobs:\n  j:\n    steps:\n{steps}"
+    want_pairs = [(2 + idx, f"echo line-{idx}") for idx in range(4096)]
+    try:
+        pairs = collect_text_step_lines(doc, rel)
+    except UsesError as err:
+        return [f"step-text-alias-dedup: unexpected error: {err}"]
+    if pairs != want_pairs:
+        return [
+            f"step-text-alias-dedup: collect_text_step_lines returned {len(pairs)} pairs, want 4096"
+        ]
+    want_records = [(rel, line_no, text) for line_no, text in want_pairs]
+    return check_step_text_case(root, "step-text-alias-dedup", rel, doc, want_records)
+
+
+def check_step_text_max_lines() -> list[str]:
+    """Verify collect_text_step_lines stops at MAX_STEP_TEXT_LINES across distinct scalars."""
+    chunk = "\\n".join(f"x{idx}" for idx in range(60000))
+    steps = "".join(f'      - run: "{chunk}-{step_i}"\n' for step_i in range(5))
+    doc = f"jobs:\n  j:\n    steps:\n{steps}"
+    needle = f"over.yml:8: more than {MAX_STEP_TEXT_LINES} step text lines"
+    try:
+        got = collect_text_step_lines(doc, "over.yml")
+        return [f"step-text-over-max-lines: accepted {len(got)} lines"]
+    except UsesError as err:
+        if needle not in str(err):
+            return [f"step-text-over-max-lines: error {str(err)!r} lacks {needle!r}"]
+        print("ok   step-text-over-max-lines")
+        return []
+
+
 def run_step_text_cases() -> list[str]:
     """Verify --step-text emits scalar lines with exact line numbers and refuses bad paths."""
     failures: list[str] = []
@@ -473,6 +524,8 @@ def run_step_text_cases() -> list[str]:
             failures.extend(
                 check_step_text_case(root, name, rel, doc, want, repeat=repeat)
             )
+        failures.extend(check_step_text_alias_dedup(root))
+        failures.extend(check_step_text_max_lines())
         for label, bad_arg in (
             ("tab", "a\tb.yml"),
             ("lf", "a\nb.yml"),
@@ -586,17 +639,163 @@ def run_version_inputs_cases() -> list[str]:
     return failures
 
 
+def run_all_uses_cases() -> list[str]:
+    """Verify --all-uses emits remote, local, escaped-key and job uses while ignoring run text."""
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        wf = Path(tmp) / "all.yml"
+        wf.write_text(
+            "on: push\njobs:\n  call:\n    uses: ./.github/workflows/reusable.yml\n"
+            "  build:\n    runs-on: ubuntu-26.04\n    steps:\n"
+            "      - uses: actions/checkout@v4\n"
+            "      - uses: ./.github/actions/local\n"
+            '      - {"\\x75ses": ./.github/actions/planted}\n'
+            "      - name: script\n        run: |\n          uses: x/y@v1\n",
+            encoding="utf-8",
+        )
+        out_buf = io.StringIO()
+        with contextlib.redirect_stdout(out_buf):
+            rc = uses_main(["--all-uses", str(wf)])
+        want = [
+            f"{wf}:4\t./.github/workflows/reusable.yml",
+            f"{wf}:8\tactions/checkout@v4",
+            f"{wf}:9\t./.github/actions/local",
+            f"{wf}:10\t./.github/actions/planted",
+        ]
+        got = out_buf.getvalue().splitlines()
+        if rc != 0 or got != want:
+            failures.append(
+                f"all-uses-remote-local-escaped-and-run: rc={rc}, got {got!r}, want {want!r}"
+            )
+        else:
+            print("ok   all-uses-remote-local-escaped-and-run")
+    err_buf = io.StringIO()
+    with contextlib.redirect_stderr(err_buf):
+        missing_rc = uses_main(["planted.yml"], yaml_mod=None)
+    err_text = err_buf.getvalue()
+    if (
+        missing_rc != 2
+        or "PyYAML is required" not in err_text
+        or "tools/ci/pyyaml_venv.sh" not in err_text
+        or "PYTHON_BIN=" not in err_text
+    ):
+        failures.append(f"pyyaml-missing-hint: rc={missing_rc}, err={err_text!r}")
+    else:
+        print("ok   pyyaml-missing-hint")
+    return failures
+
+
+def run_file_bounds_cases() -> list[str]:
+    """Verify MAX_FILE_BYTES pre-read refusal and MAX_FILE_LINES boundary in compose_top_mapping."""
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        oversized = Path(tmp) / "oversized.yml"
+        oversized.write_bytes(b"\xff")
+        os.truncate(oversized, MAX_FILE_BYTES + 1)
+        needle = f"oversized.yml: exceeds {MAX_FILE_BYTES} bytes"
+        try:
+            read_workflow_text(oversized, "oversized.yml")
+            failures.append("file-size-over-max-bytes: accepted oversized file")
+        except UsesError as err:
+            if needle not in str(err):
+                failures.append(
+                    f"file-size-over-max-bytes: error {str(err)!r} lacks {needle!r}"
+                )
+            else:
+                print("ok   file-size-over-max-bytes")
+    exact_doc = "k: 1\n" + "#\n" * (MAX_FILE_LINES - 1)
+    try:
+        top = compose_top_mapping(exact_doc, "exact.yml")
+        if "k" not in top:
+            failures.append("compose-exact-max-lines: missing root key 'k'")
+        else:
+            print("ok   compose-exact-max-lines")
+    except UsesError as err:
+        failures.append(f"compose-exact-max-lines: unexpected error: {err}")
+    over_doc = f"{exact_doc}#\n"
+    over_needle = f"over.yml: exceeds {MAX_FILE_LINES} lines"
+    try:
+        compose_top_mapping(over_doc, "over.yml")
+        failures.append("compose-over-max-lines: accepted MAX_FILE_LINES + 1 lines")
+    except UsesError as err:
+        if over_needle not in str(err):
+            failures.append(
+                f"compose-over-max-lines: error {str(err)!r} lacks {over_needle!r}"
+            )
+        else:
+            print("ok   compose-over-max-lines")
+    return failures
+
+
+def check_compose_refusal(name: str, doc: str, path: str, needle: str) -> list[str]:
+    """Assert compose_top_mapping raises UsesError containing needle (never RecursionError)."""
+    try:
+        compose_top_mapping(doc, path)
+        return [f"{name}: accepted document, expected UsesError with {needle!r}"]
+    except RecursionError as err:
+        return [f"{name}: raised RecursionError instead of UsesError: {err}"]
+    except UsesError as err:
+        if needle not in str(err):
+            return [f"{name}: error {str(err)!r} lacks {needle!r}"]
+        print(f"ok   {name}")
+        return []
+
+
+def run_yaml_depth_cases() -> list[str]:
+    """Verify MAX_YAML_DEPTH boundary, refusal message, and 5000-deep flow sequence guard."""
+    failures: list[str] = []
+    d64 = "k: " + "[" * (MAX_YAML_DEPTH - 1) + "1" + "]" * (MAX_YAML_DEPTH - 1) + "\n"
+    try:
+        top = compose_top_mapping(d64, "d64.yml")
+        if "k" not in top:
+            failures.append("yaml-depth-exact-64: missing root key 'k'")
+        else:
+            print("ok   yaml-depth-exact-64")
+    except (UsesError, RecursionError) as err:
+        failures.append(f"yaml-depth-exact-64: unexpected error: {err}")
+    d65 = "a: 1\nk: " + "[" * MAX_YAML_DEPTH + "1" + "]" * MAX_YAML_DEPTH + "\n"
+    failures.extend(
+        check_compose_refusal(
+            "yaml-depth-over-64",
+            d65,
+            "d65.yml",
+            f"d65.yml:2: YAML nesting depth exceeds {MAX_YAML_DEPTH}",
+        )
+    )
+    d5000 = "k: " + "[" * 5000 + "]" * 5000 + "\n"
+    failures.extend(
+        check_compose_refusal(
+            "yaml-depth-5000-flow-seq",
+            d5000,
+            "d5000.yml",
+            f"d5000.yml:1: YAML nesting depth exceeds {MAX_YAML_DEPTH}",
+        )
+    )
+    return failures
+
+
 def self_test() -> int:
     """Run all planted positive and negative cases; exit 1 naming any failed case."""
-    failures = [
-        *run_positive_cases(),
-        *run_negative_cases(),
-        *run_max_refs_cases(),
-        *run_list_positive_case(),
-        *run_list_negative_cases(),
-        *run_step_text_cases(),
-        *run_version_inputs_cases(),
-    ]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        failures = [
+            *run_positive_cases(),
+            *run_negative_cases(),
+            *run_max_refs_cases(),
+            *run_all_uses_cases(),
+            *run_file_bounds_cases(),
+            *run_yaml_depth_cases(),
+            *run_list_positive_case(),
+            *run_list_negative_cases(),
+            *run_step_text_cases(),
+            *run_version_inputs_cases(),
+        ]
+    out = buf.getvalue()
+    sys.stdout.write(out)
     for msg in failures:
         print(f"FAIL {msg}", file=sys.stderr)
-    return 1 if failures else 0
+    if failures:
+        return 1
+    passed = sum(1 for line in out.splitlines() if line.startswith("ok   "))
+    print(f"workflow_uses self-test: {passed} passed")
+    return 0

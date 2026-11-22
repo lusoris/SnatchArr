@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
-"""Extract remote uses, list composite actions, or emit step text and version inputs.
+"""Extract uses references, list composite actions, or emit step text and version inputs.
 
 Reads each file with yaml.compose so YAML anchors, aliases, merge keys and flow
 collections resolve while every node keeps its 1-based start line. Default mode
 prints one tab-separated line per remote reference (`owner/repo\\tpath:line`) from
 `jobs.<job>.uses`, `jobs.<job>.steps[*].uses` and `runs.steps[*].uses`, skipping
 `./`, `$/` and `docker://` values and enforcing MAX_REFS across the run.
+`--all-uses FILE...` prints `<file>:<line>\\t<value>` for every decoded job-level
+and step-level `uses` value, remote and local alike.
 `--list-actions ROOT FILE...` prints NUL-separated repo-relative paths of every
 action.yml / action.yaml under ROOT/.github/actions plus composite actions reached
 from step-level `./<dir>` and `$/<dir>`, skipping Docker-only local actions.
@@ -30,7 +32,13 @@ from workflow_actions import (
     collect_files_version_inputs,
     list_action_files,
 )
-from workflow_yaml import MAX_FILES, UsesError, collect_files_uses, yaml
+from workflow_yaml import (
+    MAX_FILES,
+    UsesError,
+    collect_files_uses,
+    keep_uses_value,
+    yaml,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,6 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--self-test", action="store_true", help="run planted self-test cases"
+    )
+    mode.add_argument(
+        "--all-uses",
+        action="store_true",
+        help="print every decoded job and step uses value as file:line\\tvalue",
     )
     mode.add_argument(
         "--list-actions",
@@ -61,35 +74,60 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def dispatch_mode(args: argparse.Namespace) -> None:
-    """Execute --list-actions, --step-text, --version-inputs or remote uses output."""
-    if args.list_actions is not None:
-        listed = list_action_files(args.list_actions, args.files)
-        if listed:
-            sys.stdout.buffer.write(
-                b"\0".join(item.encode("utf-8") for item in listed) + b"\0"
+def write_nul_items(items: list[str]) -> None:
+    """Write NUL-terminated UTF-8 entries to stdout when items is non-empty."""
+    if items:
+        sys.stdout.buffer.write(
+            b"\0".join(item.encode("utf-8") for item in items) + b"\0"
+        )
+
+
+def format_tsv_mode(args: argparse.Namespace) -> list[str]:
+    """Collect tab-separated output lines for the selected non-NUL mode."""
+    if args.all_uses:
+        return [
+            f"{file_path}:{line}\t{value}"
+            for value, file_path, line in collect_files_uses(
+                args.files, decode=keep_uses_value
             )
-        return
+        ]
     if args.step_text is not None:
-        for rel_path, line_no, line_text in collect_files_step_text(
-            args.step_text, args.files
-        ):
-            print(f"{rel_path}:{line_no}\t{line_text}")
-        return
+        return [
+            f"{rel_path}:{line_no}\t{line_text}"
+            for rel_path, line_no, line_text in collect_files_step_text(
+                args.step_text, args.files
+            )
+        ]
     if args.version_inputs is not None:
-        for rel_path, line_no, repo, version in collect_files_version_inputs(
-            args.version_inputs, args.files
-        ):
-            print(f"{rel_path}:{line_no}\t{repo}\t{version}")
+        return [
+            f"{rel_path}:{line_no}\t{repo}\t{version}"
+            for rel_path, line_no, repo, version in collect_files_version_inputs(
+                args.version_inputs, args.files
+            )
+        ]
+    return [
+        f"{repo}\t{file_path}:{line}"
+        for repo, file_path, line in collect_files_uses(args.files)
+    ]
+
+
+def dispatch_mode(args: argparse.Namespace) -> None:
+    """Execute --list-actions or print lines from the selected TSV mode."""
+    if args.list_actions is not None:
+        write_nul_items(list_action_files(args.list_actions, args.files))
         return
-    for repo, file_path, line in collect_files_uses(args.files):
-        print(f"{repo}\t{file_path}:{line}")
+    for out_line in format_tsv_mode(args):
+        print(out_line)
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run --self-test, --list-actions, --step-text, --version-inputs or print uses."""
-    if yaml is None:
-        print("error: PyYAML is required", file=sys.stderr)
+def main(argv: list[str] | None = None, *, yaml_mod: object = yaml) -> int:
+    """Run --self-test, --all-uses, --list-actions, --step-text, --version-inputs or print uses."""
+    if yaml_mod is None:
+        print(
+            "error: PyYAML is required; run tools/ci/pyyaml_venv.sh DIR"
+            " and set PYTHON_BIN=DIR/bin/python",
+            file=sys.stderr,
+        )
         return 2
     args = build_parser().parse_args(argv)
     if args.self_test:
@@ -99,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.files or len(args.files) > MAX_FILES:
         print(
             "usage: workflow_uses.py"
-            " [--self-test | --list-actions ROOT | --step-text ROOT"
+            " [--self-test | --all-uses | --list-actions ROOT | --step-text ROOT"
             " | --version-inputs ROOT] FILE [FILE ...]",
             file=sys.stderr,
         )

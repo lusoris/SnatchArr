@@ -42,6 +42,7 @@ from workflow_yaml import (
     filter_local_uses,
     mapping_uses_scalar,
     node_line,
+    read_workflow_text,
     resolve_mapping,
     resolved_job_nodes,
     runs_steps_node,
@@ -53,10 +54,7 @@ def collect_local_step_uses(
 ) -> list[tuple[str, int]]:
     """Read full_path and return step-level ./<dir> and $/<dir> (raw, line) pairs."""
     active = budget if budget is not None else RefBudget(MAX_REFS)
-    try:
-        text = full_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as err:
-        raise UsesError(f"{rel_path}: {err}") from err
+    text = read_workflow_text(full_path, rel_path)
     top = compose_top_mapping(text, rel_path)
     raw_steps: list[tuple[str, int]] = []
     if "jobs" in top:
@@ -282,8 +280,6 @@ def file_step_sequences(
     text: str, rel_path: str, seen_nodes: set[int]
 ) -> list[yaml.Node]:
     """Compose text for rel_path and return job and composite steps sequence nodes."""
-    if len(text.splitlines()) > MAX_FILE_LINES:
-        raise UsesError(f"{rel_path}: exceeds {MAX_FILE_LINES} lines")
     top = compose_top_mapping(text, rel_path)
     seqs: list[yaml.Node] = []
     if "jobs" in top:
@@ -327,8 +323,29 @@ def scalar_value_lines(val_node: yaml.ScalarNode, path: str) -> list[tuple[int, 
     ]
 
 
+def append_scalar_lines(
+    val_node: yaml.ScalarNode,
+    path: str,
+    out: list[tuple[int, str]],
+    seen_nodes: set[int],
+) -> None:
+    """Expand val_node at most once per file into out within MAX_STEP_TEXT_LINES."""
+    if id(val_node) in seen_nodes:
+        return
+    seen_nodes.add(id(val_node))
+    for line_no, clean_line in scalar_value_lines(val_node, path):
+        if len(out) >= MAX_STEP_TEXT_LINES:
+            raise UsesError(
+                f"{path}:{line_no}: more than {MAX_STEP_TEXT_LINES} step text lines"
+            )
+        out.append((line_no, clean_line))
+
+
 def collect_with_lines(
-    with_node: yaml.Node, path: str, out: list[tuple[int, str]]
+    with_node: yaml.Node,
+    path: str,
+    out: list[tuple[int, str]],
+    seen_nodes: set[int],
 ) -> None:
     """Append scalar value lines for every scalar entry inside a step with mapping."""
     if isinstance(with_node, yaml.ScalarNode) and with_node.tag == NULL_TAG:
@@ -337,13 +354,19 @@ def collect_with_lines(
         raise UsesError(
             f"{path}:{with_node.start_mark.line + 1}: with must be a mapping"
         )
+    if id(with_node) in seen_nodes:
+        return
+    seen_nodes.add(id(with_node))
     for _, val_node in resolve_mapping(with_node, path).values():
         if isinstance(val_node, yaml.ScalarNode):
-            out.extend(scalar_value_lines(val_node, path))
+            append_scalar_lines(val_node, path, out, seen_nodes)
 
 
 def collect_step_lines(
-    step_node: yaml.Node, path: str, out: list[tuple[int, str]]
+    step_node: yaml.Node,
+    path: str,
+    out: list[tuple[int, str]],
+    seen_nodes: set[int],
 ) -> None:
     """Append value lines of run and scalar with entries from one step mapping."""
     if not isinstance(step_node, yaml.MappingNode):
@@ -356,9 +379,9 @@ def collect_step_lines(
                 raise UsesError(
                     f"{path}:{node_line(key_node, val_node)}: run value must be a scalar"
                 )
-            out.extend(scalar_value_lines(val_node, path))
+            append_scalar_lines(val_node, path, out, seen_nodes)
         elif key == "with":
-            collect_with_lines(val_node, path, out)
+            collect_with_lines(val_node, path, out, seen_nodes)
 
 
 def collect_steps_seq_lines(
@@ -375,7 +398,7 @@ def collect_steps_seq_lines(
         if id(step_node) in seen_nodes:
             continue
         seen_nodes.add(id(step_node))
-        collect_step_lines(step_node, path, out)
+        collect_step_lines(step_node, path, out, seen_nodes)
 
 
 def collect_text_step_lines(text: str, rel_path: str) -> list[tuple[int, str]]:
@@ -421,10 +444,7 @@ def collect_files_step_text(
         if rel_path in seen_files:
             continue
         seen_files.add(rel_path)
-        try:
-            text = (root / rel_path).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as err:
-            raise UsesError(f"{rel_path}: {err}") from err
+        text = read_workflow_text(root / rel_path, rel_path)
         append_step_records(
             rel_path, collect_text_step_lines(text, rel_path), seen_records, records
         )
@@ -492,8 +512,6 @@ def collect_text_version_inputs(
     text: str, rel_path: str, budget: RefBudget
 ) -> list[tuple[int, str, str]]:
     """Return (line, owner/repo, version) triples for remote step uses in text."""
-    if len(text.splitlines()) > MAX_FILE_LINES:
-        raise UsesError(f"{rel_path}: exceeds {MAX_FILE_LINES} lines")
     top = compose_top_mapping(text, rel_path)
     out: list[tuple[int, str, str]] = []
     if "jobs" in top:
@@ -525,10 +543,7 @@ def collect_files_version_inputs(
         if rel_path in seen_files:
             continue
         seen_files.add(rel_path)
-        try:
-            text = (root / rel_path).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as err:
-            raise UsesError(f"{rel_path}: {err}") from err
+        text = read_workflow_text(root / rel_path, rel_path)
         for line, repo, version in collect_text_version_inputs(text, rel_path, budget):
             rec = (rel_path, line, repo, version)
             if rec not in seen_records:
