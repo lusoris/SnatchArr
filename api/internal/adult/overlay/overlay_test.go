@@ -378,13 +378,37 @@ func TestBuildMovieLimit(t *testing.T) {
 	if _, err := overlay.Build(overlay.Options{SourceRoot: sourceRoot, TargetRoot: targetRoot, MaxMovies: 2}, movies); !errors.Is(err, overlay.ErrTooManyMovies) {
 		t.Fatalf("over-limit build error = %v", err)
 	}
-	for _, limit := range []int{-1, overlay.DefaultMaxMovies + 1} {
+	for _, limit := range []int{-1, overlay.MaxMoviesCeiling + 1} {
 		if _, err := overlay.Build(overlay.Options{SourceRoot: sourceRoot, TargetRoot: targetRoot, MaxMovies: limit}, nil); !errors.Is(err, overlay.ErrInvalidOptions) {
 			t.Errorf("MaxMovies %d error = %v", limit, err)
 		}
 	}
 	if _, err := overlay.Build(overlay.Options{SourceRoot: sourceRoot, TargetRoot: targetRoot}, movies); err != nil {
 		t.Fatalf("default limit build error = %v", err)
+	}
+}
+
+func TestBuildDefaultLimitIsOneHundredThousand(t *testing.T) {
+	t.Parallel()
+	const wantDefaultLimit = 100_000
+	if overlay.DefaultMaxMovies != wantDefaultLimit {
+		t.Errorf("DefaultMaxMovies = %d, want %d", overlay.DefaultMaxMovies, wantDefaultLimit)
+	}
+	opts := overlay.Options{SourceRoot: sourceRoot, TargetRoot: testRoot("target")}
+	movies := make([]whisparr.Movie, wantDefaultLimit+1)
+	if _, err := overlay.Build(opts, movies[:wantDefaultLimit]); err != nil {
+		t.Fatalf("default-limit build error = %v", err)
+	}
+	if _, err := overlay.Build(opts, movies); !errors.Is(err, overlay.ErrTooManyMovies) {
+		t.Fatalf("over-default-limit build error = %v, want %v", err, overlay.ErrTooManyMovies)
+	}
+}
+
+func TestBuildMaxMoviesCeilingBoundary(t *testing.T) {
+	t.Parallel()
+	opts := overlay.Options{SourceRoot: sourceRoot, TargetRoot: testRoot("target"), MaxMovies: overlay.MaxMoviesCeiling}
+	if _, err := overlay.Build(opts, nil); err != nil {
+		t.Fatalf("MaxMoviesCeiling build error = %v", err)
 	}
 }
 

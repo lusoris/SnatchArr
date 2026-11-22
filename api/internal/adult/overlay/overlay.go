@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,8 +29,10 @@ const (
 	maxExtensionBytes = 16 // Includes the leading period.
 	// 180 title + 7 year + 11 " [whisparr-" + 20 digits (strconv.Itoa(math.MinInt)) + 1 "]" = 219 folder bytes; + 16 extension = 235 <= 255.
 	maxComponentBytes = 255
-	// DefaultMaxMovies caps Build when Options.MaxMovies is zero.
-	DefaultMaxMovies = 1_000_000
+	// DefaultMaxMovies bounds Build when Options.MaxMovies is zero.
+	DefaultMaxMovies = 100_000
+	// MaxMoviesCeiling is the largest explicit Options.MaxMovies accepted by Build.
+	MaxMoviesCeiling = 1_000_000
 )
 
 // ErrInvalidOptions reports an empty or non-absolute source or target root.
@@ -61,7 +64,7 @@ const (
 type Options struct {
 	SourceRoot string
 	TargetRoot string
-	// MaxMovies bounds the list processed by Build; zero selects DefaultMaxMovies.
+	// MaxMovies bounds the list processed by Build; zero selects DefaultMaxMovies, up to MaxMoviesCeiling.
 	MaxMovies int
 }
 
@@ -94,20 +97,20 @@ func Build(opts Options, movies []whisparr.Movie) (Map, error) {
 	if limit == 0 {
 		limit = DefaultMaxMovies
 	}
-	if limit < 0 || limit > DefaultMaxMovies {
+	if limit < 0 || limit > MaxMoviesCeiling {
 		return Map{}, fmt.Errorf("max movies: %w", ErrInvalidOptions)
 	}
 	if len(movies) > limit {
 		return Map{}, fmt.Errorf("%w", ErrTooManyMovies)
 	}
 	result := Map{}
-	fileCounts := countFileBearingMovies(movies)
+	duplicates := duplicateMovieIDs(movies)
 	// len(movies) is bounded by limit above.
 	for _, movie := range movies {
 		if !movie.HasFile {
 			continue
 		}
-		if fileCounts[movie.ID] > 1 {
+		if _, duplicated := duplicates[movie.ID]; duplicated {
 			result.Refused = append(result.Refused, Refusal{MovieID: movie.ID, Reason: ReasonDuplicateMovieID})
 			continue
 		}
@@ -123,15 +126,34 @@ func Build(opts Options, movies []whisparr.Movie) (Map, error) {
 	return result, nil
 }
 
-func countFileBearingMovies(movies []whisparr.Movie) map[int]int {
-	counts := make(map[int]int, len(movies))
+// duplicateMovieIDs returns the set of movie IDs that appear on more than one file-bearing movie.
+func duplicateMovieIDs(movies []whisparr.Movie) map[int]struct{} {
+	fileCount := 0
 	// len(movies) is bounded by Build's configured limit.
-	for _, movie := range movies {
-		if movie.HasFile {
-			counts[movie.ID]++
+	for index := range movies {
+		if movies[index].HasFile {
+			fileCount++
 		}
 	}
-	return counts
+	if fileCount < 2 {
+		return nil
+	}
+	ids := make([]int, 0, fileCount)
+	// len(movies) is bounded by Build's configured limit.
+	for index := range movies {
+		if movies[index].HasFile {
+			ids = append(ids, movies[index].ID)
+		}
+	}
+	slices.Sort(ids)
+	duplicates := make(map[int]struct{})
+	// len(ids) equals fileCount, bounded by Build's configured limit.
+	for index := 1; index < len(ids); index++ {
+		if ids[index] == ids[index-1] {
+			duplicates[ids[index]] = struct{}{}
+		}
+	}
+	return duplicates
 }
 
 func validateOptions(opts Options) error {
