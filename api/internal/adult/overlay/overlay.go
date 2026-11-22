@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/golusoris/goenvoy/arr/whisparr"
@@ -25,9 +26,12 @@ import (
 
 const (
 	maxTitleBytes     = 180
+	maxTitleUnits     = 180 // HFS+ length of the title, counted by hfsUnits.
 	maxRawTitleBytes  = 4096
 	maxExtensionBytes = 16 // Includes the leading period.
 	// 180 title + 7 year + 11 " [whisparr-" + 20 digits (strconv.Itoa(math.MinInt)) + 1 "]" = 219 folder bytes; + 16 extension = 235 <= 255.
+	// The year, the suffix and the extension are ASCII (one HFS+ unit per byte), so the same sums bound the HFS+ units:
+	// 180 title units + 39 = 219 folder units; + 16 extension = 235 <= 255.
 	maxComponentBytes = 255
 	// DefaultMaxMovies bounds Build when Options.MaxMovies is zero.
 	DefaultMaxMovies = 100_000
@@ -274,12 +278,39 @@ func sanitizeTitle(title string) string {
 	return trimTitle(truncateTitle(strings.Trim(strings.Join(strings.Fields(clean.String()), " "), " .")))
 }
 
+// truncateTitle drops whole trailing runes until the title fits maxTitleBytes and maxTitleUnits.
 func truncateTitle(title string) string {
 	for steps := 0; len(title) > maxTitleBytes && steps < maxRawTitleBytes; steps++ {
 		_, size := utf8.DecodeLastRuneInString(title)
 		title = title[:len(title)-size]
 	}
+	// The first loop leaves at most maxTitleBytes bytes, so this loop drops at most that many runes.
+	for steps := 0; hfsUnits(title) > maxTitleUnits && steps < maxTitleBytes; steps++ {
+		_, size := utf8.DecodeLastRuneInString(title)
+		title = title[:len(title)-size]
+	}
 	return title
+}
+
+// hfsUnits bounds the length of s on HFS+, which stores a name as decomposed UTF-16 and caps a component at 255
+// units: a title inside the byte budget can still exceed that (U+1F82 is 3 bytes and 4 units). Apple TN1150 (HFS Plus
+// Volume Format, Unicode Subtleties) freezes the HFS+ decomposition table and leaves some ranges undecomposed, so it
+// differs from current NFD. Each rune counts the larger of its own UTF-16 length and that of its NFD form, which
+// bounds the stored length whether or not the table decomposes that rune.
+func hfsUnits(s string) int {
+	units := 0
+	for _, char := range s {
+		units += max(utf16.RuneLen(char), utf16Len(norm.NFD.String(string(char))))
+	}
+	return units
+}
+
+func utf16Len(s string) int {
+	units := 0
+	for _, char := range s {
+		units += utf16.RuneLen(char)
+	}
+	return units
 }
 
 func trimTitle(title string) string {

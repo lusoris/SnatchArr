@@ -12,9 +12,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/golusoris/goenvoy/arr/whisparr"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/lusoris/SnatchArr/api/internal/adult/overlay"
 )
@@ -325,6 +327,49 @@ func TestBuildTitleSanitize(t *testing.T) {
 	tooLong := build(t, movie(6, strings.Repeat("a", 4097), 0, rootPath(sourceRoot, "a", "six.mkv")))
 	if len(tooLong.Entries) != 0 || len(tooLong.Refused) != 1 || tooLong.Refused[0].Reason != overlay.ReasonTitleTooLong {
 		t.Fatalf("4097-byte title result = %#v", tooLong)
+	}
+}
+
+// nfdUnits counts the UTF-16 units of the NFD form, the decomposed UTF-16 that HFS+ stores for these characters.
+func nfdUnits(s string) int {
+	return len(utf16.Encode([]rune(norm.NFD.String(s))))
+}
+
+func TestBuildTitleHFSUnits(t *testing.T) {
+	t.Parallel()
+	alpha := "\u1F82"      // 3 UTF-8 bytes; NFD alpha, psili, varia, ypogegrammeni = 4 UTF-16 units.
+	compat := "\U0002F800" // 4 UTF-8 bytes, 2 UTF-16 units; NFD U+4E3D = 1 unit, so only the larger count keeps 2.
+	for _, tc := range []struct{ name, title, want string }{
+		{"ascii-untouched", strings.Repeat("a", 180), strings.Repeat("a", 180)},
+		{"units-boundary-kept", strings.Repeat(alpha, 45), strings.Repeat(alpha, 45)},
+		{"units-boundary-plus-one", strings.Repeat(alpha, 45) + "a", strings.Repeat(alpha, 45)},
+		{"units-boundary-trimmed", strings.Repeat(alpha, 46), strings.Repeat(alpha, 45)},
+		{"units-trimmed-inside-byte-budget", strings.Repeat(alpha, 60), strings.Repeat(alpha, 45)},
+		{"undecomposed-length-counted", strings.Repeat(alpha, 40) + strings.Repeat(compat, 15), strings.Repeat(alpha, 40) + strings.Repeat(compat, 10)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := entryByID(t, build(t, movie(1, tc.title, 0, rootPath(sourceRoot, "a", "one.mkv"))), 1).Folder
+			if got != tc.want {
+				t.Fatalf("folder = %+q (%d bytes, %d NFD units), want %+q", got, len(got), nfdUnits(got), tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildHFSUnitsWithSuffixAndExtension(t *testing.T) {
+	t.Parallel()
+	title := strings.Repeat("\u1F82", 60) // 180 bytes, 240 HFS+ units before the fix.
+	result := build(t,
+		movie(1, title, 2020, rootPath(sourceRoot, "a", "one.abcdefghijklmno")),
+		movie(math.MaxInt, title, 2020, rootPath(sourceRoot, "b", "two.abcdefghijklmno")),
+	)
+	maxEntry := entryByID(t, result, math.MaxInt)
+	if !strings.Contains(maxEntry.Folder, " [whisparr-") {
+		t.Fatalf("collision suffix missing: %+q", maxEntry.Folder)
+	}
+	if folder, link := nfdUnits(maxEntry.Folder), nfdUnits(maxEntry.Link); folder > 255 || link > 255 {
+		t.Fatalf("HFS+ units folder=%d link=%d, want <= 255", folder, link)
 	}
 }
 
