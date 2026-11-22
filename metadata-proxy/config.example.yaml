@@ -13,6 +13,12 @@ metadata_proxy:
 
   # One dedicated CONNECT port per client application sets the bounded `app` metric label
   # without requiring proxy credentials (docs/adr/0049-metadata-proxy.md:56).
+  # IMPORTANT: the standalone binary binds every CONNECT listener on all interfaces (`:port`)
+  # without client authentication, and `log` mode tunnels unlisted public hosts that pass
+  # `refuse_hosts`, `ports`, and the dial SSRF guard. Restrict inbound network access to the
+  # intended client applications (for example via Kubernetes NetworkPolicy, container network
+  # isolation, or host firewall rules) before starting the proxy; `enforce` mode restricts
+  # destination hosts only and is not a substitute for client access control.
   listeners:
     - app: sonarr
       port: 8081

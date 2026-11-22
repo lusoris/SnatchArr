@@ -6,7 +6,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 # SnatchArr Metadata Proxy (`metadata-proxy`)
 
-`snatcharr-metadata-proxy` is the standalone outbound metadata proxy for SnatchArr ("snatch" means acquire a missing or cutoff-unmet media item, and "Arr" refers to the \*arr family of media applications; pronounce it "snatch-arr"), specified in [ADR-0049](../docs/adr/0049-metadata-proxy.md). Slice 1 implements the `CONNECT` forward-proxy binary in `log` and `enforce` modes, exposing one dedicated listener port per participating application (so the bounded `app` metric label requires no proxy credentials), refusing non-`CONNECT` plain-HTTP requests, seeded indexer/download-client hosts, and private/loopback/link-local/cluster-service addresses at dial time, and serving Kubernetes health probes (`/livez`, `/readyz`, `/startupz`) and Prometheus metrics (`/metrics`) on a separate admin HTTP listener.
+`snatcharr-metadata-proxy` is the standalone outbound metadata proxy for SnatchArr ("snatch" means acquire a missing or cutoff-unmet media item, and "Arr" refers to the \*arr family of media applications; pronounce it "snatch-arr"), specified in [ADR-0049](../docs/adr/0049-metadata-proxy.md). Slice 1 implements the `CONNECT` forward-proxy binary in `log` and `enforce` modes, exposing one dedicated listener port per participating application (so the bounded `app` metric label requires no proxy credentials), refusing non-`CONNECT` plain-HTTP requests, refusing seeded indexer/download-client hosts, blocking built-in special-purpose IP ranges (private, loopback, link-local, CGNAT, and non-global-unicast IPv6) plus operator-configured `denied_prefixes` (where operators must list their cluster Service CIDRs before use) at dial time, and serving Kubernetes health probes (`/livez`, `/readyz`, `/startupz`) and Prometheus metrics (`/metrics`) on a separate admin HTTP listener.
 
 ## Configuration
 
@@ -19,16 +19,18 @@ Settings load through `golusoris/core/config` under the `metadata_proxy` key tre
 | `metadata_proxy.listeners` | `APP_METADATA_PROXY_LISTENERS` | *(required)* | List of `{app, port}` entries in YAML (or comma-separated `app:port` pairs in env). Ports must be unique and within `1..65535`. |
 | `metadata_proxy.allow_hosts` | `APP_METADATA_PROXY_ALLOW_HOSTS` | `[]` | Metadata-provider host allow-list. Supports case-insensitive exact hosts (`skyhook.sonarr.tv`) and leading-dot subdomain suffixes (`.sonarr.tv`); a single trailing dot is ignored. Required when `mode` is `enforce`. |
 | `metadata_proxy.refuse_hosts` | `APP_METADATA_PROXY_REFUSE_HOSTS` | `[]` | Seeded indexer and download-client hosts refused with `403` in both modes before any dial; same pattern syntax as `allow_hosts`. |
-| `metadata_proxy.ports` | `APP_METADATA_PROXY_PORTS` | `[443]` | Allowed `CONNECT` destination ports (`1..65535`). |
-| `metadata_proxy.denied_prefixes` | `APP_METADATA_PROXY_DENIED_PREFIXES` | `[]` | Extra IPv4/IPv6 CIDRs refused at dial time in addition to loopback, RFC 1918 private, link-local, CGNAT, and non-global-unicast IPv6 ranges. |
+| `metadata_proxy.ports` | `APP_METADATA_PROXY_PORTS` | `[443]` | Allowed `CONNECT` destination ports (`1..65535`), as a YAML integer list or comma-separated integers in env. |
+| `metadata_proxy.denied_prefixes` | `APP_METADATA_PROXY_DENIED_PREFIXES` | `[]` | Extra IPv4/IPv6 CIDRs refused at dial time in addition to built-in loopback, RFC 1918 private, link-local, CGNAT, and non-global-unicast IPv6 ranges. Cluster Service CIDRs are not auto-discovered: configure your cluster's Service CIDRs here before use (required whenever a cluster uses ranges outside the built-in deny list). IPv4-mapped IPv6 prefixes (`/96..128`) normalize to IPv4 prefixes. |
 | `metadata_proxy.dial_timeout` | `APP_METADATA_PROXY_DIAL_TIMEOUT` | `10s` | Positive deadline for outbound TCP resolution and connection establishment. |
 | `metadata_proxy.idle_timeout` | `APP_METADATA_PROXY_IDLE_TIMEOUT` | `2m` | Closes a tunnel after this positive duration with no bytes transferred in either direction. |
 | `metadata_proxy.max_tunnel` | `APP_METADATA_PROXY_MAX_TUNNEL` | `30m` | Positive maximum lifetime of any single established `CONNECT` tunnel. |
 | `metadata_proxy.max_tunnels` | `APP_METADATA_PROXY_MAX_TUNNELS` | `256` | Positive upper bound on concurrent open tunnels per listener (`503` when full). |
 
-Startup fails immediately with a wrapped error when no listener is configured, an app name or port is duplicated, any port is outside `1..65535`, `mode` is not `log` or `enforce`, `mode` is `enforce` with an empty `allow_hosts`, a host pattern or CIDR is malformed, or any timeout or concurrency bound is non-positive.
+Startup fails immediately with a wrapped error when no listener is configured, an app name or port is duplicated, any port is non-integer or outside `1..65535`, `mode` is not `log` or `enforce`, `mode` is `enforce` with an empty `allow_hosts`, a host pattern or CIDR is malformed, an explicit `APP_METADATA_PROXY_CONFIG_FILE` lookup fails or times out, or any timeout or concurrency bound is non-positive.
 
 ## Running locally
+
+Both examples below bind the `CONNECT` listeners on all network interfaces (`:port`) without client authentication (`APP_HTTP_ADDR` restricts only the admin HTTP listener), and `log` mode tunnels unlisted public destinations that pass `refuse_hosts`, `ports`, and the dial SSRF guard. Restrict inbound access on those listener ports to trusted clients (for example with host firewall rules or network namespaces) before running either command on a shared network.
 
 Run from the repository root with the example configuration file:
 
@@ -47,14 +49,15 @@ APP_METADATA_PROXY_ALLOW_HOSTS=skyhook.sonarr.tv,api.radarr.video \
   go run ./metadata-proxy/cmd/snatcharr-metadata-proxy
 ```
 
-Verify probes and metrics on the admin listener:
+Verify probes and metrics against the environment-variable example above (labeled `metadata_proxy_*` collectors emit samples only after a proxy request records an outcome, so send one local plain-HTTP request that the `CONNECT` listener rejects with `405` without dialing upstream first):
 
 ```bash
 curl -fsS http://127.0.0.1:18080/readyz
-curl -fsS http://127.0.0.1:18080/metrics | grep '^metadata_proxy_'
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18081/
+curl -fsS http://127.0.0.1:18080/metrics | grep '^metadata_proxy_refused_tunnels_total'
 ```
 
-Readiness (`/readyz`) reflects only whether configuration is loaded and every configured `CONNECT` listener is bound; it never dials an upstream metadata provider.
+Readiness (`/readyz`) checks that configuration is loaded, every configured `CONNECT` listener is bound without a serve error, and graceful shutdown has not begun (`golusoris/k8s/health` fails `/readyz` with `503` during the `health.drain.delay` drain window while the `CONNECT` listeners remain bound before closing); it never dials an upstream metadata provider.
 
 ## `result` metric label values
 
@@ -70,7 +73,7 @@ Readiness (`/readyz`) reflects only whether configuration is loaded and every co
 | `refused_ip` | `403` | Resolved IP address was blocked at dial time by the SSRF guard or `denied_prefixes`. |
 | `refused_limit` | `503` | Listener reached `metadata_proxy.max_tunnels` concurrent open tunnels. |
 | `dial_timeout` | `504` | Outbound TCP dial exceeded `metadata_proxy.dial_timeout`. |
-| `dial_error` | `502` | Outbound TCP dial failed for another network error (for example, connection refused or DNS lookup failure). |
+| `dial_error` | `502` (or none after hijack) | Outbound TCP dial failed for another network error (for example, connection refused or DNS lookup failure), or post-dial tunnel setup failed (`Hijack`, clearing connection deadlines, or writing the `200 Connection established` response; no HTTP status can be sent once hijacked). |
 
 All pre-tunnel refusals (`400`, `403`, `405`, `503`) also increment `metadata_proxy_refused_tunnels_total{app}`. Hosts matching `allow_hosts` record their normalized `allow_hosts` entry on `host`; unlisted hosts fold into `other`.
 

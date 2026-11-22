@@ -6,10 +6,13 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,14 +36,16 @@ const (
 	DefaultConfigFile = "/etc/snatcharr/metadata-proxy.yaml"
 	ConfigFileEnv     = "APP_METADATA_PROXY_CONFIG_FILE"
 
-	DefaultPort        = 443
-	DefaultDialTimeout = 10 * time.Second
-	DefaultIdleTimeout = 2 * time.Minute
-	DefaultMaxTunnel   = 30 * time.Minute
-	DefaultMaxTunnels  = 256
+	DefaultPort              = 443
+	DefaultConfigStatTimeout = 5 * time.Second
+	DefaultDialTimeout       = 10 * time.Second
+	DefaultIdleTimeout       = 2 * time.Minute
+	DefaultMaxTunnel         = 30 * time.Minute
+	DefaultMaxTunnels        = 256
 
-	minPort = 1
-	maxPort = 65535
+	minPort              = 1
+	maxPort              = 65535
+	ipv4MappedPrefixBits = 96
 )
 
 // Validation sentinel errors.
@@ -122,6 +127,8 @@ type CoreOptionsOverride struct {
 	Files        []string
 	DisableEnv   bool
 	DisableWatch bool
+	StatTimeout  time.Duration
+	StatFunc     func(string) (os.FileInfo, error)
 }
 
 // CoreDecorateParams bundles inputs for fx.Decorate of golusoris core/config Options.
@@ -135,27 +142,56 @@ type CoreDecorateParams struct {
 // DecorateCoreOptionsFX adapts DecorateCoreOptions for fx, applying any supplied CoreOptionsOverride.
 func DecorateCoreOptionsFX(p CoreDecorateParams) (gconfig.Options, error) {
 	o := p.Options
+	timeout := DefaultConfigStatTimeout
+	statFn := defaultStatFile
 	if p.Override != nil {
 		o.Files = p.Override.Files
 		o.DisableEnv = p.Override.DisableEnv
 		if p.Override.DisableWatch {
 			o.Watch = false
 		}
+		if p.Override.StatTimeout > 0 {
+			timeout = p.Override.StatTimeout
+		}
+		if p.Override.StatFunc != nil {
+			statFn = p.Override.StatFunc
+		}
 	}
-	return DecorateCoreOptions(o)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return decorateCoreOptions(ctx, o, statFn)
 }
 
 // DecorateCoreOptions wires CompoundKeys and YAML file loading into golusoris core/config.
 func DecorateCoreOptions(o gconfig.Options) (gconfig.Options, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultConfigStatTimeout)
+	defer cancel()
+	return DecorateCoreOptionsContext(ctx, o)
+}
+
+// DecorateCoreOptionsContext wires CompoundKeys and YAML file loading using a bounded stat context.
+func DecorateCoreOptionsContext(ctx context.Context, o gconfig.Options) (gconfig.Options, error) {
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultConfigStatTimeout)
+		defer cancel()
+	}
+	return decorateCoreOptions(ctx, o, defaultStatFile)
+}
+
+func decorateCoreOptions(
+	ctx context.Context,
+	o gconfig.Options,
+	statFn func(string) (os.FileInfo, error),
+) (gconfig.Options, error) {
 	o.CompoundKeys = append(o.CompoundKeys, CompoundKeys()...)
 	if len(o.Files) == 0 {
 		o.Files = []string{DefaultConfigFile}
 	}
 	if !o.DisableEnv {
 		if envFile := strings.TrimSpace(os.Getenv(ConfigFileEnv)); envFile != "" {
-			// #nosec G703 -- operator-supplied config path from APP_METADATA_PROXY_CONFIG_FILE
-			if _, err := os.Stat(envFile); err != nil {
-				return gconfig.Options{}, fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, err)
+			if err := statConfigFile(ctx, statFn, envFile); err != nil {
+				return gconfig.Options{}, err
 			}
 			o.Files = append(o.Files, envFile)
 		}
@@ -163,11 +199,35 @@ func DecorateCoreOptions(o gconfig.Options) (gconfig.Options, error) {
 	return o, nil
 }
 
+func defaultStatFile(path string) (os.FileInfo, error) {
+	// #nosec G703 -- operator-supplied config path from APP_METADATA_PROXY_CONFIG_FILE
+	return os.Stat(path)
+}
+
+func statConfigFile(ctx context.Context, statFn func(string) (os.FileInfo, error), envFile string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, err)
+	}
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := statFn(envFile)
+		errCh <- err
+	}()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, err)
+		}
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, ctx.Err())
+	}
+}
+
 type scalarOptions struct {
 	Mode           Mode          `koanf:"mode"`
 	AllowHosts     []string      `koanf:"allow_hosts"`
 	RefuseHosts    []string      `koanf:"refuse_hosts"`
-	Ports          []int         `koanf:"ports"`
 	DeniedPrefixes []string      `koanf:"denied_prefixes"`
 	DialTimeout    time.Duration `koanf:"dial_timeout"`
 	IdleTimeout    time.Duration `koanf:"idle_timeout"`
@@ -180,7 +240,6 @@ func Load(cfg *gconfig.Config) (*Compiled, error) {
 	defaults := DefaultOptions()
 	scalars := scalarOptions{
 		Mode:        defaults.Mode,
-		Ports:       defaults.Ports,
 		DialTimeout: defaults.DialTimeout,
 		IdleTimeout: defaults.IdleTimeout,
 		MaxTunnel:   defaults.MaxTunnel,
@@ -193,12 +252,16 @@ func Load(cfg *gconfig.Config) (*Compiled, error) {
 	if err != nil {
 		return nil, err
 	}
+	ports, err := loadPorts(cfg, defaults.Ports)
+	if err != nil {
+		return nil, err
+	}
 	opts := Options{
 		Mode:           scalars.Mode,
 		Listeners:      listeners,
 		AllowHosts:     scalars.AllowHosts,
 		RefuseHosts:    scalars.RefuseHosts,
-		Ports:          scalars.Ports,
+		Ports:          ports,
 		DeniedPrefixes: scalars.DeniedPrefixes,
 		DialTimeout:    scalars.DialTimeout,
 		IdleTimeout:    scalars.IdleTimeout,
@@ -206,6 +269,11 @@ func Load(cfg *gconfig.Config) (*Compiled, error) {
 		MaxTunnels:     scalars.MaxTunnels,
 	}
 	return Compile(opts)
+}
+
+type rawListener struct {
+	App  string `koanf:"app"`
+	Port any    `koanf:"port"`
 }
 
 func loadListeners(cfg *gconfig.Config) ([]Listener, error) {
@@ -216,11 +284,19 @@ func loadListeners(cfg *gconfig.Config) ([]Listener, error) {
 	if s, ok := raw.(string); ok {
 		return parseEnvListeners(s)
 	}
-	var listeners []Listener
-	if err := cfg.Unmarshal("metadata_proxy.listeners", &listeners); err != nil {
+	var decoded []rawListener
+	if err := cfg.Unmarshal("metadata_proxy.listeners", &decoded); err != nil {
 		return nil, fmt.Errorf("config: decode metadata_proxy.listeners: %w", err)
 	}
-	return listeners, nil
+	out := make([]Listener, 0, len(decoded))
+	for _, item := range decoded {
+		port, err := parsePortValue(item.Port)
+		if err != nil {
+			return nil, fmt.Errorf("config: listener %q: %w", item.App, err)
+		}
+		out = append(out, Listener{App: item.App, Port: port})
+	}
+	return out, nil
 }
 
 func parseEnvListeners(raw string) ([]Listener, error) {
@@ -235,13 +311,145 @@ func parseEnvListeners(raw string) ([]Listener, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: listener %q must have form app:port", ErrBadAppName, item)
 		}
-		port, err := strconv.Atoi(portStr)
+		port, err := portFromString(portStr)
 		if err != nil {
-			return nil, fmt.Errorf("%w: listener %q port: %w", ErrBadPort, item, err)
+			return nil, fmt.Errorf("listener %q: %w", item, err)
 		}
 		out = append(out, Listener{App: appName, Port: port})
 	}
 	return out, nil
+}
+
+func loadPorts(cfg *gconfig.Config, defaultPorts []int) ([]int, error) {
+	raw, exists := cfg.All()["metadata_proxy.ports"]
+	if !exists {
+		return slices.Clone(defaultPorts), nil
+	}
+	switch v := raw.(type) {
+	case string:
+		return parseEnvPorts(v)
+	case []int:
+		return slices.Clone(v), nil
+	case []any:
+		return parsePortSlice(v)
+	default:
+		p, err := parsePortValue(raw)
+		if err != nil {
+			return nil, fmt.Errorf("config: decode metadata_proxy.ports: %w", err)
+		}
+		return []int{p}, nil
+	}
+}
+
+func parseEnvPorts(raw string) ([]int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return []int{}, nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]int, 0, len(parts))
+	for _, item := range parts {
+		port, err := portFromString(item)
+		if err != nil {
+			return nil, fmt.Errorf("config: decode metadata_proxy.ports: %w", err)
+		}
+		out = append(out, port)
+	}
+	return out, nil
+}
+
+func parsePortSlice(items []any) ([]int, error) {
+	out := make([]int, 0, len(items))
+	for _, item := range items {
+		p, err := parsePortValue(item)
+		if err != nil {
+			return nil, fmt.Errorf("config: decode metadata_proxy.ports: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+func parsePortValue(v any) (int, error) {
+	switch x := v.(type) {
+	case int:
+		return x, nil
+	case int64:
+		return portFromInt64(x)
+	case uint64:
+		return portFromUint64(x)
+	case float64:
+		return portFromFloat64(x)
+	case string:
+		return portFromString(x)
+	default:
+		return parseNarrowPortValue(v)
+	}
+}
+
+func parseNarrowPortValue(v any) (int, error) {
+	switch x := v.(type) {
+	case int8:
+		return int(x), nil
+	case int16:
+		return int(x), nil
+	case int32:
+		return int(x), nil
+	case uint8:
+		return int(x), nil
+	case uint16:
+		return int(x), nil
+	default:
+		return parseWideUnsignedOrFloatPort(v)
+	}
+}
+
+func parseWideUnsignedOrFloatPort(v any) (int, error) {
+	switch x := v.(type) {
+	case uint:
+		return portFromUint64(uint64(x))
+	case uint32:
+		return portFromUint64(uint64(x))
+	case float32:
+		return portFromFloat64(float64(x))
+	default:
+		return 0, fmt.Errorf("%w: invalid port value %v", ErrBadPort, v)
+	}
+}
+
+func portFromInt64(n int64) (int, error) {
+	if n < int64(math.MinInt) || n > int64(math.MaxInt) {
+		return 0, fmt.Errorf("%w: port %d", ErrBadPort, n)
+	}
+	return int(n), nil
+}
+
+func portFromUint64(n uint64) (int, error) {
+	if n > uint64(math.MaxInt) {
+		return 0, fmt.Errorf("%w: port %d", ErrBadPort, n)
+	}
+	return int(n), nil
+}
+
+func portFromFloat64(f float64) (int, error) {
+	if math.IsNaN(f) || math.IsInf(f, 0) || math.Trunc(f) != f {
+		return 0, fmt.Errorf("%w: fractional port %v", ErrBadPort, f)
+	}
+	if f < float64(math.MinInt32) || f > float64(math.MaxInt32) {
+		return 0, fmt.Errorf("%w: port %v", ErrBadPort, f)
+	}
+	return int(f), nil
+}
+
+func portFromString(raw string) (int, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return 0, fmt.Errorf("%w: empty port", ErrBadPort)
+	}
+	p, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("%w: port %q: %w", ErrBadPort, raw, err)
+	}
+	return p, nil
 }
 
 // Validate checks every startup invariant of o.
@@ -391,6 +599,15 @@ func compileDeniedPrefixes(rawPrefixes []string) ([]netip.Prefix, []netip.Prefix
 		p, err := netip.ParsePrefix(strings.TrimSpace(raw))
 		if err != nil {
 			return nil, nil, fmt.Errorf("%w %q: %w", ErrBadCIDR, raw, err)
+		}
+		if p.Addr().Is4In6() {
+			if p.Bits() < ipv4MappedPrefixBits {
+				return nil, nil, fmt.Errorf(
+					"%w %q: IPv4-mapped IPv6 prefix length must be %d..128 (or use IPv4 CIDR notation)",
+					ErrBadCIDR, raw, ipv4MappedPrefixBits,
+				)
+			}
+			p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-ipv4MappedPrefixBits)
 		}
 		masked := p.Masked()
 		if masked.Addr().Is4() {
