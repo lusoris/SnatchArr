@@ -183,3 +183,36 @@ func TestHeartbeatCancelsAStaleHolder(t *testing.T) {
 		}
 	})
 }
+
+// Heartbeat without a worker id answers CONTINUE for a leased run and leaves its lease alone:
+// the stale-holder CANCEL needs a named worker, and only the holder extends a lease.
+func TestHeartbeatWithoutWorkerKeepsLease(t *testing.T) {
+	t.Parallel()
+	srv, _, runID := completeServer(t)
+	fakeClk, ok := srv.clk.(*clockwork.FakeClock)
+	if !ok {
+		t.Fatalf("clk is %T, want *clockwork.FakeClock", srv.clk)
+	}
+	before, beforeErr := srv.runs.Get(t.Context(), uuid.MustParse(runID))
+	if beforeErr != nil {
+		t.Fatalf("runs.Get() before = %v", beforeErr)
+	}
+	fakeClk.Advance(10 * time.Second)
+	resp, err := srv.Heartbeat(t.Context(), &snatcharrv1.HeartbeatRequest{RunId: runID})
+	if err != nil {
+		t.Fatalf("Heartbeat(no worker id) = %v", err)
+	}
+	if resp.GetDirective() != snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CONTINUE {
+		t.Errorf("directive = %v, want CONTINUE", resp.GetDirective())
+	}
+	after, afterErr := srv.runs.Get(t.Context(), uuid.MustParse(runID))
+	if afterErr != nil {
+		t.Fatalf("runs.Get() after = %v", afterErr)
+	}
+	if before.LeaseExpiresAt == nil || after.LeaseExpiresAt == nil || !after.LeaseExpiresAt.Equal(*before.LeaseExpiresAt) {
+		t.Errorf("lease_expires_at = %v after, want unchanged %v", after.LeaseExpiresAt, before.LeaseExpiresAt)
+	}
+	if after.LeasedBy != "worker" {
+		t.Errorf("leased_by = %q, want %q", after.LeasedBy, "worker")
+	}
+}
