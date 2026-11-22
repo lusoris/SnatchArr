@@ -23,7 +23,7 @@ set -euo pipefail
 
 # The S3 store of the test, by version and digest (the plugin documents RustFS as a store for
 # tests); mirror.gcr.io avoids Docker Hub's anonymous pull limit on shared runners.
-RUSTFS_IMAGE=mirror.gcr.io/rustfs/rustfs:1.0.5@sha256:b81d16a90ee25bd9511280127ca1471788c6e874cf0f0da759645f46b2dc1d74
+RUSTFS_IMAGE=mirror.gcr.io/rustfs/rustfs:1.0.6@sha256:ee717072290bec9b11abfc0365f8310b00df1cd9b3639943edae47bdef05044a
 plugin=barman-cloud.cloudnative-pg.io
 store=snatcharr-backups
 

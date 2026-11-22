@@ -736,6 +736,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/release_publish_order_check.py --self-test
 	python3 -I tools/ci/release_publish_order_check.py
 	python3 -I tools/ci/release_closes_check.py --self-test
+	python3 -I tools/jellyfin/naming_census.py --self-test
 
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.
