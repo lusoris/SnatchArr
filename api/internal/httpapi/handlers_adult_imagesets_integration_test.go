@@ -261,31 +261,10 @@ func TestAdultImageSets_Boundary_EmptyDirZeroItemsAndPagination(t *testing.T) {
 	rootDir := t.TempDir()
 	enableAdultWithDir(t, f, adminCsrf, rootDir)
 
-	// 1. Boundary: empty dir
-	scanRes := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/scan", adminCsrf, nil)
-	if scanRes.statusCode != http.StatusOK {
-		t.Fatalf("scan empty dir status = %d, want 200", scanRes.statusCode)
-	}
-	var emptySummary map[string]any
-	_ = json.Unmarshal(scanRes.body, &emptySummary)
-	if emptySummary["sets_found"] != float64(0) || emptySummary["items_found"] != float64(0) {
-		t.Errorf("empty dir expected 0 sets and items, got %+v", emptySummary)
-	}
-
-	listEmpty := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/adult/image-sets", "", nil)
-	if listEmpty.statusCode != http.StatusOK {
-		t.Fatalf("list empty status = %d, want 200", listEmpty.statusCode)
-	}
-	var emptyPage map[string]any
-	if err := json.Unmarshal(listEmpty.body, &emptyPage); err != nil {
-		t.Fatalf("unmarshal empty page: %v", err)
-	}
-	if emptyPage["total"] != float64(0) {
-		t.Errorf("expected total 0, got %v", emptyPage["total"])
-	}
-	emptyItems, ok := emptyPage["items"].([]any)
-	if !ok || len(emptyItems) != 0 {
-		t.Errorf("expected 0 image sets, got %v", emptyPage["items"])
+	// 1. Boundary: an empty image_set_dir looks like a missing mount, so the scan
+	// keeps the existing index and writes no marker, on every scan.
+	for scan := 1; scan <= 2; scan++ {
+		assertEmptyDirKeepsIndex(t, f, adminCsrf, scan)
 	}
 
 	// 2. Boundary: set with zero image items
@@ -347,5 +326,51 @@ func TestAdultImageSets_Boundary_EmptyDirZeroItemsAndPagination(t *testing.T) {
 	p2First := p2Sets[0].(map[string]any)
 	if p1First["id"] == p2First["id"] {
 		t.Errorf("page 1 and page 2 returned same set: %v", p1First["id"])
+	}
+}
+
+func assertEmptyDirKeepsIndex(t *testing.T, f *routerFixture, adminCsrf string, scan int) {
+	t.Helper()
+	scanRes := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/scan", adminCsrf, nil)
+	if scanRes.statusCode != http.StatusOK {
+		t.Fatalf("empty dir scan %d: status = %d, want 200; body: %s", scan, scanRes.statusCode, string(scanRes.body))
+	}
+	type scanSummary struct {
+		SetsFound         int  `json:"sets_found"`
+		ItemsFound        int  `json:"items_found"`
+		IgnoreFilePresent bool `json:"ignore_file_present"`
+	}
+	var summary scanSummary
+	err := json.Unmarshal(scanRes.body, &summary)
+	if err != nil {
+		t.Fatalf("empty dir scan %d: unmarshal summary: %v", scan, err)
+	}
+	wantSummary := scanSummary{SetsFound: 1, ItemsFound: 0, IgnoreFilePresent: false}
+	if summary != wantSummary {
+		t.Fatalf("empty dir scan %d: summary = %+v, want %+v", scan, summary, wantSummary)
+	}
+
+	listRes := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/adult/image-sets", "", nil)
+	if listRes.statusCode != http.StatusOK {
+		t.Fatalf("empty dir scan %d: list status = %d, want 200; body: %s", scan, listRes.statusCode, string(listRes.body))
+	}
+	type imageSetRow struct {
+		ID            string `json:"id"`
+		DirectoryPath string `json:"directory_path"`
+	}
+	var page struct {
+		Total int           `json:"total"`
+		Items []imageSetRow `json:"items"`
+	}
+	err = json.Unmarshal(listRes.body, &page)
+	if err != nil {
+		t.Fatalf("empty dir scan %d: unmarshal page: %v", scan, err)
+	}
+	wantRow := imageSetRow{
+		ID:            "00000000-0000-0000-0000-000000000001",
+		DirectoryPath: "/tmp/fixture-image-set",
+	}
+	if page.Total != 1 || len(page.Items) != 1 || page.Items[0] != wantRow {
+		t.Fatalf("empty dir scan %d: total = %d, items = %+v, want total 1 and [%+v]", scan, page.Total, page.Items, wantRow)
 	}
 }
