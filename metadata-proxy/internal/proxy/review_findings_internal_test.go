@@ -320,10 +320,9 @@ func runBridgeBufferedWriteCase(t *testing.T, stop bool) {
 
 	started := make(chan struct{})
 	upstream := &signaledWriteConn{Conn: upstreamConn, started: started}
-	result := make(chan struct{}, 1)
+	result := make(chan bridgeResult, 1)
 	go func() {
-		_, _, _ = svc.bridgeTunnel(hijackResponseWriter{conn: clientConn}, upstream)
-		close(result)
+		result <- svc.bridgeTunnel(hijackResponseWriter{conn: clientConn}, upstream)
 	}()
 	if stop {
 		select {
@@ -342,13 +341,19 @@ func runBridgeBufferedWriteCase(t *testing.T, stop bool) {
 		}
 		_ = clientPeer.Close()
 	}
+	var gotRes bridgeResult
 	select {
-	case <-result:
+	case gotRes = <-result:
 	case <-time.After(2 * time.Second):
 		t.Fatal("bridgeTunnel did not return within 2 seconds")
 	}
+	wantState := bridgeOK
 	if stop {
+		wantState = bridgeTransferError
 		assertTunnelPeerClosed(t, upstreamPeer, clientDrained)
+	}
+	if gotRes.state != wantState {
+		t.Fatalf("bridgeTunnel state = %v, want %v", gotRes.state, wantState)
 	}
 }
 

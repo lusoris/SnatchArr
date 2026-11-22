@@ -74,6 +74,7 @@ Readiness (`/readyz`) checks that configuration is loaded, every configured `CON
 | `refused_limit` | `503` | Listener reached `metadata_proxy.max_tunnels` concurrent open tunnels. |
 | `dial_timeout` | `504` | Outbound TCP dial exceeded `metadata_proxy.dial_timeout`. |
 | `dial_error` | `502` (or none after hijack) | Outbound TCP dial failed for another network error (for example, connection refused or DNS lookup failure), or post-dial tunnel setup failed (`Hijack`, clearing connection deadlines, or writing the `200 Connection established` response; no HTTP status can be sent once hijacked). |
+| `transfer_error` | `200` | `CONNECT` tunnel established, then the client bytes buffered before the `200` could not be written upstream; bytes already written are counted in `metadata_proxy_tunnel_bytes_total{direction="up"}`. |
 
 All pre-tunnel refusals (`400`, `403`, `405`, `503`) also increment `metadata_proxy_refused_tunnels_total{app}`. Hosts matching `allow_hosts` record their normalized `allow_hosts` entry on `host`; unlisted hosts fold into `other`.
 

@@ -78,10 +78,10 @@ func TestRecorderFoldsUnlistedLabelsToOther(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	if err = rec.RecordTunnel(ctx, "sonarr", "skyhook.sonarr.tv", config.ModeLog, 128, 256, 20*time.Millisecond); err != nil {
+	if err = rec.RecordTunnel(ctx, "sonarr", "skyhook.sonarr.tv", metrics.ResultOK, config.ModeLog, 128, 256, 20*time.Millisecond); err != nil {
 		t.Fatalf("RecordTunnel allowlisted: %v", err)
 	}
-	if err = rec.RecordTunnel(ctx, "sonarr", "unlisted.example.org", config.ModeLog, 64, 32, 10*time.Millisecond); err != nil {
+	if err = rec.RecordTunnel(ctx, "sonarr", "unlisted.example.org", metrics.ResultOK, config.ModeLog, 64, 32, 10*time.Millisecond); err != nil {
 		t.Fatalf("RecordTunnel unlisted: %v", err)
 	}
 	if err = rec.RecordRefusal(ctx, "sonarr", metricdef.OtherValue, metrics.ResultRefusedHost, config.ModeLog, 5*time.Millisecond); err != nil {
@@ -384,7 +384,7 @@ func assertHistogramBucketPlacement(t *testing.T, dur time.Duration, lowerBound,
 	if err != nil {
 		t.Fatalf("metrics.New: %v", err)
 	}
-	if err = rec.RecordTunnel(t.Context(), "sonarr", "skyhook.sonarr.tv", config.ModeLog, 1, 1, dur); err != nil {
+	if err = rec.RecordTunnel(t.Context(), "sonarr", "skyhook.sonarr.tv", metrics.ResultOK, config.ModeLog, 1, 1, dur); err != nil {
 		t.Fatalf("RecordTunnel(%s): %v", dur, err)
 	}
 	buckets := readDurationBuckets(t, reg)
@@ -485,7 +485,7 @@ func TestRecorderSurfacesMetricdefErrors(t *testing.T) {
 		{
 			name: "negative: RecordTunnel joins and returns label-count mismatch errors",
 			call: func() error {
-				return rec.RecordTunnel(t.Context(), "sonarr", "skyhook.sonarr.tv", config.ModeLog, 10, 20, 5*time.Millisecond)
+				return rec.RecordTunnel(t.Context(), "sonarr", "skyhook.sonarr.tv", metrics.ResultOK, config.ModeLog, 10, 20, 5*time.Millisecond)
 			},
 			wantMetrics: []string{metrics.MetricTunnelBytesTotal, metrics.MetricTunnelsTotal, metrics.MetricTunnelDurationSeconds},
 		},
@@ -512,4 +512,147 @@ func assertJoinedMetricError(t *testing.T, gotErr error, wantMetrics []string) {
 			t.Fatalf("joined error %q missing metric %q", msg, m)
 		}
 	}
+}
+
+type tunnelRecordCase struct {
+	name       string
+	result     string
+	mode       config.Mode
+	up         int64
+	down       int64
+	dur        time.Duration
+	wantResult string
+	wantUp     float64
+	wantDown   float64
+}
+
+func TestTransferErrorCatalogAndRecordTunnel(t *testing.T) {
+	t.Parallel()
+	assertTransferErrorInAllResultsAndCatalog(t)
+
+	cases := []tunnelRecordCase{
+		{
+			name:       "positive: transfer_error increments tunnel counter duration and partial up bytes",
+			result:     metrics.ResultTransferError,
+			mode:       config.ModeEnforce,
+			up:         48,
+			down:       0,
+			dur:        25 * time.Millisecond,
+			wantResult: metrics.ResultTransferError,
+			wantUp:     48,
+			wantDown:   0,
+		},
+		{
+			name:       "negative: ok tunnel records ok result distinct from transfer_error",
+			result:     metrics.ResultOK,
+			mode:       config.ModeLog,
+			up:         16,
+			down:       32,
+			dur:        15 * time.Millisecond,
+			wantResult: metrics.ResultOK,
+			wantUp:     16,
+			wantDown:   32,
+		},
+		{
+			name:       "boundary: transfer_error with zero bytes and non-positive duration clamps to zero",
+			result:     metrics.ResultTransferError,
+			mode:       config.ModeLog,
+			up:         0,
+			down:       0,
+			dur:        -5 * time.Millisecond,
+			wantResult: metrics.ResultTransferError,
+			wantUp:     0,
+			wantDown:   0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assertRecordedTunnelCase(t, tc)
+		})
+	}
+}
+
+func assertTransferErrorInAllResultsAndCatalog(t *testing.T) {
+	t.Helper()
+	got := metrics.AllResults()
+	want := []string{
+		metrics.ResultOK,
+		metrics.ResultRefusedMethod,
+		metrics.ResultRefusedTarget,
+		metrics.ResultRefusedHost,
+		metrics.ResultRefusedPort,
+		metrics.ResultRefusedIP,
+		metrics.ResultRefusedLimit,
+		metrics.ResultDialTimeout,
+		metrics.ResultDialError,
+		metrics.ResultTransferError,
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("AllResults() = %v, want %v", got, want)
+	}
+	cat, err := metrics.NewCatalog([]string{"sonarr"}, []string{"skyhook.sonarr.tv"})
+	if err != nil {
+		t.Fatalf("NewCatalog: %v", err)
+	}
+	for _, d := range cat.Defs() {
+		if lim, hasResult := d.Limits["result"]; hasResult && !slices.Equal(lim.Allow, want) {
+			t.Fatalf("metric %s result Allow = %v, want %v", d.Name, lim.Allow, want)
+		}
+	}
+}
+
+func assertRecordedTunnelCase(t *testing.T, tc tunnelRecordCase) {
+	t.Helper()
+	opts := config.DefaultOptions()
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 8081}}
+	opts.AllowHosts = []string{"skyhook.sonarr.tv"}
+	compiled, err := config.Compile(opts)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	reg := prometheus.NewRegistry()
+	rec, err := metrics.New(compiled, reg)
+	if err != nil {
+		t.Fatalf("metrics.New: %v", err)
+	}
+	if err = rec.RecordTunnel(t.Context(), "sonarr", "skyhook.sonarr.tv", tc.result, tc.mode, tc.up, tc.down, tc.dur); err != nil {
+		t.Fatalf("RecordTunnel: %v", err)
+	}
+	wantTunnels := fmt.Sprintf("# HELP %s Total CONNECT requests handled by the metadata proxy, partitioned by outcome.\n# TYPE %s counter\n%s{app=\"sonarr\",host=\"skyhook.sonarr.tv\",mode=%q,result=%q} 1\n",
+		metrics.MetricTunnelsTotal, metrics.MetricTunnelsTotal, metrics.MetricTunnelsTotal, tc.mode, tc.wantResult)
+	if err = testutil.GatherAndCompare(reg, strings.NewReader(wantTunnels), metrics.MetricTunnelsTotal); err != nil {
+		t.Fatalf("GatherAndCompare(%s): %v", metrics.MetricTunnelsTotal, err)
+	}
+	wantBytes := fmt.Sprintf("# HELP %s Total bytes copied through established CONNECT tunnels.\n# TYPE %s counter\n%s{app=\"sonarr\",direction=\"down\",host=\"skyhook.sonarr.tv\"} %g\n%s{app=\"sonarr\",direction=\"up\",host=\"skyhook.sonarr.tv\"} %g\n",
+		metrics.MetricTunnelBytesTotal, metrics.MetricTunnelBytesTotal, metrics.MetricTunnelBytesTotal, tc.wantDown, metrics.MetricTunnelBytesTotal, tc.wantUp)
+	if err = testutil.GatherAndCompare(reg, strings.NewReader(wantBytes), metrics.MetricTunnelBytesTotal); err != nil {
+		t.Fatalf("GatherAndCompare(%s): %v", metrics.MetricTunnelBytesTotal, err)
+	}
+	if count := testutil.CollectAndCount(reg, metrics.MetricRefusedTunnelsTotal); count != 0 {
+		t.Fatalf("CollectAndCount(%s) = %d, want 0", metrics.MetricRefusedTunnelsTotal, count)
+	}
+	assertDurationResultRecorded(t, reg, tc.wantResult)
+}
+
+func assertDurationResultRecorded(t *testing.T, reg *prometheus.Registry, wantResult string) {
+	t.Helper()
+	fams, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+	for _, fam := range fams {
+		if fam.GetName() != metrics.MetricTunnelDurationSeconds {
+			continue
+		}
+		for _, m := range fam.GetMetric() {
+			for _, lp := range m.GetLabel() {
+				if lp.GetName() == "result" && lp.GetValue() == wantResult && m.GetHistogram().GetSampleCount() == 1 {
+					return
+				}
+			}
+		}
+	}
+	t.Fatalf("%s missing sample_count=1 series with result=%q", metrics.MetricTunnelDurationSeconds, wantResult)
 }

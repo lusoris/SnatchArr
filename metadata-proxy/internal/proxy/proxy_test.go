@@ -1539,3 +1539,230 @@ func waitForLogSubstring(t *testing.T, logs *syncBuffer, want string) string {
 	t.Fatalf("exhausted %d checks waiting for log %q in:\n%s", metricPollChecks, want, logs.String())
 	return ""
 }
+
+const wantEstablishedWire = "HTTP/1.1 200 Connection established\r\n\r\n"
+
+type partialFailWriteConn struct {
+	net.Conn
+	allowBytes int
+	wrote      int
+}
+
+func (c *partialFailWriteConn) Write(p []byte) (int, error) {
+	rem := c.allowBytes - c.wrote
+	if rem <= 0 {
+		_ = c.Close()
+		return 0, syscall.ECONNRESET
+	}
+	if len(p) <= rem {
+		n, err := c.Conn.Write(p)
+		c.wrote += n
+		return n, err
+	}
+	n, err := c.Conn.Write(p[:rem])
+	c.wrote += n
+	_ = c.Close()
+	if err != nil {
+		return n, err
+	}
+	return n, syscall.ECONNRESET
+}
+
+type bufferedFlushCase struct {
+	name       string
+	mode       string
+	buffered   string
+	partialLim int
+	wantResult string
+	wantLevel  string
+	wantUp     float64
+	wantDown   float64
+	wantTail   string
+}
+
+func TestBufferedClientWriteTransferError(t *testing.T) {
+	t.Parallel()
+
+	echoPort, cleanup := startEchoListener(t)
+	t.Cleanup(cleanup)
+
+	cases := []bufferedFlushCase{
+		{
+			name:       "positive: closed upstream write side after 200 records transfer_error",
+			mode:       "close_write",
+			buffered:   "early-client-hello\n",
+			wantResult: metrics.ResultTransferError,
+			wantLevel:  "WARN",
+			wantUp:     0,
+			wantDown:   0,
+		},
+		{
+			name:       "positive: upstream reset mid-buffered-write counts written bytes and records transfer_error",
+			mode:       "partial_reset",
+			buffered:   "early-\nremaining-bytes",
+			partialLim: 7,
+			wantResult: metrics.ResultTransferError,
+			wantLevel:  "WARN",
+			wantUp:     7,
+			wantDown:   0,
+		},
+		{
+			name:       "negative: normal tunnel flushes buffered client bytes and records ok",
+			mode:       "normal",
+			buffered:   "early-ping\n",
+			wantResult: metrics.ResultOK,
+			wantLevel:  "INFO",
+			wantUp:     11,
+			wantDown:   11,
+			wantTail:   "early-ping\n",
+		},
+		{
+			name:       "boundary: zero buffered client bytes with closed upstream write side takes ok path",
+			mode:       "close_write",
+			buffered:   "",
+			wantResult: metrics.ResultOK,
+			wantLevel:  "INFO",
+			wantUp:     0,
+			wantDown:   0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runBufferedFlushCase(t, echoPort, tc)
+		})
+	}
+}
+
+func buildBufferedFlushDialer(echoPort int, mode string, partialLim int) proxy.DialUpstreamFunc {
+	echoAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(echoPort))
+	return func(ctx context.Context, _ string) (net.Conn, int, string, error) {
+		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", echoAddr)
+		if err != nil {
+			return nil, http.StatusBadGateway, metrics.ResultDialError, err
+		}
+		switch mode {
+		case "close_write":
+			if tcpConn, ok := conn.(*net.TCPConn); ok {
+				_ = tcpConn.CloseWrite()
+			}
+		case "partial_reset":
+			return &partialFailWriteConn{Conn: conn, allowBytes: partialLim}, http.StatusOK, metrics.ResultOK, nil
+		}
+		return conn, http.StatusOK, metrics.ResultOK, nil
+	}
+}
+
+func runBufferedFlushCase(t *testing.T, echoPort int, tc bufferedFlushCase) {
+	t.Helper()
+	opts := config.DefaultOptions()
+	opts.Mode = config.ModeEnforce
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
+	opts.AllowHosts = []string{"localhost"}
+	opts.Ports = []int{echoPort}
+	h := startHarness(t, opts, proxy.WithDialForTest(buildBufferedFlushDialer(echoPort, tc.mode, tc.partialLim)))
+
+	target := fmt.Sprintf("localhost:%d", echoPort)
+	rawPayload := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n%s", target, target, tc.buffered)
+	gotWire := exchangeBufferedConnectWire(t, h.addr, rawPayload, tc.wantTail)
+	wantWire := wantEstablishedWire + tc.wantTail
+	if gotWire != wantWire {
+		t.Fatalf("client wire = %q, want %q", gotWire, wantWire)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(strings.NewReader(gotWire)), &http.Request{Method: http.MethodConnect})
+	if err != nil {
+		t.Fatalf("parse CONNECT response: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("CONNECT status = %d, want 200", resp.StatusCode)
+	}
+	assertBufferedFlushOutcome(t, h, tc)
+}
+
+func exchangeBufferedConnectWire(t *testing.T, proxyAddr, rawPayload, wantTail string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("dial proxy %s: %v", proxyAddr, err)
+	}
+	defer conn.Close()
+	if err = conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("SetDeadline: %v", err)
+	}
+	if _, err = conn.Write([]byte(rawPayload)); err != nil {
+		t.Fatalf("write CONNECT payload: %v", err)
+	}
+	if wantTail == "" {
+		raw, readErr := io.ReadAll(io.LimitReader(conn, 4096))
+		if readErr != nil {
+			t.Fatalf("read client wire: %v", readErr)
+		}
+		return string(raw)
+	}
+	head := make([]byte, len(wantEstablishedWire)+len(wantTail))
+	if _, err = io.ReadFull(conn, head); err != nil {
+		t.Fatalf("read echoed head: %v", err)
+	}
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		_ = tcpConn.CloseWrite()
+	}
+	rest, err := io.ReadAll(io.LimitReader(conn, 4096))
+	if err != nil {
+		t.Fatalf("read client EOF tail: %v", err)
+	}
+	return string(head) + string(rest)
+}
+
+func assertBufferedFlushOutcome(t *testing.T, h *proxyHarness, tc bufferedFlushCase) {
+	t.Helper()
+	waitForTunnelCount(t, h.reg, 1)
+	wantTunnels := fmt.Sprintf("# HELP %s Total CONNECT requests handled by the metadata proxy, partitioned by outcome.\n# TYPE %s counter\n%s{app=\"sonarr\",host=\"localhost\",mode=\"enforce\",result=%q} 1\n",
+		metrics.MetricTunnelsTotal, metrics.MetricTunnelsTotal, metrics.MetricTunnelsTotal, tc.wantResult)
+	if err := testutil.GatherAndCompare(h.reg, strings.NewReader(wantTunnels), metrics.MetricTunnelsTotal); err != nil {
+		t.Fatalf("GatherAndCompare(%s): %v", metrics.MetricTunnelsTotal, err)
+	}
+	upBytes, downBytes := readByteCounters(t, h.reg)
+	if upBytes != tc.wantUp || downBytes != tc.wantDown {
+		t.Fatalf("byte counters = (up=%v, down=%v), want (up=%v, down=%v)", upBytes, downBytes, tc.wantUp, tc.wantDown)
+	}
+	if count := testutil.CollectAndCount(h.reg, metrics.MetricRefusedTunnelsTotal); count != 0 {
+		t.Fatalf("CollectAndCount(%s) = %d, want 0", metrics.MetricRefusedTunnelsTotal, count)
+	}
+	assertProxyDurationResult(t, h.reg, tc.wantResult)
+	logOut := waitForLogSubstring(t, h.logs, `"msg":"metadata-proxy: tunnel finished"`)
+	for _, wantSub := range []string{
+		`"level":"` + tc.wantLevel + `"`,
+		`"result":"` + tc.wantResult + `"`,
+		fmt.Sprintf(`"bytes_up":%d`, int64(tc.wantUp)),
+		fmt.Sprintf(`"bytes_down":%d`, int64(tc.wantDown)),
+	} {
+		if !strings.Contains(logOut, wantSub) {
+			t.Fatalf("log output missing %s:\n%s", wantSub, logOut)
+		}
+	}
+}
+
+func assertProxyDurationResult(t *testing.T, reg *prometheus.Registry, wantResult string) {
+	t.Helper()
+	fams, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("reg.Gather: %v", err)
+	}
+	for _, fam := range fams {
+		if fam.GetName() != metrics.MetricTunnelDurationSeconds {
+			continue
+		}
+		for _, m := range fam.GetMetric() {
+			for _, lp := range m.GetLabel() {
+				if lp.GetName() == "result" && lp.GetValue() == wantResult && m.GetHistogram().GetSampleCount() == 1 {
+					return
+				}
+			}
+		}
+	}
+	t.Fatalf("%s missing sample_count=1 series with result=%q", metrics.MetricTunnelDurationSeconds, wantResult)
+}

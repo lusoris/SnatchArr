@@ -538,11 +538,17 @@ func (s *Service) runSlot(
 	if err != nil {
 		return tunnelOutcome{status: status, result: result}
 	}
-	up, down, established := s.bridgeTunnel(w, upstream)
-	if !established {
+	br := s.bridgeTunnel(w, upstream)
+	switch br.state {
+	case bridgeNotEstablished:
+		return tunnelOutcome{result: metrics.ResultDialError}
+	case bridgeTransferError:
+		return tunnelOutcome{result: metrics.ResultTransferError, up: br.up, down: br.down, established: true}
+	case bridgeOK:
+		return tunnelOutcome{result: metrics.ResultOK, up: br.up, down: br.down, established: true}
+	default:
 		return tunnelOutcome{result: metrics.ResultDialError}
 	}
-	return tunnelOutcome{result: metrics.ResultOK, up: up, down: down, established: true}
 }
 
 func (s *Service) withStopCancel(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -588,8 +594,12 @@ func (s *Service) finishTunnel(
 		s.logOutcome(ctx, slog.LevelWarn, app, t, out.result, 0, 0, dur)
 		return
 	}
-	s.logMetricError(ctx, app, metrics.ResultOK, s.metrics.RecordTunnel(ctx, app, t.metricHost, mode, out.up, out.down, dur))
-	s.logOutcome(ctx, slog.LevelInfo, app, t, metrics.ResultOK, out.up, out.down, dur)
+	s.logMetricError(ctx, app, out.result, s.metrics.RecordTunnel(ctx, app, t.metricHost, out.result, mode, out.up, out.down, dur))
+	level := slog.LevelInfo
+	if out.result != metrics.ResultOK {
+		level = slog.LevelWarn
+	}
+	s.logOutcome(ctx, level, app, t, out.result, out.up, out.down, dur)
 }
 
 func (s *Service) logOutcome(

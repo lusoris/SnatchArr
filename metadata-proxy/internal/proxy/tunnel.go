@@ -99,18 +99,32 @@ func closeConn(logger *slog.Logger, side string, conn net.Conn) {
 	}
 }
 
-func (s *Service) bridgeTunnel(w http.ResponseWriter, upstream net.Conn) (int64, int64, bool) {
+type bridgeState uint8
+
+const (
+	bridgeNotEstablished bridgeState = iota
+	bridgeOK
+	bridgeTransferError
+)
+
+type bridgeResult struct {
+	up    int64
+	down  int64
+	state bridgeState
+}
+
+func (s *Service) bridgeTunnel(w http.ResponseWriter, upstream net.Conn) bridgeResult {
 	clientConn, clientBuf, err := http.NewResponseController(w).Hijack()
 	if err != nil {
 		closeConn(s.logger, sideUpstream, upstream)
 		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
-		return 0, 0, false
+		return bridgeResult{}
 	}
 	if err := clientConn.SetDeadline(time.Time{}); err != nil {
 		s.logger.Debug("metadata-proxy: clear hijacked deadline failed", slog.Any("err", err))
 		closeConn(s.logger, sideClient, clientConn)
 		closeConn(s.logger, sideUpstream, upstream)
-		return 0, 0, false
+		return bridgeResult{}
 	}
 
 	opts := s.compiled.Options
@@ -122,16 +136,16 @@ func (s *Service) bridgeTunnel(w http.ResponseWriter, upstream net.Conn) (int64,
 	if err := writeEstablished(clientConn, s.clock, opts.IdleTimeout, tunnelDeadline); err != nil {
 		closeConn(s.logger, sideClient, clientConn)
 		closeConn(s.logger, sideUpstream, upstream)
-		return 0, 0, false
+		return bridgeResult{}
 	}
 	initialUp, ok := flushBufferedClientBytes(upstream, clientBuf, s.clock, opts.IdleTimeout, tunnelDeadline)
 	if !ok {
 		closeConn(s.logger, sideClient, clientConn)
 		closeConn(s.logger, sideUpstream, upstream)
-		return initialUp, 0, true
+		return bridgeResult{up: initialUp, state: bridgeTransferError}
 	}
 	up, down := s.copyBothWays(clientConn, upstream, initialUp, tunnelDeadline, maxTimerStart)
-	return up, down, true
+	return bridgeResult{up: up, down: down, state: bridgeOK}
 }
 
 func writeEstablished(clientConn net.Conn, clk clock.Clock, idleTimeout time.Duration, tunnelDeadline time.Time) error {
@@ -167,7 +181,7 @@ func flushBufferedClientBytes(
 		return 0, false
 	}
 	wroteN, writeErr := upstream.Write(buf[:readN])
-	return int64(wroteN), err == nil && writeErr == nil
+	return int64(wroteN), err == nil && writeErr == nil && wroteN == readN
 }
 
 func (s *Service) copyBothWays(

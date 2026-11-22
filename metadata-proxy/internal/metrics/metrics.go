@@ -45,6 +45,7 @@ const (
 	ResultRefusedLimit  = "refused_limit"
 	ResultDialTimeout   = "dial_timeout"
 	ResultDialError     = "dial_error"
+	ResultTransferError = "transfer_error"
 )
 
 // ErrReservedHost reports that allow_hosts contains the reserved overflow label "other".
@@ -67,6 +68,7 @@ func AllResults() []string {
 		ResultRefusedLimit,
 		ResultDialTimeout,
 		ResultDialError,
+		ResultTransferError,
 	}
 }
 
@@ -225,10 +227,10 @@ func (r *Recorder) RecordDialFailure(ctx context.Context, app, host, result stri
 	return nil
 }
 
-// RecordTunnel records a completed CONNECT tunnel and its transferred bytes.
+// RecordTunnel records an established CONNECT tunnel, its outcome, and its transferred bytes.
 func (r *Recorder) RecordTunnel(
 	ctx context.Context,
-	app, host string,
+	app, host, result string,
 	mode config.Mode,
 	bytesUp, bytesDown int64,
 	dur time.Duration,
@@ -236,8 +238,8 @@ func (r *Recorder) RecordTunnel(
 	err := errors.Join(
 		r.bytes.Add(ctx, float64(max(bytesUp, 0)), app, host, DirectionUp),
 		r.bytes.Add(ctx, float64(max(bytesDown, 0)), app, host, DirectionDown),
-		r.tunnels.Inc(ctx, app, host, ResultOK, string(mode)),
-		r.duration.Observe(ctx, max(dur.Seconds(), 0), app, host, ResultOK),
+		r.tunnels.Inc(ctx, app, host, result, string(mode)),
+		r.duration.Observe(ctx, max(dur.Seconds(), 0), app, host, result),
 	)
 	if err != nil {
 		return fmt.Errorf("metrics: record tunnel: %w", err)
