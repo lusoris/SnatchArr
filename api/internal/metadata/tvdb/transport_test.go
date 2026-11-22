@@ -48,6 +48,26 @@ func TestOriginGuardRemovesStaleWhileRevalidate(t *testing.T) {
 			in:   []string{"public, stale-while-revalidate=60", "max-age=30, STALE-WHILE-REVALIDATE"},
 			want: []string{"public", "max-age=30"},
 		},
+		{
+			name: "directive inside a quoted extension",
+			in:   []string{`extension="left,stale-while-revalidate=60,right"`},
+			want: []string{`extension="left,stale-while-revalidate=60,right"`},
+		},
+		{
+			name: "quoted extension before no-store",
+			in:   []string{`extension="a,stale-while-revalidate=60", no-store`},
+			want: []string{`extension="a,stale-while-revalidate=60", no-store`},
+		},
+		{
+			name: "escaped quote inside a quoted extension",
+			in:   []string{`ext="a\",stale-while-revalidate=1", stale-while-revalidate=5, public`},
+			want: []string{`ext="a\",stale-while-revalidate=1", public`},
+		},
+		{
+			name: "unclosed quote runs to the end",
+			in:   []string{`ext="a, stale-while-revalidate=5`},
+			want: []string{`ext="a, stale-while-revalidate=5`},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -114,6 +134,13 @@ func TestOriginGuardAddsNoStoreForUncacheableResponses(t *testing.T) {
 		{name: "lookalike directive", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusNotFound, cacheControl: []string{"x-no-store, max-age=no-store"}, body: `{"message":"missing"}`},
 		{name: "post", method: http.MethodPost, path: "/v4/unknown", status: http.StatusOK, body: `not json`},
 		{name: "empty body", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusOK, want: true},
+		{name: "multiple choices", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusMultipleChoices, want: true},
+		{name: "moved permanently", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusMovedPermanently, want: true},
+		{name: "found", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusFound, want: true},
+		{name: "temporary redirect", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusTemporaryRedirect, want: true},
+		{name: "permanent redirect", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusPermanentRedirect, want: true},
+		{name: "not modified", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusNotModified},
+		{name: "bad request", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

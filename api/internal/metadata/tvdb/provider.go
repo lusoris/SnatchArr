@@ -623,13 +623,26 @@ func (p *Provider) load(ctx context.Context, ref Ref, lang, rule string) ([]fore
 	if err != nil {
 		return nil, err
 	}
-	result := p.startLookup(lookupCtx, cancel, detached, ref, lang, rule)
+	return p.await(ctx, lookupCtx, p.startLookup(lookupCtx, cancel, detached, ref, lang, rule))
+}
+
+// await waits for the lookup result. The worker queues its result before it cancels lookupCtx,
+// and select picks among ready cases at random, so a cancelled lookupCtx first takes a queued
+// result instead of reporting a finished lookup as cancelled.
+func (p *Provider) await(
+	ctx, lookupCtx context.Context, result <-chan lookupResult,
+) ([]foreigntitle.LanguageTitle, error) {
 	select {
 	case done := <-result:
 		return done.titles, done.err
 	case <-p.lifetimeDone:
 		return nil, fmt.Errorf("%w: provider closed", ErrUnavailable)
 	case <-lookupCtx.Done():
+		select {
+		case done := <-result:
+			return done.titles, done.err
+		default:
+		}
 		return nil, fmt.Errorf("%w: %w", ErrUnavailable, lookupCtx.Err())
 	case <-ctx.Done():
 		return nil, fmt.Errorf("%w: %w", ErrUnavailable, ctx.Err())

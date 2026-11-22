@@ -66,9 +66,34 @@ func (t *originGuard) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	resp.Header.Del(cacheStatusHeader)
 	removeStaleWhileRevalidate(resp.Header)
+	if refusedRedirect(resp.StatusCode) {
+		// The provider client refuses every redirect; a cached redirect would replay that refusal for the TTL.
+		prependNoStore(resp.Header)
+		return resp, nil
+	}
 	if req.Method != http.MethodGet || resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return resp, nil
 	}
+	body, err := bufferBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	// Empty bodies decode as errors and must be no-store; goenvoy skips decoding them and returns a zero value that the cache keeps for the TTL.
+	path := relativeCachePath(req.URL.Path, t.basePath)
+	if err := decodeTVDBResponse(path, body); err != nil {
+		prependNoStore(resp.Header)
+	}
+	return resp, nil
+}
+
+// refusedRedirect reports a redirect status the provider client refuses; 304 Not Modified stays
+// cacheable because conditional revalidation needs it.
+func refusedRedirect(status int) bool {
+	return status >= http.StatusMultipleChoices && status < http.StatusBadRequest && status != http.StatusNotModified
+}
+
+// bufferBody reads at most maxBodyBytes of the response body and replaces it with an in-memory copy.
+func bufferBody(resp *http.Response) ([]byte, error) {
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("tvdb: read response body: %w", err), resp.Body.Close())
@@ -81,12 +106,7 @@ func (t *originGuard) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(body))
 	resp.ContentLength = int64(len(body))
-	// Empty bodies decode as errors and must be no-store; goenvoy skips decoding them and returns a zero value that the cache keeps for the TTL.
-	path := relativeCachePath(req.URL.Path, t.basePath)
-	if err := decodeTVDBResponse(path, body); err != nil {
-		prependNoStore(resp.Header)
-	}
-	return resp, nil
+	return body, nil
 }
 
 func removeStaleWhileRevalidate(header http.Header) {
@@ -97,7 +117,7 @@ func removeStaleWhileRevalidate(header http.Header) {
 	header.Del("Cache-Control")
 	for _, value := range values {
 		kept := make([]string, 0, 2)
-		for directive := range strings.SplitSeq(value, ",") {
+		for _, directive := range splitCacheControl(value) {
 			directive = strings.TrimSpace(directive)
 			name := strings.TrimSpace(strings.SplitN(directive, "=", 2)[0])
 			if directive != "" && !strings.EqualFold(name, "stale-while-revalidate") {
@@ -108,6 +128,28 @@ func removeStaleWhileRevalidate(header http.Header) {
 			header.Add("Cache-Control", strings.Join(kept, ", "))
 		}
 	}
+}
+
+// splitCacheControl splits one Cache-Control field value on the commas outside quoted strings; a
+// backslash inside a quoted string escapes the next byte (RFC 9110 section 5.6.4). An unclosed
+// quote runs to the end of the value, as the golusoris httpcache directive parser reads it.
+func splitCacheControl(value string) []string {
+	parts := make([]string, 0, 4)
+	start, quoted, escaped := 0, false, false
+	for i := range len(value) {
+		switch c := value[i]; {
+		case escaped:
+			escaped = false
+		case quoted && c == '\\':
+			escaped = true
+		case c == '"':
+			quoted = !quoted
+		case c == ',' && !quoted:
+			parts = append(parts, value[start:i])
+			start = i + 1
+		}
+	}
+	return append(parts, value[start:])
 }
 
 func prependNoStore(header http.Header) {

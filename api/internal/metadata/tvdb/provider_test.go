@@ -1374,6 +1374,14 @@ func TestLoginGateRespectsLookupDeadline(t *testing.T) {
 		t.Fatal("caller context unexpectedly carries a deadline")
 	}
 	p.lookup = shortLookup
+	held := len(p.detached)
+	secondAtGate := make(chan struct{}, 1)
+	p.loginWait = func() {
+		select {
+		case secondAtGate <- struct{}{}:
+		default:
+		}
+	}
 	second := make(chan error, 1)
 	started := time.Now()
 	go func() {
@@ -1392,6 +1400,18 @@ func TestLoginGateRespectsLookupDeadline(t *testing.T) {
 		closeRelease()
 		t.Fatalf("second TitlesFor() did not stop on lookup deadline within %v", waitBound)
 	}
+	select {
+	case <-secondAtGate:
+	default:
+		closeRelease()
+		t.Fatal("second lookup did not wait at the login gate")
+	}
+	// The second worker must leave the gate and free its detached slot while the first login still
+	// holds the gate; load returns at the deadline even when the worker stays blocked.
+	if !detachedDrainsTo(p, held, waitBound) {
+		closeRelease()
+		t.Fatalf("detached slots = %d while the first login holds the gate, want %d", len(p.detached), held)
+	}
 	p.lookup = lookupTimeout
 	closeRelease()
 	select {
@@ -1409,6 +1429,17 @@ func TestLoginGateRespectsLookupDeadline(t *testing.T) {
 	if logins := s.logins.Load(); logins != 1 {
 		t.Fatalf("logins = %d, want 1", logins)
 	}
+}
+
+// detachedDrainsTo polls every 5 ms, for at most bound, until p holds want detached slots.
+func detachedDrainsTo(p *Provider, want int, bound time.Duration) bool {
+	for range int(bound / (5 * time.Millisecond)) {
+		if len(p.detached) == want {
+			return true
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return len(p.detached) == want
 }
 
 func TestLoginGateClassifiesBeforeRelease(t *testing.T) {
