@@ -908,3 +908,106 @@ async fn refill_keeps_seerr_priority_when_the_planned_batch_is_empty() -> TestRe
     );
     Ok(())
 }
+
+fn unmonitored_episode(id: i64) -> serde_json::Value {
+    serde_json::json!({
+        "id": id,
+        "seriesId": id.saturating_mul(10),
+        "seasonNumber": 1,
+        "episodeNumber": id,
+        "title": format!("Ep {id}"),
+        "monitored": false,
+        "series": { "monitored": true }
+    })
+}
+
+async fn run_sequential_cursor_two(
+    unprocessed: &[i64],
+    pages: &[(u32, serde_json::Value)],
+) -> Result<(FakeApi, Vec<wiremock::Request>), Box<dyn std::error::Error>> {
+    let api = FakeApi {
+        filter_unprocessed: unprocessed.to_vec(),
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    mount_paged(&server, pages, 40).await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 3, CoreSelection::Sequential, "2")?;
+    some(run.policy.as_mut(), "policy")?.monitored_only = true;
+    run_short_polling(client, run).await;
+    let requests = some(server.received_requests().await, "recorded requests")?;
+    Ok((api, requests))
+}
+
+#[tokio::test]
+async fn fetch_keeps_the_latest_read_of_a_repeated_id_positive() -> TestResult {
+    let pages = [
+        (1, episodes(&[])),
+        (2, episodes(&[])),
+        (3, serde_json::json!([unmonitored_episode(7)])),
+        (4, episodes(&[(7, 70), (9, 90)])),
+    ];
+    let (api, requests) = run_sequential_cursor_two(&[7, 9], &pages).await?;
+    assert_eq!(dispatched_ids(&requests, "episodeIds")?, [7, 9]);
+    assert_eq!(completed_searched_ids(&api).await?, [7, 9]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn fetch_keeps_the_latest_read_of_a_repeated_id_negative() -> TestResult {
+    let page_four = serde_json::json!([
+        unmonitored_episode(7),
+        {
+            "id": 9,
+            "seriesId": 90,
+            "seasonNumber": 1,
+            "episodeNumber": 9,
+            "title": "Ep 9",
+            "monitored": true,
+            "series": { "monitored": true }
+        }
+    ]);
+    let pages = [
+        (1, episodes(&[])),
+        (2, episodes(&[])),
+        (3, episodes(&[(7, 70)])),
+        (4, page_four),
+    ];
+    let (api, requests) = run_sequential_cursor_two(&[7, 9], &pages).await?;
+    assert_eq!(dispatched_ids(&requests, "episodeIds")?, [9]);
+    assert_eq!(completed_searched_ids(&api).await?, [9]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn fetch_keeps_the_latest_read_of_a_repeated_id_boundary() -> TestResult {
+    let pages = [
+        (1, episodes(&[(7, 70)])),
+        (2, episodes(&[])),
+        (3, serde_json::json!([unmonitored_episode(7)])),
+        (4, episodes(&[(9, 90)])),
+    ];
+    let (api, requests) = run_sequential_cursor_two(&[7, 9], &pages).await?;
+    assert_eq!(dispatched_ids(&requests, "episodeIds")?, [9]);
+    assert_eq!(completed_searched_ids(&api).await?, [9]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn refill_skips_cached_page_one_ids_seen_earlier() -> TestResult {
+    let pages = [
+        (1, episodes(&[(7, 70), (8, 80)])),
+        (2, serde_json::json!([unmonitored_episode(7)])),
+        (3, episodes(&[(31, 310)])),
+        (4, episodes(&[(41, 410)])),
+    ];
+    let (api, requests) = run_sequential_cursor_two(&[7, 8, 31, 41], &pages).await?;
+    assert_eq!(dispatched_ids(&requests, "episodeIds")?, [8, 31, 41]);
+    assert_eq!(completed_searched_ids(&api).await?, [8, 31, 41]);
+    assert_eq!(
+        *api.filter_calls.lock().await,
+        vec![vec![31, 41, 8], vec![31, 41, 8]]
+    );
+    Ok(())
+}

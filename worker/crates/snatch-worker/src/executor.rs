@@ -906,33 +906,75 @@ struct FetchedPages {
     error: Option<(u32, ExecError)>,
 }
 
-async fn fetch_unique_candidates(p: &Prepared, pages: &[u32], first: &WantedPage) -> FetchedPages {
-    let mut candidates = Vec::new();
+/// Keeps, for each candidate id, the record from the latest wanted-page read (`read_order`,
+/// where `0` is the cached page-1 read from run start and later reads increase in fetch order),
+/// preserving slice order at each surviving record's position.
+fn keep_latest_candidates(tagged: Vec<(usize, Candidate)>) -> Vec<Candidate> {
+    let mut latest: BTreeMap<i64, (usize, usize)> = BTreeMap::new();
+    for (idx, (read_order, candidate)) in tagged.iter().enumerate() {
+        let rank = (*read_order, idx);
+        latest
+            .entry(candidate.id)
+            .and_modify(|prev| {
+                if rank > *prev {
+                    *prev = rank;
+                }
+            })
+            .or_insert(rank);
+    }
+    tagged
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, (_, candidate))| {
+            (latest.get(&candidate.id).map(|&(_, at)| at) == Some(idx)).then_some(candidate)
+        })
+        .collect()
+}
+
+/// Fetches `pages` in slice order, reusing `first` for page 1 while skipping cached page-1
+/// records whose id is already in `observed_ids`. For each remaining id, keeps the record from
+/// the latest read (`first` counts as the oldest read; other pages count in fetch order), leaving
+/// survivors in slice order at each surviving record's position.
+async fn fetch_unique_candidates(
+    p: &Prepared,
+    pages: &[u32],
+    first: &WantedPage,
+    observed_ids: &BTreeSet<i64>,
+) -> FetchedPages {
+    let mut tagged: Vec<(usize, Candidate)> = Vec::new();
     let mut pages_fetched: usize = 0;
+    let mut live_reads: usize = 0;
     let mut error = None;
     for &page in pages {
-        let fetched = if page == 1 {
-            (*first).clone()
-        } else {
-            match p
-                .arr
-                .wanted_page(p.wanted, page, p.page_size, release_of(&p.policy))
-                .await
-            {
-                Ok(fetched) => fetched,
-                Err(err) => {
-                    error = Some((page, ExecError::from(err)));
-                    break;
-                }
+        if page == 1 {
+            pages_fetched = pages_fetched.saturating_add(1);
+            tagged.extend(
+                first
+                    .records
+                    .iter()
+                    .filter(|c| !observed_ids.contains(&c.id))
+                    .cloned()
+                    .map(|c| (0, c)),
+            );
+            continue;
+        }
+        let fetched = match p
+            .arr
+            .wanted_page(p.wanted, page, p.page_size, release_of(&p.policy))
+            .await
+        {
+            Ok(fetched) => fetched,
+            Err(err) => {
+                error = Some((page, ExecError::from(err)));
+                break;
             }
         };
         pages_fetched = pages_fetched.saturating_add(1);
-        candidates.extend(fetched.records);
+        live_reads = live_reads.saturating_add(1);
+        tagged.extend(fetched.records.into_iter().map(|c| (live_reads, c)));
     }
-    let mut seen = BTreeSet::new();
-    candidates.retain(|c| seen.insert(c.id));
     FetchedPages {
-        candidates,
+        candidates: keep_latest_candidates(tagged),
         pages_fetched,
         error,
     }
@@ -979,10 +1021,12 @@ async fn filter_fetched_candidates(
     })
 }
 
-/// Fetches the planned pages, deduplicates shifted records, applies the local filters, drops
-/// what is already queued or freshly grabbed, and asks the API which ids are not in afterglow.
-/// Reuses `first` for page 1 so a run sends at most [`snatch_core::MAX_PAGES_PER_CYCLE`]
-/// distinct wanted-page requests, the page-1 metadata read included.
+/// Fetches the planned pages, deduplicates repeated ids by keeping the record from the latest
+/// read (`first` counts as the oldest read; other pages count in fetch order) at its slice
+/// position, applies the local filters, drops what is already queued or freshly grabbed, and asks
+/// the API which ids are not in afterglow. Reuses `first` for page 1 so a run sends at most
+/// [`snatch_core::MAX_PAGES_PER_CYCLE`] distinct wanted-page requests, the page-1 metadata read
+/// included.
 async fn collect_candidates(
     client: &mut Client,
     p: &Prepared,
@@ -991,7 +1035,8 @@ async fn collect_candidates(
     first: &WantedPage,
     busy: &[i64],
 ) -> Result<Collected, ExecError> {
-    let fetched = fetch_unique_candidates(p, pages, first).await;
+    let empty = BTreeSet::new();
+    let fetched = fetch_unique_candidates(p, pages, first, &empty).await;
     if let Some((_, err)) = fetched.error {
         return Err(err);
     }
@@ -1026,6 +1071,8 @@ enum RefillBatch {
     FilterFailed(ExecError),
 }
 
+/// Fetches and filters the refill `pages`, skipping cached page-1 records already in `seen_ids`
+/// so the older `first` snapshot never overrides an earlier page read on merge.
 async fn collect_refill_batch(
     client: &mut Client,
     p: &Prepared,
@@ -1033,8 +1080,9 @@ async fn collect_refill_batch(
     pages: &[u32],
     first: &WantedPage,
     busy: &[i64],
+    seen_ids: &BTreeSet<i64>,
 ) -> RefillBatch {
-    let fetched = fetch_unique_candidates(p, pages, first).await;
+    let fetched = fetch_unique_candidates(p, pages, first, seen_ids).await;
     let collected = match filter_fetched_candidates(client, p, run, fetched.candidates, busy).await
     {
         Ok(collected) => collected,
@@ -1164,7 +1212,16 @@ async fn collect_with_refill(
     events
         .emit(Ev::run(Level::Debug, EventType::PageFetched, page_msg))
         .await;
-    let batch = collect_refill_batch(client, p, run, &more.pages, first, &busy).await;
+    let batch = collect_refill_batch(
+        client,
+        p,
+        run,
+        &more.pages,
+        first,
+        &busy,
+        &collected.seen_ids,
+    )
+    .await;
     let cursors = (selection, plan.next_cursor, more.next_cursor);
     let cursor = apply_refill_batch(p, run, batch, cursors, &mut collected, events).await;
     Ok((collected, cursor))
