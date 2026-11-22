@@ -627,6 +627,16 @@
         "ghcr.io/lusoris/snatcharr-worker"
       ],
       "minimumReleaseAge": null
+    },
+    {
+      "description": "plurano/horistes reusable workflows get their own update PR outside the batch groups above, so a consumer takes a horistes change without a hand repin. Keep this rule last: a later package rule overrides an earlier one, and groupName null turns grouping off.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "plurano/horistes"
+      ],
+      "groupName": null
     }
   ],
   "platformCommit": "enabled",
