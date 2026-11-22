@@ -26,9 +26,9 @@ func StrictlyWithin(base, target string) bool {
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return false
 	}
-	segments := strings.Split(rel, string(filepath.Separator))
-	// len(segments) is bounded by the separator count of rel.
-	for _, segment := range segments {
+	segments := strings.SplitSeq(rel, string(filepath.Separator))
+	// strings.SplitSeq yields one segment per separator in rel, plus one.
+	for segment := range segments {
 		if strings.Trim(segment, ". ") == "" && strings.Contains(segment, " ") {
 			return false
 		}
