@@ -31,6 +31,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Stubs run their reads under this portable deadline runner instead of GNU timeout.
+export RUN_BOUNDED_PY="$HERE/run_bounded.py"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -197,7 +199,7 @@ plant clean "$CHECKOUT # v7.0.1"
 cat > "$WORK/curl-moved" <<'SH'
 #!/bin/sh
 set -eu
-timeout 5 head -c 65536 > /dev/null
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 if [ -n "${CURL_COUNT_FILE:-}" ]; then
   count=0
   if [ -f "$CURL_COUNT_FILE" ]; then
@@ -218,7 +220,7 @@ for arg in "$@"; do
   prev="$arg"
 done
 [ -n "$payload" ] || exit 22
-printf '%s\n' "$payload" | timeout 5 jq -c '
+printf '%s\n' "$payload" | python3 -I "$RUN_BOUNDED_PY" 5 jq -c '
   .query as $q
   | reduce ([ $q | match("(?<a>r[0-9]+):\\s*repository\\(owner:\\s*\"(?<o>[A-Za-z0-9_.-]+)\",\\s*name:\\s*\"(?<n>[A-Za-z0-9_.-]+)\"\\)"; "g") ][:200][]) as $m (
       {};
