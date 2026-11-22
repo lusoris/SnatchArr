@@ -9,20 +9,20 @@
 # repositories are supported: private and missing repositories cannot be read by the workflow
 # token and fail closed.
 # Platform (HISS-21): runs on Linux in CI (the verdict reads repository files and the GitHub API,
-# independent of runner OS) and on macOS/Linux hosts with bash 4 or newer (mapfile, associative
-# arrays, ${var,,}); exits 2 naming bash 4 on older bash such as macOS stock bash 3.2.
+# independent of runner OS) and on macOS/Linux hosts with bash 4.4 or newer (mapfile -d, associative
+# arrays, ${var,,}); exits 2 naming bash 4.4 or newer on older bash such as macOS stock bash 3.2.
 #
 #   tools/ci/workflow_refs.sh [ROOT]      (default: this repository)
 #
 # Exit status: 0 clean, 1 a finding or a failed lookup, 2 usage or unsupported bash.
-# Needs bash 4+, python3 with PyYAML, jq, curl, network, token (GH_TOKEN or GITHUB_TOKEN).
+# Needs bash 4.4 or newer (mapfile -d), python3 with PyYAML, jq, curl, network, token (GH_TOKEN or GITHUB_TOKEN).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=tools/ci/bash_version.sh
 . "$HERE/bash_version.sh"
-if ! bash_major_supported "${BASH_VERSINFO[0]}"; then
-  echo "error: ${0##*/} requires bash 4 or newer, found $BASH_VERSION" >&2
+if ! bash_version_supported "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"; then
+  echo "error: ${0##*/} requires bash 4.4 or newer (mapfile -d), found $BASH_VERSION" >&2
   exit 2
 fi
 
@@ -97,8 +97,8 @@ if [ ${#FIRST_USE[@]} -gt 0 ]; then
 fi
 
 CURL="${CURL_BIN:-curl}"
-API_URL="${GITHUB_API_URL:-https://api.github.com}"
-API_URL="${API_URL%/}"
+GRAPHQL_URL="${GITHUB_GRAPHQL_URL:-https://api.github.com/graphql}"
+GRAPHQL_URL="${GRAPHQL_URL%/}"
 BATCH_SIZE=100
 MAX_BATCHES=50
 if [ ${#REPOS[@]} -gt $((BATCH_SIZE * MAX_BATCHES)) ]; then
@@ -129,14 +129,14 @@ report_graphql_error() {
   local body="$1" err_repo="$2" err_idx err_msg
   shift 2
   local -a chunk=("$@")
-  if ! err_idx="$(jq -r 'if (.errors | type) == "array" and (.errors | length) > 0 and (.errors[0] | type) == "object" and (.errors[0].path | type) == "array" and (.errors[0].path[0] | type) == "string" then (.errors[0].path[0] | capture("^r(?<i>[0-9]+)$").i // "") else "" end' <<< "$body" 2> /dev/null)"; then
+  if ! err_idx="$(jq -sr '.[0] | if (.errors | type) == "array" and (.errors | length) > 0 and (.errors[0] | type) == "object" and (.errors[0].path | type) == "array" and (.errors[0].path[0] | type) == "string" then (.errors[0].path[0] | capture("^r(?<i>[0-9]+)$").i // "") else "" end' <<< "$body" 2> /dev/null)"; then
     err_idx=""
   fi
   if [[ "$err_idx" =~ ^[0-9]+$ ]] && [ "$err_idx" -lt "${#chunk[@]}" ]; then
     err_repo="${chunk[$err_idx]}"
   fi
-  err_msg="$(jq -r 'if (.errors | type) == "array" and (.errors | length) > 0 and (.errors[0] | type) == "object" and (.errors[0].message | type) == "string" then .errors[0].message else "GraphQL error" end' <<< "$body" 2> /dev/null || echo "GraphQL error")"
-  echo "error: ${FIRST_USE[$err_repo]}: GraphQL returned errors for $err_repo ($API_URL/graphql): $err_msg" >&2
+  err_msg="$(jq -sr '.[0] | if (.errors | type) == "array" and (.errors | length) > 0 and (.errors[0] | type) == "object" and (.errors[0].message | type) == "string" then .errors[0].message else "GraphQL error" end' <<< "$body" 2> /dev/null || echo "GraphQL error")"
+  echo "error: ${FIRST_USE[$err_repo]}: GraphQL returned errors for $err_repo ($GRAPHQL_URL): $err_msg" >&2
   exit 1
 }
 
@@ -151,21 +151,21 @@ query_batch() {
     "$CURL" -K - -fsS --max-time 20 --retry 2 \
       -H 'Content-Type: application/json' \
       --data-raw "$payload" \
-      "$API_URL/graphql")"; then
-    echo "error: ${FIRST_USE[$first_repo]}: cannot read repository $first_repo from $API_URL/graphql" >&2
+      "$GRAPHQL_URL")"; then
+    echo "error: ${FIRST_USE[$first_repo]}: cannot read repository $first_repo from $GRAPHQL_URL" >&2
     exit 1
   fi
-  if ! jq -e 'type == "object"' <<< "$body" > /dev/null 2>&1; then
-    echo "error: ${FIRST_USE[$first_repo]}: invalid JSON response from $API_URL/graphql" >&2
+  if ! jq -se 'length == 1 and (.[0] | type) == "object"' <<< "$body" > /dev/null 2>&1; then
+    echo "error: ${FIRST_USE[$first_repo]}: invalid JSON response from $GRAPHQL_URL" >&2
     exit 1
   fi
-  if jq -e 'has("errors")' <<< "$body" > /dev/null 2>&1; then
+  if jq -se '.[0] | has("errors")' <<< "$body" > /dev/null 2>&1; then
     report_graphql_error "$body" "$first_repo" "${chunk[@]}"
   fi
-  mapfile -t resolved < <(jq -r --argjson n "${#chunk[@]}" '
-    . as $root |
+  mapfile -t resolved < <(jq -sr --argjson n "${#chunk[@]}" '
+    .[0] as $root |
     [range(0; $n) | "r\(.)" as $k |
-      if ($root.data | type) == "object" and ($root.data | has($k)) and ($root.data[$k] | type) == "object" and ($root.data[$k].nameWithOwner | type) == "string"
+      if ($root.data | type) == "object" and ($root.data | has($k)) and ($root.data[$k] | type) == "object" and ($root.data[$k].nameWithOwner | type) == "string" and ($root.data[$k].nameWithOwner | test("\\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\\z"))
       then $root.data[$k].nameWithOwner
       else ""
       end
@@ -175,7 +175,7 @@ query_batch() {
     repo="${chunk[$i]}"
     actual="${resolved[$i]:-}"
     if [ -z "$actual" ]; then
-      echo "error: ${FIRST_USE[$repo]}: names no repository the token can read for $repo: private and missing repositories are not supported; reference a public repository ($API_URL/graphql)" >&2
+      echo "error: ${FIRST_USE[$repo]}: names no repository the token can read for $repo: private and missing repositories are not supported; reference a public repository ($GRAPHQL_URL)" >&2
       exit 1
     fi
     checked=$((checked + 1))

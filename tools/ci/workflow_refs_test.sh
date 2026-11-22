@@ -8,8 +8,10 @@
 # two current repositories across a workflow and a composite action (two-current), uses-shaped text
 # inside a run script block (run-block-uses), a Docker-only local action directory holding only
 # Dockerfile (docker-local-action), three distinct repositories batched into one GraphQL POST
-# (three-repos), workflow-refs.yml carrying no uses entry (guard-job-no-uses), and bash major
-# versions 4 and 5 (bash-major-4, bash-major-5).
+# (three-repos), GITHUB_GRAPHQL_URL overriding the REST v3 URL variable (graphql-url-override),
+# default GraphQL URL when only the REST v3 URL variable is set (graphql-url-ignores-v3-url),
+# workflow-refs.yml carrying no uses entry (guard-job-no-uses), and bash versions 4.4, 5.0 and 5.2
+# (bash-version-4-4, bash-version-5-0, bash-version-5-2).
 # Refused: a reusable workflow under a moved repository name (moved-workflow), a composite action
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
@@ -24,30 +26,44 @@
 # (missing-local-action), a local action escaping ROOT `uses: ./../outside` (escape-local-action),
 # an unreadable directory under .github/actions when unprivileged (unreadable-actions-dir), a
 # GraphQL errors array (gql-errors), a null GraphQL alias for a private or missing repository
-# (null-alias), 101 repositories split across 2 GraphQL POSTs with a moved repository in the
+# (null-alias), a mismatched GITHUB_GRAPHQL_URL (graphql-url-mismatch), two JSON objects masking a
+# GraphQL errors member (gql-two-objects-errors) or duplicating data (gql-two-data-objects), a
+# nameWithOwner holding an embedded or trailing newline (gql-newline-name, gql-trailing-newline-name),
+# 101 repositories split across 2 GraphQL POSTs with a moved repository in the
 # second batch (over-100-repos), a missing token (missing-token), workflow_uses.py without PyYAML
 # (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), workflow-refs.yml
 # copies with a planted block uses step (guard-job-block-uses), flow uses step
 # (guard-job-flow-uses), local ./ uses step (guard-job-local-uses), escaped-key "\x75ses" step
 # (guard-job-escaped-key-uses), or escaped-key local uses step (guard-job-escaped-local-uses),
-# and bash major version 3 (bash-major-3).
-# Platform (HISS-21): runs on Linux and macOS with bash 4 or newer (workflow_refs.sh uses mapfile,
-# associative arrays and ${var,,}); skips with a stated reason and exits 0 on older bash such as
-# macOS stock bash 3.2.
+# and unsupported bash versions 3.2, 4.3, 4.x and empty (bash-version-3-2, bash-version-4-3,
+# bash-version-4-x, bash-version-empty).
+# Platform (HISS-21): runs on Linux and macOS with bash 4.4 or newer (workflow_refs.sh uses
+# mapfile -d, associative arrays and ${var,,}); skips with a stated reason and exits 0 on older
+# bash such as macOS stock bash 3.2 or when neither timeout nor gtimeout is installed.
 #
 #   tools/ci/workflow_refs_test.sh
 #
-# Exit status: 0 every case behaved as recorded (or skipped on bash < 4), 1 otherwise.
-# Needs bash 4+, python3 (with PyYAML or venv + network for pyyaml_venv.sh) and jq.
+# Exit status: 0 every case behaved as recorded (or skipped on missing prerequisite), 1 otherwise.
+# Needs bash 4.4 or newer (mapfile -d), timeout or gtimeout (GNU coreutils), python3 (with PyYAML or venv + network for pyyaml_venv.sh) and jq.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=tools/ci/bash_version.sh
 . "$HERE/bash_version.sh"
-if ! bash_major_supported "${BASH_VERSINFO[0]}"; then
-  echo "skip workflow_refs_test.sh: needs bash 4 or newer, found $BASH_VERSION"
+if ! bash_version_supported "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"; then
+  echo "skip workflow_refs_test.sh: needs bash 4.4 or newer (mapfile -d), found $BASH_VERSION"
   exit 0
 fi
+
+if command -v timeout > /dev/null 2>&1; then
+  STUB_TIMEOUT="timeout"
+elif command -v gtimeout > /dev/null 2>&1; then
+  STUB_TIMEOUT="gtimeout"
+else
+  echo "skip workflow_refs_test.sh: needs timeout or gtimeout (GNU coreutils), found neither"
+  exit 0
+fi
+export STUB_TIMEOUT
 
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
@@ -82,9 +98,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Supply a fixed placeholder token so no caller token ever reaches a stub.
+# Supply a fixed placeholder token and clean endpoint environment so no caller value reaches a stub.
 export GH_TOKEN=stub-token
-unset GITHUB_TOKEN
+rest_url_var="GITHUB_API"
+rest_url_var+="_URL"
+unset GITHUB_TOKEN GITHUB_GRAPHQL_URL "$rest_url_var"
 
 # Commit-pinned actions from ci.yml used in fixture workflows.
 CHECKOUT=actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -239,7 +257,7 @@ plant_guard_step() {
 cat > "$WORK/curl-moved" <<'SH'
 #!/bin/sh
 set -eu
-timeout 5 head -c 65536 > /dev/null
+"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
 if [ -n "${CURL_COUNT_FILE:-}" ]; then
   count=0
   if [ -f "$CURL_COUNT_FILE" ]; then
@@ -260,7 +278,7 @@ for arg in "$@"; do
   prev="$arg"
 done
 [ -n "$payload" ] || exit 22
-printf '%s\n' "$payload" | timeout 5 jq -c '
+printf '%s\n' "$payload" | "$STUB_TIMEOUT" 5 jq -c '
   .query as $q
   | reduce ([ $q | match("(?<a>r[0-9]+):\\s*repository\\(owner:\\s*\"(?<o>[A-Za-z0-9_.-]+)\",\\s*name:\\s*\"(?<n>[A-Za-z0-9_.-]+)\"\\)"; "g") ][:200][]) as $m (
       {};
@@ -273,19 +291,73 @@ printf '%s\n' "$payload" | timeout 5 jq -c '
   | {data: .}
 '
 SH
-printf '#!/bin/sh\ntimeout 5 head -c 65536 > /dev/null\nexit 22\n' > "$WORK/curl-fails"
-printf '#!/bin/sh\ntimeout 5 head -c 65536 > /dev/null\necho "{}"\n' > "$WORK/curl-nameless"
+cat > "$WORK/curl-want-url" <<'SH'
+#!/bin/sh
+set -eu
+last=""
+arg_n=0
+for arg in "$@"; do
+  arg_n=$((arg_n + 1))
+  [ "$arg_n" -le 64 ] || exit 2
+  last="$arg"
+done
+if [ -z "${STUB_WANT_URL:-}" ] || [ "$last" != "$STUB_WANT_URL" ]; then
+  "$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+  exit 22
+fi
+exec "$(dirname "$0")/curl-moved" "$@"
+SH
+cat > "$WORK/curl-fails" <<'SH'
+#!/bin/sh
+set -eu
+"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+exit 22
+SH
+cat > "$WORK/curl-nameless" <<'SH'
+#!/bin/sh
+set -eu
+"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+echo "{}"
+SH
 cat > "$WORK/curl-gql-errors" <<'SH'
 #!/bin/sh
-timeout 5 head -c 65536 > /dev/null
+set -eu
+"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
 printf '%s\n' '{"data":{"r0":{"nameWithOwner":"actions/checkout"}},"errors":[{"message":"API rate limit exceeded"}]}'
 SH
 cat > "$WORK/curl-null-alias" <<'SH'
 #!/bin/sh
-timeout 5 head -c 65536 > /dev/null
+set -eu
+"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
 printf '%s\n' '{"data":{"r0":null}}'
 SH
-chmod +x "$WORK/curl-moved" "$WORK/curl-fails" "$WORK/curl-nameless" "$WORK/curl-gql-errors" "$WORK/curl-null-alias"
+cat > "$WORK/curl-two-objects-errors" <<'SH'
+#!/bin/sh
+set -eu
+"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+printf '%s\n' '{"errors":[{"message":"boom"}],"data":{"r0":{"nameWithOwner":"actions/checkout"}}} {}'
+SH
+cat > "$WORK/curl-two-data-objects" <<'SH'
+#!/bin/sh
+set -eu
+"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+printf '%s\n' '{"data":{"r0":{"nameWithOwner":"actions/checkout"}}} {"data":{"r0":{"nameWithOwner":"actions/checkout"}}}'
+SH
+cat > "$WORK/curl-newline-name" <<'SH'
+#!/bin/sh
+set -eu
+"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+printf '%s\n' '{"data":{"r0":{"nameWithOwner":"actions/checkout\nother/repo"}}}'
+SH
+cat > "$WORK/curl-trailing-newline-name" <<'SH'
+#!/bin/sh
+set -eu
+"$STUB_TIMEOUT" 5 head -c 65536 > /dev/null
+printf '%s\n' '{"data":{"r0":{"nameWithOwner":"actions/checkout\n"}}}'
+SH
+chmod +x "$WORK/curl-moved" "$WORK/curl-want-url" "$WORK/curl-fails" "$WORK/curl-nameless" \
+  "$WORK/curl-gql-errors" "$WORK/curl-null-alias" "$WORK/curl-two-objects-errors" \
+  "$WORK/curl-two-data-objects" "$WORK/curl-newline-name" "$WORK/curl-trailing-newline-name"
 
 if ! selftest_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" --self-test 2>&1)"; then
   printf 'FAIL workflow-uses-selftest: self-test failed\n%s\n' "$selftest_out" >&2
@@ -546,6 +618,40 @@ expect_refusal gql-errors "error: .github/workflows/planted.yml:10: GraphQL retu
 plant null-alias "$CHECKOUT # v7.0.1"
 expect_refusal null-alias "error: .github/workflows/planted.yml:10: names no repository the token can read for actions/checkout: private and missing repositories are not supported; reference a public repository" env CURL_BIN="$WORK/curl-null-alias"
 
+# GITHUB_GRAPHQL_URL overrides the REST v3 URL variable (stripping one trailing slash); the REST v3 URL variable alone leaves the default endpoint.
+plant graphql-url-override "$CHECKOUT # v7.0.1"
+expect_accepted graphql-url-override "all 1 used by name are under their current name" \
+  env GITHUB_GRAPHQL_URL="https://ghe.example.test/api/graphql/" \
+  "$rest_url_var=https://ghe.example.test/api/v3" \
+  STUB_WANT_URL="https://ghe.example.test/api/graphql" \
+  CURL_BIN="$WORK/curl-want-url"
+
+plant graphql-url-ignores-v3-url "$CHECKOUT # v7.0.1"
+expect_accepted graphql-url-ignores-v3-url "all 1 used by name are under their current name" \
+  env "$rest_url_var=https://ghe.example.test/api/v3" \
+  STUB_WANT_URL="https://api.github.com/graphql" \
+  CURL_BIN="$WORK/curl-want-url"
+
+plant graphql-url-mismatch "$CHECKOUT # v7.0.1"
+expect_refusal graphql-url-mismatch "cannot read repository actions/checkout from https://wrong.example.test/api/graphql" \
+  env GITHUB_GRAPHQL_URL="https://wrong.example.test/api/graphql/" \
+  STUB_WANT_URL="https://ghe.example.test/api/graphql" \
+  CURL_BIN="$WORK/curl-want-url"
+
+# Multiple JSON values in a GraphQL HTTP body are refused as invalid JSON response.
+plant gql-two-objects-errors "$CHECKOUT # v7.0.1"
+expect_refusal gql-two-objects-errors "invalid JSON response" env CURL_BIN="$WORK/curl-two-objects-errors"
+
+plant gql-two-data-objects "$CHECKOUT # v7.0.1"
+expect_refusal gql-two-data-objects "invalid JSON response" env CURL_BIN="$WORK/curl-two-data-objects"
+
+# A nameWithOwner containing an embedded or trailing newline is rejected as naming no readable repository.
+plant gql-newline-name "$CHECKOUT # v7.0.1"
+expect_refusal gql-newline-name "names no repository the token can read for actions/checkout: private and missing repositories are not supported; reference a public repository" env CURL_BIN="$WORK/curl-newline-name"
+
+plant gql-trailing-newline-name "$CHECKOUT # v7.0.1"
+expect_refusal gql-trailing-newline-name "names no repository the token can read for actions/checkout: private and missing repositories are not supported; reference a public repository" env CURL_BIN="$WORK/curl-trailing-newline-name"
+
 # 3 distinct repositories are looked up in a single GraphQL POST (1 stub call).
 mkdir -p "$WORK/three-repos/.github/workflows"
 cat > "$WORK/three-repos/.github/workflows/planted.yml" <<YAML
@@ -673,31 +779,56 @@ for ((guard_i = 0; guard_i < 5 && guard_i < ${#guard_refused_cases[@]}; guard_i+
   echo "ok   $guard_case: refused ($guard_label)"
 done
 
-# bash_version.sh refuses bash major 3 and accepts bash major 4 (boundary) and 5 when sourced directly.
-if (
-  # shellcheck source=tools/ci/bash_version.sh
-  . "$HERE/bash_version.sh"
-  bash_major_supported 3
-); then
-  echo "FAIL bash-major-3: accepted bash major 3" >&2
-  exit 1
-fi
-refused=$((refused + 1))
-echo "ok   bash-major-3: refused (bash major 3)"
+# bash_version.sh refuses < 4.4, non-integers and empty args, and accepts 4.4 (boundary) and 5.x.
+bash_ver_refused=(
+  "3-2|3|2|bash 3.2"
+  "4-3|4|3|bash 4.3"
+  "4-x|4|x|bash 4 x"
+  "empty|||empty version"
+)
+for ((ver_i = 0; ver_i < 4 && ver_i < ${#bash_ver_refused[@]}; ver_i++)); do
+  ver_entry="${bash_ver_refused[$ver_i]}"
+  ver_label="${ver_entry%%|*}"
+  ver_rest="${ver_entry#*|}"
+  ver_major="${ver_rest%%|*}"
+  ver_rest="${ver_rest#*|}"
+  ver_minor="${ver_rest%%|*}"
+  ver_desc="${ver_rest#*|}"
+  if (
+    # shellcheck source=tools/ci/bash_version.sh
+    . "$HERE/bash_version.sh"
+    bash_version_supported "$ver_major" "$ver_minor"
+  ); then
+    printf 'FAIL bash-version-%s: accepted %s\n' "$ver_label" "$ver_desc" >&2
+    exit 1
+  fi
+  refused=$((refused + 1))
+  echo "ok   bash-version-$ver_label: refused ($ver_desc)"
+done
 
-bash_major_accepted=(4 5)
-for ((major_i = 0; major_i < 2 && major_i < ${#bash_major_accepted[@]}; major_i++)); do
-  major_val="${bash_major_accepted[$major_i]}"
+bash_ver_accepted=(
+  "4-4|4|4|bash 4.4 boundary"
+  "5-0|5|0|bash 5.0"
+  "5-2|5|2|bash 5.2"
+)
+for ((ver_i = 0; ver_i < 3 && ver_i < ${#bash_ver_accepted[@]}; ver_i++)); do
+  ver_entry="${bash_ver_accepted[$ver_i]}"
+  ver_label="${ver_entry%%|*}"
+  ver_rest="${ver_entry#*|}"
+  ver_major="${ver_rest%%|*}"
+  ver_rest="${ver_rest#*|}"
+  ver_minor="${ver_rest%%|*}"
+  ver_desc="${ver_rest#*|}"
   if ! (
     # shellcheck source=tools/ci/bash_version.sh
     . "$HERE/bash_version.sh"
-    bash_major_supported "$major_val"
+    bash_version_supported "$ver_major" "$ver_minor"
   ); then
-    printf 'FAIL bash-major-%s: refused bash major %s\n' "$major_val" "$major_val" >&2
+    printf 'FAIL bash-version-%s: refused %s\n' "$ver_label" "$ver_desc" >&2
     exit 1
   fi
   accepted=$((accepted + 1))
-  echo "ok   bash-major-$major_val: accepted (bash major $major_val)"
+  echo "ok   bash-version-$ver_label: accepted ($ver_desc)"
 done
 
 echo "workflow refs: $accepted accepted, $refused refused"

@@ -26,7 +26,7 @@ jobs:
   workflow-refs:
     name: Workflow repository references
     # Linux only (HISS-21): the check reads repository files and the GitHub API, so its verdict
-    # does not depend on the runner OS, and the scripts need bash 4 or newer (mapfile, ${var,,}).
+    # does not depend on the runner OS, and the scripts need bash 4.4 or newer (mapfile -d, ${var,,}).
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:

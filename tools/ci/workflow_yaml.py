@@ -29,6 +29,7 @@ DOT_NAMES = frozenset({".", ".."})
 ACTION_FILENAMES = ("action.yml", "action.yaml")
 DOCKER_FILENAMES = ("Dockerfile", "dockerfile")
 BAD_PATH_CHARS = ("\t", "\r", "\n", "\x00")
+LOCAL_USES_PREFIXES = ("./", ".\\")
 
 MAX_FILES = 4096
 MAX_FILE_BYTES = 8 * 1024 * 1024
@@ -39,6 +40,7 @@ MAX_STEP_TEXT_LINES = 262144
 MAX_WALK_DIRS = 16384
 MAX_JOBS = 1024
 MAX_STEPS = 4096
+MAX_STEP_VISITS = 65536
 MAX_MAPPING_PAIRS = 4096
 MAX_MERGE_NODES = 1024
 MAX_REFS = 16384
@@ -61,6 +63,41 @@ class RefBudget:
         self.count += 1
         if self.count > self.limit:
             raise UsesError(f"{path}:{line}: more than {self.limit} uses references")
+
+
+class DocWalk:
+    """Track step visits and cache resolved YAML mappings within one document."""
+
+    def __init__(self, limit: int = MAX_STEP_VISITS) -> None:
+        """Initialize step visit counter at zero with limit and empty mapping cache."""
+        self.limit = limit
+        self.visits = 0
+        self.cache: dict[
+            tuple[int, bool], dict[str, tuple[yaml.ScalarNode, yaml.Node]]
+        ] = {}
+        self._nodes: list[yaml.MappingNode] = []
+
+    def visit(self, path: str, line: int) -> None:
+        """Record one step visit at path:line, raising UsesError past self.limit."""
+        self.visits += 1
+        if self.visits > self.limit:
+            raise UsesError(f"{path}:{line}: more than {self.limit} step visits")
+
+    def resolve(
+        self,
+        node: yaml.MappingNode,
+        path: str,
+        *,
+        any_scalar_key: bool = False,
+    ) -> dict[str, tuple[yaml.ScalarNode, yaml.Node]]:
+        """Return cached resolve_mapping(node, path, any_scalar_key=any_scalar_key)."""
+        key = (id(node), any_scalar_key)
+        cached = self.cache.get(key)
+        if cached is None:
+            cached = resolve_mapping(node, path, any_scalar_key=any_scalar_key)
+            self._nodes.append(node)
+            self.cache[key] = cached
+        return cached
 
 
 def node_line(key_node: yaml.Node, val_node: yaml.Node) -> int:
@@ -183,9 +220,14 @@ def split_remote_target(raw: str, path: str, line: int) -> list[str]:
     return parts
 
 
+def is_local_uses(raw: str) -> bool:
+    """Report whether raw starts with a relative local-action prefix (./ or .\\)."""
+    return raw.startswith(LOCAL_USES_PREFIXES)
+
+
 def parse_uses_value(raw: str, path: str, line: int) -> str | None:
     """Validate a uses string and return owner/repo, or None for local, self and docker."""
-    if raw.startswith(("./", "docker://")):
+    if is_local_uses(raw) or raw.startswith("docker://"):
         return None
     if raw.startswith("$/"):
         check_self_repo_uses(raw, path, line)
@@ -204,10 +246,14 @@ def keep_uses_value(raw: str, path: str, line: int) -> str:
 
 
 def mapping_uses_scalar(
-    mapping: yaml.MappingNode, path: str
+    mapping: yaml.MappingNode, path: str, *, walk: DocWalk | None = None
 ) -> tuple[dict[str, tuple[yaml.ScalarNode, yaml.Node]], tuple[str, int] | None]:
     """Resolve mapping and return its optional string uses key as (raw, line)."""
-    fields = resolve_mapping(mapping, path)
+    fields = (
+        walk.resolve(mapping, path)
+        if walk is not None
+        else resolve_mapping(mapping, path)
+    )
     if "uses" not in fields:
         return fields, None
     key_node, val_node = fields["uses"]
@@ -218,10 +264,10 @@ def mapping_uses_scalar(
 
 
 def extract_mapping_uses(
-    mapping: yaml.MappingNode, path: str
+    mapping: yaml.MappingNode, path: str, *, walk: DocWalk | None = None
 ) -> tuple[dict[str, tuple[yaml.ScalarNode, yaml.Node]], tuple[str, int] | None]:
     """Resolve mapping and parse its optional uses key into (owner/repo, line)."""
-    fields, raw_hit = mapping_uses_scalar(mapping, path)
+    fields, raw_hit = mapping_uses_scalar(mapping, path, walk=walk)
     if raw_hit is None:
         return fields, None
     repo = parse_uses_value(raw_hit[0], path, raw_hit[1])
@@ -243,23 +289,31 @@ def check_steps_sequence(steps_node: yaml.Node, path: str) -> list[yaml.Node]:
     return steps_node.value
 
 
-def step_uses_scalar(step_node: yaml.Node, path: str) -> tuple[str, int] | None:
+def step_uses_scalar(
+    step_node: yaml.Node, path: str, *, walk: DocWalk | None = None
+) -> tuple[str, int] | None:
     """Validate one step mapping node and return its optional (uses_raw, line)."""
     if not isinstance(step_node, yaml.MappingNode):
         raise UsesError(
             f"{path}:{step_node.start_mark.line + 1}: step must be a mapping"
         )
-    _, hit = mapping_uses_scalar(step_node, path)
+    _, hit = mapping_uses_scalar(step_node, path, walk=walk)
     return hit
 
 
 def collect_steps_raw_uses(
-    steps_node: yaml.Node, path: str, budget: RefBudget | None = None
+    steps_node: yaml.Node,
+    path: str,
+    budget: RefBudget | None = None,
+    *,
+    walk: DocWalk | None = None,
 ) -> list[tuple[str, int]]:
     """Collect raw (uses_value, line) pairs from steps_node within optional budget."""
+    active_walk = walk if walk is not None else DocWalk()
     found: list[tuple[str, int]] = []
     for step_node in check_steps_sequence(steps_node, path):
-        hit = step_uses_scalar(step_node, path)
+        active_walk.visit(path, step_node.start_mark.line + 1)
+        hit = step_uses_scalar(step_node, path, walk=active_walk)
         if hit is not None:
             if budget is not None:
                 budget.take(path, hit[1])
@@ -273,11 +327,14 @@ def collect_steps_uses(
     budget: RefBudget,
     *,
     decode: Callable[[str, str, int], str | None] = parse_uses_value,
+    walk: DocWalk | None = None,
 ) -> list[tuple[str, int]]:
     """Collect decoded (uses_value, line) pairs from steps_node within budget."""
+    active_walk = walk if walk is not None else DocWalk()
     found: list[tuple[str, int]] = []
     for step_node in check_steps_sequence(steps_node, path):
-        hit = step_uses_scalar(step_node, path)
+        active_walk.visit(path, step_node.start_mark.line + 1)
+        hit = step_uses_scalar(step_node, path, walk=active_walk)
         if hit is None:
             continue
         decoded = decode(hit[0], path, hit[1])
@@ -287,7 +344,9 @@ def collect_steps_uses(
     return found
 
 
-def resolved_job_nodes(jobs_node: yaml.Node, path: str) -> list[yaml.MappingNode]:
+def resolved_job_nodes(
+    jobs_node: yaml.Node, path: str, *, walk: DocWalk | None = None
+) -> list[yaml.MappingNode]:
     """Validate a jobs mapping node and return its job mapping nodes."""
     if isinstance(jobs_node, yaml.ScalarNode) and jobs_node.tag == NULL_TAG:
         return []
@@ -295,7 +354,11 @@ def resolved_job_nodes(jobs_node: yaml.Node, path: str) -> list[yaml.MappingNode
         raise UsesError(
             f"{path}:{jobs_node.start_mark.line + 1}: jobs must be a mapping"
         )
-    jobs = resolve_mapping(jobs_node, path, any_scalar_key=True)
+    jobs = (
+        walk.resolve(jobs_node, path, any_scalar_key=True)
+        if walk is not None
+        else resolve_mapping(jobs_node, path, any_scalar_key=True)
+    )
     if len(jobs) > MAX_JOBS:
         raise UsesError(
             f"{path}:{jobs_node.start_mark.line + 1}: jobs exceeds {MAX_JOBS} entries"
@@ -316,11 +379,13 @@ def collect_jobs_uses(
     budget: RefBudget,
     *,
     decode: Callable[[str, str, int], str | None] = parse_uses_value,
+    walk: DocWalk | None = None,
 ) -> list[tuple[str, int]]:
     """Collect decoded (uses_value, line) pairs from jobs.<job> within budget."""
+    active_walk = walk if walk is not None else DocWalk()
     found: list[tuple[str, int]] = []
-    for job_node in resolved_job_nodes(jobs_node, path):
-        job_fields, raw_hit = mapping_uses_scalar(job_node, path)
+    for job_node in resolved_job_nodes(jobs_node, path, walk=active_walk):
+        job_fields, raw_hit = mapping_uses_scalar(job_node, path, walk=active_walk)
         if raw_hit is not None:
             decoded = decode(raw_hit[0], path, raw_hit[1])
             if decoded is not None:
@@ -328,7 +393,13 @@ def collect_jobs_uses(
                 found.append((decoded, raw_hit[1]))
         if "steps" in job_fields:
             found.extend(
-                collect_steps_uses(job_fields["steps"][1], path, budget, decode=decode)
+                collect_steps_uses(
+                    job_fields["steps"][1],
+                    path,
+                    budget,
+                    decode=decode,
+                    walk=active_walk,
+                )
             )
     return found
 
@@ -380,7 +451,7 @@ def check_yaml_depth(text: str, path: str, max_depth: int = MAX_YAML_DEPTH) -> N
 
 
 def compose_top_mapping(
-    text: str, path: str
+    text: str, path: str, *, walk: DocWalk | None = None
 ) -> dict[str, tuple[yaml.ScalarNode, yaml.Node]]:
     """Compose YAML text for path and return its resolved root mapping."""
     check_line_limit(text, path)
@@ -391,11 +462,14 @@ def compose_top_mapping(
         raise UsesError(f"{path}: {err}") from err
     if not isinstance(root, yaml.MappingNode):
         raise UsesError(f"{path}: document root is not a YAML mapping")
-    return resolve_mapping(root, path)
+    return walk.resolve(root, path) if walk is not None else resolve_mapping(root, path)
 
 
 def runs_steps_node(
-    top: dict[str, tuple[yaml.ScalarNode, yaml.Node]], path: str
+    top: dict[str, tuple[yaml.ScalarNode, yaml.Node]],
+    path: str,
+    *,
+    walk: DocWalk | None = None,
 ) -> yaml.Node | None:
     """Validate optional runs mapping in top and return its steps node when present."""
     if "runs" not in top:
@@ -405,7 +479,11 @@ def runs_steps_node(
         raise UsesError(
             f"{path}:{runs_node.start_mark.line + 1}: runs must be a mapping"
         )
-    runs_fields = resolve_mapping(runs_node, path)
+    runs_fields = (
+        walk.resolve(runs_node, path)
+        if walk is not None
+        else resolve_mapping(runs_node, path)
+    )
     return runs_fields["steps"][1] if "steps" in runs_fields else None
 
 
@@ -416,16 +494,22 @@ def collect_text_uses(
     budget: RefBudget | None = None,
     *,
     decode: Callable[[str, str, int], str | None] = parse_uses_value,
+    max_step_visits: int = MAX_STEP_VISITS,
 ) -> list[tuple[str, int]]:
     """Compose YAML text for path and return decoded (uses_value, line) pairs."""
     active = budget if budget is not None else RefBudget(max_refs)
-    top = compose_top_mapping(text, path)
+    walk = DocWalk(max_step_visits)
+    top = compose_top_mapping(text, path, walk=walk)
     found: list[tuple[str, int]] = []
     if "jobs" in top:
-        found.extend(collect_jobs_uses(top["jobs"][1], path, active, decode=decode))
-    steps_node = runs_steps_node(top, path)
+        found.extend(
+            collect_jobs_uses(top["jobs"][1], path, active, decode=decode, walk=walk)
+        )
+    steps_node = runs_steps_node(top, path, walk=walk)
     if steps_node is not None:
-        found.extend(collect_steps_uses(steps_node, path, active, decode=decode))
+        found.extend(
+            collect_steps_uses(steps_node, path, active, decode=decode, walk=walk)
+        )
     return found
 
 
@@ -463,12 +547,12 @@ def collect_files_uses(
 def filter_local_uses(
     raw_steps: list[tuple[str, int]], path: str
 ) -> list[tuple[str, int]]:
-    """Keep ./ and $/ step references from raw_steps after validating $/ syntax."""
+    """Keep ./, .\\ and $/ step references from raw_steps after validating $/ syntax."""
     local_hits: list[tuple[str, int]] = []
     for raw, line in raw_steps:
         if raw.startswith("$/"):
             check_self_repo_uses(raw, path, line)
             local_hits.append((raw, line))
-        elif raw.startswith("./"):
+        elif is_local_uses(raw):
             local_hits.append((raw, line))
     return local_hits

@@ -7,20 +7,20 @@
 # another name. Adapted from tools/workflow-check.sh of github.com/golusoris/goenvoy (now
 # github.com/plurano/goenvoy).
 #
-# Platform (HISS-21): runs on Linux in CI and on macOS/Linux hosts with bash 4 or newer (mapfile,
-# ${var,,}); exits 2 naming bash 4 on older bash such as macOS stock bash 3.2.
+# Platform (HISS-21): runs on Linux in CI and on macOS/Linux hosts with bash 4.4 or newer (mapfile -d,
+# ${var,,}); exits 2 naming bash 4.4 or newer on older bash such as macOS stock bash 3.2.
 #
 #   tools/ci/workflow-check.sh [ROOT]      (default: this repository)
 #
 # Exit status: 0 clean, 1 a finding or a failed run, 2 usage or unsupported bash.
-# Needs bash 4+, docker (actionlint), python3 with venv, jq, curl, network, token.
+# Needs bash 4.4 or newer (mapfile -d), docker (actionlint), python3 with venv, jq, curl, network, token.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=tools/ci/bash_version.sh
 . "$HERE/bash_version.sh"
-if ! bash_major_supported "${BASH_VERSINFO[0]}"; then
-  echo "error: ${0##*/} requires bash 4 or newer, found $BASH_VERSION" >&2
+if ! bash_version_supported "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"; then
+  echo "error: ${0##*/} requires bash 4.4 or newer (mapfile -d), found $BASH_VERSION" >&2
   exit 2
 fi
 

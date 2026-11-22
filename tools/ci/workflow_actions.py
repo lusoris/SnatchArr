@@ -32,6 +32,7 @@ from workflow_yaml import (
     MAX_STEP_TEXT_LINES,
     MAX_WALK_DIRS,
     NULL_TAG,
+    DocWalk,
     RefBudget,
     UsesError,
     check_self_repo_uses,
@@ -52,23 +53,28 @@ from workflow_yaml import (
 def collect_local_step_uses(
     full_path: Path, rel_path: str, budget: RefBudget | None = None
 ) -> list[tuple[str, int]]:
-    """Read full_path and return step-level ./<dir> and $/<dir> (raw, line) pairs."""
+    """Read full_path and return step-level ./<dir>, .\\<dir> and $/<dir> (raw, line) pairs."""
     active = budget if budget is not None else RefBudget(MAX_REFS)
+    walk = DocWalk()
     text = read_workflow_text(full_path, rel_path)
-    top = compose_top_mapping(text, rel_path)
+    top = compose_top_mapping(text, rel_path, walk=walk)
     raw_steps: list[tuple[str, int]] = []
     if "jobs" in top:
-        for job_node in resolved_job_nodes(top["jobs"][1], rel_path):
-            job_fields, job_hit = mapping_uses_scalar(job_node, rel_path)
+        for job_node in resolved_job_nodes(top["jobs"][1], rel_path, walk=walk):
+            job_fields, job_hit = mapping_uses_scalar(job_node, rel_path, walk=walk)
             if job_hit is not None and job_hit[0].startswith("$/"):
                 check_self_repo_uses(job_hit[0], rel_path, job_hit[1])
             if "steps" in job_fields:
                 raw_steps.extend(
-                    collect_steps_raw_uses(job_fields["steps"][1], rel_path, active)
+                    collect_steps_raw_uses(
+                        job_fields["steps"][1], rel_path, active, walk=walk
+                    )
                 )
-    steps_node = runs_steps_node(top, rel_path)
+    steps_node = runs_steps_node(top, rel_path, walk=walk)
     if steps_node is not None:
-        raw_steps.extend(collect_steps_raw_uses(steps_node, rel_path, active))
+        raw_steps.extend(
+            collect_steps_raw_uses(steps_node, rel_path, active, walk=walk)
+        )
     return filter_local_uses(raw_steps, rel_path)
 
 
@@ -92,7 +98,7 @@ def regular_in_root(
 
 
 def resolve_local_dir(root: Path, raw: str, path: str, line: int) -> Path:
-    """Validate ./<dir> or $/<dir> syntax and return its resolved in-root Path."""
+    """Validate ./<dir>, .\\<dir> or $/<dir> syntax and return its resolved in-root Path."""
     if raw.startswith("$/"):
         check_self_repo_uses(raw, path, line)
     sub = raw[2:]
@@ -102,6 +108,8 @@ def resolve_local_dir(root: Path, raw: str, path: str, line: int) -> Path:
         or Path(sub).is_absolute()
     ):
         raise UsesError(f"{path}:{line}: invalid local action {raw!r}")
+    if raw.startswith(".\\"):
+        sub = sub.replace("\\", "/")
     try:
         target_dir = (root / sub).resolve()
     except OSError as err:
@@ -297,12 +305,72 @@ def file_step_sequences(
 
 
 def scalar_line_number(val_node: yaml.ScalarNode, idx: int) -> int:
-    """Compute the 1-based source line for value line idx of scalar val_node."""
+    """Compute the 1-based source line for non-folded scalar val_node at line idx."""
     if val_node.style == "|":
         return val_node.start_mark.line + 2 + idx
-    if val_node.style == ">":
-        return val_node.start_mark.line + 2
     return val_node.start_mark.line + 1
+
+
+def folded_body_lines(val_node: yaml.ScalarNode, path: str) -> list[str]:
+    """Extract raw body lines after the header from a folded scalar's mark buffer."""
+    mark = val_node.start_mark
+    end_mark = val_node.end_mark
+    if mark is None or end_mark is None or not isinstance(mark.buffer, str):
+        line = mark.line + 1 if mark is not None else 1
+        raise UsesError(f"{path}:{line}: folded scalar has no source buffer")
+    body = mark.buffer[mark.index : end_mark.index].splitlines()[1:]
+    if len(body) > MAX_FILE_LINES:
+        raise UsesError(
+            f"{path}:{mark.line + 1}: scalar spans more than {MAX_FILE_LINES} lines"
+        )
+    return body
+
+
+def next_folded_body_idx(
+    body: list[str], start_idx: int, val_stripped: str, path: str, base_line: int
+) -> int:
+    """Find the first body index from start_idx matching val_stripped within MAX_FILE_LINES."""
+    limit = min(len(body), MAX_FILE_LINES)
+    for idx in range(start_idx, limit):
+        body_stripped = body[idx].lstrip(" ")
+        if not val_stripped:
+            if not body_stripped:
+                return idx
+        elif body_stripped and val_stripped.startswith(body_stripped):
+            return idx
+    raise UsesError(f"{path}:{base_line}: folded scalar value does not match source")
+
+
+def consume_folded_rest(body: list[str], start_idx: int, rest: str) -> int:
+    """Advance past folded continuation lines in body matching rest within MAX_FILE_LINES."""
+    limit = min(len(body), MAX_FILE_LINES)
+    after = start_idx
+    for idx in range(start_idx, limit):
+        nxt = body[idx].lstrip(" ")
+        if not nxt or not rest.startswith(f" {nxt}"):
+            break
+        rest = rest[len(nxt) + 1 :]
+        after = idx + 1
+    return after
+
+
+def folded_line_numbers(
+    val_node: yaml.ScalarNode, parts: list[str], path: str
+) -> list[int]:
+    """Map each value line in parts of a folded scalar to its 1-based source line."""
+    body = folded_body_lines(val_node, path)
+    base_line = val_node.start_mark.line + 1
+    cursor = 0
+    lines: list[int] = []
+    for raw_line in parts[:MAX_FILE_LINES]:
+        val_stripped = raw_line.lstrip(" ")
+        matched = next_folded_body_idx(body, cursor, val_stripped, path, base_line)
+        lines.append(val_node.start_mark.line + 2 + matched)
+        body_stripped = body[matched].lstrip(" ")
+        cursor = consume_folded_rest(
+            body, matched + 1, val_stripped[len(body_stripped) :]
+        )
+    return lines
 
 
 def scalar_value_lines(val_node: yaml.ScalarNode, path: str) -> list[tuple[int, str]]:
@@ -314,12 +382,16 @@ def scalar_value_lines(val_node: yaml.ScalarNode, path: str) -> list[tuple[int, 
         raise UsesError(
             f"{path}:{val_node.start_mark.line + 1}: scalar spans more than {MAX_FILE_LINES} lines"
         )
+    if val_node.style == ">":
+        line_nos = folded_line_numbers(val_node, parts, path)
+    else:
+        line_nos = [scalar_line_number(val_node, idx) for idx in range(len(parts))]
     return [
         (
-            scalar_line_number(val_node, idx),
+            line_no,
             raw_line.replace("\x00", " ").replace("\r", " "),
         )
-        for idx, raw_line in enumerate(parts)
+        for line_no, raw_line in zip(line_nos, parts, strict=True)
     ]
 
 
@@ -461,7 +533,10 @@ def clean_version_scalar(ver_node: yaml.Node) -> str:
 
 
 def extract_with_version(
-    fields: dict[str, tuple[yaml.ScalarNode, yaml.Node]], path: str
+    fields: dict[str, tuple[yaml.ScalarNode, yaml.Node]],
+    path: str,
+    *,
+    walk: DocWalk | None = None,
 ) -> str:
     """Return raw scalar with.version text, or empty when absent, non-scalar or unsafe."""
     if "with" not in fields:
@@ -473,26 +548,34 @@ def extract_with_version(
         raise UsesError(
             f"{path}:{with_node.start_mark.line + 1}: with must be a mapping"
         )
-    with_fields = resolve_mapping(with_node, path)
+    with_fields = (
+        walk.resolve(with_node, path)
+        if walk is not None
+        else resolve_mapping(with_node, path)
+    )
     if "version" not in with_fields:
         return ""
     return clean_version_scalar(with_fields["version"][1])
 
 
 def collect_step_version_input(
-    step_node: yaml.Node, path: str, budget: RefBudget
+    step_node: yaml.Node,
+    path: str,
+    budget: RefBudget,
+    *,
+    walk: DocWalk | None = None,
 ) -> tuple[int, str, str] | None:
     """Extract (line, owner/repo, version) from one remote-uses step mapping."""
     if not isinstance(step_node, yaml.MappingNode):
         raise UsesError(
             f"{path}:{step_node.start_mark.line + 1}: step must be a mapping"
         )
-    fields, hit = extract_mapping_uses(step_node, path)
+    fields, hit = extract_mapping_uses(step_node, path, walk=walk)
     if hit is None:
         return None
     repo, line = hit
     budget.take(path, line)
-    return line, repo, extract_with_version(fields, path)
+    return line, repo, extract_with_version(fields, path, walk=walk)
 
 
 def collect_steps_version_inputs(
@@ -500,10 +583,14 @@ def collect_steps_version_inputs(
     path: str,
     budget: RefBudget,
     out: list[tuple[int, str, str]],
+    *,
+    walk: DocWalk | None = None,
 ) -> None:
     """Append (line, owner/repo, version) triples for remote-uses steps in steps_node."""
+    active_walk = walk if walk is not None else DocWalk()
     for step_node in check_steps_sequence(steps_node, path):
-        entry = collect_step_version_input(step_node, path, budget)
+        active_walk.visit(path, step_node.start_mark.line + 1)
+        entry = collect_step_version_input(step_node, path, budget, walk=active_walk)
         if entry is not None:
             out.append(entry)
 
@@ -512,18 +599,19 @@ def collect_text_version_inputs(
     text: str, rel_path: str, budget: RefBudget
 ) -> list[tuple[int, str, str]]:
     """Return (line, owner/repo, version) triples for remote step uses in text."""
-    top = compose_top_mapping(text, rel_path)
+    walk = DocWalk()
+    top = compose_top_mapping(text, rel_path, walk=walk)
     out: list[tuple[int, str, str]] = []
     if "jobs" in top:
-        for job_node in resolved_job_nodes(top["jobs"][1], rel_path):
-            job_fields = resolve_mapping(job_node, rel_path)
+        for job_node in resolved_job_nodes(top["jobs"][1], rel_path, walk=walk):
+            job_fields = walk.resolve(job_node, rel_path)
             if "steps" in job_fields:
                 collect_steps_version_inputs(
-                    job_fields["steps"][1], rel_path, budget, out
+                    job_fields["steps"][1], rel_path, budget, out, walk=walk
                 )
-    steps_node = runs_steps_node(top, rel_path)
+    steps_node = runs_steps_node(top, rel_path, walk=walk)
     if steps_node is not None:
-        collect_steps_version_inputs(steps_node, rel_path, budget, out)
+        collect_steps_version_inputs(steps_node, rel_path, budget, out, walk=walk)
     return out
 
 

@@ -14,11 +14,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import workflow_yaml
 from workflow_actions import (
     collect_files_step_text,
     collect_files_version_inputs,
     collect_text_step_lines,
     list_action_files,
+    resolve_local_action,
+    scalar_value_lines,
     walk_github_actions,
 )
 from workflow_uses import main as uses_main
@@ -27,11 +30,14 @@ from workflow_yaml import (
     MAX_FILE_LINES,
     MAX_REFS,
     MAX_STEP_TEXT_LINES,
+    MAX_STEP_VISITS,
     MAX_STEPS,
     MAX_YAML_DEPTH,
     UsesError,
     collect_text_uses,
     compose_top_mapping,
+    filter_local_uses,
+    parse_uses_value,
     read_workflow_text,
 )
 
@@ -422,10 +428,10 @@ def check_step_text_case(
     return []
 
 
-def step_text_positive_table() -> list[
+def step_text_manifest_cases() -> list[
     tuple[str, str, str, list[tuple[str, int, str]], bool]
 ]:
-    """Return planted --step-text documents and expected (file, line, text) records."""
+    """Return composite block/plain and flow-manifest --step-text test tuples."""
     act_rel = ".github/actions/sample/action.yml"
     act_doc = (
         "name: sample\ndescription: go install golang.org/x/vuln/cmd/govulncheck@latest\n"
@@ -439,12 +445,6 @@ def step_text_positive_table() -> list[
     flow_doc = (
         "{name: sample, description: 'Example: go install example.com/tool',"
         " runs: {using: composite, steps: [{shell: bash, run: echo ok}]}}\n"
-    )
-    quoted_rel = ".github/workflows/quoted.yml"
-    quoted_doc = (
-        "jobs:\n  j:\n    steps:\n"
-        "      - run: 'go install golang.org/x/vuln/cmd/govulncheck@latest'\n"
-        '      - run: >-\n          folded one\n      - run: "nul\\0cr\\rend"\n'
     )
     return [
         (
@@ -466,6 +466,25 @@ def step_text_positive_table() -> list[
             [(flow_rel, 1, "echo ok")],
             False,
         ),
+    ]
+
+
+def step_text_quoted_and_folded_cases() -> list[
+    tuple[str, str, str, list[tuple[str, int, str]], bool]
+]:
+    """Return quoted/sanitized and multi-paragraph folded --step-text test tuples."""
+    quoted_rel = ".github/workflows/quoted.yml"
+    quoted_doc = (
+        "jobs:\n  j:\n    steps:\n"
+        "      - run: 'go install golang.org/x/vuln/cmd/govulncheck@latest'\n"
+        '      - run: >-\n          folded one\n      - run: "nul\\0cr\\rend"\n'
+    )
+    folded_rel = ".github/actions/folded/action.yml"
+    folded_doc = (
+        "steps: &s\n  - run: >\n      echo a\n      echo b\n\n      echo c\n\n\n"
+        "      echo d\n    shell: bash\nruns: {using: composite, steps: *s}\n"
+    )
+    return [
         (
             "step-text-quoted-folded-sanitized",
             quoted_rel,
@@ -477,6 +496,77 @@ def step_text_positive_table() -> list[
             ],
             False,
         ),
+        (
+            "step-text-folded-paragraphs",
+            folded_rel,
+            folded_doc,
+            [
+                (folded_rel, 3, "echo a echo b"),
+                (folded_rel, 6, "echo c"),
+                (folded_rel, 7, ""),
+                (folded_rel, 9, "echo d"),
+            ],
+            False,
+        ),
+    ]
+
+
+def step_text_folded_cursor_cases() -> list[
+    tuple[str, str, str, list[tuple[str, int, str]], bool]
+]:
+    """Return more-indented, prefix-collision and repeated-line folded --step-text tuples."""
+    indented_rel = ".github/actions/folded_indent/action.yml"
+    indented_doc = (
+        "steps: &s\n  - run: >\n      a\n        b\n      c\n"
+        "runs: {using: composite, steps: *s}\n"
+    )
+    prefix_rel = ".github/actions/folded_prefix/action.yml"
+    prefix_doc = (
+        "steps: &s\n  - run: >\n      x\n      y\n\n      y z\n    shell: bash\n"
+        "runs: {using: composite, steps: *s}\n"
+    )
+    repeat_rel = ".github/actions/folded_repeat/action.yml"
+    repeat_doc = (
+        "steps: &s\n  - run: >\n      echo\n      echo\n\n      echo\n    shell: bash\n"
+        "runs: {using: composite, steps: *s}\n"
+    )
+    return [
+        (
+            "step-text-folded-more-indented",
+            indented_rel,
+            indented_doc,
+            [
+                (indented_rel, 3, "a"),
+                (indented_rel, 4, "  b"),
+                (indented_rel, 5, "c"),
+            ],
+            False,
+        ),
+        (
+            "step-text-folded-prefix-collision",
+            prefix_rel,
+            prefix_doc,
+            [(prefix_rel, 3, "x y"), (prefix_rel, 6, "y z")],
+            False,
+        ),
+        (
+            "step-text-folded-repeat-line",
+            repeat_rel,
+            repeat_doc,
+            [(repeat_rel, 3, "echo echo"), (repeat_rel, 6, "echo")],
+            False,
+        ),
+    ]
+
+
+def step_text_positive_table() -> list[
+    tuple[str, str, str, list[tuple[str, int, str]], bool]
+]:
+    """Return planted --step-text documents and expected (file, line, text) records."""
+    return [
+        *step_text_manifest_cases(),
+        *step_text_quoted_and_folded_cases(),
+        *step_text_folded_cursor_cases(),
     ]
 
 
@@ -515,6 +605,59 @@ def check_step_text_max_lines() -> list[str]:
         return []
 
 
+def check_bad_path_cases(
+    root: Path,
+    prefix: str,
+    runner: Callable[[str, list[str]], object],
+) -> list[str]:
+    """Verify runner refuses tab, lf (with real fixtures) and nul paths as invalid."""
+    failures: list[str] = []
+    for label, bad_arg, make_fixture in (
+        ("tab", "a\tb.yml", True),
+        ("lf", "a\nb.yml", True),
+        ("nul", "a\x00b.yml", False),
+    ):
+        case_name = f"{prefix}-bad-{label}"
+        skipped = False
+        if make_fixture:
+            try:
+                (root / bad_arg).write_text("jobs: {}\n", encoding="utf-8")
+            except OSError as err:
+                print(f"skip {case_name}: {err}")
+                skipped = True
+        try:
+            runner(str(root), [bad_arg])
+            failures.append(f"{case_name}: accepted {bad_arg!r}")
+        except UsesError as err:
+            if "invalid file path" not in str(err):
+                failures.append(
+                    f"{case_name}: error {str(err)!r} lacks 'invalid file path'"
+                )
+            elif not skipped:
+                print(f"ok   {case_name}")
+        except ValueError as err:
+            failures.append(f"{case_name}: unexpected ValueError: {err}")
+    return failures
+
+
+def check_folded_missing_buffer() -> list[str]:
+    """Verify scalar_value_lines refuses a folded ScalarNode whose mark buffer is None."""
+    top = compose_top_mapping("run: >\n  echo hi\n", "nobuf.yml")
+    val_node = top["run"][1]
+    assert isinstance(val_node, workflow_yaml.yaml.ScalarNode)
+    val_node.start_mark.buffer = None
+    try:
+        scalar_value_lines(val_node, "nobuf.yml")
+        return ["step-text-folded-missing-buffer: accepted None buffer"]
+    except UsesError as err:
+        if "nobuf.yml:1" not in str(err):
+            return [
+                f"step-text-folded-missing-buffer: error {str(err)!r} lacks 'nobuf.yml:1'"
+            ]
+        print("ok   step-text-folded-missing-buffer")
+        return []
+
+
 def run_step_text_cases() -> list[str]:
     """Verify --step-text emits scalar lines with exact line numbers and refuses bad paths."""
     failures: list[str] = []
@@ -526,16 +669,10 @@ def run_step_text_cases() -> list[str]:
             )
         failures.extend(check_step_text_alias_dedup(root))
         failures.extend(check_step_text_max_lines())
-        for label, bad_arg in (
-            ("tab", "a\tb.yml"),
-            ("lf", "a\nb.yml"),
-            ("nul", "a\x00b.yml"),
-        ):
-            try:
-                collect_files_step_text(str(root), [bad_arg])
-                failures.append(f"step-text-bad-{label}: accepted {bad_arg!r}")
-            except UsesError:
-                print(f"ok   step-text-bad-{label}")
+        failures.extend(check_folded_missing_buffer())
+        failures.extend(
+            check_bad_path_cases(root, "step-text", collect_files_step_text)
+        )
     return failures
 
 
@@ -630,13 +767,156 @@ def run_version_inputs_cases() -> list[str]:
             failures.append("version-inputs-max-refs: accepted >3 refs")
         except UsesError:
             print("ok   version-inputs-max-refs")
-        for label, bad_arg in (("tab", "a\tb.yml"), ("nul", "a\x00b.yml")):
-            try:
-                collect_files_version_inputs(str(root), [bad_arg])
-                failures.append(f"version-inputs-bad-{label}: accepted {bad_arg!r}")
-            except UsesError:
-                print(f"ok   version-inputs-bad-{label}")
+        failures.extend(
+            check_bad_path_cases(root, "version-inputs", collect_files_version_inputs)
+        )
     return failures
+
+
+def check_windows_local_resolution(base: Path, win_uses: str) -> list[str]:
+    """Verify resolve_local_action resolves .\\ in-root and refuses root escapes."""
+    failures: list[str] = []
+    root = base / "repo"
+    act = root / ".github" / "actions" / "x" / "action.yml"
+    act.parent.mkdir(parents=True)
+    act.write_text("runs:\n  using: composite\n  steps: []\n", encoding="utf-8")
+    outside = base / "outside"
+    outside.mkdir()
+    (outside / "action.yml").write_text(
+        "runs:\n  using: composite\n  steps: []\n", encoding="utf-8"
+    )
+    try:
+        got = resolve_local_action(root, win_uses, "ci.yml", 6)
+    except UsesError as err:
+        failures.append(f"windows-local-resolve-action: raised {err}")
+    else:
+        if got != ".github/actions/x/action.yml":
+            failures.append(f"windows-local-resolve-action: got {got!r}")
+        else:
+            print("ok   windows-local-resolve-action")
+    try:
+        resolve_local_action(root, r".\..\outside", "ci.yml", 7)
+        failures.append("windows-local-escape: accepted .\\..\\outside")
+    except UsesError as err:
+        if "escapes repository root" not in str(err):
+            failures.append(f"windows-local-escape: unexpected error {str(err)!r}")
+        else:
+            print("ok   windows-local-escape")
+    return failures
+
+
+def run_windows_local_path_cases() -> list[str]:
+    """Verify .\\ local paths parse, filter, resolve in-root and refuse root escapes."""
+    failures: list[str] = []
+    win_uses = r".\.github\actions\x"
+    try:
+        parsed = parse_uses_value(win_uses, "win.yml", 1)
+    except UsesError as err:
+        failures.append(f"windows-local-parse-uses: raised {err}")
+    else:
+        if parsed is not None:
+            failures.append(
+                f"windows-local-parse-uses: did not return None for {win_uses!r}"
+            )
+        else:
+            print("ok   windows-local-parse-uses")
+    try:
+        kept = filter_local_uses([(win_uses, 4), ("actions/checkout@v4", 5)], "win.yml")
+    except UsesError as err:
+        failures.append(f"windows-local-filter-uses: raised {err}")
+    else:
+        if kept != [(win_uses, 4)]:
+            failures.append(f"windows-local-filter-uses: got {kept!r}")
+        else:
+            print("ok   windows-local-filter-uses")
+    with tempfile.TemporaryDirectory() as tmp:
+        failures.extend(check_windows_local_resolution(Path(tmp).resolve(), win_uses))
+    return failures
+
+
+def run_step_visit_bound_cases() -> list[str]:
+    """Verify MAX_STEP_VISITS boundary at 8 and fast refusal on 1024x4096x1024 alias bomb."""
+    failures: list[str] = []
+    four_steps = "x-steps: &s\n" + "".join(f"  - run: echo {i}\n" for i in range(4))
+    two_jobs = f"{four_steps}jobs:\n  j0:\n    steps: *s\n  j1:\n    steps: *s\n"
+    three_jobs = f"{two_jobs}  j2:\n    steps: *s\n"
+    try:
+        got = collect_text_uses(two_jobs, "v8.yml", max_step_visits=8)
+        if got != []:
+            failures.append(f"step-visits-exact-8: got {got!r}, want []")
+        else:
+            print("ok   step-visits-exact-8")
+    except UsesError as err:
+        failures.append(f"step-visits-exact-8: unexpected error: {err}")
+    try:
+        collect_text_uses(three_jobs, "v9.yml", max_step_visits=8)
+        failures.append("step-visits-over-8: accepted 12 step visits at limit 8")
+    except UsesError as err:
+        if "more than 8 step visits" not in str(err):
+            failures.append(f"step-visits-over-8: error {str(err)!r} lacks needle")
+        else:
+            print("ok   step-visits-over-8")
+    scale_doc = (
+        "x-step: &m\n"
+        + "".join(f"  k{i}: 0\n" for i in range(1024))
+        + "x-steps: &seq\n"
+        + "  - *m\n" * 4096
+        + "jobs:\n"
+        + "".join(f"  j{i}:\n    steps: *seq\n" for i in range(1024))
+    )
+    try:
+        collect_text_uses(scale_doc, "scale.yml")
+        failures.append("step-visits-full-scale: accepted 1024x4096 step visits")
+    except UsesError as err:
+        if f"more than {MAX_STEP_VISITS} step visits" not in str(err):
+            failures.append(f"step-visits-full-scale: error {str(err)!r} lacks needle")
+        else:
+            print("ok   step-visits-full-scale")
+    return failures
+
+
+def run_docwalk_cache_case() -> list[str]:
+    """Verify DocWalk.resolve reads an aliased step mapping node once across jobs."""
+    doc = (
+        "x-step: &m\n  name: build\n  run: echo ok\n"
+        "x-steps: &s\n  - *m\n  - *m\n  - *m\n  - *m\n"
+        "jobs:\n  j0:\n    steps: *s\n  j1:\n    steps: *s\n  j2:\n    steps: *s\n"
+    )
+    orig = workflow_yaml.explicit_entries
+    counts: dict[int, int] = {}
+    step_ids: set[int] = set()
+
+    def counting_explicit(
+        node: workflow_yaml.yaml.MappingNode,
+        path: str,
+        *,
+        any_scalar_key: bool = False,
+    ) -> tuple[
+        dict[str, tuple[workflow_yaml.yaml.ScalarNode, workflow_yaml.yaml.Node]],
+        list[workflow_yaml.yaml.MappingNode],
+    ]:
+        """Count explicit_entries calls per mapping node id and delegate."""
+        node_id = id(node)
+        counts[node_id] = counts.get(node_id, 0) + 1
+        if any(
+            isinstance(k, workflow_yaml.yaml.ScalarNode) and k.value == "run"
+            for k, _ in node.value
+        ):
+            step_ids.add(node_id)
+        return orig(node, path, any_scalar_key=any_scalar_key)
+
+    workflow_yaml.explicit_entries = counting_explicit
+    try:
+        collect_text_uses(doc, "cache.yml")
+    except UsesError as err:
+        return [f"docwalk-mapping-cache: unexpected error: {err}"]
+    finally:
+        workflow_yaml.explicit_entries = orig
+    step_reads = sum(counts[nid] for nid in step_ids)
+    if len(step_ids) != 1 or step_reads != 1:
+        return [f"docwalk-mapping-cache: step mapping read {step_reads} times, want 1"]
+    print("ok   docwalk-mapping-cache")
+    return []
 
 
 def run_all_uses_cases() -> list[str]:
@@ -789,6 +1069,9 @@ def self_test() -> int:
             *run_list_negative_cases(),
             *run_step_text_cases(),
             *run_version_inputs_cases(),
+            *run_windows_local_path_cases(),
+            *run_step_visit_bound_cases(),
+            *run_docwalk_cache_case(),
         ]
     out = buf.getvalue()
     sys.stdout.write(out)
