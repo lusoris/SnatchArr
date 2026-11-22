@@ -104,17 +104,12 @@ jobs:
       - name: Renovate presets reachable from renovate.json keep Docker release-age coverage, after their planted cases
         env:
           GH_TOKEN: ${{ github.token }}
-          # mirror.gcr.io carries no signatures, so the same digest is verified on ghcr.io.
-          RENOVATE_SIGNER_ISSUER: https://token.actions.githubusercontent.com
-          RENOVATE_SIGNER: https://github.com/renovatebot/renovate/.github/workflows/build.yml@refs/heads/main
         run: |
           set -euo pipefail
           bash tools/ci/renovate_presets_test.sh
           bash tools/ci/renovate_image_pull_test.sh
           . tools/ci/tool-versions.env
-          export RENOVATE_IMAGE RENOVATE_SIGNED_REPO
-          digest="${RENOVATE_IMAGE##*@}"
-          timeout 300 cosign verify --certificate-oidc-issuer "$RENOVATE_SIGNER_ISSUER" --certificate-identity "$RENOVATE_SIGNER" "$RENOVATE_SIGNED_REPO@$digest" > /dev/null
+          export RENOVATE_IMAGE RENOVATE_SIGNED_REPO RENOVATE_SIGNER_ISSUER RENOVATE_SIGNER
           ref="$(bash tools/ci/renovate_image_pull.sh)"
           python3 -I tools/ci/renovate_presets.py --image "$ref"
       - name: The release dogfood gate and pass recorder refuse their planted cases

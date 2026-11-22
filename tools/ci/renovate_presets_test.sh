@@ -736,10 +736,11 @@ PY
 echo "ok   bounded-file-and-docker-stderr"
 
 # 13. Both CI entry points invoke this check; planted copies prove every assertion fails closed.
-# assert_wiring FILE KIND NEEDLE [MODE]: require NEEDLE present or absent in the F1 step or workflows-lint.
+# assert_wiring FILE KIND NEEDLE [MODE]: require NEEDLE in uncommented code (present) or nowhere (absent) in the F1 step or workflows-lint.
 assert_wiring() {
   python3 -I - "$1" "$2" "$3" "${4:-present}" <<'PY'
 import pathlib
+import re
 import sys
 
 text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -756,7 +757,15 @@ elif sys.argv[2] == "makefile":
 else:
     raise SystemExit(f"unknown wiring target: {sys.argv[2]}")
 if sys.argv[4] == "present":
-    if sys.argv[3] not in section:
+    comment_re = re.compile(r"(?:^|(?<=\s))#")
+    found = False
+    for line in section.splitlines():
+        match = comment_re.search(line)
+        code = line if match is None else line[: match.start()]
+        if sys.argv[3] in code:
+            found = True
+            break
+    if not found:
         raise SystemExit(f"missing wiring: {sys.argv[3]}")
 elif sys.argv[4] == "absent":
     if sys.argv[3] in section:
@@ -780,7 +789,9 @@ if len(raw) > 65536:
 lines = raw.decode("utf-8").split("\n")
 if len(lines) > 256:
     raise SystemExit(f"{sys.argv[1]}: exceeds 256 lines")
-pattern = re.compile(r"^RENOVATE_SIGNED_REPO=[a-z0-9.-]+/[a-z0-9._/-]+$")
+pattern = re.compile(
+    r"^RENOVATE_SIGNED_REPO=[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{1,5})?(/[a-z0-9]+([._-][a-z0-9]+)*){2,}$"
+)
 matches = 0
 assignments = 0
 for idx in range(len(lines)):
@@ -791,7 +802,7 @@ for idx in range(len(lines)):
         assignments += 1
 if matches != 1 or assignments != 1:
     raise SystemExit(
-        f"{sys.argv[1]}: expected 1 RENOVATE_SIGNED_REPO=<host>/<repo> line, got {matches} valid ({assignments} total)"
+        f"{sys.argv[1]}: expected 1 RENOVATE_SIGNED_REPO=<host>/<owner>/<repo> line, got {matches} valid ({assignments} total)"
     )
 PY
 }
@@ -837,7 +848,7 @@ test_signed_repo_wiring() {
   local ci="$HERE/../../.github/workflows/ci.yml"
   local mk="$HERE/../../Makefile"
   local lit="ghcr.io/renovatebot/renovate"
-  local exp="export RENOVATE_IMAGE RENOVATE_SIGNED_REPO"
+  local exp="export RENOVATE_IMAGE RENOVATE_SIGNED_REPO RENOVATE_SIGNER_ISSUER RENOVATE_SIGNER"
 
   expect_named_pass "tool-versions-signed-repo" assert_signed_repo_env "$tv"
   plant_replacement "$tv" "$work/tv-no-signed.env" "RENOVATE_SIGNED_REPO=" "# removed "
@@ -850,6 +861,10 @@ test_signed_repo_wiring() {
     "RENOVATE_SIGNED_REPO=" "RENOVATE_SIGNED_REPO=bad:tag/"
   expect_named_fail "tool-versions-signed-repo" "tagged repo passed" \
     assert_signed_repo_env "$work/tv-tagged-signed.env"
+  plant_replacement "$tv" "$work/tv-one-seg-signed.env" \
+    "RENOVATE_SIGNED_REPO=$lit" "RENOVATE_SIGNED_REPO=ghcr.io/renovate"
+  expect_named_fail "tool-versions-signed-repo" "single-segment repo passed" \
+    assert_signed_repo_env "$work/tv-one-seg-signed.env"
   printf '%s\nRENOVATE_SIGNED_REPO=BAD\n' "$(cat "$tv")" > "$work/tv-shadow-signed.env"
   expect_named_fail "tool-versions-signed-repo" "shadowed invalid key passed" \
     assert_signed_repo_env "$work/tv-shadow-signed.env"
@@ -882,11 +897,44 @@ test_signed_repo_wiring() {
   echo "ok   makefile-no-signed-repo-literal"
 }
 
+# test_wiring_ignores_comments: refuse commented-out or trailing-comment wiring in ci.yml and Makefile.
+test_wiring_ignores_comments() {
+  local ci="$HERE/../../.github/workflows/ci.yml"
+  local mk="$HERE/../../Makefile"
+  local needle="tools/ci/renovate_image_pull.sh"
+
+  expect_named_pass "wiring-ignores-comments" assert_wiring "$ci" workflow "$needle"
+  expect_named_pass "wiring-ignores-comments" assert_wiring "$mk" makefile "$needle"
+
+  plant_replacement "$ci" "$work/ci-commented-pull.yml" \
+    "          ref=\"\$(bash tools/ci/renovate_image_pull.sh)\"" \
+    "          # ref=\"\$(bash tools/ci/renovate_image_pull.sh)\""
+  expect_named_fail "wiring-ignores-comments" "commented-out workflow pull passed" \
+    assert_wiring "$work/ci-commented-pull.yml" workflow "$needle"
+
+  plant_replacement "$mk" "$work/make-commented-pull" \
+    "	ref=\"\$\$(bash tools/ci/renovate_image_pull.sh)\"" \
+    "	# ref=\"\$\$(bash tools/ci/renovate_image_pull.sh)\""
+  expect_named_fail "wiring-ignores-comments" "commented-out Makefile pull passed" \
+    assert_wiring "$work/make-commented-pull" makefile "$needle"
+
+  plant_replacement "$ci" "$work/ci-trailing-comment-pull.yml" \
+    "ref=\"\$(bash tools/ci/renovate_image_pull.sh)\"" \
+    "echo skipped # tools/ci/renovate_image_pull.sh"
+  expect_named_fail "wiring-ignores-comments" "trailing-comment workflow pull passed" \
+    assert_wiring "$work/ci-trailing-comment-pull.yml" workflow "$needle"
+
+  echo "ok   wiring-ignores-comments"
+}
+
 assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow \
   "python3 -I tools/ci/renovate_presets.py"
 assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow \
   "python3 -I tools/ci/renovate_presets.py --image \"\$ref\""
-assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow "cosign verify"
+assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow \
+  "renovatebot/renovate/.github/workflows/build.yml" absent
+assert_wiring "$HERE/../../Makefile" makefile \
+  "renovatebot/renovate/.github/workflows/build.yml" absent
 assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow "tools/ci/renovate_image_pull.sh"
 assert_wiring "$HERE/../../.github/workflows/ci.yml" workflow "tools/ci/renovate_image_pull_test.sh"
 assert_wiring "$HERE/../../Makefile" makefile "python3 -I tools/ci/renovate_presets.py"
@@ -895,6 +943,7 @@ assert_wiring "$HERE/../../Makefile" makefile \
 assert_wiring "$HERE/../../Makefile" makefile "tools/ci/renovate_image_pull.sh"
 assert_wiring "$HERE/../../Makefile" makefile "tools/ci/renovate_image_pull_test.sh"
 test_signed_repo_wiring
+test_wiring_ignores_comments
 
 # assert_workflow_timeout CI_YML [minimum]: require enough budget or print its ceiling in minutes.
 assert_workflow_timeout() {
@@ -1017,11 +1066,20 @@ if assert_wiring "$work/ci-no-check.yml" workflow "python3 -I tools/ci/renovate_
   echo "FAIL wiring: workflow copy without checker passed" >&2
   exit 1
 fi
-sed '/cosign verify/d' "$HERE/../../.github/workflows/ci.yml" > "$work/ci-no-cosign.yml"
-if assert_wiring "$work/ci-no-cosign.yml" workflow "cosign verify"; then
-  echo "FAIL wiring: workflow copy without cosign verification passed" >&2
-  exit 1
-fi
+plant_replacement "$HERE/../../.github/workflows/ci.yml" "$work/ci-signer-literal.yml" \
+  "export RENOVATE_IMAGE RENOVATE_SIGNED_REPO RENOVATE_SIGNER_ISSUER RENOVATE_SIGNER" \
+  "RENOVATE_SIGNER=https://github.com/renovatebot/renovate/.github/workflows/build.yml@refs/heads/main
+          export RENOVATE_IMAGE RENOVATE_SIGNED_REPO RENOVATE_SIGNER_ISSUER RENOVATE_SIGNER"
+expect_named_fail "workflow-no-signer-literal" "workflow signer literal passed" \
+  assert_wiring "$work/ci-signer-literal.yml" workflow \
+  "renovatebot/renovate/.github/workflows/build.yml" absent
+plant_replacement "$HERE/../../Makefile" "$work/make-signer-literal" \
+  "export RENOVATE_IMAGE RENOVATE_SIGNED_REPO RENOVATE_SIGNER_ISSUER RENOVATE_SIGNER" \
+  "RENOVATE_SIGNER=https://github.com/renovatebot/renovate/.github/workflows/build.yml@refs/heads/main
+	export RENOVATE_IMAGE RENOVATE_SIGNED_REPO RENOVATE_SIGNER_ISSUER RENOVATE_SIGNER"
+expect_named_fail "makefile-no-signer-literal" "Makefile signer literal passed" \
+  assert_wiring "$work/make-signer-literal" makefile \
+  "renovatebot/renovate/.github/workflows/build.yml" absent
 sed '/renovate_image_pull\.sh/d' "$HERE/../../.github/workflows/ci.yml" > "$work/ci-no-pull.yml"
 if assert_wiring "$work/ci-no-pull.yml" workflow "tools/ci/renovate_image_pull.sh"; then
   echo "FAIL wiring: workflow copy without renovate_image_pull.sh passed" >&2
