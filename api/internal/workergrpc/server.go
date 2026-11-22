@@ -287,21 +287,24 @@ func (s *Server) pace(ctx context.Context, run domain.Run, pol *snatcharrv1.Poli
 	}
 }
 
-// Heartbeat extends a lease and tells a worker when its run was cancelled.
+// Heartbeat extends a lease and tells a worker when its run was cancelled. A named worker
+// whose expired lease another worker took also receives CANCEL so two workers never run it at
+// once.
 func (s *Server) Heartbeat(ctx context.Context, req *snatcharrv1.HeartbeatRequest) (*snatcharrv1.HeartbeatResponse, error) {
 	runID, err := parseRun(req.GetRunId())
 	if err != nil {
 		return nil, err
 	}
-	if req.GetWorkerId() != "" {
-		s.touch(ctx, req.GetWorkerId())
+	workerID := req.GetWorkerId()
+	if workerID != "" {
+		s.touch(ctx, workerID)
 	}
-	run, err := s.runs.Heartbeat(ctx, runID, req.GetWorkerId())
+	run, err := s.runs.Heartbeat(ctx, runID, workerID)
 	if err != nil {
 		return nil, toStatus(err)
 	}
 	directive := snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CONTINUE
-	if run.Status != domain.RunLeased {
+	if run.Status != domain.RunLeased || (workerID != "" && run.LeasedBy != workerID) {
 		directive = snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CANCEL
 	}
 	var expires int64
