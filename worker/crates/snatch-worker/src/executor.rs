@@ -205,16 +205,14 @@ struct Collected {
     unavailable_ids: BTreeSet<i64>,
     priority_ids: Vec<i64>,
     priority_groups: Vec<i64>,
-}
-
-fn merge_ids(dst: &mut Vec<i64>, src: &mut Vec<i64>) {
-    dst.append(src);
-    dst.sort_unstable();
-    dst.dedup();
+    /// True when a `FilterCandidates` response set `priority_ids` and `priority_groups`.
+    priorities_read: bool,
 }
 
 impl Collected {
-    fn merge(&mut self, mut other: Self) {
+    /// Folds a later batch into `self`: its reads replace earlier reads of the same ids, and its
+    /// Seerr priority lists replace the earlier ones only when it got a `FilterCandidates` answer.
+    fn merge(&mut self, other: Self) {
         let order: Vec<i64> = other.keep.iter().map(|c| c.id).collect();
         let mut fresh: BTreeMap<i64, Candidate> =
             other.keep.into_iter().map(|c| (c.id, c)).collect();
@@ -238,8 +236,11 @@ impl Collected {
             .retain(|id| !other.seen_ids.contains(id));
         self.unavailable_ids.extend(other.unavailable_ids);
         self.seen_ids.extend(other.seen_ids);
-        merge_ids(&mut self.priority_ids, &mut other.priority_ids);
-        merge_ids(&mut self.priority_groups, &mut other.priority_groups);
+        if other.priorities_read {
+            self.priority_ids = other.priority_ids;
+            self.priority_groups = other.priority_groups;
+            self.priorities_read = true;
+        }
     }
 
     fn drop_busy(&mut self, busy: &[i64]) {
@@ -835,9 +836,12 @@ struct FilterOutcome {
     unprocessed_ids: Vec<i64>,
     priority_ids: Vec<i64>,
     priority_group_ids: Vec<i64>,
+    /// True when at least one `FilterCandidates` response arrived.
+    answered: bool,
 }
 
 /// Asks the API which of `ids` are unprocessed, in batches of at most [`MAX_FILTER_BATCH`].
+/// Makes no call for empty `ids`; `answered` then stays false and the priority lists are no answer.
 async fn filter_unprocessed(
     client: &mut Client,
     run: &Run,
@@ -859,6 +863,7 @@ async fn filter_unprocessed(
         })
         .await?
         .into_inner();
+        outcome.answered = true;
         outcome.unprocessed_ids.append(&mut resp.unprocessed_ids);
         outcome.priority_ids.append(&mut resp.priority_ids);
         outcome
@@ -980,6 +985,8 @@ async fn fetch_unique_candidates(
     }
 }
 
+/// Filters one fetched batch by focus, policy, busy ids and processed memory; `priorities_read`
+/// records whether the API answered with Seerr priority lists.
 async fn filter_fetched_candidates(
     client: &mut Client,
     p: &Prepared,
@@ -1018,6 +1025,7 @@ async fn filter_fetched_candidates(
         unavailable_ids,
         priority_ids: outcome.priority_ids,
         priority_groups: outcome.priority_group_ids,
+        priorities_read: outcome.answered,
     })
 }
 

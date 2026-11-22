@@ -825,6 +825,7 @@ async fn merge_takes_the_latest_record_for_a_refetched_id() -> TestResult {
         unavailable_ids: BTreeSet::from([2]),
         priority_ids: vec![4],
         priority_groups: Vec::new(),
+        priorities_read: true,
     };
     let batch_b = Collected {
         keep: vec![test_candidate(3, "ep3"), test_candidate(2, "ep2-new")],
@@ -833,6 +834,7 @@ async fn merge_takes_the_latest_record_for_a_refetched_id() -> TestResult {
         unavailable_ids: BTreeSet::new(),
         priority_ids: vec![2],
         priority_groups: Vec::new(),
+        priorities_read: true,
     };
     batch_a.merge(batch_b);
     assert_eq!(
@@ -846,7 +848,7 @@ async fn merge_takes_the_latest_record_for_a_refetched_id() -> TestResult {
     assert!(batch_a.busy_ids.is_empty());
     assert!(batch_a.unavailable_ids.is_empty());
     assert_eq!(batch_a.seen_ids, BTreeSet::from([1, 2, 3, 4]));
-    assert_eq!(batch_a.priority_ids, vec![2, 4]);
+    assert_eq!(batch_a.priority_ids, vec![2]);
 
     let api = FakeApi {
         filter_unprocessed: vec![1, 3, 4],
@@ -1008,6 +1010,96 @@ async fn refill_skips_cached_page_one_ids_seen_earlier() -> TestResult {
     assert_eq!(
         *api.filter_calls.lock().await,
         vec![vec![31, 41, 8], vec![31, 41, 8]]
+    );
+    Ok(())
+}
+
+/// Runs a monitored-only Radarr Sequential run from cursor 1 (20 movies in all, page size 10) over
+/// `pages`, with FilterCandidates answering the per-call Seerr priority ids in `script`.
+async fn run_radarr_priority_script(
+    per_cycle: u32,
+    script: Vec<Vec<i64>>,
+    pages: &[(u32, serde_json::Value)],
+) -> Result<FakeApi, Box<dyn std::error::Error>> {
+    let api = FakeApi {
+        filter_unprocessed: vec![10, 11, 21, 22],
+        filter_priority_script: script,
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    mount_paged(&server, pages, 20).await;
+    let mut run = default_run(&server.uri());
+    run.app = AppKind::Radarr as i32;
+    policy(&mut run, per_cycle, CoreSelection::Sequential, "1")?;
+    some(run.policy.as_mut(), "policy")?.monitored_only = true;
+    run_short_polling(client, run).await;
+    Ok(api)
+}
+
+/// The title of the run's CandidatesFiltered event.
+async fn filtered_title(api: &FakeApi) -> Result<String, Box<dyn std::error::Error>> {
+    let events = api.reported_events.lock().await;
+    let filtered = events
+        .iter()
+        .find(|ev| ev.r#type == EventType::CandidatesFiltered as i32);
+    Ok(some(filtered, "CandidatesFiltered event")?.title.clone())
+}
+
+#[tokio::test]
+async fn refill_takes_the_latest_seerr_priority_positive() -> TestResult {
+    let pages = [
+        (1, serde_json::json!([radarr_record(10)])),
+        (2, serde_json::json!([radarr_record(21), radarr_record(22)])),
+    ];
+    let api = run_radarr_priority_script(2, vec![vec![22], vec![]], &pages).await?;
+    assert_eq!(completed_searched_ids(&api).await?, [10, 21]);
+    let title = filtered_title(&api).await?;
+    assert!(
+        title.contains("; 0 requested via Seerr"),
+        "unexpected title: {title}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn refill_takes_the_latest_seerr_priority_negative() -> TestResult {
+    let pages = [
+        (1, serde_json::json!([radarr_record(10)])),
+        (2, serde_json::json!([radarr_record(21), radarr_record(22)])),
+    ];
+    let api = run_radarr_priority_script(2, vec![vec![], vec![22]], &pages).await?;
+    assert_eq!(completed_searched_ids(&api).await?, [10, 22]);
+    let title = filtered_title(&api).await?;
+    assert!(
+        title.contains("; 1 requested via Seerr"),
+        "unexpected title: {title}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn refill_takes_the_latest_seerr_priority_boundary() -> TestResult {
+    let pages = [
+        (1, serde_json::json!([radarr_record(10), radarr_record(11)])),
+        (
+            2,
+            serde_json::json!([{"id": 21, "title": "Film 21", "monitored": false}]),
+        ),
+    ];
+    let api = run_radarr_priority_script(3, vec![vec![11]], &pages).await?;
+    assert_eq!(completed_searched_ids(&api).await?, [10, 11]);
+    let calls = api.filter_calls.lock().await.clone();
+    assert_eq!(
+        calls.len(),
+        2,
+        "a refill batch with no eligible movie makes no call: {calls:?}"
+    );
+    assert_eq!(calls.first(), Some(&vec![10, 11]));
+    let title = filtered_title(&api).await?;
+    assert!(
+        title.contains("; 1 requested via Seerr"),
+        "unexpected title: {title}"
     );
     Ok(())
 }
