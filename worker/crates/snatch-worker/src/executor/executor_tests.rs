@@ -42,6 +42,9 @@ struct FakeApi {
     /// Per-call unprocessed allow-lists for `FilterCandidates`; calls past the list fall back to
     /// `filter_unprocessed`.
     pub filter_script: Vec<Vec<i64>>,
+    /// Per-call priority ids for `FilterCandidates`; calls past the list fall back to
+    /// `filter_priority_ids`.
+    pub filter_priority_script: Vec<Vec<i64>>,
     /// Every `FilterCandidates` call's `entity_ids`, in call order.
     pub filter_calls: Arc<Mutex<Vec<Vec<i64>>>>,
     pub reported_events: Arc<Mutex<Vec<SnatchEvent>>>,
@@ -73,6 +76,7 @@ impl Default for FakeApi {
             filter_unprocessed: vec![1, 2, 3, 4, 5],
             filter_priority_ids: Vec::new(),
             filter_script: Vec::new(),
+            filter_priority_script: Vec::new(),
             filter_calls: Arc::new(Mutex::new(Vec::new())),
             reported_events: Arc::new(Mutex::new(Vec::new())),
             completed_requests: Arc::new(Mutex::new(Vec::new())),
@@ -173,7 +177,11 @@ impl WorkerService for FakeApi {
             .collect();
         Ok(tonic::Response::new(FilterCandidatesResponse {
             unprocessed_ids: unprocessed,
-            priority_ids: self.filter_priority_ids.clone(),
+            priority_ids: self
+                .filter_priority_script
+                .get(call_index)
+                .unwrap_or(&self.filter_priority_ids)
+                .clone(),
             priority_group_ids: vec![],
         }))
     }
