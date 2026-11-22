@@ -47,6 +47,14 @@ const (
 	ResultDialError     = "dial_error"
 )
 
+// ErrReservedHost reports that allow_hosts contains the reserved overflow label "other".
+var ErrReservedHost = errors.New("metrics: host pattern \"other\" is reserved for unlisted hosts")
+
+var tunnelDurationBuckets = []float64{
+	0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5,
+	1, 2.5, 5, 10, 30, 60, 120, 300, 600, 1800, 3600,
+}
+
 // AllResults returns a copy of the fixed result label allow-list.
 func AllResults() []string {
 	return []string{
@@ -64,14 +72,34 @@ func AllResults() []string {
 
 // NewCatalog constructs the validated metricdef.Catalog for the four CONNECT metrics.
 func NewCatalog(apps, allowHosts []string) (*metricdef.Catalog, error) {
+	if err := validateAllowHosts(allowHosts); err != nil {
+		return nil, err
+	}
+	cat, err := metricdef.NewCatalog(catalogDefs(apps, allowHosts)...)
+	if err != nil {
+		return nil, fmt.Errorf("metrics: build catalog: %w", err)
+	}
+	return cat, nil
+}
+
+func validateAllowHosts(allowHosts []string) error {
+	for _, raw := range allowHosts {
+		if config.NormalizeHost(raw) == metricdef.OtherValue {
+			return fmt.Errorf("%w: %q", ErrReservedHost, raw)
+		}
+	}
+	return nil
+}
+
+func catalogDefs(apps, allowHosts []string) []metricdef.Def {
 	appLimit := metricdef.LabelLimit{Allow: nonEmptyAllow(apps)}
 	hostLimit := metricdef.LabelLimit{Allow: nonEmptyAllow(allowHosts)}
 	resultLimit := metricdef.LabelLimit{Allow: AllResults()}
 	modeLimit := metricdef.LabelLimit{Allow: []string{string(config.ModeLog), string(config.ModeEnforce)}}
 	dirLimit := metricdef.LabelLimit{Allow: []string{DirectionUp, DirectionDown}}
 
-	cat, err := metricdef.NewCatalog(
-		metricdef.Def{
+	return []metricdef.Def{
+		{
 			Name:   MetricTunnelsTotal,
 			Help:   "Total CONNECT requests handled by the metadata proxy, partitioned by outcome.",
 			Kind:   metricdef.KindCounter,
@@ -80,7 +108,7 @@ func NewCatalog(apps, allowHosts []string) (*metricdef.Catalog, error) {
 				"app": appLimit, "host": hostLimit, "result": resultLimit, "mode": modeLimit,
 			},
 		},
-		metricdef.Def{
+		{
 			Name:   MetricTunnelBytesTotal,
 			Help:   "Total bytes copied through established CONNECT tunnels.",
 			Unit:   "bytes",
@@ -90,28 +118,25 @@ func NewCatalog(apps, allowHosts []string) (*metricdef.Catalog, error) {
 				"app": appLimit, "host": hostLimit, "direction": dirLimit,
 			},
 		},
-		metricdef.Def{
-			Name:   MetricTunnelDurationSeconds,
-			Help:   "Duration of CONNECT requests and established tunnels in seconds.",
-			Unit:   "seconds",
-			Kind:   metricdef.KindHistogram,
-			Labels: []string{"app", "host", "result"},
+		{
+			Name:    MetricTunnelDurationSeconds,
+			Help:    "Duration of CONNECT requests and established tunnels in seconds.",
+			Unit:    "seconds",
+			Kind:    metricdef.KindHistogram,
+			Labels:  []string{"app", "host", "result"},
+			Buckets: tunnelDurationBuckets,
 			Limits: map[string]metricdef.LabelLimit{
 				"app": appLimit, "host": hostLimit, "result": resultLimit,
 			},
 		},
-		metricdef.Def{
+		{
 			Name:   MetricRefusedTunnelsTotal,
 			Help:   "Total forward-proxy requests refused before establishing an upstream tunnel.",
 			Kind:   metricdef.KindCounter,
 			Labels: []string{"app"},
 			Limits: map[string]metricdef.LabelLimit{"app": appLimit},
 		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("metrics: build catalog: %w", err)
 	}
-	return cat, nil
 }
 
 func nonEmptyAllow(values []string) []string {

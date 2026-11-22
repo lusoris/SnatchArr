@@ -13,6 +13,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -93,6 +94,7 @@ type Service struct {
 	dialControl    DialControl
 	customDialCtrl bool
 	listen         func(ctx context.Context, network, addr string) (net.Listener, error)
+	dial           func(ctx context.Context, targetAddr string) (net.Conn, int, string, error)
 	listeners      []*appListener
 	ready          atomic.Bool
 	serveFailed    atomic.Bool
@@ -198,6 +200,7 @@ func (s *Service) Start(ctx context.Context) error {
 			return err
 		}
 	}
+	s.publishBoundAddrs()
 	serveCtx := context.WithoutCancel(ctx)
 	for _, al := range s.listeners {
 		s.startServe(serveCtx, al)
@@ -225,7 +228,6 @@ func (s *Service) bindOne(ctx context.Context, al *appListener) error {
 	bound := tcpLn.Addr().String()
 	al.mu.Lock()
 	al.ln = tcpLn
-	al.addr = bound
 	al.mu.Unlock()
 
 	s.logger.InfoContext(ctx, "metadata-proxy: CONNECT listener bound",
@@ -234,6 +236,25 @@ func (s *Service) bindOne(ctx context.Context, al *appListener) error {
 		slog.String("mode", string(s.compiled.Options.Mode)),
 	)
 	return nil
+}
+
+func (s *Service) publishBoundAddrs() {
+	for _, al := range s.listeners {
+		al.mu.Lock()
+		if al.ln != nil {
+			al.addr = al.ln.Addr().String()
+		}
+		al.mu.Unlock()
+	}
+}
+
+func (s *Service) clearBoundAddr(al *appListener, tcpLn net.Listener) {
+	al.mu.Lock()
+	if tcpLn == nil || al.ln == tcpLn {
+		al.ln = nil
+		al.addr = ""
+	}
+	al.mu.Unlock()
 }
 
 func (s *Service) startServe(serveCtx context.Context, al *appListener) {
@@ -267,7 +288,9 @@ func (s *Service) rollbackBound(ctx context.Context, count int) {
 }
 
 func (s *Service) serveLoop(ctx context.Context, al *appListener, tcpLn net.Listener) {
-	if err := al.srv.Serve(tcpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	err := al.srv.Serve(tcpLn)
+	s.clearBoundAddr(al, tcpLn)
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		s.serveFailed.Store(true)
 		s.ready.Store(false)
 		s.logger.ErrorContext(ctx, "metadata-proxy: listener serve error",
@@ -283,6 +306,7 @@ func (s *Service) Stop(ctx context.Context) error {
 	s.stopOnce.Do(func() { close(s.stopCh) })
 	var errs []error
 	for _, al := range s.listeners {
+		s.clearBoundAddr(al, nil)
 		if err := al.srv.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
 			errs = append(errs, fmt.Errorf("proxy: shutdown %s: %w", al.app, err))
 		}
@@ -351,33 +375,71 @@ func (s *Service) handleRequest(al *appListener, w http.ResponseWriter, r *http.
 }
 
 func (s *Service) parseTarget(r *http.Request) (parsedTarget, bool) {
-	authority := r.Host
-	if authority == "" {
-		authority = r.URL.Host
-	}
-	rawHost, portStr, err := net.SplitHostPort(strings.TrimSpace(authority))
-	if err != nil {
+	authority, ok := requestAuthority(r)
+	if !ok {
 		return parsedTarget{}, false
 	}
-	host := config.NormalizeHost(rawHost)
-	if host == "" {
-		return parsedTarget{}, false
-	}
-	portNum, err := strconv.ParseUint(portStr, 10, 16)
-	if err != nil || portNum == 0 || portNum > math.MaxUint16 {
+	dialHost, host, port, ok := splitTargetAuthority(authority)
+	if !ok {
 		return parsedTarget{}, false
 	}
 	metricHost := metricdef.OtherValue
 	if matched, allowed := s.compiled.AllowMatcher.Match(host); allowed {
 		metricHost = matched
 	}
-	port := uint16(portNum)
 	return parsedTarget{
 		host:       host,
 		metricHost: metricHost,
 		port:       port,
-		addr:       net.JoinHostPort(host, strconv.FormatUint(portNum, 10)),
+		addr:       net.JoinHostPort(dialHost, strconv.FormatUint(uint64(port), 10)),
 	}, true
+}
+
+func requestAuthority(r *http.Request) (string, bool) {
+	if r == nil || r.URL == nil {
+		return "", false
+	}
+	if r.URL.Host == "" || strings.HasPrefix(r.RequestURI, "/") {
+		return "", false
+	}
+	if *r.URL != (url.URL{Host: r.URL.Host}) {
+		return "", false
+	}
+	return r.URL.Host, true
+}
+
+func splitTargetAuthority(authority string) (string, string, uint16, bool) {
+	if strings.TrimSpace(authority) != authority {
+		return "", "", 0, false
+	}
+	rawHost, portStr, err := net.SplitHostPort(authority)
+	if err != nil {
+		return "", "", 0, false
+	}
+	dialHost, host, ok := normalizeTargetHost(rawHost)
+	if !ok {
+		return "", "", 0, false
+	}
+	portNum, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil || portNum == 0 || portNum > math.MaxUint16 {
+		return "", "", 0, false
+	}
+	return dialHost, host, uint16(portNum), true
+}
+
+func normalizeTargetHost(rawHost string) (string, string, bool) {
+	if rawHost == "" || strings.TrimSpace(rawHost) != rawHost {
+		return "", "", false
+	}
+	dialHost := strings.ToLower(rawHost)
+	host := config.NormalizeHost(dialHost)
+	if host == "" || strings.HasSuffix(host, ".") {
+		return "", "", false
+	}
+	if strings.Contains(dialHost, ":") && strings.HasSuffix(dialHost, ".") {
+		return "", "", false
+	}
+	return dialHost, host, true
 }
 
 func (s *Service) checkPolicy(ctx context.Context, app string, t parsedTarget) (int, string) {
@@ -465,7 +527,14 @@ func (s *Service) runSlot(
 	w http.ResponseWriter,
 ) tunnelOutcome {
 	defer func() { <-al.sem }()
-	upstream, status, result, err := s.dialUpstream(ctx, t.addr)
+	dialCtx, cancelDial := s.withStopCancel(ctx)
+	defer cancelDial()
+	dialFn := s.dial
+	if dialFn == nil {
+		dialFn = s.dialUpstream
+	}
+	upstream, status, result, err := dialFn(dialCtx, t.addr)
+	cancelDial()
 	if err != nil {
 		return tunnelOutcome{status: status, result: result}
 	}
@@ -474,6 +543,23 @@ func (s *Service) runSlot(
 		return tunnelOutcome{result: metrics.ResultDialError}
 	}
 	return tunnelOutcome{result: metrics.ResultOK, up: up, down: down, established: true}
+}
+
+func (s *Service) withStopCancel(ctx context.Context) (context.Context, context.CancelFunc) {
+	dialCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-s.stopCh:
+			cancel()
+		case <-dialCtx.Done():
+		}
+		close(done)
+	}()
+	return dialCtx, func() {
+		cancel()
+		<-done
+	}
 }
 
 func (s *Service) finishTunnel(

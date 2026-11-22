@@ -5,6 +5,11 @@
 package metrics_test
 
 import (
+	"errors"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"slices"
 	"strings"
 	"testing"
@@ -18,6 +23,8 @@ import (
 	"github.com/lusoris/SnatchArr/metadata-proxy/internal/config"
 	"github.com/lusoris/SnatchArr/metadata-proxy/internal/metrics"
 )
+
+const maxHISSFuncLines = 60
 
 func TestCatalogShapeAndLabelLimits(t *testing.T) {
 	t.Parallel()
@@ -84,26 +91,34 @@ func TestRecorderFoldsUnlistedLabelsToOther(t *testing.T) {
 		t.Fatalf("RecordDialFailure: %v", err)
 	}
 
-	families, err := reg.Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
-	if len(families) != 4 {
-		t.Fatalf("gathered %d families, want 4", len(families))
-	}
-
-	count := testutil.CollectAndCount(reg, metrics.MetricTunnelsTotal)
-	if count != 4 {
+	if count := testutil.CollectAndCount(reg, metrics.MetricTunnelsTotal); count != 4 {
 		t.Fatalf("CollectAndCount(%s) = %d, want 4 series", metrics.MetricTunnelsTotal, count)
 	}
+	assertFoldedUnlistedHost(t, reg, "unlisted.example.org", 4)
+}
 
-	foundFoldedUnlisted := false
+func assertFoldedUnlistedHost(t *testing.T, reg prometheus.Gatherer, unlistedHost string, wantFamilies int) {
+	t.Helper()
+	if err := verifyFoldedUnlistedHost(reg, unlistedHost, wantFamilies); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func verifyFoldedUnlistedHost(reg prometheus.Gatherer, unlistedHost string, wantFamilies int) error {
+	families, err := reg.Gather()
+	if err != nil {
+		return fmt.Errorf("gather: %w", err)
+	}
+	if wantFamilies > 0 && len(families) != wantFamilies {
+		return fmt.Errorf("gathered %d families, want %d", len(families), wantFamilies)
+	}
+	foundFolded := false
 	for _, fam := range families {
 		for _, m := range fam.GetMetric() {
 			var hostVal, resultVal string
 			for _, lp := range m.GetLabel() {
-				if lp.GetValue() == "unlisted.example.org" {
-					t.Fatalf("family %s leaked raw unlisted label %s=%q", fam.GetName(), lp.GetName(), lp.GetValue())
+				if lp.GetValue() == unlistedHost {
+					return fmt.Errorf("family %s leaked raw unlisted label %s=%q", fam.GetName(), lp.GetName(), lp.GetValue())
 				}
 				switch lp.GetName() {
 				case "host":
@@ -115,13 +130,293 @@ func TestRecorderFoldsUnlistedLabelsToOther(t *testing.T) {
 			if fam.GetName() == metrics.MetricTunnelsTotal &&
 				hostVal == metricdef.OtherValue &&
 				resultVal == metrics.ResultOK {
-				foundFoldedUnlisted = true
+				foundFolded = true
 			}
 		}
 	}
-	if !foundFoldedUnlisted {
-		t.Fatalf("%s missing folded series host=%q result=%q", metrics.MetricTunnelsTotal, metricdef.OtherValue, metrics.ResultOK)
+	if !foundFolded {
+		return fmt.Errorf("%s missing folded series host=%q result=%q", metrics.MetricTunnelsTotal, metricdef.OtherValue, metrics.ResultOK)
 	}
+	return nil
+}
+
+func TestVerifyFoldedUnlistedHostHelper(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		setup   func(*prometheus.Registry)
+		wantErr string
+	}{
+		{
+			name: "positive: folded other ok present and raw host absent",
+			setup: func(reg *prometheus.Registry) {
+				cv := prometheus.NewCounterVec(prometheus.CounterOpts{Name: metrics.MetricTunnelsTotal, Help: "h"}, []string{"host", "result"})
+				reg.MustRegister(cv)
+				cv.WithLabelValues(metricdef.OtherValue, metrics.ResultOK).Inc()
+			},
+		},
+		{
+			name: "negative: raw unlisted host leaked into series",
+			setup: func(reg *prometheus.Registry) {
+				cv := prometheus.NewCounterVec(prometheus.CounterOpts{Name: metrics.MetricTunnelsTotal, Help: "h"}, []string{"host", "result"})
+				reg.MustRegister(cv)
+				cv.WithLabelValues("unlisted.example.org", metrics.ResultOK).Inc()
+			},
+			wantErr: "leaked raw unlisted label",
+		},
+		{
+			name: "boundary: empty scrape missing folded series",
+			setup: func(*prometheus.Registry) {
+			},
+			wantErr: "missing folded series",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			reg := prometheus.NewRegistry()
+			tc.setup(reg)
+			err := verifyFoldedUnlistedHost(reg, "unlisted.example.org", 0)
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("verifyFoldedUnlistedHost unexpected error: %v", err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("verifyFoldedUnlistedHost error = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestFunctionLineSpanWithinHISSLimit(t *testing.T) {
+	t.Parallel()
+
+	buildSyntheticGo := func(totalLines int) string {
+		var b strings.Builder
+		b.WriteString("package synthetic\nfunc sample() {\n")
+		for range totalLines - 2 {
+			b.WriteString("\t_ = 1\n")
+		}
+		b.WriteString("}\n")
+		return b.String()
+	}
+
+	cases := []struct {
+		name    string
+		path    string
+		src     string
+		wantErr bool
+	}{
+		{name: "positive: metrics.go functions <= 60 lines", path: "metrics.go"},
+		{name: "positive: metrics_test.go functions <= 60 lines", path: "metrics_test.go"},
+		{name: "boundary: 60-line function passes", path: "boundary.go", src: buildSyntheticGo(maxHISSFuncLines)},
+		{name: "negative: 61-line function fails", path: "over.go", src: buildSyntheticGo(maxHISSFuncLines + 1), wantErr: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := checkFileFuncLengths(tc.path, tc.src, maxHISSFuncLines)
+			if tc.wantErr && err == nil {
+				t.Fatalf("checkFileFuncLengths(%s) = nil, want error", tc.path)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("checkFileFuncLengths(%s): %v", tc.path, err)
+			}
+		})
+	}
+}
+
+func checkFileFuncLengths(filename, inlineSrc string, maxLines int) error {
+	fset := token.NewFileSet()
+	var (
+		file *ast.File
+		err  error
+	)
+	if inlineSrc != "" {
+		file, err = parser.ParseFile(fset, filename, inlineSrc, 0)
+	} else {
+		file, err = parser.ParseFile(fset, filename, nil, 0)
+	}
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", filename, err)
+	}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		span := fset.Position(fn.End()).Line - fset.Position(fn.Pos()).Line + 1
+		if span > maxLines {
+			return fmt.Errorf("%s:%d: func %s spans %d lines (max %d)", filename, fset.Position(fn.Pos()).Line, fn.Name.Name, span, maxLines)
+		}
+	}
+	return nil
+}
+
+func TestReservedOtherHostRejected(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		allowHosts []string
+		wantErr    error
+	}{
+		{
+			name:       "positive: provider hosts accepted",
+			allowHosts: []string{"skyhook.sonarr.tv", ".radarr.video"},
+		},
+		{
+			name:       "positive: empty allow_hosts in log mode accepted",
+			allowHosts: nil,
+		},
+		{
+			name:       "boundary: leading-dot .other suffix does not collide with exact other",
+			allowHosts: []string{".other"},
+		},
+		{
+			name:       "negative: exact other rejected",
+			allowHosts: []string{"other"},
+			wantErr:    metrics.ErrReservedHost,
+		},
+		{
+			name:       "negative: mixed-case trailing-dot OTHER. rejected",
+			allowHosts: []string{"skyhook.sonarr.tv", "OTHER."},
+			wantErr:    metrics.ErrReservedHost,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assertReservedHostCase(t, tc.allowHosts, tc.wantErr)
+		})
+	}
+}
+
+func assertReservedHostCase(t *testing.T, allowHosts []string, wantErr error) {
+	t.Helper()
+	_, catErr := metrics.NewCatalog([]string{"sonarr"}, allowHosts)
+	if wantErr == nil && catErr != nil {
+		t.Fatalf("NewCatalog(%v) unexpected error: %v", allowHosts, catErr)
+	}
+	if wantErr != nil && !errors.Is(catErr, wantErr) {
+		t.Fatalf("NewCatalog(%v) error = %v, want errors.Is(_, %v)", allowHosts, catErr, wantErr)
+	}
+
+	opts := config.DefaultOptions()
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 8081}}
+	opts.AllowHosts = allowHosts
+	compiled, err := config.Compile(opts)
+	if err != nil {
+		t.Fatalf("config.Compile(%v): %v", allowHosts, err)
+	}
+	_, recErr := metrics.New(compiled, prometheus.NewRegistry())
+	if wantErr == nil && recErr != nil {
+		t.Fatalf("metrics.New(%v) unexpected error: %v", allowHosts, recErr)
+	}
+	if wantErr != nil && !errors.Is(recErr, wantErr) {
+		t.Fatalf("metrics.New(%v) error = %v, want errors.Is(_, %v)", allowHosts, recErr, wantErr)
+	}
+}
+
+func TestTunnelDurationBucketsCoverLongLivedTunnels(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		dur        time.Duration
+		lowerBound float64
+		upperBound float64
+	}{
+		{
+			name:       "positive: subsecond refusal lands in subsecond finite bucket",
+			dur:        20 * time.Millisecond,
+			lowerBound: 0.01,
+			upperBound: 0.025,
+		},
+		{
+			name:       "positive: 20s tunnel lands in 30s bucket above 10s",
+			dur:        20 * time.Second,
+			lowerBound: 10,
+			upperBound: 30,
+		},
+		{
+			name:       "positive: 120s idle tunnel lands in 120s bucket separate from 20s",
+			dur:        120 * time.Second,
+			lowerBound: 60,
+			upperBound: 120,
+		},
+		{
+			name:       "boundary: 30m default max_tunnel lands in 1800s finite bucket",
+			dur:        30 * time.Minute,
+			lowerBound: 600,
+			upperBound: 1800,
+		},
+		{
+			name:       "negative: 2h duration exceeds highest finite bucket",
+			dur:        2 * time.Hour,
+			lowerBound: 3600,
+			upperBound: -1,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assertHistogramBucketPlacement(t, tc.dur, tc.lowerBound, tc.upperBound)
+		})
+	}
+}
+
+func assertHistogramBucketPlacement(t *testing.T, dur time.Duration, lowerBound, upperBound float64) {
+	t.Helper()
+	opts := config.DefaultOptions()
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 8081}}
+	opts.AllowHosts = []string{"skyhook.sonarr.tv"}
+	compiled, err := config.Compile(opts)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	reg := prometheus.NewRegistry()
+	rec, err := metrics.New(compiled, reg)
+	if err != nil {
+		t.Fatalf("metrics.New: %v", err)
+	}
+	if err = rec.RecordTunnel(t.Context(), "sonarr", "skyhook.sonarr.tv", config.ModeLog, 1, 1, dur); err != nil {
+		t.Fatalf("RecordTunnel(%s): %v", dur, err)
+	}
+	buckets := readDurationBuckets(t, reg)
+	if gotLow, ok := buckets[lowerBound]; !ok || gotLow != 0 {
+		t.Fatalf("dur=%s bucket le=%v count=(%d, exists=%v), want (0, true)", dur, lowerBound, gotLow, ok)
+	}
+	if upperBound < 0 {
+		return
+	}
+	if gotHigh, ok := buckets[upperBound]; !ok || gotHigh != 1 {
+		t.Fatalf("dur=%s bucket le=%v count=(%d, exists=%v), want (1, true)", dur, upperBound, gotHigh, ok)
+	}
+}
+
+func readDurationBuckets(t *testing.T, reg *prometheus.Registry) map[float64]uint64 {
+	t.Helper()
+	fams, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+	out := make(map[float64]uint64)
+	for _, fam := range fams {
+		if fam.GetName() != metrics.MetricTunnelDurationSeconds {
+			continue
+		}
+		for _, m := range fam.GetMetric() {
+			for _, b := range m.GetHistogram().GetBucket() {
+				out[b.GetUpperBound()] = b.GetCumulativeCount()
+			}
+		}
+	}
+	return out
 }
 
 type mismatchRegisterer struct{}

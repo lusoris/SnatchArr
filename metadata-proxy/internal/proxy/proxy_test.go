@@ -14,6 +14,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -651,28 +652,77 @@ func TestMaxTunnelsBoundary(t *testing.T) {
 	target := fmt.Sprintf("localhost:%d", echoPort)
 	rawReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
 
-	openConns := make([]net.Conn, 0, capTunnels)
-	for i := range capTunnels {
-		resp, conn, _ := dialRawProxy(t, h.addr, rawReq)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			_ = conn.Close()
-			t.Fatalf("tunnel %d status = %d, want 200", i+1, resp.StatusCode)
-		}
-		openConns = append(openConns, conn)
-	}
-	t.Cleanup(func() {
-		for _, c := range openConns {
-			_ = c.Close()
-		}
-	})
+	openConns := openBoundaryTunnels(t, h.addr, rawReq, capTunnels)
 
 	if got := sendConnectStatus(t, h.addr, target); got != http.StatusServiceUnavailable {
 		t.Fatalf("N+1 tunnel status = %d, want 503", got)
 	}
 
 	_ = openConns[0].Close()
+	waitForSlotRelease(t, h.addr, target)
 
+	waitForTunnelCount(t, h.reg, 2) // 1 refused_limit + 1 ok series
+}
+
+func openBoundaryTunnels(t *testing.T, proxyAddr, rawReq string, count int) []net.Conn {
+	t.Helper()
+	conns, err := dialBoundaryTunnels(t.Context(), proxyAddr, rawReq, count, t.Cleanup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return conns
+}
+
+func dialBoundaryTunnels(
+	ctx context.Context,
+	proxyAddr, rawReq string,
+	count int,
+	registerCleanup func(func()),
+) ([]net.Conn, error) {
+	openConns := make([]net.Conn, 0, count)
+	registerCleanup(func() {
+		for _, c := range openConns {
+			_ = c.Close()
+		}
+	})
+	for i := range count {
+		conn, status, err := dialOneBoundaryTunnel(ctx, proxyAddr, rawReq)
+		if err != nil {
+			return openConns, fmt.Errorf("tunnel %d: %w", i+1, err)
+		}
+		if status != http.StatusOK {
+			_ = conn.Close()
+			return openConns, fmt.Errorf("tunnel %d status = %d, want 200", i+1, status)
+		}
+		openConns = append(openConns, conn)
+	}
+	return openConns, nil
+}
+
+func dialOneBoundaryTunnel(ctx context.Context, proxyAddr, rawReq string) (net.Conn, int, error) {
+	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", proxyAddr)
+	if err != nil {
+		return nil, 0, fmt.Errorf("dial proxy %s: %w", proxyAddr, err)
+	}
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err = io.WriteString(conn, rawReq); err != nil {
+		_ = conn.Close()
+		return nil, 0, fmt.Errorf("write CONNECT: %w", err)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: http.MethodConnect})
+	if err != nil {
+		_ = conn.Close()
+		return nil, 0, fmt.Errorf("read CONNECT response: %w", err)
+	}
+	_ = resp.Body.Close()
+	return conn, resp.StatusCode, nil
+}
+
+func waitForSlotRelease(t *testing.T, proxyAddr, target string) {
+	t.Helper()
 	const (
 		maxAdmitAttempts = 100
 		admitRetryTick   = 20 * time.Millisecond
@@ -680,13 +730,11 @@ func TestMaxTunnelsBoundary(t *testing.T) {
 	admitTicker := time.NewTicker(admitRetryTick)
 	defer admitTicker.Stop()
 
-	admitted := false
 	lastStatus := 0
 	for attempt := range maxAdmitAttempts {
-		lastStatus = sendConnectStatus(t, h.addr, target)
+		lastStatus = sendConnectStatus(t, proxyAddr, target)
 		if lastStatus == http.StatusOK {
-			admitted = true
-			break
+			return
 		}
 		if lastStatus != http.StatusServiceUnavailable {
 			t.Fatalf("attempt %d: tunnel status after slot release = %d, want 200 or 503", attempt+1, lastStatus)
@@ -699,11 +747,7 @@ func TestMaxTunnelsBoundary(t *testing.T) {
 			}
 		}
 	}
-	if !admitted {
-		t.Fatalf("exhausted %d attempts waiting for slot release; last status = %d", maxAdmitAttempts, lastStatus)
-	}
-
-	waitForTunnelCount(t, h.reg, 2) // 1 refused_limit + 1 ok series
+	t.Fatalf("exhausted %d attempts waiting for slot release; last status = %d", maxAdmitAttempts, lastStatus)
 }
 
 func TestReadinessBeforeAndAfterBind(t *testing.T) {
@@ -823,4 +867,675 @@ func TestMetricErrorLoggedAtWarn(t *testing.T) {
 		!strings.Contains(logOut, `"result":"refused_target"`) {
 		t.Fatalf("expected WARN log with result label on metric failure, got:\n%s", logOut)
 	}
+}
+
+func TestBoundaryTunnelCleanupOnPartialFailure(t *testing.T) {
+	t.Parallel()
+
+	echoPort, cleanup := startEchoListener(t)
+	t.Cleanup(cleanup)
+
+	cases := []struct {
+		name       string
+		maxTunnels int
+		requestCnt int
+		wantErr    bool
+	}{
+		{name: "positive: full batch within cap registers cleanup", maxTunnels: 2, requestCnt: 2},
+		{name: "negative: second tunnel hitting 503 still cleans up first client socket", maxTunnels: 1, requestCnt: 2, wantErr: true},
+		{name: "boundary: zero tunnels requested is a safe no-op", maxTunnels: 1, requestCnt: 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runBoundaryCleanupCase(t, echoPort, tc.maxTunnels, tc.requestCnt, tc.wantErr)
+		})
+	}
+}
+
+func runBoundaryCleanupCase(t *testing.T, echoPort, maxTunnels, requestCnt int, wantErr bool) {
+	t.Helper()
+	opts := config.DefaultOptions()
+	opts.Mode = config.ModeLog
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
+	opts.AllowHosts = []string{"localhost"}
+	opts.Ports = []int{echoPort}
+	opts.MaxTunnels = maxTunnels
+	h := startHarness(t, opts, proxy.WithDialControl(proxy.AllowAllDialControl))
+
+	target := fmt.Sprintf("localhost:%d", echoPort)
+	rawReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
+
+	var cleanups []func()
+	recordCleanup := func(fn func()) { cleanups = append(cleanups, fn) }
+	t.Cleanup(func() {
+		for _, fn := range cleanups {
+			fn()
+		}
+	})
+
+	opened, err := dialBoundaryTunnels(t.Context(), h.addr, rawReq, requestCnt, recordCleanup)
+	t.Cleanup(func() {
+		for _, c := range opened {
+			_ = c.Close()
+		}
+	})
+	if wantErr && err == nil {
+		t.Fatal("expected partial-batch error when exceeding MaxTunnels, got nil")
+	}
+	if !wantErr && err != nil {
+		t.Fatalf("unexpected batch error: %v", err)
+	}
+	for _, fn := range cleanups {
+		fn()
+	}
+	for i, c := range opened {
+		if _, writeErr := c.Write([]byte("x")); !errors.Is(writeErr, net.ErrClosed) {
+			t.Fatalf("client socket %d remained open after registered cleanups ran: writeErr=%v, want net.ErrClosed", i+1, writeErr)
+		}
+	}
+	waitForSlotRelease(t, h.addr, target)
+}
+
+func TestConnectPreservesRootDotInDialAddr(t *testing.T) {
+	t.Parallel()
+
+	echoPort, cleanup := startEchoListener(t)
+	t.Cleanup(cleanup)
+	portStr := strconv.Itoa(echoPort)
+
+	cases := []struct {
+		name           string
+		target         string
+		wantStatus     int
+		wantDialTarget string
+		wantHostLog    string
+	}{
+		{
+			name:           "positive: rooted FQDN keeps trailing dot in dial address and normalizes policy/metric host",
+			target:         "SKYHOOK.SONARR.TV.:" + portStr,
+			wantStatus:     http.StatusOK,
+			wantDialTarget: "skyhook.sonarr.tv.:" + portStr,
+			wantHostLog:    "skyhook.sonarr.tv",
+		},
+		{
+			name:           "boundary: unrooted FQDN dials without trailing dot",
+			target:         "skyhook.sonarr.tv:" + portStr,
+			wantStatus:     http.StatusOK,
+			wantDialTarget: "skyhook.sonarr.tv:" + portStr,
+			wantHostLog:    "skyhook.sonarr.tv",
+		},
+		{
+			name:       "negative: rooted refused host rejected before dial",
+			target:     "indexer.secret.example.:" + portStr,
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runRootDotDialCase(t, echoPort, tc.target, tc.wantStatus, tc.wantDialTarget, tc.wantHostLog)
+		})
+	}
+}
+
+func runRootDotDialCase(t *testing.T, echoPort int, target string, wantStatus int, wantDial, wantHost string) {
+	t.Helper()
+	var dialed atomic.Value
+	var dialCount atomic.Int32
+	echoAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(echoPort))
+
+	dialHook := func(ctx context.Context, targetAddr string) (net.Conn, int, string, error) {
+		dialCount.Add(1)
+		dialed.Store(targetAddr)
+		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", echoAddr)
+		if err != nil {
+			return nil, http.StatusBadGateway, metrics.ResultDialError, err
+		}
+		return conn, http.StatusOK, metrics.ResultOK, nil
+	}
+
+	opts := config.DefaultOptions()
+	opts.Mode = config.ModeEnforce
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
+	opts.AllowHosts = []string{"skyhook.sonarr.tv"}
+	opts.RefuseHosts = []string{"indexer.secret.example"}
+	opts.Ports = []int{echoPort}
+	h := startHarness(t, opts, proxy.WithDialForTest(dialHook))
+
+	rawReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
+	resp, conn, br := dialRawProxy(t, h.addr, rawReq)
+	t.Cleanup(func() {
+		_ = resp.Body.Close()
+		_ = conn.Close()
+	})
+	if resp.StatusCode != wantStatus {
+		t.Fatalf("CONNECT %s status = %d, want %d", target, resp.StatusCode, wantStatus)
+	}
+	if wantDial == "" {
+		if got := dialCount.Load(); got != 0 {
+			t.Fatalf("dial count = %d, want 0", got)
+		}
+		return
+	}
+	assertRootDotTunnelOutcome(t, h, conn, br, &dialed, wantDial, wantHost)
+}
+
+func assertRootDotTunnelOutcome(
+	t *testing.T,
+	h *proxyHarness,
+	conn net.Conn,
+	br *bufio.Reader,
+	dialed *atomic.Value,
+	wantDial, wantHost string,
+) {
+	t.Helper()
+	if _, err := io.WriteString(conn, "ping\n"); err != nil {
+		t.Fatalf("write tunnel: %v", err)
+	}
+	line, err := br.ReadString('\n')
+	if err != nil || line != "ping\n" {
+		t.Fatalf("echo = %q (err=%v), want %q", line, err, "ping\n")
+	}
+	_ = conn.Close()
+
+	if gotDial, _ := dialed.Load().(string); gotDial != wantDial {
+		t.Fatalf("dialed targetAddr = %q, want %q", gotDial, wantDial)
+	}
+	waitForTunnelCount(t, h.reg, 1)
+	wantSeries := fmt.Sprintf(`# HELP metadata_proxy_tunnels_total Total CONNECT requests handled by the metadata proxy, partitioned by outcome.
+# TYPE metadata_proxy_tunnels_total counter
+metadata_proxy_tunnels_total{app="sonarr",host=%q,mode="enforce",result="ok"} 1
+`, wantHost)
+	if err := testutil.GatherAndCompare(h.reg, strings.NewReader(wantSeries), metrics.MetricTunnelsTotal); err != nil {
+		t.Fatalf("GatherAndCompare: %v", err)
+	}
+}
+
+func TestStopCancelsInFlightUpstreamDial(t *testing.T) {
+	t.Parallel()
+
+	echoPort, cleanup := startEchoListener(t)
+	t.Cleanup(cleanup)
+
+	cases := []struct {
+		name string
+		mode string
+	}{
+		{name: "negative: Stop cancels stalled upstream dial before dial_timeout", mode: "stop"},
+		{name: "boundary: client disconnect cancels in-flight upstream dial", mode: "disconnect"},
+		{name: "positive: normal dial succeeds and Stop closes hijacked tunnel", mode: "normal"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			switch tc.mode {
+			case "stop":
+				runStopDuringStalledDial(t, echoPort)
+			case "disconnect":
+				runClientDisconnectDuringStalledDial(t, echoPort)
+			default:
+				runNormalDialThenStop(t, echoPort)
+			}
+		})
+	}
+}
+
+func runStopDuringStalledDial(t *testing.T, port int) {
+	t.Helper()
+	dialEntered := make(chan struct{})
+	var enterOnce sync.Once
+	var svcRef atomic.Pointer[proxy.Service]
+
+	stalledDial := func(ctx context.Context, targetAddr string) (net.Conn, int, string, error) {
+		enterOnce.Do(func() { close(dialEntered) })
+		<-ctx.Done()
+		return proxy.DialUpstreamForTest(svcRef.Load(), ctx, targetAddr)
+	}
+
+	opts := config.DefaultOptions()
+	opts.Mode = config.ModeLog
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
+	opts.AllowHosts = []string{"localhost"}
+	opts.Ports = []int{port}
+	opts.DialTimeout = 30 * time.Second
+	h := startHarness(t, opts, proxy.WithDialControl(proxy.AllowAllDialControl), proxy.WithDialForTest(stalledDial))
+	svcRef.Store(h.svc)
+
+	target := fmt.Sprintf("localhost:%d", port)
+	statusCh := make(chan int, 1)
+	go func() {
+		statusCh <- sendConnectStatus(t, h.addr, target)
+	}()
+
+	select {
+	case <-dialEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upstream dial to start")
+	}
+
+	stopCtx, stopCancel := context.WithTimeout(t.Context(), time.Second)
+	defer stopCancel()
+	if err := h.svc.Stop(stopCtx); err != nil {
+		t.Fatalf("svc.Stop during stalled dial failed: %v", err)
+	}
+	if status := <-statusCh; status != http.StatusBadGateway {
+		t.Fatalf("canceled dial status = %d, want 502", status)
+	}
+}
+
+func runClientDisconnectDuringStalledDial(t *testing.T, port int) {
+	t.Helper()
+	dialEntered := make(chan struct{})
+	dialCanceled := make(chan error, 1)
+	var enterOnce sync.Once
+
+	stalledDial := func(ctx context.Context, _ string) (net.Conn, int, string, error) {
+		enterOnce.Do(func() { close(dialEntered) })
+		<-ctx.Done()
+		dialCanceled <- ctx.Err()
+		return nil, http.StatusBadGateway, metrics.ResultDialError, ctx.Err()
+	}
+
+	opts := config.DefaultOptions()
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
+	opts.AllowHosts = []string{"localhost"}
+	opts.Ports = []int{port}
+	opts.DialTimeout = 30 * time.Second
+	h := startHarness(t, opts, proxy.WithDialForTest(stalledDial))
+
+	conn, err := (&net.Dialer{}).DialContext(t.Context(), "tcp", h.addr)
+	if err != nil {
+		t.Fatalf("dial proxy: %v", err)
+	}
+	target := fmt.Sprintf("localhost:%d", port)
+	_, _ = fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
+
+	select {
+	case <-dialEntered:
+	case <-time.After(2 * time.Second):
+		_ = conn.Close()
+		t.Fatal("timed out waiting for upstream dial to start")
+	}
+	_ = conn.Close()
+
+	select {
+	case err := <-dialCanceled:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("dial ctx err = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("client disconnect did not cancel dial context")
+	}
+}
+
+func runNormalDialThenStop(t *testing.T, echoPort int) {
+	t.Helper()
+	opts := config.DefaultOptions()
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
+	opts.AllowHosts = []string{"localhost"}
+	opts.Ports = []int{echoPort}
+	h := startHarness(t, opts, proxy.WithDialControl(proxy.AllowAllDialControl))
+
+	target := fmt.Sprintf("localhost:%d", echoPort)
+	rawReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
+	resp, conn, _ := dialRawProxy(t, h.addr, rawReq)
+	t.Cleanup(func() {
+		_ = resp.Body.Close()
+		_ = conn.Close()
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	stopCtx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	if err := h.svc.Stop(stopCtx); err != nil {
+		t.Fatalf("svc.Stop: %v", err)
+	}
+}
+
+func TestAddrLifecycleValidity(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		mode string
+	}{
+		{name: "negative: Addr stays false while second listener bind is pending and after failed Start", mode: "partial_fail"},
+		{name: "positive: Addr publishes ephemeral bound addresses after Start and clears them on Stop", mode: "start_stop"},
+		{name: "boundary: unknown app always returns empty false", mode: "unknown_app"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			switch tc.mode {
+			case "partial_fail":
+				runAddrPartialBindFailure(t)
+			case "start_stop":
+				runAddrStartAndStopLifecycle(t)
+			default:
+				runAddrUnknownApp(t)
+			}
+		})
+	}
+}
+
+func newAddrTestService(t *testing.T, extraOpts ...proxy.Option) *proxy.Service {
+	t.Helper()
+	opts := config.DefaultOptions()
+	opts.Listeners = []config.Listener{
+		{App: "sonarr", Port: 18081},
+		{App: "radarr", Port: 18082},
+	}
+	compiled, err := config.Compile(opts)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	rec, err := metrics.New(compiled, prometheus.NewRegistry())
+	if err != nil {
+		t.Fatalf("metrics.New: %v", err)
+	}
+	baseOpts := append([]proxy.Option{proxy.WithBindHost("127.0.0.1"), proxy.WithEphemeralPorts()}, extraOpts...)
+	svc, err := proxy.New(compiled, rec, clockwork.NewRealClock(), nil, baseOpts...)
+	if err != nil {
+		t.Fatalf("proxy.New: %v", err)
+	}
+	t.Cleanup(func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = svc.Stop(stopCtx)
+	})
+	return svc
+}
+
+func runAddrPartialBindFailure(t *testing.T) {
+	t.Helper()
+	secondPending := make(chan struct{})
+	releaseSecond := make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(releaseSecond) })
+
+	errSecond := errors.New("second listener bind failed")
+	var calls atomic.Int32
+	listenHook := func(ctx context.Context, network, addr string) (net.Listener, error) {
+		if calls.Add(1) == 1 {
+			return (&net.ListenConfig{}).Listen(ctx, network, addr)
+		}
+		close(secondPending)
+		<-releaseSecond
+		return nil, errSecond
+	}
+
+	svc := newAddrTestService(t, proxy.WithListenForTest(listenHook))
+	if addr, ok := svc.Addr("sonarr"); ok || addr != "" {
+		t.Fatalf("before Start Addr(sonarr) = (%q, %v), want (\"\", false)", addr, ok)
+	}
+
+	startErrCh := make(chan error, 1)
+	go func() { startErrCh <- svc.Start(t.Context()) }()
+
+	select {
+	case <-secondPending:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for second bind")
+	}
+	if addr, ok := svc.Addr("sonarr"); ok || addr != "" {
+		t.Fatalf("while second bind pending Addr(sonarr) = (%q, %v), want (\"\", false)", addr, ok)
+	}
+
+	releaseOnce.Do(func() { close(releaseSecond) })
+	if err := <-startErrCh; !errors.Is(err, errSecond) {
+		t.Fatalf("Start err = %v, want %v", err, errSecond)
+	}
+	if addr, ok := svc.Addr("sonarr"); ok || addr != "" {
+		t.Fatalf("after failed Start Addr(sonarr) = (%q, %v), want (\"\", false)", addr, ok)
+	}
+}
+
+func runAddrStartAndStopLifecycle(t *testing.T) {
+	t.Helper()
+	svc := newAddrTestService(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	if err := svc.Start(ctx); err != nil {
+		t.Fatalf("svc.Start: %v", err)
+	}
+	for _, app := range []string{"sonarr", "radarr"} {
+		addr, ok := svc.Addr(app)
+		if !ok || !strings.HasPrefix(addr, "127.0.0.1:") || strings.HasSuffix(addr, ":0") {
+			t.Fatalf("after Start Addr(%s) = (%q, %v), want bound ephemeral 127.0.0.1:port", app, addr, ok)
+		}
+	}
+	if err := svc.Stop(ctx); err != nil {
+		t.Fatalf("svc.Stop: %v", err)
+	}
+	for _, app := range []string{"sonarr", "radarr"} {
+		if addr, ok := svc.Addr(app); ok || addr != "" {
+			t.Fatalf("after Stop Addr(%s) = (%q, %v), want (\"\", false)", app, addr, ok)
+		}
+	}
+}
+
+func runAddrUnknownApp(t *testing.T) {
+	t.Helper()
+	svc := newAddrTestService(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if err := svc.Start(ctx); err != nil {
+		t.Fatalf("svc.Start: %v", err)
+	}
+	if addr, ok := svc.Addr("lidarr"); ok || addr != "" {
+		t.Fatalf("Addr(lidarr) = (%q, %v), want (\"\", false)", addr, ok)
+	}
+}
+
+func TestConnectRequiresAuthorityForm(t *testing.T) {
+	t.Parallel()
+
+	echoPort, cleanup := startEchoListener(t)
+	t.Cleanup(cleanup)
+	portStr := strconv.Itoa(echoPort)
+
+	cases := []struct {
+		name       string
+		target     string
+		hostHdr    string
+		wantStatus int
+		wantResult string
+	}{
+		{
+			name:       "positive: authority-form CONNECT tunnels",
+			target:     "localhost:" + portStr,
+			hostHdr:    "localhost:" + portStr,
+			wantStatus: http.StatusOK,
+			wantResult: metrics.ResultOK,
+		},
+		{
+			name:       "boundary: authority-form uses request-target over mismatched Host header",
+			target:     "localhost:" + portStr,
+			hostHdr:    "refused.example:" + portStr,
+			wantStatus: http.StatusOK,
+			wantResult: metrics.ResultOK,
+		},
+		{
+			name:       "negative: net/rpc path-form CONNECT with allowed Host header rejected as 400",
+			target:     "/_goRPC_",
+			hostHdr:    "localhost:" + portStr,
+			wantStatus: http.StatusBadRequest,
+			wantResult: metrics.ResultRefusedTarget,
+		},
+		{
+			name:       "negative: path-form CONNECT with refused Host header rejected as 400 before policy",
+			target:     "/_goRPC_",
+			hostHdr:    "refused.example:" + portStr,
+			wantStatus: http.StatusBadRequest,
+			wantResult: metrics.ResultRefusedTarget,
+		},
+		{
+			name:       "negative: network-path //host:port CONNECT rejected as 400",
+			target:     "//localhost:" + portStr,
+			hostHdr:    "localhost:" + portStr,
+			wantStatus: http.StatusBadRequest,
+			wantResult: metrics.ResultRefusedTarget,
+		},
+		{
+			name:       "negative: authority with path and query rejected as 400 without leaking query",
+			target:     "localhost:" + portStr + "/rpc?apikey=SECRET_CONNECT_QUERY_88",
+			hostHdr:    "localhost:" + portStr,
+			wantStatus: http.StatusBadRequest,
+			wantResult: metrics.ResultRefusedTarget,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runAuthorityFormCase(t, echoPort, tc.target, tc.hostHdr, tc.wantStatus, tc.wantResult)
+		})
+	}
+}
+
+func runAuthorityFormCase(t *testing.T, echoPort int, target, hostHdr string, wantStatus int, wantResult string) {
+	t.Helper()
+	var dialCalls atomic.Int32
+	ctrl := func(string, string, syscall.RawConn) error {
+		dialCalls.Add(1)
+		return nil
+	}
+
+	opts := config.DefaultOptions()
+	opts.Mode = config.ModeEnforce
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
+	opts.AllowHosts = []string{"localhost"}
+	opts.RefuseHosts = []string{"refused.example"}
+	opts.Ports = []int{echoPort}
+	h := startHarness(t, opts, proxy.WithDialControl(ctrl))
+
+	rawReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, hostHdr)
+	resp, conn, _ := dialRawProxy(t, h.addr, rawReq)
+	_ = resp.Body.Close()
+	_ = conn.Close()
+
+	if resp.StatusCode != wantStatus {
+		t.Fatalf("CONNECT %q (Host: %q) status = %d, want %d", target, hostHdr, resp.StatusCode, wantStatus)
+	}
+	if wantStatus != http.StatusOK && dialCalls.Load() != 0 {
+		t.Fatalf("expected 0 dials on rejected CONNECT %q, got %d", target, dialCalls.Load())
+	}
+	waitForTunnelCount(t, h.reg, 1)
+	logOut := waitForLogSubstring(t, h.logs, `"result":"`+wantResult+`"`)
+	if strings.Contains(logOut, "SECRET_CONNECT_QUERY_88") {
+		t.Fatalf("logs leaked query secret:\n%s", logOut)
+	}
+}
+
+func TestConnectTrailingDotNormalization(t *testing.T) {
+	t.Parallel()
+
+	echoPort, cleanup := startEchoListener(t)
+	t.Cleanup(cleanup)
+	portStr := strconv.Itoa(echoPort)
+
+	cases := []struct {
+		name       string
+		target     string
+		wantStatus int
+		wantResult string
+	}{
+		{
+			name:       "positive: single trailing dot on allowed host accepted",
+			target:     "localhost.:" + portStr,
+			wantStatus: http.StatusOK,
+			wantResult: metrics.ResultOK,
+		},
+		{
+			name:       "negative: double trailing dot on allowed host rejected with 400 refused_target",
+			target:     "localhost..:" + portStr,
+			wantStatus: http.StatusBadRequest,
+			wantResult: metrics.ResultRefusedTarget,
+		},
+		{
+			name:       "negative: double trailing dot on refused host rejected with 400 refused_target instead of 403",
+			target:     "refused.example..:" + portStr,
+			wantStatus: http.StatusBadRequest,
+			wantResult: metrics.ResultRefusedTarget,
+		},
+		{
+			name:       "boundary: bare single dot host rejected with 400 refused_target",
+			target:     ".:" + portStr,
+			wantStatus: http.StatusBadRequest,
+			wantResult: metrics.ResultRefusedTarget,
+		},
+		{
+			name:       "boundary: bare double dot host rejected with 400 refused_target",
+			target:     "..:" + portStr,
+			wantStatus: http.StatusBadRequest,
+			wantResult: metrics.ResultRefusedTarget,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runTrailingDotCase(t, echoPort, tc.target, tc.wantStatus, tc.wantResult)
+		})
+	}
+}
+
+func runTrailingDotCase(t *testing.T, echoPort int, target string, wantStatus int, wantResult string) {
+	t.Helper()
+	var dialCalls atomic.Int32
+	echoAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(echoPort))
+	dialHook := func(ctx context.Context, _ string) (net.Conn, int, string, error) {
+		dialCalls.Add(1)
+		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", echoAddr)
+		if err != nil {
+			return nil, http.StatusBadGateway, metrics.ResultDialError, err
+		}
+		return conn, http.StatusOK, metrics.ResultOK, nil
+	}
+
+	opts := config.DefaultOptions()
+	opts.Mode = config.ModeEnforce
+	opts.Listeners = []config.Listener{{App: "sonarr", Port: 18081}}
+	opts.AllowHosts = []string{"localhost"}
+	opts.RefuseHosts = []string{"refused.example"}
+	opts.Ports = []int{echoPort}
+	h := startHarness(t, opts, proxy.WithDialForTest(dialHook))
+
+	got := sendConnectStatus(t, h.addr, target)
+	if got != wantStatus {
+		t.Fatalf("CONNECT %q status = %d, want %d", target, got, wantStatus)
+	}
+	if wantStatus != http.StatusOK && dialCalls.Load() != 0 {
+		t.Fatalf("CONNECT %q dialed %d times, want 0", target, dialCalls.Load())
+	}
+	waitForTunnelCount(t, h.reg, 1)
+	_ = waitForLogSubstring(t, h.logs, `"result":"`+wantResult+`"`)
+}
+
+func waitForLogSubstring(t *testing.T, logs *syncBuffer, want string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), metricPollWait)
+	defer cancel()
+
+	ticker := time.NewTicker(metricPollTick)
+	defer ticker.Stop()
+	for range metricPollChecks {
+		if out := logs.String(); strings.Contains(out, want) {
+			return out
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for log %q in:\n%s", want, logs.String())
+		case <-ticker.C:
+		}
+	}
+	t.Fatalf("exhausted %d checks waiting for log %q in:\n%s", metricPollChecks, want, logs.String())
+	return ""
 }
