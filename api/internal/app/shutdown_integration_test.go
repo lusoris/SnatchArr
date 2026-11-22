@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -116,10 +115,15 @@ func startOnFreePort(ctx context.Context, t *testing.T, pick func(*testing.T) st
 // read from a file only, with the environment layer disabled.
 func controlPlaneConfig(t *testing.T, grpcAddr string) *gconfig.Config {
 	t.Helper()
-	cc := storetest.New(t).Pool().Config().ConnConfig
+	return controlPlaneConfigForDatabase(t, grpcAddr, newTestDatabase(t))
+}
+
+// controlPlaneConfigForDatabase builds a control-plane config for an existing test database.
+func controlPlaneConfigForDatabase(t *testing.T, grpcAddr string, database testDatabase) *gconfig.Config {
+	t.Helper()
 	dsn := url.URL{
-		Scheme: "postgres", User: url.UserPassword(cc.User, cc.Password),
-		Host: net.JoinHostPort(cc.Host, strconv.Itoa(int(cc.Port))), Path: "/" + cc.Database, RawQuery: "sslmode=disable",
+		Scheme: "postgres", User: url.UserPassword(database.user, database.password),
+		Host: database.host, Path: "/" + database.name, RawQuery: "sslmode=disable",
 	}
 	raw, err := json.Marshal(map[string]any{
 		"snatcharr": map[string]any{"profile": "dev", "worker": map[string]any{"token": workerToken}},

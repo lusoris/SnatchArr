@@ -56,6 +56,10 @@
         {
           "type": "generic",
           "path": "deploy/helm/snatcharr/Chart.yaml"
+        },
+        {
+          "type": "generic",
+          "path": "README.md"
         }
       ]
     }

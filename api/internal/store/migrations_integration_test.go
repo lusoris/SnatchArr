@@ -1853,3 +1853,44 @@ func TestMigration000058SonarrMissingDefaultDynamic(t *testing.T) {
 		t.Fatalf("v58 row mutated by down: sonarr_missing_mode = %q, want 'dynamic' (down must not UPDATE)", missMode)
 	}
 }
+
+func TestMigration000059QueueOutputCursor(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	stepDownToVersion(t, m, 58)
+	assertTableExists(t, st, "queue_output_cursors", false)
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 59: %v", err)
+	}
+	assertTableExists(t, st, "queue_output_cursors", true)
+
+	instanceID := uuid.New()
+	now := time.Date(2026, 11, 20, 1, 0, 0, 0, time.UTC)
+	const insertInstance = `INSERT INTO instances (
+		id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at
+	) VALUES ($1, 'sonarr', 'sonarr-59', 'http://127.0.0.1:8989', '\x0102', true, 'manual', $2, $2)`
+	if _, err := st.Pool().Exec(ctx, insertInstance, instanceID, now); err != nil {
+		t.Fatalf("insert instance at v59: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, "INSERT INTO queue_output_cursors (instance_id, last_parent, updated_at) VALUES ($1, $2, $3)", instanceID, "/downloads/last/", now); err != nil {
+		t.Fatalf("insert cursor at v59: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, "DELETE FROM instances WHERE id = $1", instanceID); err != nil {
+		t.Fatalf("delete instance at v59: %v", err)
+	}
+	var count int
+	if err := st.Pool().QueryRow(ctx, "SELECT count(*) FROM queue_output_cursors WHERE instance_id = $1", instanceID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("cursor cascade count = %d, %v; want 0, nil", count, err)
+	}
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 58: %v", err)
+	}
+	assertTableExists(t, st, "queue_output_cursors", false)
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 59: %v", err)
+	}
+	assertTableExists(t, st, "queue_output_cursors", true)
+}

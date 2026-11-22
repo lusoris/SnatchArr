@@ -275,6 +275,9 @@ jobs:
               # The coverage floor: worker-cover and tools/cover.
               - 'Makefile'
               - 'tools/cover/**'
+              # The Rust MSRV declaration check and its planted cases.
+              - 'tools/ci/rust_msrv_check.py'
+              - 'tools/ci/rust_msrv_check_test.sh'
               - '.github/workflows/ci.yml'
             web:
               - 'web/**'
@@ -557,6 +560,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust MSRV declaration
+        run: |
+          bash tools/ci/rust_msrv_check_test.sh
+          python3 -I tools/ci/rust_msrv_check.py
       # The runner's rustup installs the release pinned in rust-toolchain.toml.
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install --component llvm-tools-preview
@@ -591,7 +598,7 @@ jobs:
     services:
       # The Postgres the integration tests pin, through the Docker Hub mirror.
       postgres: &postgres
-        image: mirror.gcr.io/library/postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+        image: mirror.gcr.io/library/postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
         env:
           POSTGRES_PASSWORD: smoke
         options: >-
@@ -780,7 +787,7 @@ jobs:
     name: web (SvelteKit)
     needs: changes
     if: needs.changes.outputs.web == 'true'
-    uses: golusoris/sveltesentio/.github/workflows/ci-sveltekit.yml@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # main 2026-09-21
+    uses: plurano/sveltesentio/.github/workflows/ci-sveltekit.yml@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # main 2026-09-21
     with:
       node-version: '24'
       working-directory: web
@@ -906,6 +913,12 @@ jobs:
             https://github.com/helm-unittest/helm-unittest/releases/download/v1.2.1/unittest-1.2.1.tgz
           echo "$HELM_UNITTEST_SHA256  $RUNNER_TEMP/unittest.tgz" | sha256sum -c -
           helm plugin install "$RUNNER_TEMP/unittest.tgz" --verify=false
+      # unittest_lint.py needs PyYAML: pinned here, not taken from the runner image.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.15'
+      - name: Install the deploy check toolchain
+        run: python -m pip install -r tools/deploy/requirements.txt
       # The same checks as locally: strict lint, kubeconform on the default and all-features
       # renders (kubeconform runs from its pinned image), the kind overlay build and the render
       # guards (#116).

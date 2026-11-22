@@ -246,6 +246,12 @@ type ProwlarrRateBucket struct {
 	Used        int32
 }
 
+type QueueOutputCursor struct {
+	InstanceID uuid.UUID
+	LastParent string
+	UpdatedAt  time.Time
+}
+
 type QueuePolicy struct {
 	InstanceID           uuid.UUID
 	Enabled              bool

@@ -43,6 +43,10 @@ func (p *stubProber) Queue(context.Context, domain.AppKind, string, string, int,
 	return p.items, nil
 }
 
+func (p *stubProber) ListFolder(context.Context, domain.AppKind, string, string, string) ([]string, error) {
+	return nil, p.err
+}
+
 func (p *stubProber) RemoveQueueItem(context.Context, domain.AppKind, string, string, int32, bool, bool) error {
 	return p.err
 }

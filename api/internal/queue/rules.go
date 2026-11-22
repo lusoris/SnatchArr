@@ -115,8 +115,14 @@ type Item struct {
 	Status                string
 	TrackedDownloadStatus string
 	TrackedDownloadState  string
-	SizeLeft              int64
-	CustomFormatScore     int32
+	// OutputPath is the download path reported by the upstream *arr queue record.
+	OutputPath string
+	// OutputListed reports whether the *arr process listed the output folder's name.
+	OutputListed bool
+	// OutputUnchecked is true when this sweep did not decide output visibility (over budget or error).
+	OutputUnchecked   bool
+	SizeLeft          int64
+	CustomFormatScore int32
 	// QualityRank is the relative quality rank from quality profiles; higher = better, 0 = unknown.
 	QualityRank int
 	// ExistingScore is the custom-format score of the file already on disk;

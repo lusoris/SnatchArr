@@ -118,6 +118,8 @@ func (s *DBInstanceSource) decodeInstance(row sqlcgen.Instance) (Instance, error
 // ArrClient defines the *arr queue operations needed by the sweep.
 type ArrClient interface {
 	Queue(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, maxPages, pageSize int) ([]Item, error)
+	// ListFolder returns directory names visible to the *arr process in dir.
+	ListFolder(ctx context.Context, kind domain.AppKind, baseURL, apiKey, dir string) ([]string, error)
 	RemoveQueueItem(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, id int32, blocklist, research bool) error
 	ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string, mode ImportMode) (int, error)
 }
@@ -133,6 +135,9 @@ type MetricsRecorder interface {
 	QueueRemoval(instance, rule, result string)
 	QueueSkipped(instance, reason string)
 	QueueImport(instance, result string)
+	QueueOutputCheckInit(instance string, results []string)
+	QueueOutputCheck(instance, result string)
+	QueueOutputNotVisibleAt(instance string, at time.Time)
 }
 
 // Service manages download queues across *arr instances.
@@ -152,6 +157,8 @@ type StoreInterface interface {
 	Settings(ctx context.Context, instanceID uuid.UUID) (Settings, error)
 	Strikes(ctx context.Context, instanceID uuid.UUID) (map[string]Strike, error)
 	Record(ctx context.Context, instanceID uuid.UUID, decisions []Decision) error
+	OutputCursor(ctx context.Context, instanceID uuid.UUID) (string, error)
+	SetOutputCursor(ctx context.Context, instanceID uuid.UUID, lastParent string, at time.Time) error
 	Forget(ctx context.Context, instanceID uuid.UUID, downloadID string) error
 	Purge(ctx context.Context, batch int) (int64, error)
 	DownloadPriorityPreset(ctx context.Context) (domain.PriorityPreset, error)
@@ -212,6 +219,9 @@ func (s *Service) SweepAll(ctx context.Context) error {
 		errs = append(errs, err)
 	}
 	for _, inst := range insts {
+		s.metrics.QueueOutputCheckInit(inst.Name, outputResultNames)
+	}
+	for _, inst := range insts {
 		if sweepErr := s.sweepInstance(ctx, inst); sweepErr != nil {
 			s.logger.WarnContext(ctx, "queue: sweep instance failed", slog.String("instance", inst.Name), slog.String("error", sweepErr.Error()))
 			errs = append(errs, sweepErr)
@@ -253,7 +263,7 @@ func (s *Service) sweepInstance(ctx context.Context, inst Instance) error {
 	}
 	cfg.ForceImport = SupportsForceImport(inst.Kind)
 	now := s.clk.Now()
-	decisions, err := s.fetchAndEvaluate(ctx, inst, cfg, now)
+	decisions, cursor, err := s.fetchAndEvaluate(ctx, inst, cfg, now)
 	if err != nil {
 		if errors.Is(err, ErrQueueUnsupported) {
 			s.logger.InfoContext(ctx, "queue: sweep skipped unsupported kind", slog.String("instance", inst.Name), slog.String("kind", string(inst.Kind)))
@@ -263,19 +273,54 @@ func (s *Service) sweepInstance(ctx context.Context, inst Instance) error {
 		return err
 	}
 
-	return s.processDecisions(ctx, inst, cfg, decisions, now)
+	if err := s.processDecisions(ctx, inst, cfg, decisions, now); err != nil {
+		return err
+	}
+	if err := s.store.SetOutputCursor(ctx, inst.ID, cursor, now); err != nil {
+		return fmt.Errorf("save output cursor for %s: %w", inst.Name, err)
+	}
+	return nil
 }
 
-func (s *Service) fetchAndEvaluate(ctx context.Context, inst Instance, cfg Settings, now time.Time) ([]Decision, error) {
+func (s *Service) fetchAndEvaluate(ctx context.Context, inst Instance, cfg Settings, now time.Time) ([]Decision, string, error) {
+	cursor, err := s.store.OutputCursor(ctx, inst.ID)
+	if err != nil {
+		return nil, "", fmt.Errorf("fetch output cursor for %s: %w", inst.Name, err)
+	}
 	items, err := s.arr.Queue(ctx, inst.Kind, inst.BaseURL, inst.APIKey, sweepMaxPages, sweepPageSize)
 	if err != nil {
-		return nil, fmt.Errorf("fetch queue for %s: %w", inst.Name, err)
+		return nil, "", fmt.Errorf("fetch queue for %s: %w", inst.Name, err)
 	}
+	items, results, next := checkOutputs(ctx, s.arr, inst, cfg, items, now, cursor)
+	s.recordOutputResults(ctx, inst, results, now)
 	prev, err := s.store.Strikes(ctx, inst.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetch strikes for %s: %w", inst.Name, err)
+		return nil, "", fmt.Errorf("fetch strikes for %s: %w", inst.Name, err)
 	}
-	return Sweep(cfg, items, prev, now), nil
+	return Sweep(cfg, items, prev, now), next, nil
+}
+
+func (s *Service) recordOutputResults(ctx context.Context, inst Instance, results []outputResult, now time.Time) {
+	foundNotVisible := false
+	for _, result := range results {
+		s.metrics.QueueOutputCheck(inst.Name, result.result)
+		s.logOutputResult(ctx, inst, result)
+		if result.result == outputNotVisible {
+			foundNotVisible = true
+		}
+	}
+	if foundNotVisible {
+		s.metrics.QueueOutputNotVisibleAt(inst.Name, now)
+	}
+}
+
+func (s *Service) logOutputResult(ctx context.Context, inst Instance, result outputResult) {
+	if result.result == outputNotVisible {
+		s.logger.WarnContext(ctx, "queue: output path not visible to arr", slog.String("instance", inst.Name), slog.String("download_id", result.downloadID), slog.String("output_path", result.outputPath))
+	}
+	if result.result == outputError {
+		s.logger.WarnContext(ctx, "queue: output path check failed", slog.String("instance", inst.Name), slog.String("dir", result.dir), slog.String("error", result.err.Error()))
+	}
 }
 
 func (s *Service) processDecisions(ctx context.Context, inst Instance, cfg Settings, ds []Decision, now time.Time) error {
