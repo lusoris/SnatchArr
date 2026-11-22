@@ -292,11 +292,24 @@ func applyCollisions(entries []Entry) {
 	// Build caps len(entries) at DefaultMaxMovies; these loops are bounded by that input size.
 	for index := range entries {
 		folder := entries[index].Folder
-		key := norm.NFC.String(caser.String(norm.NFD.String(folder)))
+		key := norm.NFC.String(caser.String(norm.NFD.String(strings.Map(dropHFSIgnorable, folder))))
 		groups[key] = append(groups[key], index)
 	}
 	for _, indexes := range groups {
 		applyCollision(entries, indexes)
+	}
+}
+
+// dropHFSIgnorable removes the code points HFS+ ignores when it compares names, so folders that differ only by
+// them land in one collision group and get suffixed: U+200C-U+200F, U+202A-U+202E, U+206A-U+206F and U+FEFF.
+// Source: the gLowerCaseTable in apple-oss-distributions/hfs core/UCStringCompareData.h (Apple TN1150,
+// "HFS Plus Volume Format", section "Unicode Subtleties"). U+200B is not in that set. Display names keep them.
+func dropHFSIgnorable(char rune) rune {
+	switch {
+	case char >= 0x200C && char <= 0x200F, char >= 0x202A && char <= 0x202E, char >= 0x206A && char <= 0x206F, char == 0xFEFF:
+		return -1
+	default:
+		return char
 	}
 }
 

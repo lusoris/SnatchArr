@@ -19,17 +19,16 @@ const MaxPathBytes = 4096
 // Cleaned base and target paths longer than [MaxPathBytes] bytes are refused, so the segment loop runs at most MaxPathBytes/2+1 times.
 // Following [filepath.IsLocal], it allows segment names such as "..." and "..name" rather than refusing every ".." prefix.
 // On every platform it refuses any segment made only of periods and spaces that contains at least one space, which Windows path normalization trims to "." or ".." (Microsoft "File path formats on Windows systems", section "Trim characters").
+// It refuses base itself, including a target that differs from base only in letter case where [filepath.Rel]
+// compares case-insensitively and returns "." (Windows).
 func StrictlyWithin(base, target string) bool {
 	cleanBase := filepath.Clean(base)
 	cleanTarget := filepath.Clean(target)
 	if len(cleanBase) > MaxPathBytes || len(cleanTarget) > MaxPathBytes {
 		return false
 	}
-	if cleanTarget == cleanBase {
-		return false
-	}
 	rel, err := filepath.Rel(cleanBase, cleanTarget)
-	if err != nil || escapesBase(rel) {
+	if err != nil || rel == "." || escapesBase(rel) {
 		return false
 	}
 	segments := strings.SplitSeq(rel, string(filepath.Separator))

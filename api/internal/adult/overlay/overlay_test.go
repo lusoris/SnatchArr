@@ -162,6 +162,25 @@ func TestBuildUnicodeCollision(t *testing.T) {
 	}
 }
 
+func TestBuildHFSIgnorableCollision(t *testing.T) {
+	t.Parallel()
+	result := build(t,
+		movie(1, "AB", 0, rootPath(sourceRoot, "one", "a.mkv")),
+		movie(2, "A\u200dB", 0, rootPath(sourceRoot, "two", "a.mkv")),
+		movie(3, "A\ufeffB\u200c", 0, rootPath(sourceRoot, "three", "a.mkv")),
+		movie(4, "A\u200bB", 0, rootPath(sourceRoot, "four", "a.mkv")),
+	)
+	want := map[int]string{
+		1: "AB", 2: "A\u200dB [whisparr-2]", 3: "A\ufeffB\u200c [whisparr-3]",
+		4: "A\u200bB",
+	}
+	for id, folder := range want {
+		if got := entryByID(t, result, id).Folder; got != folder {
+			t.Errorf("movie %d folder = %q, want %q", id, got, folder)
+		}
+	}
+}
+
 func TestBuildWindowsNames(t *testing.T) {
 	t.Parallel()
 	result := build(t,

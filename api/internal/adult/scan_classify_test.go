@@ -9,23 +9,24 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+type classifyCase struct {
+	name     string
+	subPath  string
+	wantScan bool
+	wantKeep bool
+}
 
 func TestClassifySetDir(t *testing.T) {
 	t.Parallel()
 	baseDir := t.TempDir()
 
 	plainDir := filepath.Join(baseDir, "gallery_1")
-	tripleDotDir := filepath.Join(baseDir, "...")
-	twoDotsSpaceDir := filepath.Join(baseDir, ".. ")
-	spaceDotDir := filepath.Join(baseDir, " .")
-	for _, dir := range []string{plainDir, tripleDotDir, twoDotsSpaceDir, spaceDotDir} {
-		if err := os.Mkdir(dir, 0o750); err != nil {
-			t.Fatalf("mkdir %q: %v", dir, err)
-		}
-	}
+	mkdirAll(t, plainDir)
 
 	symlinkDir := filepath.Join(baseDir, "symlink_dir")
 	if err := os.Symlink(plainDir, symlinkDir); err != nil {
@@ -39,20 +40,44 @@ func TestClassifySetDir(t *testing.T) {
 
 	missingPath := filepath.Join(baseDir, "missing")
 
-	cases := []struct {
-		name     string
-		subPath  string
-		wantScan bool
-		wantKeep bool
-	}{
+	runClassifyCases(t, baseDir, []classifyCase{
 		{name: "plain dir", subPath: plainDir, wantScan: true, wantKeep: true},
-		{name: "triple dot dir", subPath: tripleDotDir, wantScan: true, wantKeep: true},
-		{name: "two dots space dir", subPath: twoDotsSpaceDir, wantScan: false, wantKeep: true},
-		{name: "space dot dir", subPath: spaceDotDir, wantScan: false, wantKeep: true},
 		{name: "symlink to dir", subPath: symlinkDir, wantScan: false, wantKeep: false},
 		{name: "regular file", subPath: regularFile, wantScan: false, wantKeep: false},
 		{name: "missing path", subPath: missingPath, wantScan: false, wantKeep: false},
+	})
+}
+
+func TestClassifySetDirDotNames(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows trims trailing periods and spaces from the last path segment, so these names collapse onto existing paths")
 	}
+	baseDir := t.TempDir()
+
+	tripleDotDir := filepath.Join(baseDir, "...")
+	twoDotsSpaceDir := filepath.Join(baseDir, ".. ")
+	spaceDotDir := filepath.Join(baseDir, " .")
+	mkdirAll(t, tripleDotDir, twoDotsSpaceDir, spaceDotDir)
+
+	runClassifyCases(t, baseDir, []classifyCase{
+		{name: "triple dot dir", subPath: tripleDotDir, wantScan: true, wantKeep: true},
+		{name: "two dots space dir", subPath: twoDotsSpaceDir, wantScan: false, wantKeep: true},
+		{name: "space dot dir", subPath: spaceDotDir, wantScan: false, wantKeep: true},
+	})
+}
+
+func mkdirAll(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, dir := range dirs {
+		if err := os.Mkdir(dir, 0o750); err != nil {
+			t.Fatalf("mkdir %q: %v", dir, err)
+		}
+	}
+}
+
+func runClassifyCases(t *testing.T, baseDir string, cases []classifyCase) {
+	t.Helper()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

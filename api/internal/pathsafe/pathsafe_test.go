@@ -57,6 +57,7 @@ func TestStrictlyWithin(t *testing.T) {
 		{name: "four dots", target: filepath.Join(base, "...."), want: true},
 		{name: "target at MaxPathBytes", target: exactMaxTarget, want: true},
 		{name: "same directory", target: base, want: false},
+		{name: "base differing only in letter case", base: `C:\Media`, target: `c:\media`, want: false},
 		{name: "parent directory", target: filepath.Join(sep, "tmp", "media"), want: false},
 		{name: "escape parent", target: filepath.Join(sep, "tmp", "media", "other"), want: false},
 		{name: "escape relative", target: base + sep + ".." + sep + "other", want: false},
