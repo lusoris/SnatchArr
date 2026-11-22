@@ -33,10 +33,10 @@ jobs:
     # Linux only (HISS-21): the check reads repository files and the GitHub API, so its verdict
     # does not depend on the runner OS, and the scripts need bash 4.4 or newer (mapfile -d, ${var,,}).
     runs-on: ubuntu-26.04
-    timeout-minutes: 5
     # Fleet floor 5 min; measured p95 18 s over the last 5 successful runs, so
     # max(5, ceil(p95 x2)) = 5. Step bounds keep a stalled step inside it: fetch 60 s, PyYAML
     # 60 s, planted cases 1 min, lookup 60 s. Literal: env is not allowed in timeout-minutes.
+    timeout-minutes: 5
     steps:
       # GitHub downloads every action of a job before its first step and does not follow a moved
       # action repository, so a moved action would stop this guard before it can name the move;
