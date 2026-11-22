@@ -9,6 +9,11 @@
 # in this file, and the daily schedule catches a repository move that happens with no pull
 # request. Only public repositories are supported: the fetch runs without credentials, and
 # GITHUB_TOKEN cannot read private or missing repositories, so any such reference fails.
+# A pull request runs this file from its own merge commit, so it could drop the check and still
+# report it: the merge-time check tools/ci/guard_definition_check.sh (lefthook commit-msg command
+# `guard-definition`, run when the merge script judges the squash message in a default-branch
+# clone) refuses a pull request that changes this file or a script its steps run, unless the
+# merger acknowledges the change with GUARD_DEFINITION_ACK.
 name: Workflow references
 
 on:
@@ -29,6 +34,9 @@ jobs:
     # does not depend on the runner OS, and the scripts need bash 4.4 or newer (mapfile -d, ${var,,}).
     runs-on: ubuntu-26.04
     timeout-minutes: 5
+    # Fleet floor 5 min; measured p95 18 s over the last 5 successful runs, so
+    # max(5, ceil(p95 x2)) = 5. Step bounds keep a stalled step inside it: fetch 60 s, PyYAML
+    # 60 s, planted cases 1 min, lookup 60 s. Literal: env is not allowed in timeout-minutes.
     steps:
       # GitHub downloads every action of a job before its first step and does not follow a moved
       # action repository, so a moved action would stop this guard before it can name the move;
@@ -38,12 +46,13 @@ jobs:
           set -euo pipefail
           git -c init.defaultBranch=main init -q .
           git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
-          timeout 120 git fetch --no-tags --quiet --depth=1 origin "$GITHUB_SHA"
+          timeout 60 git fetch --no-tags --quiet --depth=1 origin "$GITHUB_SHA"
           git checkout -q --detach FETCH_HEAD
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - name: PyYAML for the workflow parser (pinned by hash)
         run: bash tools/ci/pyyaml_venv.sh "$RUNNER_TEMP/pyyaml"
       - name: Planted cases for the repository-name check
+        timeout-minutes: 1
         env:
           PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
         run: bash tools/ci/workflow_refs_test.sh
