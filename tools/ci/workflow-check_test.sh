@@ -4,15 +4,18 @@
 #
 # Planted cases for workflow-check.sh. Accepted: a commit pin whose comment names its tag,
 # a commit pin whose comment names a branch (printed as a note), a go install pinned to a
-# release, a go install pinned by a variable, and go install text in composite action
-# descriptions (go-install-description). Refused: a tag pin, a comment that names
+# release, a go install pinned by a variable, go install text in composite action
+# descriptions (go-install-description) and in a flow-style composite action manifest
+# (go-install-flow-description), and setup-helm pinned to a release in block style (helm-pinned)
+# and flow style (helm-flow-pinned). Refused: a tag pin, a comment that names
 # another tag, a missing comment, a broken workflow, a missing token, a repository without
 # workflow files, a zizmor run that fails or writes no report, a gate image without a digest,
 # a zizmor requirements file without hashes, a go install at @latest, at @main, without a
-# package, or at @latest in a composite action step (go-install-action-latest), and
-# azure/setup-helm without a version, at latest, or with the version in the next
-# step, and a ${{ }} expression expanded into a run script (accepted: setup-helm pinned to a
-# release). Last: Renovate reads all three workflow-gate image
+# package, single-quoted at @latest (go-install-quoted-run), or at @latest in a composite action
+# step (go-install-action-latest), and azure/setup-helm without a version, at latest, with the
+# version in the next step, in flow style without a version (helm-flow-no-version), anchored and
+# aliased without a version (helm-alias-no-version), or in a leading-dot workflow file without a
+# version (helm-hidden-workflow), and a ${{ }} expression expanded into a run script. Last: Renovate reads all three workflow-gate image
 # pins, zizmor-requirements.txt, every go install pin and every setup-helm version in the
 # workflows, and neither @latest, a variable nor a helm version of latest. Every case runs
 # workflow_refs.sh against a local GraphQL CURL_BIN stub (verified on clean with CURL_COUNT_FILE;
@@ -339,6 +342,33 @@ jobs:
 YAML
 expect_refusal go-install-action-latest "refused .github/actions/planted/action.yml:10: go install not pinned to a version"
 
+# A flow-style composite action manifest whose description mentions go install passes.
+mkdir -p "$WORK/go-install-flow-description/.github/workflows" "$WORK/go-install-flow-description/.github/actions/planted"
+cat > "$WORK/go-install-flow-description/.github/actions/planted/action.yml" <<'YAML'
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+{name: sample, description: 'Example: go install example.com/tool', runs: {using: composite, steps: [{shell: bash, run: echo ok}]}}
+YAML
+cat > "$WORK/go-install-flow-description/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/planted
+YAML
+expect_accepted go-install-flow-description "no version comment names another tag"
+
+plant_install go-install-quoted-run "'go install golang.org/x/vuln/cmd/govulncheck@latest'"
+expect_refusal go-install-quoted-run "refused .github/workflows/planted.yml:14: go install not pinned to a version"
+
 plant_install template-injection "echo \${{ github.event.inputs.tag }}"
 expect_refusal template-injection "refused .github/workflows/planted.yml:14: template-injection"
 
@@ -354,6 +384,72 @@ expect_refusal helm-latest "refused .github/workflows/planted.yml:10: azure/setu
 # A version in the next step does not pin this one.
 plant_helm helm-next-step "      - run: echo" "        with:" "          version: v4.3.1"
 expect_refusal helm-next-step "refused .github/workflows/planted.yml:10: azure/setup-helm without a pinned version input"
+
+# A flow-style setup-helm step pinned to a release passes; without version it is refused.
+mkdir -p "$WORK/helm-flow-pinned/.github/workflows"
+cat > "$WORK/helm-flow-pinned/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - {uses: $SETUP_HELM, with: {version: v4.3.1}} # v5.0.1
+YAML
+expect_accepted helm-flow-pinned "no version comment names another tag"
+
+mkdir -p "$WORK/helm-flow-no-version/.github/workflows"
+cat > "$WORK/helm-flow-no-version/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - {uses: $SETUP_HELM, with: {}} # v5.0.1
+YAML
+expect_refusal helm-flow-no-version "refused .github/workflows/planted.yml:10: azure/setup-helm without a pinned version input"
+
+# Steps anchored in one job and aliased in another without a version input are refused.
+mkdir -p "$WORK/helm-alias-no-version/.github/workflows"
+cat > "$WORK/helm-alias-no-version/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  first:
+    runs-on: ubuntu-26.04
+    steps: &helm-steps
+      - {uses: $SETUP_HELM} # v5.0.1
+  second:
+    runs-on: ubuntu-26.04
+    steps: *helm-steps
+YAML
+expect_refusal helm-alias-no-version "refused .github/workflows/planted.yml:10: azure/setup-helm without a pinned version input"
+
+# A leading-dot workflow file `.github/workflows/.hidden.yml` is matched by dotglob and refused.
+mkdir -p "$WORK/helm-hidden-workflow/.github/workflows"
+cat > "$WORK/helm-hidden-workflow/.github/workflows/.hidden.yml" <<YAML
+name: hidden
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $SETUP_HELM # v5.0.1
+YAML
+expect_refusal helm-hidden-workflow "refused .github/workflows/.hidden.yml:10: azure/setup-helm without a pinned version input"
 
 plant_action action-pinned "$CHECKOUT # v7.0.1"
 expect_accepted action-pinned "no version comment names another tag"

@@ -52,7 +52,7 @@ if [ ! -f "$ZIZMOR_REQ" ] || \
   exit 1
 fi
 
-shopt -s nullglob
+shopt -s nullglob dotglob
 FILES=()
 for f in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/workflows/*.yaml; do
   FILES+=("${f#"$ROOT"/}")
@@ -129,34 +129,29 @@ done < "$WORK/step-text.tsv"
 # 6a83713996. Allow-list: an action listed here must carry a semver `version` in its step.
 VERSION_INPUT_ACTIONS=(azure/setup-helm)
 
-# step_version_pinned INDEX COL: whether the step whose `uses:` key sits at column COL on
-# STEP_LINES[INDEX] sets `version:` to a release. The step ends at the first non-empty line
-# indented less than COL.
-step_version_pinned() {
-  local i line indent
-  for ((i = $1 + 1; i < ${#STEP_LINES[@]}; i++)); do
-    line="${STEP_LINES[i]}"
-    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
-    indent="${line%%[![:space:]]*}"
-    [ "${#indent}" -lt "$2" ] && return 1
-    [[ "$line" =~ ^[[:space:]]+version:[[:space:]]*[\"\']?v?[0-9]+(\.[0-9]+)+[\"\']?[[:space:]]*(#.*)?$ ]] && return 0
+if ! "$PYTHON" -I "$HERE/workflow_uses.py" --version-inputs "$ROOT" -- "${FILES[@]}" "${ACTION_FILES[@]}" > "$WORK/version-inputs.tsv"; then
+  exit 1
+fi
+MAX_VERSION_RECORDS=16384
+version_record_count=0
+while IFS= read -r record || [ -n "$record" ]; do
+  version_record_count=$((version_record_count + 1))
+  if [ "$version_record_count" -gt "$MAX_VERSION_RECORDS" ]; then
+    echo "error: more than $MAX_VERSION_RECORDS step uses records under $ROOT" >&2
+    exit 1
+  fi
+  loc="${record%%$'\t'*}"
+  rest="${record#*$'\t'}"
+  action="${rest%%$'\t'*}"
+  version="${rest#*$'\t'}"
+  for guarded_action in "${VERSION_INPUT_ACTIONS[@]}"; do
+    [ "${action,,}" = "${guarded_action,,}" ] || continue
+    if ! [[ "$version" =~ ^v?[0-9]+(\.[0-9]+)+$ ]]; then
+      echo "refused $loc: $guarded_action without a pinned version input" >&2
+      floating=1
+    fi
   done
-  return 1
-}
-
-for file in "${FILES[@]}" "${ACTION_FILES[@]}"; do
-  mapfile -t STEP_LINES < "$ROOT/$file"
-  for ((idx = 0; idx < ${#STEP_LINES[@]}; idx++)); do
-    [[ "${STEP_LINES[idx]}" =~ ^([[:space:]]*(-[[:space:]]+)?)uses:[[:space:]]*([^@[:space:]]+)@ ]] || continue
-    for action in "${VERSION_INPUT_ACTIONS[@]}"; do
-      [ "${BASH_REMATCH[3]}" = "$action" ] || continue
-      if ! step_version_pinned "$idx" "${#BASH_REMATCH[1]}"; then
-        echo "refused $file:$((idx + 1)): $action without a pinned version input" >&2
-        floating=1
-      fi
-    done
-  done
-done
+done < "$WORK/version-inputs.tsv"
 if [ "$floating" -ne 0 ]; then
   exit 1
 fi

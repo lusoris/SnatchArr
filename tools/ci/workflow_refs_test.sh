@@ -4,15 +4,18 @@
 #
 # Offline planted cases for workflow_refs.sh and workflow_uses.py (no Docker, no network, stub
 # GraphQL curl on every call, fixed placeholder token).
-# Accepted: one current repository (clean), two current repositories across a workflow and a
-# composite action (two-current), uses-shaped text inside a run script block (run-block-uses), a
-# Docker-only local action directory holding only Dockerfile (docker-local-action), and three
-# distinct repositories batched into one GraphQL POST (three-repos).
+# Accepted: workflow_uses.py --self-test (workflow-uses-selftest), one current repository (clean),
+# two current repositories across a workflow and a composite action (two-current), uses-shaped text
+# inside a run script block (run-block-uses), a Docker-only local action directory holding only
+# Dockerfile (docker-local-action), three distinct repositories batched into one GraphQL POST
+# (three-repos), and workflow-refs.yml BOOTSTRAP_REPO matching its earliest remote uses
+# (bootstrap-repo-matches).
 # Refused: a reusable workflow under a moved repository name (moved-workflow), a composite action
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
 # flow-style step under a moved repository name (moved-flow), an unquoted boolean job id `yes`
-# under a moved repository name (moved-bool-job-id), a nested composite action under a moved
+# under a moved repository name (moved-bool-job-id), a leading-dot workflow file under a moved
+# repository name (moved-hidden-workflow), a nested composite action under a moved
 # repository name (moved-nested-action), a composite action outside .github/actions reached via
 # `uses: ./tools/actions/x` (moved-outside-action), a composite action reached via self-repository
 # `uses: $/.github/actions/planted` under a moved repository name (moved-self-repo-action), a
@@ -22,8 +25,9 @@
 # an unreadable directory under .github/actions when unprivileged (unreadable-actions-dir), a
 # GraphQL errors array (gql-errors), a null GraphQL alias for a private or missing repository
 # (null-alias), 101 repositories split across 2 GraphQL POSTs with a moved repository in the
-# second batch (over-100-repos), a missing token (missing-token), and workflow_uses.py without
-# PyYAML (no-pyyaml).
+# second batch (over-100-repos), a missing token (missing-token), workflow_uses.py without PyYAML
+# (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), and a workflow-refs.yml
+# copy whose checkout uses disagrees with BOOTSTRAP_REPO (bootstrap-repo-mismatch).
 #
 #   tools/ci/workflow_refs_test.sh
 #
@@ -31,6 +35,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 WORK="$(mktemp -d)"
 # cleanup: restore the mode of the unreadable-actions-dir fixture when it exists (a failed restore goes to stderr), then remove $WORK.
 cleanup() {
@@ -159,6 +164,47 @@ expect_refusal() {
   esac
 }
 
+# read_bootstrap_repo FILE: print the single strict owner/name BOOTSTRAP_REPO value of FILE or fail.
+read_bootstrap_repo() {
+  local file="$1" line line_n=0 boot_count=0 boot_repo="" val
+  while IFS= read -r line || [ -n "$line" ]; do
+    line_n=$((line_n + 1))
+    [ "$line_n" -le 65536 ] || return 1
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" == *BOOTSTRAP_REPO:* ]] || continue
+    boot_count=$((boot_count + 1))
+    [ "$boot_count" -le 1 ] || return 1
+    [[ "$line" =~ ^[[:space:]]*BOOTSTRAP_REPO:[[:space:]]*([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)[[:space:]]*(#.*)?$ ]] || return 1
+    val="${BASH_REMATCH[1]}"
+    case "$val" in
+      ./* | ../* | */. | */..) return 1 ;;
+    esac
+    boot_repo="$val"
+  done < "$file"
+  [ "$boot_count" -eq 1 ] || return 1
+  printf '%s\n' "$boot_repo"
+}
+
+# bootstrap_repo_matches FILE: succeed when FILE's BOOTSTRAP_REPO matches its lowest-line remote uses.
+bootstrap_repo_matches() {
+  local file="$1" boot_repo uses_out u_repo u_loc u_line line_n=0 lowest_line=0 first_repo=""
+  boot_repo="$(read_bootstrap_repo "$file")" || return 1
+  uses_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" "$file")" || return 1
+  [ -n "$uses_out" ] || return 1
+  while IFS=$'\t' read -r u_repo u_loc; do
+    line_n=$((line_n + 1))
+    [ "$line_n" -le 16384 ] || return 1
+    [ -n "$u_repo" ] || continue
+    u_line="${u_loc##*:}"
+    [[ "$u_line" =~ ^[0-9]+$ ]] || return 1
+    if [ "$lowest_line" -eq 0 ] || [ "$u_line" -lt "$lowest_line" ]; then
+      lowest_line="$u_line"
+      first_repo="$u_repo"
+    fi
+  done <<< "$uses_out"
+  [ -n "$first_repo" ] && [ "$boot_repo" = "$first_repo" ]
+}
+
 # A fake GitHub GraphQL API: golusoris/<repo> moved to plurano/<repo> and moved/<repo> moved to
 # current/<repo>; any other repository answers its own name. Optionally counts invocations in
 # CURL_COUNT_FILE. Every stub runs under a 5 s bound with bounded argument loops.
@@ -212,6 +258,13 @@ timeout 5 head -c 65536 > /dev/null
 printf '%s\n' '{"data":{"r0":null}}'
 SH
 chmod +x "$WORK/curl-moved" "$WORK/curl-fails" "$WORK/curl-nameless" "$WORK/curl-gql-errors" "$WORK/curl-null-alias"
+
+if ! selftest_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" --self-test 2>&1)"; then
+  printf 'FAIL workflow-uses-selftest: self-test failed\n%s\n' "$selftest_out" >&2
+  exit 1
+fi
+accepted=$((accepted + 1))
+echo "ok   workflow-uses-selftest: accepted"
 
 plant clean "$CHECKOUT # v7.0.1"
 expect_accepted clean "all 1 used by name are under their current name" env CURL_BIN="$WORK/curl-moved"
@@ -300,6 +353,22 @@ jobs:
       - uses: moved/repo@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da
 YAML
 expect_refusal moved-bool-job-id "refused .github/workflows/planted.yml:10: moved/repo moved to current/repo" env CURL_BIN="$WORK/curl-moved"
+
+# A leading-dot workflow file `.github/workflows/.hidden.yml` is matched by dotglob and refused.
+mkdir -p "$WORK/moved-hidden-workflow/.github/workflows"
+cat > "$WORK/moved-hidden-workflow/.github/workflows/.hidden.yml" <<'YAML'
+name: hidden
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: moved/repo@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da
+YAML
+expect_refusal moved-hidden-workflow "refused .github/workflows/.hidden.yml:10: moved/repo moved to current/repo" env CURL_BIN="$WORK/curl-moved"
 
 # A moved reference in a nested composite action `.github/actions/group/inner/action.yml` is refused.
 plant_action moved-nested-action "moved/repo@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # v1.0.0" "group/inner"
@@ -507,9 +576,9 @@ fi
 plant missing-token "$CHECKOUT # v7.0.1"
 expect_refusal missing-token "is required" env -u GH_TOKEN -u GITHUB_TOKEN CURL_BIN="$WORK/curl-moved"
 
-# workflow_uses.py under `python3 -I -S` (no site packages -> no PyYAML) exits 2 with `PyYAML is required`.
+# workflow_uses.py under `-I -S` (no site packages -> no PyYAML) exits 2 with `PyYAML is required`.
 pyyaml_rc=0
-pyyaml_out="$(python3 -I -S "$HERE/workflow_uses.py" "$WORK/clean/.github/workflows/planted.yml" 2>&1)" || pyyaml_rc=$?
+pyyaml_out="$("${PYTHON_BIN:-python3}" -I -S "$HERE/workflow_uses.py" "$WORK/clean/.github/workflows/planted.yml" 2>&1)" || pyyaml_rc=$?
 if [ "$pyyaml_rc" -ne 2 ]; then
   printf 'FAIL no-pyyaml: expected exit 2, got %s\n%s\n' "$pyyaml_rc" "$pyyaml_out" >&2
   exit 1
@@ -524,5 +593,40 @@ case "$pyyaml_out" in
     exit 1
     ;;
 esac
+
+# pyyaml_venv.sh without arguments exits 2 and prints its usage.
+venv_rc=0
+venv_out="$(bash "$HERE/pyyaml_venv.sh" 2>&1)" || venv_rc=$?
+if [ "$venv_rc" -ne 2 ]; then
+  printf 'FAIL pyyaml-venv-no-arg: expected exit 2, got %s\n%s\n' "$venv_rc" "$venv_out" >&2
+  exit 1
+fi
+case "$venv_out" in
+  *"usage: pyyaml_venv.sh DIR"*)
+    refused=$((refused + 1))
+    echo "ok   pyyaml-venv-no-arg: refused (exit 2, usage)"
+    ;;
+  *)
+    printf 'FAIL pyyaml-venv-no-arg: exit 2 without usage\n%s\n' "$venv_out" >&2
+    exit 1
+    ;;
+esac
+
+# workflow-refs.yml BOOTSTRAP_REPO matches its checkout uses repository, and a mismatch is refused.
+if ! bootstrap_repo_matches "$REPO_ROOT/.github/workflows/workflow-refs.yml"; then
+  echo "FAIL bootstrap-repo-matches: workflow-refs.yml BOOTSTRAP_REPO did not match checkout uses" >&2
+  exit 1
+fi
+accepted=$((accepted + 1))
+echo "ok   bootstrap-repo-matches: accepted (actions/checkout)"
+
+sed 's|uses: actions/checkout@|uses: actions/checkout2@|' \
+  "$REPO_ROOT/.github/workflows/workflow-refs.yml" > "$WORK/workflow-refs-mismatch.yml"
+if bootstrap_repo_matches "$WORK/workflow-refs-mismatch.yml"; then
+  echo "FAIL bootstrap-repo-mismatch: accepted mismatched BOOTSTRAP_REPO" >&2
+  exit 1
+fi
+refused=$((refused + 1))
+echo "ok   bootstrap-repo-mismatch: refused (actions/checkout vs actions/checkout2)"
 
 echo "workflow refs: $accepted accepted, $refused refused"

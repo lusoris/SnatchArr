@@ -33,7 +33,7 @@ if [ -z "$TOKEN" ]; then
 fi
 
 MAX_FILES=4096
-shopt -s nullglob
+shopt -s nullglob dotglob
 FILES=()
 file_count=0
 for f in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/workflows/*.yaml; do
