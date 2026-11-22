@@ -26,14 +26,18 @@ Usage: python3 -I tools/ci/semgrep_scan.py --image NAME:TAG@sha256:DIGEST
 """
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 RULES = ".semgrep.yml"
 FIXTURES = "tools/ci/semgrep/testdata"
@@ -41,6 +45,13 @@ FIXTURE_CONSTRAINT = "//go:build semgrep_fixture\n"
 MAX_FIXTURES = 64
 MAX_TARGETS = 4096
 TIMEOUT_SECONDS = 600
+MAX_CONFIG_BYTES = 64 * 1024
+MAX_TARGET_BYTES = 8 * 1024 * 1024
+MAX_LISTED_PATHS = MAX_TARGETS + MAX_FIXTURES
+MAX_LISTED_BYTES = MAX_LISTED_PATHS * 1024
+READ_CHUNK_BYTES = 8 * 1024
+MAX_MESSAGE_CHARS = 300
+TRUNCATED_MARKER = "... [truncated]"
 IMAGE_RE = re.compile(r"^[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$")
 RULE_ID_RE = re.compile(r"^  - id: ([a-z0-9-]+)$", re.MULTILINE)
 ANNOTATION_RE = re.compile(r"//\s*(ruleid|ok):\s*([a-z0-9-]+)\s*$", re.MULTILINE)
@@ -180,38 +191,287 @@ def self_test(semgrep, names, ids):
     )
 
 
+class BoundedReadError(OSError):
+    """Raised when a bounded regular-file read is refused."""
+
+
+def _read_regular_fd(fd, path, limit):
+    """Verify fd is a regular file within limit and read at most limit + 1 bytes."""
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode):
+        raise BoundedReadError(f"{path}: not a regular file")
+    if info.st_size > limit:
+        raise BoundedReadError(f"{path}: size {info.st_size} exceeds {limit} bytes")
+    chunks = []
+    remaining = limit + 1
+    for _ in range(limit + 2):
+        if remaining <= 0:
+            break
+        chunk = os.read(fd, min(remaining, READ_CHUNK_BYTES))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def read_bounded_bytes(path, limit):
+    """Open path without following symlinks and read at most limit regular-file bytes."""
+    if limit < 0:
+        raise BoundedReadError(f"{path}: negative byte limit {limit}")
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    except OSError as err:
+        raise BoundedReadError(f"{path}: {err}") from err
+    try:
+        data = _read_regular_fd(fd, path, limit)
+    except BoundedReadError:
+        raise
+    except OSError as err:
+        raise BoundedReadError(f"{path}: {err}") from err
+    finally:
+        os.close(fd)
+    if len(data) > limit:
+        raise BoundedReadError(f"{path}: content exceeds {limit} bytes")
+    return data
+
+
+def read_bounded_text(path, limit):
+    """Read regular UTF-8 text file path up to limit bytes, or raise BoundedReadError."""
+    try:
+        return read_bounded_bytes(path, limit).decode("utf-8")
+    except UnicodeDecodeError as err:
+        raise BoundedReadError(f"{path}: {err}") from err
+
+
+def stop_process(proc):
+    """Kill proc if still running, close its pipes, and reap it."""
+    if proc.poll() is None:
+        proc.kill()
+    if proc.stdout is not None:
+        proc.stdout.close()
+    if proc.stderr is not None:
+        proc.stderr.close()
+    proc.wait()
+
+
+def collect_nul_names(carry, names, cap):
+    """Extract NUL-terminated UTF-8 names from carry into names, refusing above cap."""
+    pos = 0
+    for _ in range(len(carry) + 1):
+        nul = carry.find(b"\0", pos)
+        if nul < 0:
+            break
+        raw = carry[pos:nul]
+        pos = nul + 1
+        if not raw:
+            continue
+        if len(names) >= cap:
+            raise ScanError(
+                f"git ls-files listed more than {cap} Go files "
+                f"(cap {MAX_TARGETS} targets + {MAX_FIXTURES} fixtures)"
+            )
+        try:
+            names.append(raw.decode("utf-8"))
+        except UnicodeDecodeError as err:
+            raise ScanError(f"git ls-files returned non-UTF-8 path: {err}") from err
+    return carry[pos:]
+
+
+def start_git_ls_files(root):
+    """Start git ls-files for tracked and non-ignored untracked Go files under root."""
+    try:
+        return subprocess.Popen(  # nosec B603, B607  # fixed git ls-files argv, no shell
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "--",
+                "*.go",
+            ],
+            cwd=root,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as err:
+        raise ScanError(f"git did not complete: {err}") from err
+
+
+def list_git_targets(root):
+    """Stream NUL-terminated Go paths from git ls-files under time, byte and count bounds."""
+    deadline = time.monotonic() + TIMEOUT_SECONDS
+    timed_out = threading.Event()
+    proc = start_git_ls_files(root)
+
+    def on_timeout():
+        """Mark timeout and kill git when TIMEOUT_SECONDS elapses."""
+        timed_out.set()
+        proc.kill()
+
+    timer = threading.Timer(TIMEOUT_SECONDS, on_timeout)
+    timer.start()
+    names = []
+    carry = b""
+    total_bytes = 0
+    try:
+        for _ in range(MAX_LISTED_BYTES + 2):
+            chunk = proc.stdout.read(READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if total_bytes > MAX_LISTED_BYTES:
+                raise ScanError(f"git ls-files output exceeds {MAX_LISTED_BYTES} bytes")
+            carry = collect_nul_names(carry + chunk, names, MAX_LISTED_PATHS)
+        err_text = proc.stderr.read(4096).decode("utf-8", errors="replace").strip()
+        proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired as err:
+        raise ScanError(f"git ls-files timed out after {TIMEOUT_SECONDS}s") from err
+    except OSError as err:
+        raise ScanError(f"git ls-files failed: {err}") from err
+    finally:
+        timer.cancel()
+        stop_process(proc)
+    if timed_out.is_set():
+        raise ScanError(f"git ls-files timed out after {TIMEOUT_SECONDS}s")
+    if proc.returncode != 0:
+        raise ScanError(f"git ls-files failed: {err_text}")
+    if carry:
+        raise ScanError("git ls-files output was not NUL-terminated")
+    return names
+
+
+def has_symlink_component(resolved_root, name):
+    """Report whether name is non-relative or traverses a symlink under resolved_root."""
+    if name.startswith("/"):
+        return True
+    current = resolved_root
+    for part in pathlib.PurePosixPath(name).parts:
+        if part in ("", ".", ".."):
+            return True
+        current = current / part
+        try:
+            if stat.S_ISLNK(os.lstat(current).st_mode):
+                return True
+        except FileNotFoundError, NotADirectoryError:
+            return False
+        except OSError as err:
+            raise ScanError(f"cannot stat target {name}: {err}") from err
+    return False
+
+
+def inspect_target(resolved_root, name):
+    """Classify repo-relative name under resolved_root as 'bad', 'keep', or 'skip'."""
+    candidate = resolved_root / name
+    try:
+        info = os.lstat(candidate)
+    except FileNotFoundError, NotADirectoryError:
+        info = None
+    except OSError as err:
+        raise ScanError(f"cannot stat target {name}: {err}") from err
+    try:
+        resolved = candidate.resolve()
+    except OSError as err:
+        raise ScanError(f"cannot resolve target {name}: {err}") from err
+    if (
+        has_symlink_component(resolved_root, name)
+        or (info is not None and stat.S_ISLNK(info.st_mode))
+        or resolved == resolved_root
+        or not resolved.is_relative_to(resolved_root)
+    ):
+        return "bad"
+    if info is not None and stat.S_ISREG(info.st_mode):
+        return "keep"
+    return "skip"
+
+
 def targets(root, allow_empty=False):
     """Tracked Go files still on disk plus untracked ones Git does not ignore, fixtures left out."""
-    listed = run(
-        [
-            "git",
-            "ls-files",
-            "-z",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "--",
-            "*.go",
-        ],
-        root,
-    )
-    if listed.returncode != 0:
-        raise ScanError(f"git ls-files failed: {listed.stderr.strip()}")
-    names = sorted(
-        {
-            n
-            for n in listed.stdout.split("\0")
-            if n and not n.startswith(FIXTURES + "/") and (root / n).is_file()
-        }
-    )
+    resolved_root = pathlib.Path(root).resolve()
+    listed = sorted(set(list_git_targets(resolved_root)))
+    bad = []
+    names = []
+    for name in listed:
+        if not name or name.startswith(FIXTURES + "/"):
+            continue
+        kind = inspect_target(resolved_root, name)
+        if kind == "bad":
+            bad.append(name)
+        elif kind == "keep":
+            names.append(name)
+    if bad:
+        raise ScanError(
+            f"refused {len(bad)} symlink or outside-root target(s): {bad[:10]}"
+        )
     if (not names and not allow_empty) or len(names) > MAX_TARGETS:
         raise ScanError(f"{len(names)} Go files to scan, expected 1 to {MAX_TARGETS}")
     return names
 
 
+def target_digests(root, names):
+    """Return a map of each target path in names to the sha256 digest of its bytes."""
+    digests = {}
+    for name in names:
+        try:
+            raw = read_bounded_bytes(root / name, MAX_TARGET_BYTES)
+        except BoundedReadError as err:
+            raise ScanError(f"cannot read target {name}: {err}") from err
+        digests[name] = hashlib.sha256(raw).digest()
+    return digests
+
+
+def changed_targets(root, before):
+    """Return sorted target paths whose bytes changed or vanished since before was recorded."""
+    changed = []
+    for name, digest in before.items():
+        try:
+            raw = read_bounded_bytes(root / name, MAX_TARGET_BYTES)
+        except BoundedReadError:
+            changed.append(name)
+            continue
+        if hashlib.sha256(raw).digest() != digest:
+            changed.append(name)
+    return sorted(changed)
+
+
+def format_message(message):
+    """Escape control characters in a finding message and cut past MAX_MESSAGE_CHARS."""
+    escaped = (
+        str(message)[: MAX_MESSAGE_CHARS + 1].encode("unicode_escape").decode("ascii")
+    )
+    if len(escaped) > MAX_MESSAGE_CHARS:
+        keep = MAX_MESSAGE_CHARS - len(TRUNCATED_MARKER)
+        return f"{escaped[:keep]}{TRUNCATED_MARKER}"
+    return escaped
+
+
+def report_findings(report):
+    """Print findings and errors from Semgrep's JSON report, raising ScanError if any exist."""
+    results = report.get("results", [])
+    errors = report.get("errors", [])
+    for finding in results:
+        message = format_message(finding.get("extra", {}).get("message", ""))
+        print(
+            f"{finding['path']}:{finding['start']['line']}: {finding['check_id']}: "
+            f"{message}",
+            file=sys.stderr,
+        )
+    for error in errors:
+        print(
+            f"semgrep error: {error.get('type')}: {format_message(error.get('message', ''))}",
+            file=sys.stderr,
+        )
+    if results or errors:
+        raise ScanError(f"{len(results)} finding(s), {len(errors)} error(s)")
+
+
 def scan(semgrep, root):
-    """Scan every target and fail unless the report is clean and names each target as scanned."""
+    """Scan every target and fail unless the report is clean and every target stayed unchanged."""
     names = targets(root)
+    before = target_digests(root, names)
     result = semgrep(
         [
             "scan",
@@ -230,22 +490,8 @@ def scan(semgrep, root):
     except json.JSONDecodeError as err:
         sys.stderr.write(result.stderr[-4000:])
         raise ScanError(f"no JSON report (exit {result.returncode}): {err}") from err
-    for finding in report.get("results", []):
-        print(
-            f"{finding['path']}:{finding['start']['line']}: {finding['check_id']}: "
-            f"{finding['extra']['message']}",
-            file=sys.stderr,
-        )
-    for error in report.get("errors", []):
-        print(
-            f"semgrep error: {error.get('type')}: {error.get('message')}",
-            file=sys.stderr,
-        )
+    report_findings(report)
     scanned = set(report.get("paths", {}).get("scanned", []))
-    if report.get("results") or report.get("errors"):
-        raise ScanError(
-            f"{len(report.get('results', []))} finding(s), {len(report.get('errors', []))} error(s)"
-        )
     if scanned != set(names):
         skipped = sorted(set(names) - scanned)[:10]
         raise ScanError(
@@ -262,13 +508,20 @@ def scan(semgrep, root):
             f"target set changed during the scan: {len(added)} added, "
             f"{len(removed)} removed: {paths}"
         )
+    changed = changed_targets(root, before)
+    if changed:
+        raise ScanError(
+            f"target contents changed during the scan ({len(changed)}): {changed[:10]}"
+        )
     print(f"Semgrep: {len(names)} files scanned, 0 findings")
 
 
 def checked_inputs(root):
-    """Rule ids and fixture paths, refused before any Semgrep call."""
+    """Rule ids, fixture paths and targets, refused before any Semgrep call."""
     ids = rule_ids(root)
-    return ids, fixtures(root, ids)
+    fixture_names = fixtures(root, ids)
+    targets(root)
+    return ids, fixture_names
 
 
 def image_scan(docker, image, root):
@@ -308,8 +561,9 @@ def native_scan(name, root):
 def ci_pin(root):
     """Read the Semgrep image tag as data, never as shell input."""
     try:
-        with (root / "tools/ci/tool-versions.env").open(encoding="utf-8") as source:
-            lines = [source.readline() for _ in range(256)]
+        lines = read_bounded_text(
+            root / "tools/ci/tool-versions.env", MAX_CONFIG_BYTES
+        ).splitlines(keepends=True)[:256]
     except OSError, UnicodeError:
         return None
     for line in lines:

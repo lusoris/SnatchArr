@@ -120,8 +120,17 @@ case "$STUB_MODE" in
     printf 'package main\n' > added.go
     jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"
     ;;
+  rewrites-file)
+    printf 'package main\n\nfunc main() { println("mutated") }\n' > main.go
+    jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"
+    ;;
   finding) jq -n '{results: [{path: "main.go", start: {line: 1}, check_id: "demo-rule",
                    extra: {message: "planted"}}], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@" ;;
+  finding-ansi-long)
+    long_msg="$(python3 -I -c 'import sys; sys.stdout.write("\x1b[31m" + "x" * 995)')"
+    jq -n --arg msg "$long_msg" '{results: [{path: "main.go", start: {line: 1}, check_id: "demo-rule",
+      extra: {message: $msg}}], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"
+    ;;
   skipped) jq -n '{results: [], errors: [], paths: {scanned: []}}' ;;
   no-json) echo "not a report" ;;
   exit-2) jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"; exit 2 ;;
@@ -164,6 +173,33 @@ fresh() {
 accepted=0
 refused=0
 
+# assert_scanned_set CASE_NAME TARGET...: check that $WORK/calls holds exactly one scan call and
+# that its targets after "--" equal the sorted TARGET arguments (nothing else, fixture absent).
+assert_scanned_set() {
+  set_case="$1"
+  shift
+  want_set="$(printf '%s\n' "$@" | LC_ALL=C sort)"
+  got_set="$(awk '
+    index($0, " -- ") {
+      scans++
+      rest = substr($0, index($0, " -- ") + 4)
+      n = split(rest, items, " ")
+      for (i = 1; i <= n; i++) {
+        if (items[i] != "") print items[i]
+      }
+    }
+    END {
+      if (scans != 1) {
+        printf "SCAN_CALL_COUNT=%d\n", scans + 0
+      }
+    }
+  ' "$WORK/calls" | LC_ALL=C sort)"
+  if [ "$got_set" != "$want_set" ]; then
+    printf 'FAIL %s: scanned set %s, want %s\n' "$set_case" "$got_set" "$want_set" >&2
+    exit 1
+  fi
+}
+
 # expect WANT NAME MODE CALLED NEEDLE [SH EDIT]: after EDIT runs in a fresh repository, the scan
 # must exit WANT, print NEEDLE, and call the stub (CALLED yes) or never call it (CALLED no).
 expect() {
@@ -175,9 +211,9 @@ expect() {
   got=0
   if [ -n "${NATIVE:-}" ]; then
     out="$(cd "${NATIVE_CWD:-$PWD}" && STUB_MODE="$mode" STUB_LOG="$WORK/calls" \
-      python3 -I "$SCAN" --root "$root" --semgrep "$NATIVE" 2>&1)" || got=$?
+      timeout 30 python3 -I "$SCAN" --root "$root" --semgrep "$NATIVE" 2>&1)" || got=$?
   else
-    out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" python3 -I "$SCAN" --root "$root" --docker "$STUB" \
+    out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" timeout 30 python3 -I "$SCAN" --root "$root" --docker "$STUB" \
       --image "$image" 2>&1)" || got=$?
   fi
   check_case "$name" "$want" "$got" "$needle" "$out" "output lacks"
@@ -196,6 +232,7 @@ expect() {
 FX=tools/ci/semgrep/testdata
 
 expect 0 "clean repository" clean yes "Semgrep: 1 files scanned, 0 findings"
+assert_scanned_set "clean repository" main.go
 
 # Defects refused before any docker call.
 IMAGE_OVERRIDE="${IMAGE%@*}" expect 1 "image pinned by tag only" clean no "is not pinned"
@@ -221,24 +258,56 @@ expect 1 "rule without an ok line" clean no 'no `ok:` fixture line for rule(s): 
   "sed -i '/ok:/d' $FX/demo-rule.go"
 expect 1 "second rule without a fixture" clean no "fixture line for rule(s): second-rule" \
   'printf "  - id: second-rule\n    pattern: x\n" >> .semgrep.yml'
+expect 1 "no Go file to scan" clean no "0 Go files to scan, expected 1 to 4096" \
+  'git rm --quiet --cached main.go && rm main.go'
+printf 'package outside\n' > "$WORK/outside.go"
+expect 1 "untracked symlink outside repository root" clean no \
+  "refused 1 symlink or outside-root target(s): ['link.go']" 'ln -s ../outside.go link.go'
+
+# MAX_TARGETS = 4096 and MAX_FIXTURES = 64. fresh() tracks 1 non-fixture Go file (main.go) plus
+# 1 excluded fixture (tools/ci/semgrep/testdata/demo-rule.go):
+# - 4096 - 1 = 4095 untracked Go files -> 1 + 4095 = 4096 == MAX_TARGETS (accepted at boundary);
+# - 4097 untracked Go files -> 1 + 4097 = 4098 > 4096 (refused with MAX_TARGETS in diagnostic);
+# - 4159 untracked Go files -> 1 + 1 + 4159 = 4161 > 4160 = MAX_TARGETS + MAX_FIXTURES (streaming cap).
+expect 0 "4096 Go files at MAX_TARGETS boundary" clean yes "Semgrep: 4096 files scanned, 0 findings" \
+  "i=0; while [ \$i -lt 4095 ]; do printf 'package main\n' > u-\$i.go; i=\$((i + 1)); done"
+expect 1 "4097 untracked Go files above MAX_TARGETS" clean no "4098 Go files to scan, expected 1 to 4096" \
+  "i=0; while [ \$i -lt 4097 ]; do printf 'package main\n' > u-\$i.go; i=\$((i + 1)); done"
+expect 1 "listed Go paths above MAX_TARGETS + MAX_FIXTURES" clean no \
+  "git ls-files listed more than 4160 Go files" \
+  "i=0; while [ \$i -lt 4159 ]; do printf 'package main\n' > u-\$i.go; i=\$((i + 1)); done"
 
 # Defects only Semgrep's own answer reveals.
 expect 1 "fixture replay fails" fixture-fails yes "fixture tools/ci/semgrep/testdata/demo-rule.go did not pass (exit 1)"
 expect 1 "scan reports a finding" finding yes "1 finding(s), 0 error(s)"
+expect 1 "finding message with ANSI escape and 1000 chars" finding-ansi-long yes 'demo-rule: \x1b[31m'
+check_case "finding message cut marker" 0 0 "... [truncated]" "$out"
+esc_char="$(printf '\033')"
+case "$out" in
+  *"$esc_char"*)
+    echo "FAIL finding message with ANSI escape and 1000 chars: raw ESC in output" >&2
+    exit 1
+    ;;
+esac
+echo "ok   finding message cut marker and escaped control bytes"
 expect 1 "scan skips a file" skipped yes "report scanned 0 of 1 files; not scanned: ['main.go']"
 expect 1 "scan prints no report" no-json yes "no JSON report"
 expect 1 "clean report, failing exit" exit-2 yes "semgrep exited 2 with a clean report"
-expect 1 "no Go file to scan" clean yes "0 Go files to scan, expected 1 to 4096" 'git rm --quiet --cached main.go && rm main.go'
 
 # Targets: what a working tree holds, not only what the index lists.
 expect 0 "untracked Go file is scanned" clean yes "Semgrep: 2 files scanned, 0 findings" \
   'printf "package main\n" > extra.go'
+assert_scanned_set "untracked Go file is scanned" extra.go main.go
 expect 0 "ignored Go file is left out" clean yes "Semgrep: 1 files scanned, 0 findings" \
   'printf "ignored.go\n" > .gitignore && printf "package main\n" > ignored.go'
+assert_scanned_set "ignored Go file is left out" main.go
 expect 0 "deleted tracked file is left out" clean yes "Semgrep: 1 files scanned, 0 findings" \
   'printf "package main\n" > gone.go && git add gone.go && rm gone.go'
+assert_scanned_set "deleted tracked file is left out" main.go
 expect 1 "target added during scan" adds-file yes \
   "target set changed during the scan: 1 added, 0 removed: ['added.go']"
+expect 1 "target rewritten during scan" rewrites-file yes \
+  "target contents changed during the scan (1): ['main.go']"
 
 # Native binary (--semgrep): same replay and scanned-file check, state outside the home directory.
 NATIVE="$STUB" expect 0 "native binary, clean repository" clean yes \
@@ -263,6 +332,8 @@ NATIVE="$STUB" expect 0 "native without CI pin" clean yes "CI pin unknown" \
   'rm tools/ci/tool-versions.env'
 NATIVE="$STUB" expect 0 "native with missing CI tag" clean yes "CI pin unknown" \
   "sed -i 's/:[^:@]*@/@/' tools/ci/tool-versions.env"
+NATIVE="$STUB" expect 0 "native with FIFO tool-versions.env" clean yes "CI pin unknown" \
+  'rm tools/ci/tool-versions.env && mkfifo tools/ci/tool-versions.env'
 NATIVE="$STUB" expect 1 "native binary, scan skips a file" skipped yes \
   "report scanned 0 of 1 files; not scanned: ['main.go']"
 NATIVE="$STUB" expect 1 "native binary, scan reports a finding" finding yes "1 finding(s), 0 error(s)"
@@ -343,6 +414,11 @@ for case_name in review-only missing-fix prefix-only; do
   check_case "lane brief $case_name" 1 "$wiring_rc" "missing $missing_stage:" "$wiring_out"
   echo "ok   lane brief $case_name"
 done
+mkfifo "$WORK/fifo-brief.yaml"
+wiring_rc=0
+wiring_out="$(timeout 30 python3 -I "$WIRING" "$WORK/fifo-brief.yaml" 2>&1)" || wiring_rc=$?
+check_case "lane brief FIFO" 1 "$wiring_rc" "lane brief unreadable" "$wiring_out"
+echo "ok   lane brief FIFO"
 echo "ok   Makefile (verify-all, semgrep-scan), lefthook pre-push, CI semgrep job, Renovate and lane briefs wire semgrep_scan.py and SEMGREP_IMAGE"
 
 echo "semgrep scan: $accepted accepted, $refused refused"
