@@ -11,8 +11,11 @@
 # (three-repos), GITHUB_GRAPHQL_URL overriding the REST v3 URL variable (graphql-url-override),
 # default GraphQL URL when only the REST v3 URL variable is set (graphql-url-ignores-v3-url),
 # workflow-refs.yml carrying no uses entry (guard-job-no-uses), bash versions 4.4, 5.0 and 5.2
-# (bash-version-4-4, bash-version-5-0, bash-version-5-2), and stubs in this file and in
-# workflow-check_test.sh that run no GNU timeout (stubs-no-gnu-timeout).
+# (bash-version-4-4, bash-version-5-0, bash-version-5-2), stubs in this file and in
+# workflow-check_test.sh that run no GNU timeout (stubs-no-gnu-timeout), curl bounded by
+# --max-time 20 and --retry-max-time 55 to 60 under the default lookup deadline
+# (lookup-max-time-default) and by 1 to 5 under a 5 s deadline (lookup-max-time-short), and
+# WORKFLOW_REFS_DEADLINE_SECONDS at its bounds 1 and 9999 (deadline-env-1, deadline-env-9999).
 # Refused: a reusable workflow under a moved repository name (moved-workflow), a composite action
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
@@ -31,7 +34,10 @@
 # GraphQL errors member (gql-two-objects-errors) or duplicating data (gql-two-data-objects), a
 # nameWithOwner holding an embedded or trailing newline (gql-newline-name, gql-trailing-newline-name),
 # 101 repositories split across 2 GraphQL POSTs with a moved repository in the
-# second batch (over-100-repos), a missing token (missing-token), workflow_uses.py without PyYAML
+# second batch (over-100-repos), a lookup stalled past a 2 s deadline in batch 1 of 2
+# (lookup-deadline-batch-1), WORKFLOW_REFS_DEADLINE_SECONDS 0, 10000, 05 and abc (deadline-env-0,
+# deadline-env-10000, deadline-env-05, deadline-env-abc), a missing token (missing-token),
+# workflow_uses.py without PyYAML
 # (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), workflow-refs.yml
 # copies with a planted block uses step (guard-job-block-uses), flow uses step
 # (guard-job-flow-uses), local ./ uses step (guard-job-local-uses), escaped-key "\x75ses" step
@@ -349,9 +355,41 @@ set -eu
 python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
 printf '%s\n' '{"data":{"r0":{"nameWithOwner":"actions/checkout\n"}}}'
 SH
+# curl-slow: counts its call in CURL_COUNT_FILE like curl-moved, stalls 10 s, then answers as
+# curl-moved without counting again; the lookup deadline is expected to cut it first
+# (lookup-deadline-batch-1).
+cat > "$WORK/curl-slow" <<'SH'
+#!/bin/sh
+set -eu
+if [ -n "${CURL_COUNT_FILE:-}" ]; then
+  count=0
+  if [ -f "$CURL_COUNT_FILE" ]; then
+    read -r count < "$CURL_COUNT_FILE"
+  fi
+  printf '%s\n' "$((count + 1))" > "$CURL_COUNT_FILE"
+fi
+sleep 10
+unset CURL_COUNT_FILE
+exec "$(dirname "$0")/curl-moved" "$@"
+SH
+# curl-argv: writes each argument on its own line to CURL_ARGV_FILE (at most 64 arguments), then
+# answers as curl-moved with the same arguments and stdin.
+cat > "$WORK/curl-argv" <<'SH'
+#!/bin/sh
+set -eu
+: > "$CURL_ARGV_FILE"
+arg_n=0
+for arg in "$@"; do
+  arg_n=$((arg_n + 1))
+  [ "$arg_n" -le 64 ] || exit 2
+  printf '%s\n' "$arg" >> "$CURL_ARGV_FILE"
+done
+exec "$(dirname "$0")/curl-moved" "$@"
+SH
 chmod +x "$WORK/curl-moved" "$WORK/curl-want-url" "$WORK/curl-fails" "$WORK/curl-nameless" \
   "$WORK/curl-gql-errors" "$WORK/curl-null-alias" "$WORK/curl-two-objects-errors" \
-  "$WORK/curl-two-data-objects" "$WORK/curl-newline-name" "$WORK/curl-trailing-newline-name"
+  "$WORK/curl-two-data-objects" "$WORK/curl-newline-name" "$WORK/curl-trailing-newline-name" \
+  "$WORK/curl-slow" "$WORK/curl-argv"
 
 if ! selftest_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" --self-test 2>&1)"; then
   printf 'FAIL workflow-uses-selftest: self-test failed\n%s\n' "$selftest_out" >&2
@@ -699,6 +737,115 @@ if [ "$(cat "$WORK/curl.count")" != "2" ]; then
   echo "FAIL over-100-repos: expected 2 GraphQL calls, got $(cat "$WORK/curl.count")" >&2
   exit 1
 fi
+
+# The same 101 repositories with curl stalled 10 s and a 2 s lookup deadline: batch 1 of 2 is cut
+# by run_bounded.py (exit 1, deadline message) after 1 GraphQL call and within 8 s.
+cp -R "$WORK/over-100-repos" "$WORK/lookup-deadline-batch-1"
+rm -f "$WORK/curl.count"
+deadline_t0=$SECONDS
+expect_refusal lookup-deadline-batch-1 \
+  "repository lookup deadline of 2 s passed at batch 1 of 2 (first repository current/repo-000)" \
+  env WORKFLOW_REFS_DEADLINE_SECONDS=2 CURL_BIN="$WORK/curl-slow" CURL_COUNT_FILE="$WORK/curl.count"
+deadline_elapsed=$((SECONDS - deadline_t0))
+deadline_calls="$(cat "$WORK/curl.count" 2> /dev/null || echo 0)"
+if [ "$deadline_calls" != "1" ] || [ "$deadline_elapsed" -gt 8 ]; then
+  printf 'FAIL lookup-deadline-batch-1: want 1 GraphQL call within 8 s, got %s in %s s\n' \
+    "$deadline_calls" "$deadline_elapsed" >&2
+  exit 1
+fi
+
+# curl_arg_after FILE FLAG: print the line after the first FLAG line in FILE (at most 64 lines).
+curl_arg_after() {
+  local file="$1" flag="$2" line n=0 take=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    if [ "$n" -gt 64 ]; then
+      return 1
+    fi
+    if [ "$take" -eq 1 ]; then
+      printf '%s\n' "$line"
+      return 0
+    fi
+    if [ "$line" = "$flag" ]; then
+      take=1
+    fi
+  done < "$file"
+  return 1
+}
+
+# in_range VALUE LOW HIGH: succeed when VALUE is a whole number from LOW to HIGH.
+in_range() {
+  [[ "$1" =~ ^[0-9]{1,5}$ ]] && [ "$1" -ge "$2" ] && [ "$1" -le "$3" ]
+}
+
+# expect_curl_bounds CASE DEADLINE MAX_LOW MAX_HIGH RETRY_LOW RETRY_HIGH: run a copy of clean under
+# curl-argv with WORKFLOW_REFS_DEADLINE_SECONDS=DEADLINE (unset when DEADLINE is empty) and require
+# the values after --max-time and --retry-max-time inside the given ranges.
+expect_curl_bounds() {
+  local name="$1" max_time retry_time
+  local -a deadline_env=(-u WORKFLOW_REFS_DEADLINE_SECONDS)
+  if [ -n "$2" ]; then
+    deadline_env=("WORKFLOW_REFS_DEADLINE_SECONDS=$2")
+  fi
+  cp -R "$WORK/clean" "$WORK/$name"
+  expect_accepted "$name" "all 1 used by name are under their current name" \
+    env "${deadline_env[@]}" CURL_BIN="$WORK/curl-argv" CURL_ARGV_FILE="$WORK/$name.argv"
+  max_time="$(curl_arg_after "$WORK/$name.argv" --max-time)" || max_time=""
+  retry_time="$(curl_arg_after "$WORK/$name.argv" --retry-max-time)" || retry_time=""
+  if ! in_range "$max_time" "$3" "$4" || ! in_range "$retry_time" "$5" "$6"; then
+    printf 'FAIL %s: --max-time %s (want %s to %s), --retry-max-time %s (want %s to %s)\n' \
+      "$name" "$max_time" "$3" "$4" "$retry_time" "$5" "$6" >&2
+    exit 1
+  fi
+}
+
+expect_curl_bounds lookup-max-time-default "" 20 20 55 60
+expect_curl_bounds lookup-max-time-short 5 1 5 1 5
+
+# WORKFLOW_REFS_DEADLINE_SECONDS outside 1 to 9999 or not a plain whole number exits 2 before any
+# lookup (curl-fails would exit 1); 1 passes on a fixture with no repository (no lookup, so no
+# clock tick decides it) and 9999 on a copy of clean.
+for deadline_value in 0 10000 05 abc; do
+  deadline_rc=0
+  deadline_out="$(env WORKFLOW_REFS_DEADLINE_SECONDS="$deadline_value" CURL_BIN="$WORK/curl-fails" \
+    bash "$HERE/workflow_refs.sh" "$WORK/clean" 2>&1)" || deadline_rc=$?
+  deadline_needle="WORKFLOW_REFS_DEADLINE_SECONDS must be a whole number of seconds"
+  deadline_needle+=" from 1 to 9999, got '$deadline_value'"
+  if [ "$deadline_rc" -ne 2 ]; then
+    printf 'FAIL deadline-env-%s: want exit 2, got %s\n%s\n' \
+      "$deadline_value" "$deadline_rc" "$deadline_out" >&2
+    exit 1
+  fi
+  case "$deadline_out" in
+    *"$deadline_needle"*)
+      refused=$((refused + 1))
+      echo "ok   deadline-env-$deadline_value: refused (exit 2)"
+      ;;
+    *)
+      printf 'FAIL deadline-env-%s: exit 2 without "%s"\n%s\n' \
+        "$deadline_value" "$deadline_needle" "$deadline_out" >&2
+      exit 1
+      ;;
+  esac
+done
+mkdir -p "$WORK/deadline-env-1/.github/workflows"
+cat > "$WORK/deadline-env-1/.github/workflows/planted.yml" <<'YAML'
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - run: echo planted
+YAML
+expect_accepted deadline-env-1 "all 0 used by name are under their current name" \
+  env WORKFLOW_REFS_DEADLINE_SECONDS=1 CURL_BIN="$WORK/curl-fails"
+cp -R "$WORK/clean" "$WORK/deadline-env-9999"
+expect_accepted deadline-env-9999 "all 1 used by name are under their current name" \
+  env WORKFLOW_REFS_DEADLINE_SECONDS=9999 CURL_BIN="$WORK/curl-moved"
 
 # Missing GH_TOKEN and GITHUB_TOKEN is refused before any lookup.
 plant missing-token "$CHECKOUT # v7.0.1"
