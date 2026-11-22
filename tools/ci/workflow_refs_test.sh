@@ -14,8 +14,9 @@
 # (bash-version-4-4, bash-version-5-0, bash-version-5-2), stubs in this file and in
 # workflow-check_test.sh that run no GNU timeout (stubs-no-gnu-timeout), curl bounded by
 # --max-time 20 and --retry-max-time 55 to 60 under the default lookup deadline
-# (lookup-max-time-default) and by 1 to 5 under a 5 s deadline (lookup-max-time-short), and
-# WORKFLOW_REFS_DEADLINE_SECONDS at its bounds 1 and 9999 (deadline-env-1, deadline-env-9999).
+# (lookup-max-time-default) and by 1 to 5 under a 5 s deadline (lookup-max-time-short),
+# WORKFLOW_REFS_DEADLINE_SECONDS at its bounds 1 and 9999 (deadline-env-1, deadline-env-9999), and
+# workflow-refs.yml running on a schedule with a non-empty cron string (guard-job-schedule).
 # Refused: a reusable workflow under a moved repository name (moved-workflow), a composite action
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
@@ -38,8 +39,11 @@
 # (lookup-deadline-batch-1), WORKFLOW_REFS_DEADLINE_SECONDS 0, 10000, 05 and abc (deadline-env-0,
 # deadline-env-10000, deadline-env-05, deadline-env-abc), a missing token (missing-token),
 # workflow_uses.py without PyYAML
-# (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), workflow-refs.yml
-# copies with a planted block uses step (guard-job-block-uses), flow uses step
+# (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), with the deadline word
+# abc (pyyaml-venv-deadline-word) or against a package index that never answers past a 12 s
+# deadline (pyyaml-venv-stalled-index), workflow-refs.yml copies with no schedule
+# (guard-job-no-schedule), a schedule with no cron line (guard-job-empty-schedule), a planted
+# block uses step (guard-job-block-uses), flow uses step
 # (guard-job-flow-uses), local ./ uses step (guard-job-local-uses), escaped-key "\x75ses" step
 # (guard-job-escaped-key-uses), or escaped-key local uses step (guard-job-escaped-local-uses),
 # and unsupported bash versions 3.2, 4.3, 4.x and empty (bash-version-3-2, bash-version-4-3,
@@ -249,6 +253,52 @@ plant_guard_step() {
     fi
   done < "$src" > "$dst"
   [ "$steps_count" -eq 1 ] || return 1
+}
+
+# guard_has_schedule FILE: succeed when the on mapping of FILE (PyYAML reads the key on as True)
+# holds a schedule list with a mapping whose cron is a non-empty string; otherwise print
+# `no schedule entry with a cron string` and exit 1. Reads under a 10 s bound.
+guard_has_schedule() {
+  python3 -I "$RUN_BOUNDED_PY" 10 "${PYTHON_BIN:-python3}" -I -c '
+import sys
+
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    doc = yaml.safe_load(handle)
+on = doc.get(True) if isinstance(doc, dict) else None
+entries = on.get("schedule") if isinstance(on, dict) else None
+if not isinstance(entries, list):
+    entries = []
+crons = [entry.get("cron") for entry in entries if isinstance(entry, dict)]
+if not any(isinstance(cron, str) and cron.strip() for cron in crons):
+    print("no schedule entry with a cron string")
+    sys.exit(1)
+' "$1"
+}
+
+# plant_guard_unscheduled CASE MODE: copy workflow-refs.yml to $WORK/CASE.yml without its single
+# cron line (MODE cron) or without its single schedule: and cron lines (MODE schedule).
+plant_guard_unscheduled() {
+  local mode="$2" src="$REPO_ROOT/.github/workflows/workflow-refs.yml"
+  local dst="$WORK/$1.yml" line line_n=0 cron_n=0 schedule_n=0
+  local cron_re='^[[:space:]]+-[[:space:]]+cron:'
+  [ "$mode" = cron ] || [ "$mode" = schedule ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line_n=$((line_n + 1))
+    [ "$line_n" -le 65536 ] || return 1
+    if [[ "$line" =~ $cron_re ]]; then
+      cron_n=$((cron_n + 1))
+      continue
+    fi
+    if [ "$mode" = schedule ] && [ "$line" = "  schedule:" ]; then
+      schedule_n=$((schedule_n + 1))
+      continue
+    fi
+    printf '%s\n' "$line"
+  done < "$src" > "$dst"
+  [ "$cron_n" -eq 1 ] || return 1
+  [ "$mode" = cron ] || [ "$schedule_n" -eq 1 ]
 }
 
 # A fake GitHub GraphQL API: golusoris/<repo> moved to plurano/<repo> and moved/<repo> moved to
@@ -887,6 +937,93 @@ case "$venv_out" in
     ;;
 esac
 
+# pyyaml_venv.sh refuses the deadline word abc with exit 2 before it creates DIR.
+venv_rc=0
+venv_out="$(PYYAML_VENV_DEADLINE_SECONDS=abc bash "$HERE/pyyaml_venv.sh" "$WORK/venv-word" 2>&1)" ||
+  venv_rc=$?
+if [ "$venv_rc" -ne 2 ] || [ -e "$WORK/venv-word" ]; then
+  printf 'FAIL pyyaml-venv-deadline-word: want exit 2 and no DIR, got %s\n%s\n' \
+    "$venv_rc" "$venv_out" >&2
+  exit 1
+fi
+venv_needle="PYYAML_VENV_DEADLINE_SECONDS must be a whole number of seconds from 1 to 9999, got"
+case "$venv_out" in
+  *"$venv_needle 'abc'"*)
+    refused=$((refused + 1))
+    echo "ok   pyyaml-venv-deadline-word: refused (exit 2)"
+    ;;
+  *)
+    printf 'FAIL pyyaml-venv-deadline-word: exit 2 without the deadline message\n%s\n' \
+      "$venv_out" >&2
+    exit 1
+    ;;
+esac
+
+# start_stalled_index PORT_FILE: start in the background a loopback listener that accepts
+# connections and never answers (bounded to 60 s by run_bounded.py), set stall_pid, and wait at
+# most 10 s for PORT_FILE to hold its port; exit 1 when it does not.
+start_stalled_index() {
+  local wait_i
+  : > "$1"
+  python3 -I "$RUN_BOUNDED_PY" 60 python3 -I -c '
+import socket
+import time
+
+listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+listener.bind(("127.0.0.1", 0))
+listener.listen(16)
+print(listener.getsockname()[1], flush=True)
+time.sleep(60)
+' > "$1" 2> "$1.err" &
+  stall_pid=$!
+  for ((wait_i = 0; wait_i < 100; wait_i++)); do
+    if [[ "$(head -n 1 "$1")" =~ ^[0-9]{1,5}$ ]]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# pyyaml_venv.sh stops at its deadline against a package index that never answers.
+stall_pid=""
+if ! start_stalled_index "$WORK/stall.port"; then
+  printf 'FAIL pyyaml-venv-stalled-index: loopback listener did not start\n%s\n' \
+    "$(head -c 4096 "$WORK/stall.port.err")" >&2
+  exit 1
+fi
+stall_port="$(head -n 1 "$WORK/stall.port")"
+stall_t0=$SECONDS
+stall_rc=0
+stall_out="$(env -u PIP_EXTRA_INDEX_URL -u PIP_FIND_LINKS -u PIP_NO_INDEX \
+  PYYAML_VENV_DEADLINE_SECONDS=12 PIP_INDEX_URL="http://127.0.0.1:$stall_port/simple/" \
+  PIP_CONFIG_FILE=/dev/null NO_PROXY=127.0.0.1 no_proxy=127.0.0.1 \
+  bash "$HERE/pyyaml_venv.sh" "$WORK/venv-stalled" 2>&1)" || stall_rc=$?
+stall_elapsed=$((SECONDS - stall_t0))
+stall_stop="stopped"
+if ! kill "$stall_pid" 2> /dev/null; then
+  stall_stop="already gone"
+fi
+stall_wait_rc=0
+wait "$stall_pid" || stall_wait_rc=$?
+if [ "$stall_rc" -ne 1 ] || [ "$stall_elapsed" -gt 25 ]; then
+  printf 'FAIL pyyaml-venv-stalled-index: want exit 1 within 25 s, got %s after %s s\n' \
+    "$stall_rc" "$stall_elapsed" >&2
+  printf 'listener %s (wait rc %s)\n%s\n' "$stall_stop" "$stall_wait_rc" "$stall_out" >&2
+  exit 1
+fi
+case "$stall_out" in
+  *"PyYAML setup deadline of 12 s passed"*)
+    refused=$((refused + 1))
+    echo "ok   pyyaml-venv-stalled-index: refused (PyYAML setup deadline of 12 s passed)"
+    ;;
+  *)
+    printf 'FAIL pyyaml-venv-stalled-index: exit 1 without the deadline message\n%s\n' \
+      "$stall_out" >&2
+    exit 1
+    ;;
+esac
+
 # workflow-refs.yml carries no uses entry, and planted block, flow, local and escaped-key uses are refused.
 if ! guard_has_no_uses "$REPO_ROOT/.github/workflows/workflow-refs.yml"; then
   echo "FAIL guard-job-no-uses: workflow-refs.yml carried a uses entry" >&2
@@ -918,6 +1055,34 @@ for ((guard_i = 0; guard_i < 5 && guard_i < ${#guard_refused_cases[@]}; guard_i+
   fi
   refused=$((refused + 1))
   echo "ok   $guard_case: refused ($guard_label)"
+done
+
+# workflow-refs.yml runs on a schedule with a cron string; copies without the schedule or its
+# cron line are refused.
+if ! guard_has_schedule "$REPO_ROOT/.github/workflows/workflow-refs.yml" > /dev/null; then
+  echo "FAIL guard-job-schedule: workflow-refs.yml has no schedule entry with a cron string" >&2
+  exit 1
+fi
+accepted=$((accepted + 1))
+echo "ok   guard-job-schedule: accepted (schedule with a cron string)"
+
+for schedule_mode in schedule cron; do
+  schedule_case="guard-job-no-schedule"
+  [ "$schedule_mode" = schedule ] || schedule_case="guard-job-empty-schedule"
+  if ! plant_guard_unscheduled "$schedule_case" "$schedule_mode"; then
+    printf 'FAIL %s: failed to drop the %s line from workflow-refs.yml\n' \
+      "$schedule_case" "$schedule_mode" >&2
+    exit 1
+  fi
+  schedule_rc=0
+  schedule_out="$(guard_has_schedule "$WORK/$schedule_case.yml")" || schedule_rc=$?
+  if [ "$schedule_rc" -ne 1 ] || [ "$schedule_out" != "no schedule entry with a cron string" ]; then
+    printf 'FAIL %s: want exit 1 and no schedule entry, got %s: %s\n' \
+      "$schedule_case" "$schedule_rc" "$schedule_out" >&2
+    exit 1
+  fi
+  refused=$((refused + 1))
+  echo "ok   $schedule_case: refused (no schedule entry with a cron string)"
 done
 
 # bash_version.sh refuses < 4.4, non-integers and empty args, and accepts 4.4 (boundary) and 5.x.
