@@ -148,18 +148,27 @@ report_graphql_error() {
   exit 1
 }
 
-# query_batch OFFSET: look up up to BATCH_SIZE repositories starting at REPOS[OFFSET] in one
-# GraphQL POST, setting moved=1 on any renamed repository and exiting 1 on transport or schema error.
+# query_batch OFFSET REMAINING BATCH TOTAL: look up up to BATCH_SIZE repositories starting at
+# REPOS[OFFSET] in one GraphQL POST bounded by REMAINING seconds, setting moved=1 on any renamed
+# repository and exiting 1 on a transport or schema error or when the deadline passes.
 query_batch() {
-  local offset="$1" payload body first_repo repo actual i
+  local offset="$1" remaining="$2" batch_no="$3" total="$4" payload body first_repo repo actual i
+  local max_time rc=0
   local -a chunk=("${REPOS[@]:offset:BATCH_SIZE}") resolved=()
   first_repo="${chunk[0]}"
   payload="$(build_graphql_payload "$offset")"
-  if ! body="$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" |
-    "$CURL" -K - -fsS --max-time 20 --retry 2 \
+  max_time=$((remaining < 20 ? remaining : 20))
+  body="$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" |
+    "$PYTHON" -I "$HERE/run_bounded.py" "$remaining" "$CURL" -K - -fsS \
+      --max-time "$max_time" --retry 2 --retry-max-time "$remaining" \
       -H 'Content-Type: application/json' \
       --data-raw "$payload" \
-      "$GRAPHQL_URL")"; then
+      "$GRAPHQL_URL")" || rc=$?
+  if [ "$rc" -eq 124 ]; then
+    echo "error: ${FIRST_USE[$first_repo]}: repository lookup deadline of $DEADLINE_SECONDS s passed at batch $batch_no of $total (first repository $first_repo) ($GRAPHQL_URL)" >&2
+    exit 1
+  fi
+  if [ "$rc" -ne 0 ]; then
     echo "error: ${FIRST_USE[$first_repo]}: cannot read repository $first_repo from $GRAPHQL_URL" >&2
     exit 1
   fi
@@ -205,7 +214,7 @@ for ((batch = 0; batch < MAX_BATCHES && batch * BATCH_SIZE < ${#REPOS[@]}; batch
     echo "error: ${FIRST_USE[$first_repo]}: repository lookup deadline of $DEADLINE_SECONDS s passed at batch $((batch + 1)) of $total_batches (first repository $first_repo)" >&2
     exit 1
   fi
-  query_batch $((batch * BATCH_SIZE))
+  query_batch $((batch * BATCH_SIZE)) "$remaining" $((batch + 1)) "$total_batches"
 done
 if [ "$moved" -ne 0 ]; then
   exit 1
