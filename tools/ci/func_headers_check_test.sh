@@ -641,6 +641,51 @@ edit_90() {
         'outer_doc() { inner_bare() { :; } && inner_bare; } && outer_doc' >nested-and.sh
 }
 
+# edit_91: editing the command after && does not touch the chained function.
+edit_91() {
+    printf '%s\n' '#!/usr/bin/env bash' 'chain_and() { :; } &&' \
+        '    printf '\''%s\n'\'' old' >chain-and.sh
+    git add chain-and.sh && git commit -q -m chain-and
+    sed -i 's/old/new/' chain-and.sh
+}
+
+# edit_92: editing the command after || does not touch the chained function.
+edit_92() {
+    printf '%s\n' '#!/usr/bin/env bash' 'chain_or() { :; } ||' \
+        '    printf '\''%s\n'\'' old' >chain-or.sh
+    git add chain-or.sh && git commit -q -m chain-or
+    sed -i 's/old/new/' chain-or.sh
+}
+
+# edit_93: editing the command after a pipe does not touch the chained function.
+edit_93() {
+    printf '%s\n' '#!/usr/bin/env bash' 'chain_pipe() { :; } |' '    tr a b' >chain-pipe.sh
+    git add chain-pipe.sh && git commit -q -m chain-pipe
+    sed -i 's/tr a b/tr a c/' chain-pipe.sh
+}
+
+# edit_94: editing the body of a chained bare function is refused.
+edit_94() {
+    printf '%s\n' '#!/usr/bin/env bash' 'chain_body() {' '    echo old' '} &&' \
+        '    printf '\''%s\n'\'' done' >chain-body.sh
+    git add chain-body.sh && git commit -q -m chain-body
+    sed -i 's/echo old/echo new/' chain-body.sh
+}
+
+# edit_95: deleting a chained line after the closing brace does not touch the function.
+edit_95() {
+    printf '%s\n' '#!/usr/bin/env bash' 'chain_gap() {' '    :' '} &&' \
+        '    printf '\''%s\n'\'' a &&' '    printf '\''%s\n'\'' b' >chain-gap.sh
+    git add chain-gap.sh && git commit -q -m chain-gap
+    sed -i '/ a &&$/d' chain-gap.sh
+}
+
+# edit_96: a function in the right operand of a chain is still checked.
+edit_96() {
+    printf '%s\n' '#!/usr/bin/env bash' '# left_fn is documented.' \
+        'left_fn() { :; } &&' '    right_fn() { :; }' >chain-two.sh
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -738,6 +783,12 @@ expect "documented function followed by && passes" 0 "ok (" edit_87
 expect "documented function followed by || passes" 0 "ok (" edit_88
 expect "documented function followed by a pipe passes" 0 "ok (" edit_89
 expect "nested function on header line does not inherit outer header" 1 "shell function inner_bare has no header comment" edit_90
+expect "command after && does not touch the chained function" 0 "ok (" edit_91
+expect "command after || does not touch the chained function" 0 "ok (" edit_92
+expect "command after a pipe does not touch the chained function" 0 "ok (" edit_93
+expect "body edit in a chained function is refused" 1 "shell function chain_body has no header comment" edit_94
+expect "deletion after the closing brace does not touch the chained function" 0 "ok (" edit_95
+expect "function in the right operand is still checked" 1 "shell function right_fn has no header comment" edit_96
 
 if [ "$failed" -ne 0 ]; then
     exit 1

@@ -183,12 +183,25 @@ def shell_line(node: dict, key: str, path: str) -> int:
     return line
 
 
+def shell_func_end(cmd: dict, start: int, path: str) -> int:
+    """Return the end line of a FuncDecl body before any chained BinaryCmd."""
+    stmt = cmd.get("Body")
+    for _ in range(MAX_SHELL_NODES):
+        if not isinstance(stmt, dict):
+            raise CheckError(f"{path}:{start}: shfmt FuncDecl Body missing")
+        inner = stmt.get("Cmd")
+        if not isinstance(inner, dict) or inner.get("Type") != "BinaryCmd":
+            return shell_line(stmt, "End", path)
+        stmt = inner.get("X")
+    raise CheckError(f"{path}: shfmt syntax tree exceeds {MAX_SHELL_NODES} nodes")
+
+
 def shell_func_entry(
     node: dict, cmd: dict, path: str
 ) -> tuple[str, int, int, list[dict]]:
     """Read one FuncDecl statement node and fail closed on anonymous or overflowed nodes."""
     start = shell_line(cmd, "Pos", path)
-    end = shell_line(cmd, "End", path)
+    end = shell_func_end(cmd, start, path)
     name = cmd.get("Name")
     if not isinstance(name, dict) or not name.get("Value"):
         raise CheckError(f"{path}:{start}: anonymous functions are a zsh feature")
