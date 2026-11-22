@@ -3,13 +3,14 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 //! Sends a unary call once more when the connection it was queued on closed before the call
-//! left the worker. The API rotates gRPC connections (`max_connection_age`); a call queued on
-//! the old connection in the moment it closes is refused by hyper with a cancel ("connection was
-//! not ready", "connection closed") before any byte reaches the API, so sending it again on the
-//! next connection is safe for every call. The soak (`make e2e-soak`, C14-01) counted these as
-//! failed API calls. [`stream_once_more`] opens a client stream again the same way, on the same
-//! receiver, so no event emitted meanwhile is lost; an attempt that took an item is not reopened
-//! and the first refusal is returned.
+//! left the worker; the second attempt waits a random time up to `RESEND_WAIT`. The API rotates
+//! gRPC connections (`max_connection_age`); a call queued on the old connection in the moment it
+//! closes is refused by hyper with a cancel ("connection was not ready", "connection closed")
+//! before any byte reaches the API, so sending it again on the next connection is safe for every
+//! call. The soak (`make e2e-soak`, C14-01) counted these as failed API calls.
+//! [`stream_once_more`] opens a client stream again the same way, on the same receiver, so no
+//! event emitted meanwhile is lost; an attempt that took an item is not reopened and the first
+//! refusal is returned.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -26,6 +27,10 @@ const MAX_SOURCE_DEPTH: usize = 8;
 /// Upper bound on waiting for a dropped call attempt to hand its receiver back: hyper drops an
 /// unsent body before it answers, so this is a HISS-02 bound.
 const RETURN_WAIT: Duration = Duration::from_secs(1);
+
+/// Upper bound on the random wait before the second attempt (HISS-02): spreads workers refused
+/// in the same connection rotation so they do not retry in lockstep.
+const RESEND_WAIT: Duration = Duration::from_millis(250);
 
 /// Whether `status` is hyper's refusal of a request it never handed to a connection. hyper
 /// reports only that case as canceled on the client side; tonic maps it to `Cancelled` and keeps
@@ -47,8 +52,9 @@ pub fn unsent(status: &Status) -> bool {
     false
 }
 
-/// Runs `call`, and runs it once more when the first attempt was never sent. Any other
-/// outcome, and the outcome of the second attempt, is returned as is.
+/// Runs `call`, and runs it once more when the first attempt was never sent; the second attempt
+/// waits a random time up to `RESEND_WAIT`. Any other outcome, and the outcome of the second
+/// attempt, is returned as is.
 pub async fn once_more<T, F, Fut>(mut call: F) -> Result<T, Status>
 where
     F: FnMut() -> Fut,
@@ -57,6 +63,7 @@ where
     match call().await {
         Err(status) if unsent(&status) => {
             tracing::debug!(%status, "call not sent on a closing connection; sending it again");
+            tokio::time::sleep(crate::backoff::jitter(RESEND_WAIT)).await;
             call().await
         }
         other => other,
@@ -100,9 +107,10 @@ impl<T> Drop for Lent<T> {
 }
 
 /// Runs `call` with `rx` lent as a request stream, and opens it once more on the same receiver
-/// when the first attempt was never sent and dropped its stream within `RETURN_WAIT`. Any other
-/// outcome, and the outcome of the second attempt, is returned as is. An attempt that took an
-/// item is not reopened and the first refusal is returned.
+/// when the first attempt was never sent and dropped its stream within `RETURN_WAIT`; the second
+/// attempt waits a random time up to `RESEND_WAIT`. Any other outcome, and the outcome of the
+/// second attempt, is returned as is. An attempt that took an item is not reopened and the first
+/// refusal is returned.
 pub async fn stream_once_more<T, R, F, Fut>(rx: mpsc::Receiver<T>, mut call: F) -> Result<R, Status>
 where
     F: FnMut(Lent<T>) -> Fut,
@@ -123,6 +131,7 @@ where
                 %status,
                 "event stream not sent on a closing connection; opening it again"
             );
+            tokio::time::sleep(crate::backoff::jitter(RESEND_WAIT)).await;
             call(Lent {
                 rx: Some(rx),
                 back: None,
@@ -390,5 +399,62 @@ mod tests {
         let mut returned = back_rx.await.expect("receiver handed back");
         tx.send(99).await.expect("send after return");
         assert_eq!(returned.recv().await, Some(99));
+    }
+
+    // The clock starts paused so `start` sits on the timer tick and the upper bound holds.
+    #[tokio::test(start_paused = true)]
+    async fn once_more_waits_before_the_second_attempt() {
+        let status = unsent_status().await;
+        let start = tokio::time::Instant::now();
+        let (result, attempts) = run(vec![Err(status), Ok(7)]).await;
+        let elapsed = start.elapsed();
+        assert_eq!(result.expect("second attempt answers"), 7);
+        assert_eq!(attempts, 2);
+        assert!(
+            elapsed >= RESEND_WAIT / 2 && elapsed <= RESEND_WAIT,
+            "elapsed {elapsed:?} outside {:?}..={RESEND_WAIT:?}",
+            RESEND_WAIT / 2
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stream_once_more_waits_before_the_second_attempt() {
+        let status = unsent_status().await;
+        let (tx, rx) = mpsc::channel::<u32>(4);
+        tx.send(1).await.expect("first item");
+        tx.send(2).await.expect("second item");
+        drop(tx);
+        let start = tokio::time::Instant::now();
+        let attempts = AtomicU32::new(0);
+        let result = stream_once_more(rx, |events| {
+            let n = attempts.fetch_add(1, Ordering::SeqCst);
+            let status = status.clone();
+            async move {
+                if n == 0 {
+                    drop(events);
+                    return Err(status);
+                }
+                Ok(events.collect::<Vec<_>>().await)
+            }
+        })
+        .await;
+        let elapsed = start.elapsed();
+        assert_eq!(result.expect("second attempt answers"), vec![1, 2]);
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert!(
+            elapsed >= RESEND_WAIT / 2 && elapsed <= RESEND_WAIT,
+            "elapsed {elapsed:?} outside {:?}..={RESEND_WAIT:?}",
+            RESEND_WAIT / 2
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn once_more_does_not_wait_after_an_answer() {
+        let status = Status::unavailable("down");
+        let start = tokio::time::Instant::now();
+        let (result, attempts) = run(vec![Err(status)]).await;
+        assert_eq!(result.expect_err("refused").code(), Code::Unavailable);
+        assert_eq!(attempts, 1);
+        assert_eq!(start.elapsed(), Duration::ZERO);
     }
 }

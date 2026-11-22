@@ -8,6 +8,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 mod auth;
+mod backoff;
 mod config;
 mod executor;
 mod health;
