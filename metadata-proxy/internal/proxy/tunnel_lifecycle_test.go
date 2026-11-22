@@ -13,7 +13,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -295,13 +297,77 @@ func startSingleConnListener(t *testing.T, deadline time.Duration, handle func(n
 func TestSingleConnListenerCleanupInterruptsHandler(t *testing.T) {
 	t.Parallel()
 
+	cases := []struct {
+		name           string
+		connectClient  bool
+		waitForHandler bool
+		wantErr        bool
+	}{
+		{
+			name:           "positive: cleanup interrupts handler and waits for handler exit",
+			connectClient:  true,
+			waitForHandler: true,
+		},
+		{
+			name:           "negative: cleanup returning before handler exits is rejected",
+			connectClient:  true,
+			waitForHandler: false,
+			wantErr:        true,
+		},
+		{
+			name:           "boundary: cleanup before any client connects closes listener cleanly",
+			connectClient:  false,
+			waitForHandler: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := runSingleConnCleanupCase(t, tc.connectClient, tc.waitForHandler)
+			if tc.wantErr && err == nil {
+				t.Fatal("expected cleanup barrier check to fail, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("cleanup barrier check failed: %v", err)
+			}
+		})
+	}
+}
+
+func runSingleConnCleanupCase(t *testing.T, connectClient, waitForHandler bool) error {
+	t.Helper()
 	handlerStarted := make(chan struct{})
+	copyInterrupted := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	handlerExited := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(releaseHandler) }) }
+	defer unblock()
+
+	var acceptedConn net.Conn
+	var acceptedMu sync.Mutex
 	port, cleanup := startSingleConnListener(t, singleConnListenerDeadline, func(conn net.Conn) {
+		defer close(handlerExited)
+		acceptedMu.Lock()
+		acceptedConn = conn
+		acceptedMu.Unlock()
 		close(handlerStarted)
 		_, _ = io.Copy(io.Discard, conn)
+		close(copyInterrupted)
+		<-releaseHandler
 	})
 	t.Cleanup(cleanup)
-	client, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+
+	if !connectClient {
+		cleanup()
+		assertListenerRefusesDial(t, fmt.Sprintf("127.0.0.1:%d", port))
+		return nil
+	}
+
+	dialCtx, dialCancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer dialCancel()
+	client, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		t.Fatalf("dial single-connection listener: %v", err)
 	}
@@ -312,15 +378,56 @@ func TestSingleConnListenerCleanupInterruptsHandler(t *testing.T) {
 		t.Fatal("handler did not start within bound")
 	}
 
+	runCleanup := cleanup
+	if !waitForHandler {
+		runCleanup = func() {
+			acceptedMu.Lock()
+			c := acceptedConn
+			acceptedMu.Unlock()
+			if c != nil {
+				_ = c.Close()
+			}
+		}
+	}
+	return verifyCleanupWaitsForHandler(runCleanup, copyInterrupted, unblock, handlerExited)
+}
+
+func verifyCleanupWaitsForHandler(
+	cleanup func(),
+	copyInterrupted <-chan struct{},
+	unblockHandler func(),
+	handlerExited <-chan struct{},
+) error {
 	cleanupDone := make(chan struct{})
 	go func() {
 		cleanup()
 		close(cleanupDone)
 	}()
+
+	select {
+	case <-copyInterrupted:
+	case <-time.After(2 * time.Second):
+		return errors.New("cleanup did not interrupt blocked handler read")
+	}
+
+	select {
+	case <-cleanupDone:
+		return errors.New("cleanup returned while handler barrier was still held")
+	case <-time.After(40 * time.Millisecond):
+	}
+
+	unblockHandler()
 	select {
 	case <-cleanupDone:
 	case <-time.After(2 * time.Second):
-		t.Fatal("listener cleanup did not return within bound")
+		return errors.New("listener cleanup did not return within bound")
+	}
+
+	select {
+	case <-handlerExited:
+		return nil
+	default:
+		return errors.New("cleanup returned before handler exited")
 	}
 }
 
@@ -557,13 +664,75 @@ func assertClientsClosedAfterStop(t *testing.T, clients []establishedClient) {
 	}
 }
 
+func isConnRefused(err error) bool {
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return true
+	}
+	return runtime.GOOS == "windows" && errors.Is(err, syscall.Errno(10061))
+}
+
+func checkPostStopDialError(dialErr error) error {
+	if dialErr == nil {
+		return errors.New("expected dial after Stop to fail, got nil error")
+	}
+	if !isConnRefused(dialErr) {
+		return fmt.Errorf("expected connection refused after Stop, got: %w", dialErr)
+	}
+	return nil
+}
+
 func assertListenerRefusesDial(t *testing.T, proxyAddr string) {
 	t.Helper()
 	dialCtx, dialCancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer dialCancel()
 	postConn, dialErr := (&net.Dialer{}).DialContext(dialCtx, "tcp", proxyAddr)
 	if dialErr == nil {
-		postConn.Close()
-		t.Fatal("expected dial after Stop to fail, got nil error")
+		_ = postConn.Close()
+	}
+	if err := checkPostStopDialError(dialErr); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckPostStopDialError(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		dialErr error
+		wantErr bool
+	}{
+		{
+			name:    "positive: connection refused satisfies post-Stop check",
+			dialErr: &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED},
+		},
+		{
+			name:    "negative: dial timeout does not satisfy post-Stop refusal check",
+			dialErr: &net.OpError{Op: "dial", Net: "tcp", Err: context.DeadlineExceeded},
+			wantErr: true,
+		},
+		{
+			name:    "negative: unrelated network error does not satisfy post-Stop refusal check",
+			dialErr: &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ENETUNREACH},
+			wantErr: true,
+		},
+		{
+			name:    "boundary: nil dial error fails check",
+			dialErr: nil,
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := checkPostStopDialError(tc.dialErr)
+			if tc.wantErr && err == nil {
+				t.Fatalf("checkPostStopDialError(%v) = nil, want error", tc.dialErr)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("checkPostStopDialError(%v) = %v, want nil", tc.dialErr, err)
+			}
+		})
 	}
 }

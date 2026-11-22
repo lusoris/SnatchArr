@@ -6,11 +6,17 @@ package app_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +30,8 @@ import (
 	"github.com/lusoris/SnatchArr/metadata-proxy/internal/config"
 	"github.com/lusoris/SnatchArr/metadata-proxy/internal/proxy"
 )
+
+const maxFunctionLines = 60
 
 func reservePort(t *testing.T) int {
 	t.Helper()
@@ -43,25 +51,16 @@ func TestModuleGraphValidates(t *testing.T) {
 	}
 }
 
-func TestAppLifecycleAndAdminProbes(t *testing.T) {
-	t.Parallel()
-
+func startTestAdminApp(t *testing.T) string {
+	t.Helper()
 	adminPort := reservePort(t)
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, "config.yaml")
-	yamlBody := `metadata_proxy:
-  mode: log
-  listeners:
-    - app: sonarr
-      port: 18081
-  allow_hosts:
-    - skyhook.sonarr.tv
-`
+	cfgFile := filepath.Join(t.TempDir(), "config.yaml")
+	yamlBody := "metadata_proxy:\n  mode: log\n  listeners:\n    - app: sonarr\n      port: 18081\n  allow_hosts:\n    - skyhook.sonarr.tv\n"
 	if err := os.WriteFile(cfgFile, []byte(yamlBody), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
-	adminAddr := net.JoinHostPort("127.0.0.1", strings.TrimSpace(http.CanonicalHeaderKey(""))+itoa(adminPort))
+	adminAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(adminPort))
 	fxApp := fx.New(
 		fx.NopLogger,
 		fx.Supply(app.BuildInfo{Version: "test", Commit: "abc1234", Date: "2026-11-15"}),
@@ -82,9 +81,9 @@ func TestAppLifecycleAndAdminProbes(t *testing.T) {
 		}),
 	)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	if err := fxApp.Start(ctx); err != nil {
+	startCtx, startCancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer startCancel()
+	if err := fxApp.Start(startCtx); err != nil {
 		t.Fatalf("fxApp.Start: %v", err)
 	}
 	t.Cleanup(func() {
@@ -92,25 +91,42 @@ func TestAppLifecycleAndAdminProbes(t *testing.T) {
 		defer stopCancel()
 		_ = fxApp.Stop(stopCtx)
 	})
+	return adminAddr
+}
 
+func TestAppLifecycleAndAdminProbes(t *testing.T) {
+	t.Parallel()
+
+	adminAddr := startTestAdminApp(t)
 	client := &http.Client{Timeout: 5 * time.Second}
 	for _, path := range []string{"/livez", "/readyz", "/startupz", "/metrics"} {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+adminAddr+path, nil)
-		if err != nil {
-			t.Fatalf("new request %s: %v", path, err)
+		wantBody := ""
+		if path == "/metrics" {
+			wantBody = "app_check_status"
 		}
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("GET %s: %v", path, err)
-		}
-		body, _ := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s status = %d, body = %s", path, resp.StatusCode, string(body))
-		}
-		if path == "/metrics" && !strings.Contains(string(body), "app_check_status") {
-			t.Fatalf("/metrics missing status gauges:\n%s", string(body))
-		}
+		assertAdminProbeOK(t, client, adminAddr, path, wantBody)
+	}
+}
+
+func assertAdminProbeOK(t *testing.T, client *http.Client, adminAddr, path, wantBody string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+adminAddr+path, nil)
+	if err != nil {
+		t.Fatalf("new request %s: %v", path, err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s status = %d, body = %s", path, resp.StatusCode, string(body))
+	}
+	if wantBody != "" && !strings.Contains(string(body), wantBody) {
+		t.Fatalf("GET %s missing %q:\n%s", path, wantBody, string(body))
 	}
 }
 
@@ -137,15 +153,56 @@ func TestAppRefusesInvalidConfigOnStart(t *testing.T) {
 	}
 }
 
-func itoa(n int) string {
-	var buf [20]byte
-	i := len(buf)
-	for n >= 10 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
+func checkAppTestSource(filename string, src any) error {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filename, src, 0)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", filename, err)
 	}
-	i--
-	buf[i] = byte('0' + n)
-	return string(buf[i:])
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		if fn.Name.Name == "itoa" {
+			return errors.New("custom itoa helper declared; use strconv.Itoa")
+		}
+		lines := fset.Position(fn.End()).Line - fset.Position(fn.Pos()).Line + 1
+		if lines > maxFunctionLines {
+			return fmt.Errorf("function %s spans %d lines, max %d", fn.Name.Name, lines, maxFunctionLines)
+		}
+	}
+	return nil
+}
+
+func TestAppTestFileConventions(t *testing.T) {
+	t.Parallel()
+
+	sixtyLineBody := "package p\nfunc f() {\n" + strings.Repeat("\t_ = 1\n", maxFunctionLines-2) + "}\n"
+	sixtyOneLineBody := "package p\nfunc f() {\n" + strings.Repeat("\t_ = 1\n", maxFunctionLines-1) + "}\n"
+
+	cases := []struct {
+		name    string
+		file    string
+		src     any
+		wantErr bool
+	}{
+		{name: "positive: app_test.go obeys function length and stdlib port formatting", file: "app_test.go"},
+		{name: "negative: function exceeding 60 lines rejected", file: "long.go", src: sixtyOneLineBody, wantErr: true},
+		{name: "negative: custom itoa helper rejected", file: "itoa.go", src: "package p\nfunc itoa(n int) string { return \"\" }\n", wantErr: true},
+		{name: "boundary: function of exactly 60 lines accepted", file: "edge.go", src: sixtyLineBody},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := checkAppTestSource(tc.file, tc.src)
+			if tc.wantErr && err == nil {
+				t.Fatalf("checkAppTestSource(%s) = nil, want error", tc.file)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("checkAppTestSource(%s) = %v, want nil", tc.file, err)
+			}
+		})
+	}
 }

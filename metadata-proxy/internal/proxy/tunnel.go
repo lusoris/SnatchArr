@@ -14,7 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sync/atomic"
+	"sync"
 	"syscall"
 	"time"
 
@@ -178,18 +178,17 @@ func (s *Service) copyBothWays(
 ) (int64, int64) {
 	opts := s.compiled.Options
 	close(maxTimerStart)
-	var lastActivity atomic.Int64
-	lastActivity.Store(s.clock.Now().UnixNano())
+	activity := newTunnelActivity(s.clock.Now())
 
 	upCh := make(chan int64, 1)
 	go func() {
-		n := initialUp + pump(upstream, clientConn, opts.IdleTimeout, tunnelDeadline, s.clock, &lastActivity)
+		n := initialUp + pump(upstream, clientConn, opts.IdleTimeout, tunnelDeadline, s.clock, activity)
 		closeConn(s.logger, sideUpstream, upstream)
 		closeConn(s.logger, sideClient, clientConn)
 		upCh <- n
 	}()
 
-	down := pump(clientConn, upstream, opts.IdleTimeout, tunnelDeadline, s.clock, &lastActivity)
+	down := pump(clientConn, upstream, opts.IdleTimeout, tunnelDeadline, s.clock, activity)
 	closeConn(s.logger, sideClient, clientConn)
 	closeConn(s.logger, sideUpstream, upstream)
 	up := <-upCh
@@ -231,22 +230,25 @@ func pump(
 	idleTimeout time.Duration,
 	tunnelDeadline time.Time,
 	clk clock.Clock,
-	lastActivity *atomic.Int64,
+	activity *tunnelActivity,
 ) int64 {
 	buf := make([]byte, tunnelBufSize)
 	var total int64
 	for range maxPumpReads {
-		if err := src.SetReadDeadline(activityDeadline(lastActivity, idleTimeout, tunnelDeadline)); err != nil {
+		if err := src.SetReadDeadline(activity.deadline(idleTimeout, tunnelDeadline)); err != nil {
 			return total
 		}
 		n, readErr := src.Read(buf)
-		wrote, writeOK := forwardPumpBytes(dst, buf[:n], idleTimeout, tunnelDeadline, clk, lastActivity)
+		if n > 0 {
+			activity.touch(clk.Now())
+		}
+		wrote, writeOK := forwardPumpBytes(dst, buf[:n], idleTimeout, tunnelDeadline, clk, activity)
 		total += int64(wrote)
 		if !writeOK {
 			return total
 		}
 		if readErr != nil {
-			if n == 0 && retrySharedIdleTimeout(readErr, clk.Now(), lastActivity, idleTimeout, tunnelDeadline) {
+			if retrySharedIdleTimeout(readErr, clk.Now(), activity, idleTimeout, tunnelDeadline) {
 				continue
 			}
 			return total
@@ -261,33 +263,77 @@ func forwardPumpBytes(
 	idleTimeout time.Duration,
 	tunnelDeadline time.Time,
 	clk clock.Clock,
-	lastActivity *atomic.Int64,
+	activity *tunnelActivity,
 ) (int, bool) {
-	if len(buf) == 0 {
-		return 0, true
+	totalWrote := 0
+	pending := buf
+	for range maxPumpReads {
+		if len(pending) == 0 {
+			return totalWrote, true
+		}
+		if err := dst.SetWriteDeadline(activity.deadline(idleTimeout, tunnelDeadline)); err != nil {
+			return totalWrote, false
+		}
+		wrote, err := dst.Write(pending)
+		if wrote > 0 {
+			totalWrote += wrote
+			pending = pending[wrote:]
+			activity.touch(clk.Now())
+		}
+		if !canContinueWrite(wrote, err, clk.Now(), activity, idleTimeout, tunnelDeadline) {
+			return totalWrote, false
+		}
 	}
-	lastActivity.Store(clk.Now().UnixNano())
-	if err := dst.SetWriteDeadline(stepDeadline(clk.Now(), idleTimeout, tunnelDeadline)); err != nil {
-		return 0, false
-	}
-	wrote, err := dst.Write(buf)
-	return wrote, err == nil
+	return totalWrote, false
 }
 
-func retrySharedIdleTimeout(
-	readErr error,
+func canContinueWrite(
+	wrote int,
+	writeErr error,
 	now time.Time,
-	lastActivity *atomic.Int64,
+	activity *tunnelActivity,
 	idleTimeout time.Duration,
 	tunnelDeadline time.Time,
 ) bool {
-	return errors.Is(readErr, os.ErrDeadlineExceeded) &&
-		now.Before(activityDeadline(lastActivity, idleTimeout, tunnelDeadline))
+	if writeErr == nil {
+		return wrote > 0
+	}
+	return retrySharedIdleTimeout(writeErr, now, activity, idleTimeout, tunnelDeadline)
 }
 
-func activityDeadline(lastActivity *atomic.Int64, idleTimeout time.Duration, tunnelDeadline time.Time) time.Time {
-	lastActive := time.Unix(0, lastActivity.Load())
-	return stepDeadline(lastActive, idleTimeout, tunnelDeadline)
+func retrySharedIdleTimeout(
+	ioErr error,
+	now time.Time,
+	activity *tunnelActivity,
+	idleTimeout time.Duration,
+	tunnelDeadline time.Time,
+) bool {
+	return errors.Is(ioErr, os.ErrDeadlineExceeded) &&
+		now.Before(activity.deadline(idleTimeout, tunnelDeadline))
+}
+
+type tunnelActivity struct {
+	mu   sync.Mutex
+	last time.Time
+}
+
+func newTunnelActivity(now time.Time) *tunnelActivity {
+	return &tunnelActivity{last: now}
+}
+
+func (a *tunnelActivity) touch(now time.Time) {
+	a.mu.Lock()
+	if now.After(a.last) {
+		a.last = now
+	}
+	a.mu.Unlock()
+}
+
+func (a *tunnelActivity) deadline(idleTimeout time.Duration, tunnelDeadline time.Time) time.Time {
+	a.mu.Lock()
+	last := a.last
+	a.mu.Unlock()
+	return stepDeadline(last, idleTimeout, tunnelDeadline)
 }
 
 func stepDeadline(now time.Time, idleTimeout time.Duration, tunnelDeadline time.Time) time.Time {
