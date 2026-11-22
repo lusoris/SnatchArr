@@ -16,6 +16,8 @@
 #
 # Exit status: 0 clean, 1 a finding or a failed lookup, 2 usage or unsupported bash.
 # Needs bash 4.4 or newer (mapfile -d), python3 with PyYAML, jq, curl, network, token (GH_TOKEN or GITHUB_TOKEN).
+# WORKFLOW_REFS_DEADLINE_SECONDS (default 60, a whole number from 1 to 9999, else exit 2) bounds all
+# repository lookups together; a passed deadline exits 1 naming the batch it stopped at.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,6 +30,12 @@ fi
 
 if [ $# -gt 1 ]; then
   echo "usage: ${0##*/} [ROOT]" >&2
+  exit 2
+fi
+
+DEADLINE_SECONDS="${WORKFLOW_REFS_DEADLINE_SECONDS:-60}"
+if ! [[ "$DEADLINE_SECONDS" =~ ^[1-9][0-9]{0,3}$ ]]; then
+  echo "error: WORKFLOW_REFS_DEADLINE_SECONDS must be a whole number of seconds from 1 to 9999, got '$DEADLINE_SECONDS'" >&2
   exit 2
 fi
 
@@ -188,7 +196,15 @@ query_batch() {
 
 moved=0
 checked=0
+total_batches=$(( (${#REPOS[@]} + BATCH_SIZE - 1) / BATCH_SIZE ))
+deadline_at=$((SECONDS + DEADLINE_SECONDS))
 for ((batch = 0; batch < MAX_BATCHES && batch * BATCH_SIZE < ${#REPOS[@]}; batch++)); do
+  remaining=$((deadline_at - SECONDS))
+  first_repo="${REPOS[$((batch * BATCH_SIZE))]}"
+  if [ "$remaining" -le 0 ]; then
+    echo "error: ${FIRST_USE[$first_repo]}: repository lookup deadline of $DEADLINE_SECONDS s passed at batch $((batch + 1)) of $total_batches (first repository $first_repo)" >&2
+    exit 1
+  fi
   query_batch $((batch * BATCH_SIZE))
 done
 if [ "$moved" -ne 0 ]; then
