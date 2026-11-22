@@ -26,7 +26,7 @@ Settings load through `golusoris/core/config` under the `metadata_proxy` key tre
 | `metadata_proxy.max_tunnel` | `APP_METADATA_PROXY_MAX_TUNNEL` | `30m` | Positive maximum lifetime of any single established `CONNECT` tunnel. |
 | `metadata_proxy.max_tunnels` | `APP_METADATA_PROXY_MAX_TUNNELS` | `256` | Positive upper bound on concurrent open tunnels per listener (`503` when full). |
 
-Startup fails immediately with a wrapped error when no listener is configured, an app name or port is duplicated, any port is non-integer or outside `1..65535`, `mode` is not `log` or `enforce`, `mode` is `enforce` with an empty `allow_hosts`, a host pattern or CIDR is malformed, an explicit `APP_METADATA_PROXY_CONFIG_FILE` lookup fails or times out, or any timeout or concurrency bound is non-positive.
+Startup fails immediately with a wrapped error when no listener is configured, an app name or port is duplicated, any port is non-integer or outside `1..65535`, `mode` is not `log` or `enforce`, `mode` is `enforce` with an empty `allow_hosts`, a host pattern or CIDR is malformed, an explicit `APP_METADATA_PROXY_CONFIG_FILE` lookup fails or times out (or the file is removed, replaced, or modified during load), or any timeout or concurrency bound is non-positive.
 
 ## Running locally
 

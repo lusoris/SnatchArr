@@ -50,6 +50,7 @@ const (
 
 // Validation sentinel errors.
 var (
+	ErrConfigFileChanged  = errors.New("config: explicit config file changed during load")
 	ErrNoListeners        = errors.New("config: at least one listener is required")
 	ErrBadAppName         = errors.New("config: invalid listener app name")
 	ErrDuplicateApp       = errors.New("config: duplicate listener app")
@@ -131,35 +132,103 @@ type CoreOptionsOverride struct {
 	StatFunc     func(string) (os.FileInfo, error)
 }
 
+type statFunc = func(string) (os.FileInfo, error)
+
+// ExplicitFileCheck carries the decorate-time FileInfo of ConfigFileEnv through the fx graph
+// so post-load verification can confirm the same unchanged file remained in place.
+type ExplicitFileCheck struct {
+	path    string
+	before  os.FileInfo
+	timeout time.Duration
+	statFn  statFunc
+}
+
+// NewExplicitFileCheck constructs an empty ExplicitFileCheck for the fx graph.
+func NewExplicitFileCheck() *ExplicitFileCheck {
+	return &ExplicitFileCheck{}
+}
+
+// Verify re-stats any recorded explicit config file under its deadline and fails with
+// ErrConfigFileChanged unless the same unchanged file is still in place.
+func (c *ExplicitFileCheck) Verify() error {
+	if c == nil || c.path == "" {
+		return nil
+	}
+	timeout := c.timeout
+	if timeout <= 0 {
+		timeout = DefaultConfigStatTimeout
+	}
+	statFn := c.statFn
+	if statFn == nil {
+		statFn = defaultStatFile
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	after, err := statConfigFile(ctx, statFn, c.path)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrConfigFileChanged, err)
+	}
+	if !sameConfigFile(c.before, after) {
+		return fmt.Errorf("%w: %s %q", ErrConfigFileChanged, ConfigFileEnv, c.path)
+	}
+	return nil
+}
+
+func sameConfigFile(before, after os.FileInfo) bool {
+	return before != nil &&
+		after != nil &&
+		os.SameFile(before, after) &&
+		before.ModTime().Equal(after.ModTime()) &&
+		before.Size() == after.Size()
+}
+
 // CoreDecorateParams bundles inputs for fx.Decorate of golusoris core/config Options.
 type CoreDecorateParams struct {
 	fx.In
 
 	Options  gconfig.Options
 	Override *CoreOptionsOverride `optional:"true"`
+	Check    *ExplicitFileCheck   `optional:"true"`
 }
 
 // DecorateCoreOptionsFX adapts DecorateCoreOptions for fx, applying any supplied CoreOptionsOverride.
 func DecorateCoreOptionsFX(p CoreDecorateParams) (gconfig.Options, error) {
-	o := p.Options
-	timeout := DefaultConfigStatTimeout
-	statFn := defaultStatFile
-	if p.Override != nil {
-		o.Files = p.Override.Files
-		o.DisableEnv = p.Override.DisableEnv
-		if p.Override.DisableWatch {
-			o.Watch = false
-		}
-		if p.Override.StatTimeout > 0 {
-			timeout = p.Override.StatTimeout
-		}
-		if p.Override.StatFunc != nil {
-			statFn = p.Override.StatFunc
-		}
-	}
+	o, timeout, statFn := applyCoreOverride(p.Options, p.Override)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return decorateCoreOptions(ctx, o, statFn)
+	decorated, envPath, info, err := decorateCoreOptions(ctx, o, statFn)
+	if err != nil {
+		return gconfig.Options{}, err
+	}
+	if p.Check != nil {
+		*p.Check = ExplicitFileCheck{
+			path:    envPath,
+			before:  info,
+			timeout: timeout,
+			statFn:  statFn,
+		}
+	}
+	return decorated, nil
+}
+
+func applyCoreOverride(o gconfig.Options, ov *CoreOptionsOverride) (gconfig.Options, time.Duration, statFunc) {
+	timeout := DefaultConfigStatTimeout
+	statFn := defaultStatFile
+	if ov == nil {
+		return o, timeout, statFn
+	}
+	o.Files = ov.Files
+	o.DisableEnv = ov.DisableEnv
+	if ov.DisableWatch {
+		o.Watch = false
+	}
+	if ov.StatTimeout > 0 {
+		timeout = ov.StatTimeout
+	}
+	if ov.StatFunc != nil {
+		statFn = ov.StatFunc
+	}
+	return o, timeout, statFn
 }
 
 // DecorateCoreOptions wires CompoundKeys and YAML file loading into golusoris core/config.
@@ -176,27 +245,32 @@ func DecorateCoreOptionsContext(ctx context.Context, o gconfig.Options) (gconfig
 		ctx, cancel = context.WithTimeout(ctx, DefaultConfigStatTimeout)
 		defer cancel()
 	}
-	return decorateCoreOptions(ctx, o, defaultStatFile)
+	decorated, _, _, err := decorateCoreOptions(ctx, o, defaultStatFile)
+	return decorated, err
 }
 
 func decorateCoreOptions(
 	ctx context.Context,
 	o gconfig.Options,
-	statFn func(string) (os.FileInfo, error),
-) (gconfig.Options, error) {
+	statFn statFunc,
+) (gconfig.Options, string, os.FileInfo, error) {
 	o.CompoundKeys = append(o.CompoundKeys, CompoundKeys()...)
 	if len(o.Files) == 0 {
 		o.Files = []string{DefaultConfigFile}
 	}
-	if !o.DisableEnv {
-		if envFile := strings.TrimSpace(os.Getenv(ConfigFileEnv)); envFile != "" {
-			if err := statConfigFile(ctx, statFn, envFile); err != nil {
-				return gconfig.Options{}, err
-			}
-			o.Files = append(o.Files, envFile)
-		}
+	if o.DisableEnv {
+		return o, "", nil, nil
 	}
-	return o, nil
+	envFile := strings.TrimSpace(os.Getenv(ConfigFileEnv))
+	if envFile == "" {
+		return o, "", nil, nil
+	}
+	info, err := statConfigFile(ctx, statFn, envFile)
+	if err != nil {
+		return gconfig.Options{}, "", nil, err
+	}
+	o.Files = append(o.Files, envFile)
+	return o, envFile, info, nil
 }
 
 func defaultStatFile(path string) (os.FileInfo, error) {
@@ -204,23 +278,28 @@ func defaultStatFile(path string) (os.FileInfo, error) {
 	return os.Stat(path)
 }
 
-func statConfigFile(ctx context.Context, statFn func(string) (os.FileInfo, error), envFile string) error {
+type statResult struct {
+	info os.FileInfo
+	err  error
+}
+
+func statConfigFile(ctx context.Context, statFn statFunc, envFile string) (os.FileInfo, error) {
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, err)
+		return nil, fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, err)
 	}
-	errCh := make(chan error, 1)
+	resCh := make(chan statResult, 1)
 	go func() {
-		_, err := statFn(envFile)
-		errCh <- err
+		info, err := statFn(envFile)
+		resCh <- statResult{info: info, err: err}
 	}()
 	select {
-	case err := <-errCh:
-		if err != nil {
-			return fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, err)
+	case res := <-resCh:
+		if res.err != nil {
+			return nil, fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, res.err)
 		}
-		return nil
+		return res.info, nil
 	case <-ctx.Done():
-		return fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, ctx.Err())
+		return nil, fmt.Errorf("config: stat %s %q: %w", ConfigFileEnv, envFile, ctx.Err())
 	}
 }
 
@@ -619,5 +698,14 @@ func compileDeniedPrefixes(rawPrefixes []string) ([]netip.Prefix, []netip.Prefix
 	return v4, v6, nil
 }
 
-// Module provides *Compiled to the fx graph.
-var Module = fx.Module("metadata_proxy.config", fx.Provide(Load))
+// LoadChecked verifies that any explicit ConfigFileEnv file recorded in check remained unchanged
+// across configuration loading, then compiles *Compiled from cfg.
+func LoadChecked(cfg *gconfig.Config, check *ExplicitFileCheck) (*Compiled, error) {
+	if err := check.Verify(); err != nil {
+		return nil, err
+	}
+	return Load(cfg)
+}
+
+// Module provides *ExplicitFileCheck and *Compiled to the fx graph.
+var Module = fx.Module("metadata_proxy.config", fx.Provide(NewExplicitFileCheck, LoadChecked))

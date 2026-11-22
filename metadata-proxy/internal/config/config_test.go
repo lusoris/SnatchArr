@@ -16,8 +16,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.uber.org/fx"
 
 	gconfig "github.com/golusoris/golusoris/core/config"
 
@@ -502,6 +505,219 @@ func assertStalledStatTimesOut(t *testing.T) {
 	})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("DecorateCoreOptionsFX error = %v, want errors.Is(_, context.DeadlineExceeded)", err)
+	}
+}
+
+const (
+	defaultFixtureYAML  = "metadata_proxy:\n  mode: log\n  listeners:\n    - app: sonarr\n      port: 18081\n  allow_hosts:\n    - skyhook.sonarr.tv\n"
+	explicitEnforceYAML = "metadata_proxy:\n  mode: enforce\n"
+	explicitPaddedYAML  = "metadata_proxy:\n  mode: log    \n"
+)
+
+type explicitFileCase struct {
+	name         string
+	unsetEnv     bool
+	disableEnv   bool
+	statTimeout  time.Duration
+	onFirstStat  func(t *testing.T, path string, before os.FileInfo)
+	stallSecond  bool
+	wantMode     config.Mode
+	wantErr      error
+	wantExtraErr error
+	wantStats    int
+}
+
+func TestExplicitConfigFileCheck(t *testing.T) {
+	cases := []explicitFileCase{
+		{name: "positive: explicit file present and unchanged across load", wantMode: config.ModeEnforce, wantStats: 2},
+		{
+			name:         "negative: explicit file removed after decorate stat",
+			onFirstStat:  removeConfigFileAfterStat,
+			wantErr:      config.ErrConfigFileChanged,
+			wantExtraErr: os.ErrNotExist,
+			wantStats:    2,
+		},
+		{name: "negative: explicit file replaced with new inode between stats", onFirstStat: replaceConfigFileInodeAfterStat, wantErr: config.ErrConfigFileChanged, wantStats: 2},
+		{name: "negative: explicit file size changed in place between stats", onFirstStat: truncateConfigFileAfterStat, wantErr: config.ErrConfigFileChanged, wantStats: 2},
+		{name: "negative: explicit file mtime changed in place between stats", onFirstStat: touchConfigFileAfterStat, wantErr: config.ErrConfigFileChanged, wantStats: 2},
+		{
+			name:         "negative: stalled post-load stat times out",
+			statTimeout:  20 * time.Millisecond,
+			stallSecond:  true,
+			wantErr:      config.ErrConfigFileChanged,
+			wantExtraErr: context.DeadlineExceeded,
+			wantStats:    2,
+		},
+		{name: "boundary: ConfigFileEnv unset skips stat and keeps default optional", unsetEnv: true, wantMode: config.ModeLog, wantStats: 0},
+		{name: "boundary: DisableEnv true skips explicit file stat", disableEnv: true, wantMode: config.ModeLog, wantStats: 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			override, explicitFile, envVal, statCalls := prepareExplicitFileFixture(t, tc)
+			t.Setenv(config.ConfigFileEnv, envVal)
+			if tc.unsetEnv {
+				t.Setenv("APP_METADATA_PROXY_LISTENERS", "sonarr:18081")
+			}
+			runExplicitFileCase(t, tc, override, explicitFile, statCalls)
+		})
+	}
+}
+
+func runExplicitFileCase(
+	t *testing.T,
+	tc explicitFileCase,
+	override *config.CoreOptionsOverride,
+	explicitFile string,
+	statCalls *atomic.Int32,
+) {
+	t.Helper()
+	var compiled *config.Compiled
+	fxApp := fx.New(
+		fx.NopLogger,
+		gconfig.Module,
+		fx.Decorate(config.DecorateCoreOptionsFX),
+		config.Module,
+		fx.Supply(override),
+		fx.Populate(&compiled),
+	)
+	err := fxApp.Err()
+	if tc.wantErr != nil {
+		if !errors.Is(err, tc.wantErr) {
+			t.Fatalf("err = %v, want errors.Is(_, %v)", err, tc.wantErr)
+		}
+		if tc.wantExtraErr != nil && !errors.Is(err, tc.wantExtraErr) {
+			t.Fatalf("err = %v, want errors.Is(_, %v)", err, tc.wantExtraErr)
+		}
+		if !strings.Contains(err.Error(), explicitFile) {
+			t.Fatalf("err %q does not mention %q", err.Error(), explicitFile)
+		}
+		if got := int(statCalls.Load()); got != tc.wantStats {
+			t.Fatalf("stat calls = %d, want %d", got, tc.wantStats)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := int(statCalls.Load()); got != tc.wantStats {
+		t.Fatalf("stat calls = %d, want %d", got, tc.wantStats)
+	}
+	if compiled.Options.Mode != tc.wantMode {
+		t.Fatalf("Mode = %q, want %q", compiled.Options.Mode, tc.wantMode)
+	}
+}
+
+func prepareExplicitFileFixture(
+	t *testing.T,
+	tc explicitFileCase,
+) (*config.CoreOptionsOverride, string, string, *atomic.Int32) {
+	t.Helper()
+	dir := t.TempDir()
+	defaultFile := filepath.Join(dir, "default.yaml")
+	explicitFile := filepath.Join(dir, "explicit.yaml")
+	files := []string{defaultFile}
+	envVal := explicitFile
+	if tc.unsetEnv {
+		envVal = ""
+		files = []string{filepath.Join(dir, "missing-default.yaml")}
+	} else {
+		writeFixtureFile(t, defaultFile, defaultFixtureYAML)
+		if tc.disableEnv {
+			envVal = filepath.Join(dir, "missing-explicit.yaml")
+		} else {
+			writeFixtureFile(t, explicitFile, explicitEnforceYAML)
+		}
+	}
+	statCalls := new(atomic.Int32)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	return &config.CoreOptionsOverride{
+		Files:        files,
+		DisableEnv:   tc.disableEnv,
+		DisableWatch: true,
+		StatTimeout:  tc.statTimeout,
+		StatFunc:     makeCountingStatFunc(t, tc, statCalls, release),
+	}, explicitFile, envVal, statCalls
+}
+
+func makeCountingStatFunc(
+	t *testing.T,
+	tc explicitFileCase,
+	calls *atomic.Int32,
+	release <-chan struct{},
+) func(string) (os.FileInfo, error) {
+	t.Helper()
+	return func(path string) (os.FileInfo, error) {
+		callNum := calls.Add(1)
+		if callNum == 2 && tc.stallSecond {
+			timer := time.NewTimer(250 * time.Millisecond)
+			defer timer.Stop()
+			select {
+			case <-release:
+			case <-timer.C:
+			}
+		}
+		info, err := os.Stat(path)
+		if err == nil && callNum == 1 && tc.onFirstStat != nil {
+			tc.onFirstStat(t, path, info)
+		}
+		return info, err
+	}
+}
+
+func writeFixtureFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func removeConfigFileAfterStat(t *testing.T, path string, _ os.FileInfo) {
+	t.Helper()
+	if err := os.Remove(path); err != nil {
+		t.Errorf("remove %s: %v", path, err)
+	}
+}
+
+func replaceConfigFileInodeAfterStat(t *testing.T, path string, before os.FileInfo) {
+	t.Helper()
+	replacement := filepath.Join(filepath.Dir(path), "replacement.yaml")
+	if err := os.WriteFile(replacement, []byte(explicitPaddedYAML), 0o600); err != nil {
+		t.Errorf("write replacement: %v", err)
+		return
+	}
+	if err := os.Chtimes(replacement, before.ModTime(), before.ModTime()); err != nil {
+		t.Errorf("chtimes replacement: %v", err)
+		return
+	}
+	if err := os.Rename(replacement, path); err != nil {
+		t.Errorf("rename replacement over %s: %v", path, err)
+	}
+}
+
+func truncateConfigFileAfterStat(t *testing.T, path string, before os.FileInfo) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		t.Errorf("open %s: %v", path, err)
+		return
+	}
+	_, writeErr := f.WriteString("metadata_proxy:\n  mode: log\n")
+	closeErr := f.Close()
+	if writeErr != nil || closeErr != nil {
+		t.Errorf("rewrite %s: write=%v close=%v", path, writeErr, closeErr)
+		return
+	}
+	if err := os.Chtimes(path, before.ModTime(), before.ModTime()); err != nil {
+		t.Errorf("restore mtime %s: %v", path, err)
+	}
+}
+
+func touchConfigFileAfterStat(t *testing.T, path string, before os.FileInfo) {
+	t.Helper()
+	bumped := before.ModTime().Add(time.Second)
+	if err := os.Chtimes(path, bumped, bumped); err != nil {
+		t.Errorf("chtimes %s: %v", path, err)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -150,6 +151,120 @@ func TestAppRefusesInvalidConfigOnStart(t *testing.T) {
 	)
 	if err := fxApp.Err(); err == nil || !strings.Contains(err.Error(), config.ErrEmptyAllowHosts.Error()) {
 		t.Fatalf("fxApp.Err() = %v, want %v", err, config.ErrEmptyAllowHosts)
+	}
+}
+
+type appExplicitFileCase struct {
+	name        string
+	unsetEnv    bool
+	mutateAfter func(t *testing.T, path string)
+	wantMode    config.Mode
+	wantErr     error
+	wantStats   int
+}
+
+func TestAppExplicitConfigFileOnStart(t *testing.T) {
+	cases := []appExplicitFileCase{
+		{name: "positive: explicit file present and unchanged across load", wantMode: config.ModeEnforce, wantStats: 2},
+		{
+			name: "negative: explicit file removed after decorate stat",
+			mutateAfter: func(t *testing.T, path string) {
+				t.Helper()
+				if err := os.Remove(path); err != nil {
+					t.Errorf("remove %s: %v", path, err)
+				}
+			},
+			wantErr:   config.ErrConfigFileChanged,
+			wantStats: 2,
+		},
+		{
+			name: "negative: explicit file replaced with new inode between stats",
+			mutateAfter: func(t *testing.T, path string) {
+				t.Helper()
+				rep := filepath.Join(filepath.Dir(path), "rep.yaml")
+				if err := os.WriteFile(rep, []byte("metadata_proxy:\n  mode: log\n"), 0o600); err != nil {
+					t.Errorf("write %s: %v", rep, err)
+					return
+				}
+				if err := os.Rename(rep, path); err != nil {
+					t.Errorf("rename %s -> %s: %v", rep, path, err)
+				}
+			},
+			wantErr:   config.ErrConfigFileChanged,
+			wantStats: 2,
+		},
+		{name: "boundary: ConfigFileEnv unset skips stat and keeps default optional", unsetEnv: true, wantMode: config.ModeLog, wantStats: 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files, explicitFile, envVal := prepareAppExplicitFiles(t, tc)
+			t.Setenv(config.ConfigFileEnv, envVal)
+			if tc.unsetEnv {
+				t.Setenv("APP_METADATA_PROXY_LISTENERS", "sonarr:18081")
+				t.Setenv("APP_METADATA_PROXY_ALLOW_HOSTS", "skyhook.sonarr.tv")
+			}
+			runAppExplicitFileCase(t, tc, files, explicitFile)
+		})
+	}
+}
+
+func prepareAppExplicitFiles(t *testing.T, tc appExplicitFileCase) ([]string, string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	if tc.unsetEnv {
+		return []string{filepath.Join(dir, "missing-default.yaml")}, "", ""
+	}
+	defaultFile := filepath.Join(dir, "default.yaml")
+	defaultYAML := "metadata_proxy:\n  mode: log\n  listeners:\n    - app: sonarr\n      port: 18081\n  allow_hosts:\n    - skyhook.sonarr.tv\n"
+	if err := os.WriteFile(defaultFile, []byte(defaultYAML), 0o600); err != nil {
+		t.Fatalf("write default config: %v", err)
+	}
+	explicitFile := filepath.Join(dir, "explicit.yaml")
+	if err := os.WriteFile(explicitFile, []byte("metadata_proxy:\n  mode: enforce\n"), 0o600); err != nil {
+		t.Fatalf("write explicit config: %v", err)
+	}
+	return []string{defaultFile}, explicitFile, explicitFile
+}
+
+func runAppExplicitFileCase(t *testing.T, tc appExplicitFileCase, files []string, explicitFile string) {
+	t.Helper()
+	var statCalls atomic.Int32
+	var compiled *config.Compiled
+	fxApp := fx.New(
+		fx.NopLogger,
+		app.Module,
+		fx.Supply(&config.CoreOptionsOverride{
+			Files:        files,
+			DisableWatch: true,
+			StatFunc: func(path string) (os.FileInfo, error) {
+				call := statCalls.Add(1)
+				info, err := os.Stat(path)
+				if err == nil && call == 1 && tc.mutateAfter != nil {
+					tc.mutateAfter(t, path)
+				}
+				return info, err
+			},
+		}),
+		fx.Populate(&compiled),
+	)
+	err := fxApp.Err()
+	if tc.wantErr != nil {
+		if !errors.Is(err, tc.wantErr) || !strings.Contains(err.Error(), explicitFile) {
+			t.Fatalf("fxApp.Err() = %v, want %v mentioning %q", err, tc.wantErr, explicitFile)
+		}
+		if got := int(statCalls.Load()); got != tc.wantStats {
+			t.Fatalf("stat calls = %d, want %d", got, tc.wantStats)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("fxApp.Err() unexpected error: %v", err)
+	}
+	if got := int(statCalls.Load()); got != tc.wantStats {
+		t.Fatalf("stat calls = %d, want %d", got, tc.wantStats)
+	}
+	if compiled.Options.Mode != tc.wantMode {
+		t.Fatalf("Mode = %q, want %q", compiled.Options.Mode, tc.wantMode)
 	}
 }
 
