@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
@@ -98,121 +99,100 @@ func TestHeartbeatExtendsLease(t *testing.T) {
 	}
 }
 
-// Heartbeat cancels a worker whose expired lease was handed to another worker, extends the new
-// holder's lease, and still extends an expired lease that nobody else took.
-func TestHeartbeatCancelsAStaleHolder(t *testing.T) {
+// Heartbeat answers by lease ownership: a worker whose expired lease another worker took gets
+// CANCEL, the holder of the lease gets it extended (also after it expired with nobody taking
+// it), and a heartbeat without a worker id gets CONTINUE and leaves the lease alone.
+func TestHeartbeatLeaseOwnership(t *testing.T) {
 	t.Parallel()
-	t.Run("reassigned lease cancels stale holder and extends new holder", func(t *testing.T) {
-		t.Parallel()
-		srv, _, runID := completeServer(t)
-		fakeClk, ok := srv.clk.(*clockwork.FakeClock)
-		if !ok {
-			t.Fatalf("clk is %T, want *clockwork.FakeClock", srv.clk)
-		}
-		fakeClk.Advance(snatch.LeaseTTL + time.Second)
-		leased, leaseErr := srv.runs.Lease(t.Context(), "worker-2")
-		if leaseErr != nil {
-			t.Fatalf("Lease(worker-2) = %v", leaseErr)
-		}
-		if leased.ID.String() != runID {
-			t.Fatalf("leased run = %s, want %s", leased.ID, runID)
-		}
-		fakeClk.Advance(10 * time.Second)
-		staleResp, staleErr := srv.Heartbeat(t.Context(), &snatcharrv1.HeartbeatRequest{
-			RunId:    runID,
-			WorkerId: "worker",
+	cancelled := snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CANCEL
+	carryOn := snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CONTINUE
+	cases := []struct {
+		name       string
+		expire     bool
+		reassign   bool
+		worker     string
+		want       snatcharrv1.HeartbeatDirective
+		extends    bool
+		wantHolder string
+	}{
+		{"stale holder of a reassigned lease", true, true, "worker", cancelled, false, "worker-2"},
+		{"new holder of a reassigned lease", true, true, "worker-2", carryOn, true, "worker-2"},
+		{"holder of an expired lease nobody took", true, false, "worker", carryOn, true, "worker"},
+		{"heartbeat without a worker id", false, false, "", carryOn, false, "worker"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv, _, runID := completeServer(t)
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			heartbeatFixture(ctx, t, srv, runID, tc.expire, tc.reassign)
+			before := heartbeatRun(ctx, t, srv, runID)
+			resp, err := srv.Heartbeat(ctx, &snatcharrv1.HeartbeatRequest{RunId: runID, WorkerId: tc.worker})
+			if err != nil {
+				t.Fatalf("Heartbeat(%q) = %v", tc.worker, err)
+			}
+			if resp.GetDirective() != tc.want {
+				t.Errorf("directive = %v, want %v", resp.GetDirective(), tc.want)
+			}
+			after := heartbeatRun(ctx, t, srv, runID)
+			if after.LeasedBy != tc.wantHolder {
+				t.Errorf("leased_by = %q, want %q", after.LeasedBy, tc.wantHolder)
+			}
+			checkLeaseExpiry(t, srv, resp, before, after, tc.extends)
 		})
-		if staleErr != nil {
-			t.Fatalf("Heartbeat(worker) = %v", staleErr)
-		}
-		if staleResp.GetDirective() != snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CANCEL {
-			t.Errorf("stale directive = %v, want CANCEL", staleResp.GetDirective())
-		}
-		curResp, curErr := srv.Heartbeat(t.Context(), &snatcharrv1.HeartbeatRequest{
-			RunId:    runID,
-			WorkerId: "worker-2",
-		})
-		if curErr != nil {
-			t.Fatalf("Heartbeat(worker-2) = %v", curErr)
-		}
-		if curResp.GetDirective() != snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CONTINUE {
-			t.Errorf("current directive = %v, want CONTINUE", curResp.GetDirective())
-		}
-		wantExpires := srv.clk.Now().Add(snatch.LeaseTTL).Unix()
-		if curResp.GetLeaseExpiresUnix() != wantExpires {
-			t.Errorf("lease_expires_unix = %v, want %v", curResp.GetLeaseExpiresUnix(), wantExpires)
-		}
-		run, getErr := srv.runs.Get(t.Context(), uuid.MustParse(runID))
-		if getErr != nil {
-			t.Fatalf("runs.Get() = %v", getErr)
-		}
-		wantAt := srv.clk.Now().Add(snatch.LeaseTTL).Truncate(time.Microsecond)
-		if run.LeaseExpiresAt == nil || !run.LeaseExpiresAt.Equal(wantAt) {
-			t.Errorf("run lease_expires_at = %v, want %v", run.LeaseExpiresAt, wantAt)
-		}
-	})
-	t.Run("expired lease not taken again extends for original holder", func(t *testing.T) {
-		t.Parallel()
-		srv, _, runID := completeServer(t)
-		fakeClk, ok := srv.clk.(*clockwork.FakeClock)
-		if !ok {
-			t.Fatalf("clk is %T, want *clockwork.FakeClock", srv.clk)
-		}
-		fakeClk.Advance(snatch.LeaseTTL + time.Second)
-		resp, err := srv.Heartbeat(t.Context(), &snatcharrv1.HeartbeatRequest{
-			RunId:    runID,
-			WorkerId: "worker",
-		})
-		if err != nil {
-			t.Fatalf("Heartbeat(worker) = %v", err)
-		}
-		if resp.GetDirective() != snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CONTINUE {
-			t.Errorf("directive = %v, want CONTINUE", resp.GetDirective())
-		}
-		wantExpires := srv.clk.Now().Add(snatch.LeaseTTL).Unix()
-		if resp.GetLeaseExpiresUnix() != wantExpires {
-			t.Errorf("lease_expires_unix = %v, want %v", resp.GetLeaseExpiresUnix(), wantExpires)
-		}
-		run, getErr := srv.runs.Get(t.Context(), uuid.MustParse(runID))
-		if getErr != nil {
-			t.Fatalf("runs.Get() = %v", getErr)
-		}
-		wantAt := srv.clk.Now().Add(snatch.LeaseTTL).Truncate(time.Microsecond)
-		if run.LeaseExpiresAt == nil || !run.LeaseExpiresAt.Equal(wantAt) {
-			t.Errorf("run lease_expires_at = %v, want %v", run.LeaseExpiresAt, wantAt)
-		}
-	})
+	}
 }
 
-// Heartbeat without a worker id answers CONTINUE for a leased run and leaves its lease alone:
-// the stale-holder CANCEL needs a named worker, and only the holder extends a lease.
-func TestHeartbeatWithoutWorkerKeepsLease(t *testing.T) {
-	t.Parallel()
-	srv, _, runID := completeServer(t)
+// heartbeatFixture takes the run completeServer leased to "worker", lets that lease expire when
+// expire is set, hands the run to "worker-2" when reassign is set, and then moves the clock 10 s on.
+func heartbeatFixture(ctx context.Context, t *testing.T, srv *Server, runID string, expire, reassign bool) {
+	t.Helper()
 	fakeClk, ok := srv.clk.(*clockwork.FakeClock)
 	if !ok {
 		t.Fatalf("clk is %T, want *clockwork.FakeClock", srv.clk)
 	}
-	before, beforeErr := srv.runs.Get(t.Context(), uuid.MustParse(runID))
-	if beforeErr != nil {
-		t.Fatalf("runs.Get() before = %v", beforeErr)
+	if expire {
+		fakeClk.Advance(snatch.LeaseTTL + time.Second)
+	}
+	if reassign {
+		leased, err := srv.runs.Lease(ctx, "worker-2")
+		if err != nil {
+			t.Fatalf("Lease(worker-2) = %v", err)
+		}
+		if leased.ID.String() != runID {
+			t.Fatalf("leased run = %s, want %s", leased.ID, runID)
+		}
 	}
 	fakeClk.Advance(10 * time.Second)
-	resp, err := srv.Heartbeat(t.Context(), &snatcharrv1.HeartbeatRequest{RunId: runID})
+}
+
+// heartbeatRun reads the run row back for the lease checks.
+func heartbeatRun(ctx context.Context, t *testing.T, srv *Server, runID string) domain.Run {
+	t.Helper()
+	run, err := srv.runs.Get(ctx, uuid.MustParse(runID))
 	if err != nil {
-		t.Fatalf("Heartbeat(no worker id) = %v", err)
+		t.Fatalf("runs.Get() = %v", err)
 	}
-	if resp.GetDirective() != snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CONTINUE {
-		t.Errorf("directive = %v, want CONTINUE", resp.GetDirective())
+	return run
+}
+
+// checkLeaseExpiry wants the lease moved to now + LeaseTTL in the answer and in the row when
+// extends is set, and the row's lease left as it was otherwise.
+func checkLeaseExpiry(t *testing.T, srv *Server, resp *snatcharrv1.HeartbeatResponse, before, after domain.Run, extends bool) {
+	t.Helper()
+	if !extends {
+		if before.LeaseExpiresAt == nil || after.LeaseExpiresAt == nil || !after.LeaseExpiresAt.Equal(*before.LeaseExpiresAt) {
+			t.Errorf("lease_expires_at = %v after, want unchanged %v", after.LeaseExpiresAt, before.LeaseExpiresAt)
+		}
+		return
 	}
-	after, afterErr := srv.runs.Get(t.Context(), uuid.MustParse(runID))
-	if afterErr != nil {
-		t.Fatalf("runs.Get() after = %v", afterErr)
+	wantExpires := srv.clk.Now().Add(snatch.LeaseTTL)
+	if resp.GetLeaseExpiresUnix() != wantExpires.Unix() {
+		t.Errorf("lease_expires_unix = %v, want %v", resp.GetLeaseExpiresUnix(), wantExpires.Unix())
 	}
-	if before.LeaseExpiresAt == nil || after.LeaseExpiresAt == nil || !after.LeaseExpiresAt.Equal(*before.LeaseExpiresAt) {
-		t.Errorf("lease_expires_at = %v after, want unchanged %v", after.LeaseExpiresAt, before.LeaseExpiresAt)
-	}
-	if after.LeasedBy != "worker" {
-		t.Errorf("leased_by = %q, want %q", after.LeasedBy, "worker")
+	wantAt := wantExpires.Truncate(time.Microsecond)
+	if after.LeaseExpiresAt == nil || !after.LeaseExpiresAt.Equal(wantAt) {
+		t.Errorf("run lease_expires_at = %v, want %v", after.LeaseExpiresAt, wantAt)
 	}
 }
