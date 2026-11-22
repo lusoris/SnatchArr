@@ -198,6 +198,8 @@ const FOCUS_PAGE_SIZE: u32 = 500;
 #[derive(Default)]
 struct Collected {
     keep: Vec<Candidate>,
+    /// Every candidate id the batch fetched after page deduplication, before focus and filters.
+    seen_ids: BTreeSet<i64>,
     busy_ids: BTreeSet<i64>,
     /// Dropped only because the app reports them as not yet available (#350).
     unavailable_ids: BTreeSet<i64>,
@@ -205,21 +207,39 @@ struct Collected {
     priority_groups: Vec<i64>,
 }
 
+fn merge_ids(dst: &mut Vec<i64>, src: &mut Vec<i64>) {
+    dst.append(src);
+    dst.sort_unstable();
+    dst.dedup();
+}
+
 impl Collected {
     fn merge(&mut self, mut other: Self) {
-        for candidate in other.keep.drain(..) {
-            if !self.keep.iter().any(|kept| kept.id == candidate.id) {
-                self.keep.push(candidate);
+        let order: Vec<i64> = other.keep.iter().map(|c| c.id).collect();
+        let mut fresh: BTreeMap<i64, Candidate> =
+            other.keep.into_iter().map(|c| (c.id, c)).collect();
+        self.keep.retain_mut(|kept| {
+            if !other.seen_ids.contains(&kept.id) {
+                fresh.remove(&kept.id);
+                return true;
             }
-        }
+            if let Some(updated) = fresh.remove(&kept.id) {
+                *kept = updated;
+                true
+            } else {
+                false
+            }
+        });
+        self.keep
+            .extend(order.into_iter().filter_map(|id| fresh.remove(&id)));
+        self.busy_ids.retain(|id| !other.seen_ids.contains(id));
         self.busy_ids.extend(other.busy_ids);
+        self.unavailable_ids
+            .retain(|id| !other.seen_ids.contains(id));
         self.unavailable_ids.extend(other.unavailable_ids);
-        self.priority_ids.append(&mut other.priority_ids);
-        self.priority_ids.sort_unstable();
-        self.priority_ids.dedup();
-        self.priority_groups.append(&mut other.priority_groups);
-        self.priority_groups.sort_unstable();
-        self.priority_groups.dedup();
+        self.seen_ids.extend(other.seen_ids);
+        merge_ids(&mut self.priority_ids, &mut other.priority_ids);
+        merge_ids(&mut self.priority_groups, &mut other.priority_groups);
     }
 
     fn drop_busy(&mut self, busy: &[i64]) {
@@ -925,6 +945,7 @@ async fn filter_fetched_candidates(
     mut candidates: Vec<Candidate>,
     busy: &[i64],
 ) -> Result<Collected, ExecError> {
+    let seen_ids: BTreeSet<i64> = candidates.iter().map(|c| c.id).collect();
     if let Some(focus) = p.focus {
         candidates.retain(|c| focus.matches(c));
     }
@@ -950,6 +971,7 @@ async fn filter_fetched_candidates(
         .collect();
     Ok(Collected {
         keep,
+        seen_ids,
         busy_ids,
         unavailable_ids,
         priority_ids: outcome.priority_ids,
@@ -1053,6 +1075,11 @@ async fn emit_refill_page_warning(
         .await;
 }
 
+/// Merges a refill batch into `collected` and returns the cursor to persist. On a partial
+/// sequential refill, `failed_page` is the next unread page of the contiguous cursor walk
+/// (page 1 reuses the initial metadata read and never fails), so advancing to `failed_page`
+/// skips the refill pages already fetched without skipping the failed one; non-sequential
+/// selections keep `plan_cursor`.
 async fn apply_refill_batch(
     p: &Prepared,
     run: &Run,
@@ -1083,7 +1110,11 @@ async fn apply_refill_batch(
             }
             let kept = collected.keep.len();
             emit_refill_page_warning(run, failed_page, pages_fetched, &error, kept, events).await;
-            plan_cursor
+            if selection == Selection::Sequential {
+                failed_page
+            } else {
+                plan_cursor
+            }
         }
         RefillBatch::FilterFailed(err) => {
             let kept = collected.keep.len();

@@ -37,6 +37,8 @@ struct FakeApi {
     /// Every AcquireBudget call: the items asked for and the grants answered.
     pub budget_calls: Arc<Mutex<Vec<BudgetCall>>>,
     pub filter_unprocessed: Vec<i64>,
+    /// Priority entity ids `FilterCandidates` answers on every call, like `seerr.PriorityFor`.
+    pub filter_priority_ids: Vec<i64>,
     /// Per-call unprocessed allow-lists for `FilterCandidates`; calls past the list fall back to
     /// `filter_unprocessed`.
     pub filter_script: Vec<Vec<i64>>,
@@ -69,6 +71,7 @@ impl Default for FakeApi {
             scripted_grants: None,
             budget_calls: Arc::new(Mutex::new(Vec::new())),
             filter_unprocessed: vec![1, 2, 3, 4, 5],
+            filter_priority_ids: Vec::new(),
             filter_script: Vec::new(),
             filter_calls: Arc::new(Mutex::new(Vec::new())),
             reported_events: Arc::new(Mutex::new(Vec::new())),
@@ -170,7 +173,7 @@ impl WorkerService for FakeApi {
             .collect();
         Ok(tonic::Response::new(FilterCandidatesResponse {
             unprocessed_ids: unprocessed,
-            priority_ids: vec![],
+            priority_ids: self.filter_priority_ids.clone(),
             priority_group_ids: vec![],
         }))
     }

@@ -124,9 +124,11 @@ impl PagePlan {
 
     /// Plans additional pages after the planned pages yielded too few eligible candidates,
     /// keeping the run within [`MAX_PAGES_PER_CYCLE`] distinct wanted-page requests, the
-    /// page-1 metadata read included. Sequential walks unread pages from `self.next_cursor`
-    /// and advances it; Recent walks unread pages in list order from page 1 and keeps
-    /// `self.next_cursor`; Random samples unread pages uniformly.
+    /// page-1 metadata read included. When the plan omitted page 1, Sequential places page 1
+    /// where its cursor walk from `self.next_cursor` passes it (or last when the walk does not
+    /// wrap) and advances the cursor over the walked pages; Recent and Random place page 1
+    /// first, walking unread pages from page 1 or sampling them uniformly while keeping
+    /// `self.next_cursor`.
     #[must_use]
     pub fn refill<R: RngExt>(
         &self,
@@ -148,30 +150,40 @@ impl PagePlan {
             .copied()
             .filter(|&p| (1..=total_pages).contains(&p))
             .collect();
-        let prepend_first = read_set.insert(1);
+        let include_first = read_set.insert(1);
         let read_count = u32::try_from(read_set.len()).unwrap_or(u32::MAX);
         let budget = MAX_PAGES_PER_CYCLE
             .min(total_pages)
             .saturating_sub(read_count);
-        let mut pages = Vec::new();
-        if prepend_first {
-            pages.push(1);
-        }
-        let (new_pages, next_cursor) = match selection {
+        match selection {
             Selection::Sequential => {
-                Self::sequential_excluding(total_pages, budget, self.next_cursor, &read_set)
+                let (pages, next_cursor) = Self::sequential_refill(
+                    total_pages,
+                    budget,
+                    self.next_cursor,
+                    &read_set,
+                    include_first,
+                );
+                Self { pages, next_cursor }
             }
             Selection::Recent => {
-                let (unread, _) = Self::sequential_excluding(total_pages, budget, 1, &read_set);
-                (unread, self.next_cursor)
+                let mut pages = Vec::from_iter(include_first.then_some(1));
+                let (unread, _) = Self::sequential_refill(total_pages, budget, 1, &read_set, false);
+                pages.extend(unread);
+                Self {
+                    pages,
+                    next_cursor: self.next_cursor,
+                }
             }
-            Selection::Random => (
-                Self::sample_unread(total_pages, budget, &read_set, rng),
-                self.next_cursor,
-            ),
-        };
-        pages.extend(new_pages);
-        Self { pages, next_cursor }
+            Selection::Random => {
+                let mut pages = Vec::from_iter(include_first.then_some(1));
+                pages.extend(Self::sample_unread(total_pages, budget, &read_set, rng));
+                Self {
+                    pages,
+                    next_cursor: self.next_cursor,
+                }
+            }
+        }
     }
 
     fn random<R: RngExt>(total_pages: u32, count: u32, rng: &mut R) -> Self {
@@ -224,31 +236,39 @@ impl PagePlan {
             .collect()
     }
 
-    fn sequential_excluding(
+    fn sequential_refill(
         total_pages: u32,
         budget: u32,
         cursor: u32,
         read_set: &BTreeSet<u32>,
+        include_first: bool,
     ) -> (Vec<u32>, u32) {
         let mut cur = if cursor == 0 || cursor > total_pages {
             1
         } else {
             cursor
         };
-        let mut pages = Vec::with_capacity(usize::try_from(budget).unwrap_or(0));
+        let mut walked = Vec::with_capacity(usize::try_from(budget).unwrap_or(0).saturating_add(1));
+        let mut first_pos = None;
         for _ in 0..total_pages {
-            if u32::try_from(pages.len()).unwrap_or(u32::MAX) >= budget {
+            if cur == 1 && first_pos.is_none() {
+                first_pos = Some(walked.len());
+            }
+            if u32::try_from(walked.len()).unwrap_or(u32::MAX) >= budget {
                 break;
             }
             if !read_set.contains(&cur) {
-                pages.push(cur);
+                walked.push(cur);
             }
             cur = wrap_page(cur, total_pages);
         }
-        let next = pages
+        let next = walked
             .last()
             .map_or(cursor, |last| wrap_page(*last, total_pages));
-        (pages, next)
+        if include_first {
+            walked.insert(first_pos.unwrap_or(walked.len()), 1);
+        }
+        (walked, next)
     }
 
     fn sequential(total_pages: u32, count: u32, cursor: u32) -> Self {
@@ -1270,6 +1290,138 @@ mod tests {
             let refill = plan.refill(20_000, 100, Selection::Random, &mut rng);
             assert!(refill.pages.iter().all(|page| !plan.pages.contains(page)));
         }
+    }
+
+    #[test]
+    fn sequential_refill_places_page_one_at_its_wrap_position() {
+        let mut rng = SmallRng::seed_from_u64(1);
+        let wrapping = PagePlan {
+            pages: vec![5, 6],
+            next_cursor: 7,
+        };
+        let refill = wrapping.refill(80, 10, Selection::Sequential, &mut rng);
+        assert_eq!(refill.pages, [7, 8, 1, 2, 3, 4]);
+        assert_eq!(refill.next_cursor, 5);
+
+        let non_wrapping = PagePlan {
+            pages: vec![2],
+            next_cursor: 3,
+        };
+        let refill = non_wrapping.refill(1000, 10, Selection::Sequential, &mut rng);
+        assert_eq!(refill.pages, [3, 4, 5, 6, 7, 8, 1]);
+        assert_eq!(refill.next_cursor, 9);
+    }
+
+    #[test]
+    fn recent_and_random_refill_keep_page_one_first() {
+        let mut rng = SmallRng::seed_from_u64(5);
+        let plan = PagePlan {
+            pages: vec![2, 3],
+            next_cursor: 4,
+        };
+        let recent = plan.refill(1000, 10, Selection::Recent, &mut rng);
+        assert_eq!(recent.pages, [1, 4, 5, 6, 7, 8]);
+        assert_eq!(recent.next_cursor, 4);
+
+        for seed in 0..32 {
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let random = plan.refill(1000, 10, Selection::Random, &mut rng);
+            assert_eq!(random.pages.first(), Some(&1), "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn refill_reuses_page_one_when_the_plan_omits_it() {
+        let omits_one = PagePlan {
+            pages: vec![2, 3],
+            next_cursor: 4,
+        };
+        let has_one = PagePlan {
+            pages: vec![1, 2],
+            next_cursor: 3,
+        };
+        for selection in [Selection::Random, Selection::Sequential, Selection::Recent] {
+            let mut rng = SmallRng::seed_from_u64(9);
+            let with_reuse = omits_one.refill(100, 10, selection, &mut rng);
+            assert_eq!(
+                with_reuse.pages.iter().filter(|&&p| p == 1).count(),
+                1,
+                "{selection:?} without page 1"
+            );
+            let without_reuse = has_one.refill(100, 10, selection, &mut rng);
+            assert!(
+                !without_reuse.pages.contains(&1),
+                "{selection:?} with page 1: {:?}",
+                without_reuse.pages
+            );
+        }
+    }
+
+    #[test]
+    fn random_refill_fills_its_budget_past_sixteen_pages() {
+        let boundary = PagePlan {
+            pages: vec![2, 3, 4, 5, 6],
+            next_cursor: 1,
+        };
+        let wide = PagePlan {
+            pages: vec![3, 50, 97],
+            next_cursor: 1,
+        };
+        for seed in 0..200 {
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let r17 = boundary.refill(170, 10, Selection::Random, &mut rng);
+            assert_eq!(r17.pages.first(), Some(&1), "seed {seed}");
+            let tail17: BTreeSet<u32> = r17.pages[1..].iter().copied().collect();
+            assert_eq!(r17.pages.len(), 3, "seed {seed}: {:?}", r17.pages);
+            assert_eq!(tail17.len(), 2, "seed {seed}: {:?}", r17.pages);
+            assert!(
+                tail17.iter().all(|p| (7..=17).contains(p)),
+                "seed {seed}: {tail17:?}"
+            );
+
+            let r100 = wide.refill(1000, 10, Selection::Random, &mut rng);
+            assert_eq!(r100.pages.first(), Some(&1), "seed {seed}");
+            let tail100: BTreeSet<u32> = r100.pages[1..].iter().copied().collect();
+            assert_eq!(r100.pages.len(), 5, "seed {seed}: {:?}", r100.pages);
+            assert_eq!(tail100.len(), 4, "seed {seed}: {:?}", r100.pages);
+            assert!(
+                tail100
+                    .iter()
+                    .all(|p| (2..=100).contains(p) && !wide.pages.contains(p)),
+                "seed {seed}: {tail100:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn unavailable_ids_returns_exact_ids() {
+        let on = Filter {
+            monitored_only: true,
+            skip_unavailable: true,
+            ..Filter::default()
+        };
+        let mixed = vec![
+            with_available(cand(40, 40, 1, None, true), Some(false)),
+            with_available(cand(10, 10, 1, None, true), Some(true)),
+            with_available(cand(30, 30, 1, None, false), Some(false)),
+            with_available(cand(20, 20, 1, None, true), Some(false)),
+            with_available(cand(50, 50, 1, None, true), None),
+        ];
+        assert_eq!(unavailable_ids(&mixed, &on), vec![40, 20]);
+        assert!(unavailable_ids(&mixed, &Filter::default()).is_empty());
+
+        let all_available = vec![
+            with_available(cand(1, 1, 1, None, true), Some(true)),
+            with_available(cand(2, 2, 1, None, true), Some(true)),
+        ];
+        assert!(unavailable_ids(&all_available, &on).is_empty());
+
+        let missing_flag = vec![
+            with_available(cand(1, 1, 1, None, true), None),
+            with_available(cand(2, 2, 1, None, true), None),
+        ];
+        assert!(unavailable_ids(&missing_flag, &on).is_empty());
+        assert!(unavailable_ids(&[], &on).is_empty());
     }
 
     // Radarr minimum availability (#350): positive (all available), negative (none available),
