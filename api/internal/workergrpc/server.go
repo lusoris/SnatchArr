@@ -586,6 +586,9 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	if err != nil {
 		return nil, err
 	}
+	if err = requireHolder(run, req.GetWorkerId()); err != nil {
+		return nil, err
+	}
 	policy, err := s.policies.Get(ctx, run.InstanceID)
 	if err != nil {
 		return nil, toStatus(err)
@@ -613,6 +616,15 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 		RunID: &run.ID, InstanceID: run.InstanceID, Level: level, Type: "run_finished",
 		Title: fmt.Sprintf("%s snatch %s: %d item(s) searched", run.Kind, outcome(req.GetOutcome()), len(searched)), Detail: req.GetError(),
 	})
+}
+
+// requireHolder refuses a CompleteRun from any worker but the lease holder before CompleteRun writes
+// progress; runs.Complete checks the same holder, but only after persistRunProgress has committed.
+func requireHolder(run domain.Run, workerID string) error {
+	if workerID == "" || run.LeasedBy != workerID {
+		return toStatus(fmt.Errorf("%w: run %s is not leased by %s", domain.ErrConflict, run.ID, workerID))
+	}
+	return nil
 }
 
 func (s *Server) persistRunProgress(ctx context.Context, run domain.Run, policy domain.Policy, req *snatcharrv1.CompleteRunRequest, searched []*snatcharrv1.SearchedItem) error {
