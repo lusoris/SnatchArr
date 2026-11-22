@@ -8,8 +8,7 @@
 # two current repositories across a workflow and a composite action (two-current), uses-shaped text
 # inside a run script block (run-block-uses), a Docker-only local action directory holding only
 # Dockerfile (docker-local-action), three distinct repositories batched into one GraphQL POST
-# (three-repos), and workflow-refs.yml BOOTSTRAP_REPO matching its earliest remote uses
-# (bootstrap-repo-matches).
+# (three-repos), and workflow-refs.yml carrying no uses entry (guard-job-no-uses).
 # Refused: a reusable workflow under a moved repository name (moved-workflow), a composite action
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
@@ -26,8 +25,10 @@
 # GraphQL errors array (gql-errors), a null GraphQL alias for a private or missing repository
 # (null-alias), 101 repositories split across 2 GraphQL POSTs with a moved repository in the
 # second batch (over-100-repos), a missing token (missing-token), workflow_uses.py without PyYAML
-# (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), and a workflow-refs.yml
-# copy whose checkout uses disagrees with BOOTSTRAP_REPO (bootstrap-repo-mismatch).
+# (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), and workflow-refs.yml
+# copies with a planted block uses step (guard-job-block-uses), flow uses step
+# (guard-job-flow-uses), local ./ uses step (guard-job-local-uses), or escaped-key "\x75ses" step
+# (guard-job-escaped-key-uses).
 #
 #   tools/ci/workflow_refs_test.sh
 #
@@ -164,45 +165,38 @@ expect_refusal() {
   esac
 }
 
-# read_bootstrap_repo FILE: print the single strict owner/name BOOTSTRAP_REPO value of FILE or fail.
-read_bootstrap_repo() {
-  local file="$1" line line_n=0 boot_count=0 boot_repo="" val
+# guard_has_no_uses FILE: succeed when workflow_uses.py and a bounded line scan find no uses entry in FILE.
+guard_has_no_uses() {
+  local file="$1" uses_out line line_n=0
+  local uses_re="(^|[[:space:]{,-])[\"']?uses[\"']?[[:space:]]*:"
+  uses_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" "$file")" || return 1
+  [ -z "$uses_out" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     line_n=$((line_n + 1))
     [ "$line_n" -le 65536 ] || return 1
     [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ "$line" == *BOOTSTRAP_REPO:* ]] || continue
-    boot_count=$((boot_count + 1))
-    [ "$boot_count" -le 1 ] || return 1
-    [[ "$line" =~ ^[[:space:]]*BOOTSTRAP_REPO:[[:space:]]*([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)[[:space:]]*(#.*)?$ ]] || return 1
-    val="${BASH_REMATCH[1]}"
-    case "$val" in
-      ./* | ../* | */. | */..) return 1 ;;
-    esac
-    boot_repo="$val"
+    if [[ "$line" =~ $uses_re ]]; then
+      return 1
+    fi
   done < "$file"
-  [ "$boot_count" -eq 1 ] || return 1
-  printf '%s\n' "$boot_repo"
+  return 0
 }
 
-# bootstrap_repo_matches FILE: succeed when FILE's BOOTSTRAP_REPO matches its lowest-line remote uses.
-bootstrap_repo_matches() {
-  local file="$1" boot_repo uses_out u_repo u_loc u_line line_n=0 lowest_line=0 first_repo=""
-  boot_repo="$(read_bootstrap_repo "$file")" || return 1
-  uses_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" "$file")" || return 1
-  [ -n "$uses_out" ] || return 1
-  while IFS=$'\t' read -r u_repo u_loc; do
+# plant_guard_step CASE STEP: copy workflow-refs.yml to $WORK/CASE.yml with STEP inserted after its single steps: line.
+plant_guard_step() {
+  local case_name="$1" step="$2" src="$REPO_ROOT/.github/workflows/workflow-refs.yml"
+  local dst="$WORK/$case_name.yml" line line_n=0 steps_count=0
+  [[ "$step" != *$'\n'* ]] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
     line_n=$((line_n + 1))
-    [ "$line_n" -le 16384 ] || return 1
-    [ -n "$u_repo" ] || continue
-    u_line="${u_loc##*:}"
-    [[ "$u_line" =~ ^[0-9]+$ ]] || return 1
-    if [ "$lowest_line" -eq 0 ] || [ "$u_line" -lt "$lowest_line" ]; then
-      lowest_line="$u_line"
-      first_repo="$u_repo"
+    [ "$line_n" -le 65536 ] || return 1
+    printf '%s\n' "$line"
+    if [ "$line" = "    steps:" ]; then
+      steps_count=$((steps_count + 1))
+      printf '%s\n' "$step"
     fi
-  done <<< "$uses_out"
-  [ -n "$first_repo" ] && [ "$boot_repo" = "$first_repo" ]
+  done < "$src" > "$dst"
+  [ "$steps_count" -eq 1 ] || return 1
 }
 
 # A fake GitHub GraphQL API: golusoris/<repo> moved to plurano/<repo> and moved/<repo> moved to
@@ -612,21 +606,36 @@ case "$venv_out" in
     ;;
 esac
 
-# workflow-refs.yml BOOTSTRAP_REPO matches its checkout uses repository, and a mismatch is refused.
-if ! bootstrap_repo_matches "$REPO_ROOT/.github/workflows/workflow-refs.yml"; then
-  echo "FAIL bootstrap-repo-matches: workflow-refs.yml BOOTSTRAP_REPO did not match checkout uses" >&2
+# workflow-refs.yml carries no uses entry, and planted block, flow, local and escaped-key uses are refused.
+if ! guard_has_no_uses "$REPO_ROOT/.github/workflows/workflow-refs.yml"; then
+  echo "FAIL guard-job-no-uses: workflow-refs.yml carried a uses entry" >&2
   exit 1
 fi
 accepted=$((accepted + 1))
-echo "ok   bootstrap-repo-matches: accepted (actions/checkout)"
+echo "ok   guard-job-no-uses: accepted (no uses in workflow-refs.yml)"
 
-sed 's|uses: actions/checkout@|uses: actions/checkout2@|' \
-  "$REPO_ROOT/.github/workflows/workflow-refs.yml" > "$WORK/workflow-refs-mismatch.yml"
-if bootstrap_repo_matches "$WORK/workflow-refs-mismatch.yml"; then
-  echo "FAIL bootstrap-repo-mismatch: accepted mismatched BOOTSTRAP_REPO" >&2
-  exit 1
-fi
-refused=$((refused + 1))
-echo "ok   bootstrap-repo-mismatch: refused (actions/checkout vs actions/checkout2)"
+guard_refused_cases=(
+  "guard-job-block-uses|block uses|      - uses: $CHECKOUT # v7.0.1"
+  "guard-job-flow-uses|flow uses|      - {uses: $CHECKOUT, with: {persist-credentials: false}}"
+  "guard-job-local-uses|local uses|      - uses: ./.github/actions/planted"
+  'guard-job-escaped-key-uses|escaped-key uses|      - {"\x75ses": '"$CHECKOUT"'}'
+)
+for ((guard_i = 0; guard_i < 4 && guard_i < ${#guard_refused_cases[@]}; guard_i++)); do
+  guard_entry="${guard_refused_cases[$guard_i]}"
+  guard_case="${guard_entry%%|*}"
+  guard_rest="${guard_entry#*|}"
+  guard_label="${guard_rest%%|*}"
+  guard_step="${guard_rest#*|}"
+  if ! plant_guard_step "$guard_case" "$guard_step"; then
+    printf 'FAIL %s: failed to plant step in workflow-refs.yml\n' "$guard_case" >&2
+    exit 1
+  fi
+  if guard_has_no_uses "$WORK/$guard_case.yml"; then
+    printf 'FAIL %s: accepted planted %s\n' "$guard_case" "$guard_label" >&2
+    exit 1
+  fi
+  refused=$((refused + 1))
+  echo "ok   $guard_case: refused ($guard_label)"
+done
 
 echo "workflow refs: $accepted accepted, $refused refused"
