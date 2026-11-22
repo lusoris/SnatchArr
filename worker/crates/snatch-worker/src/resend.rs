@@ -191,19 +191,26 @@ mod tests {
         assert!(!unsent(&Status::ok("")));
     }
 
-    /// Runs `once_more` over `answers`, one per attempt; returns the result and the attempts.
-    async fn run(answers: Vec<Result<u32, Status>>) -> (Result<u32, Status>, u32) {
-        let attempts = AtomicU32::new(0);
+    /// Runs `once_more` over `answers`, one per attempt; returns the result and the start of each
+    /// attempt.
+    async fn run_timed(
+        answers: Vec<Result<u32, Status>>,
+    ) -> (Result<u32, Status>, Vec<tokio::time::Instant>) {
+        let mut starts = Vec::new();
         let result = once_more(|| {
-            let n = attempts.fetch_add(1, Ordering::SeqCst);
-            let answer = answers
-                .get(usize::try_from(n).expect("index"))
-                .cloned()
-                .expect("an answer per attempt");
+            let n = starts.len();
+            starts.push(tokio::time::Instant::now());
+            let answer = answers.get(n).cloned().expect("an answer per attempt");
             async move { answer }
         })
         .await;
-        (result, attempts.load(Ordering::SeqCst))
+        (result, starts)
+    }
+
+    /// Runs `once_more` over `answers`, one per attempt; returns the result and the attempts.
+    async fn run(answers: Vec<Result<u32, Status>>) -> (Result<u32, Status>, u32) {
+        let (result, starts) = run_timed(answers).await;
+        (result, u32::try_from(starts.len()).expect("attempts"))
     }
 
     #[tokio::test]
@@ -406,10 +413,20 @@ mod tests {
     async fn once_more_waits_before_the_second_attempt() {
         let status = unsent_status().await;
         let start = tokio::time::Instant::now();
-        let (result, attempts) = run(vec![Err(status), Ok(7)]).await;
+        let (result, starts) = run_timed(vec![Err(status), Ok(7)]).await;
         let elapsed = start.elapsed();
         assert_eq!(result.expect("second attempt answers"), 7);
-        assert_eq!(attempts, 2);
+        assert_eq!(starts.len(), 2);
+        let [first, second]: [_; 2] = starts.try_into().expect("two attempts");
+        assert_eq!(first.checked_duration_since(start), Some(Duration::ZERO));
+        let before_second = second
+            .checked_duration_since(start)
+            .expect("second attempt not before start");
+        assert!(
+            before_second >= RESEND_WAIT / 2 && before_second <= RESEND_WAIT,
+            "once_more second attempt at {before_second:?} outside {:?}..={RESEND_WAIT:?}",
+            RESEND_WAIT / 2
+        );
         assert!(
             elapsed >= RESEND_WAIT / 2 && elapsed <= RESEND_WAIT,
             "elapsed {elapsed:?} outside {:?}..={RESEND_WAIT:?}",
@@ -425,9 +442,10 @@ mod tests {
         tx.send(2).await.expect("second item");
         drop(tx);
         let start = tokio::time::Instant::now();
-        let attempts = AtomicU32::new(0);
+        let mut starts = Vec::new();
         let result = stream_once_more(rx, |events| {
-            let n = attempts.fetch_add(1, Ordering::SeqCst);
+            let n = starts.len();
+            starts.push(tokio::time::Instant::now());
             let status = status.clone();
             async move {
                 if n == 0 {
@@ -440,7 +458,17 @@ mod tests {
         .await;
         let elapsed = start.elapsed();
         assert_eq!(result.expect("second attempt answers"), vec![1, 2]);
-        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(starts.len(), 2);
+        let [first, second]: [_; 2] = starts.try_into().expect("two attempts");
+        assert_eq!(first.checked_duration_since(start), Some(Duration::ZERO));
+        let before_second = second
+            .checked_duration_since(start)
+            .expect("second attempt not before start");
+        assert!(
+            before_second >= RESEND_WAIT / 2 && before_second <= RESEND_WAIT,
+            "stream second attempt at {before_second:?} outside {:?}..={RESEND_WAIT:?}",
+            RESEND_WAIT / 2
+        );
         assert!(
             elapsed >= RESEND_WAIT / 2 && elapsed <= RESEND_WAIT,
             "elapsed {elapsed:?} outside {:?}..={RESEND_WAIT:?}",
