@@ -71,7 +71,6 @@ SPDX-License-Identifier: EUPL-1.2
 			cmds.push({
 				id: `nav-${item.href}`,
 				title: item.label,
-				subtitle: item.label,
 				group: m.nav_overview(),
 				keywords: [item.href.replace('/', ''), item.label.toLowerCase()],
 				run: async () => {
@@ -108,7 +107,6 @@ SPDX-License-Identifier: EUPL-1.2
 		cmds.push({
 			id: 'nav-/account',
 			title: m.nav_account(),
-			subtitle: m.nav_account(),
 			group: m.nav_account(),
 			run: async () => {
 				await goto(pageHref('/account'));
