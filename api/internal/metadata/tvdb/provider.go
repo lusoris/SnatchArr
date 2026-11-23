@@ -492,8 +492,8 @@ func (r *boundRedis) bound(ctx context.Context) (context.Context, context.Cancel
 }
 
 // Close cancels every lookup, waits for admitted lookups, then releases the HTTP cache, idle
-// connections and Redis client. Its timeout handles only I/O that ignores its context; cache and
-// Redis still close so shutdown remains bounded.
+// connections and Redis client. The lookup wait and the Redis teardown each stop after
+// closeWaitTimeout, and Close reports either overrun, so shutdown remains bounded.
 func (p *Provider) Close() error {
 	if p == nil {
 		return nil
@@ -513,10 +513,29 @@ func (p *Provider) Close() error {
 			p.closeErr = errors.Join(p.closeErr, p.cache.Close())
 		}
 		if p.redis != nil {
-			p.redis.Close()
+			p.closeErr = errors.Join(p.closeErr, p.closeRedis())
 		}
 	})
 	return p.closeErr
+}
+
+// closeRedis closes the Redis client and waits at most closeWaitTimeout for it. rueidis
+// Client.Close takes no context and closes its connections one after another, so Close reports a
+// teardown that overruns instead of blocking shutdown on it.
+func (p *Provider) closeRedis() error {
+	closed := make(chan struct{})
+	go func() {
+		p.redis.Close()
+		close(closed)
+	}()
+	wait, cancel := context.WithTimeout(context.Background(), closeWaitTimeout)
+	defer cancel()
+	select {
+	case <-closed:
+		return nil
+	case <-wait.Done():
+		return fmt.Errorf("tvdb: close redis: %w", wait.Err())
+	}
 }
 
 // waitLookups waits up to closeWaitTimeout for admitted lookups and detached lookup slots to drain.

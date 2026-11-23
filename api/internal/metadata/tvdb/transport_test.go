@@ -132,6 +132,7 @@ func TestOriginGuardAddsNoStoreForUncacheableResponses(t *testing.T) {
 		{name: "unknown path", method: http.MethodGet, path: "/v4/unknown", status: http.StatusOK, body: `{"not":"tvdb"}`, want: true},
 		{name: "not found", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusNotFound, body: `{"message":"missing"}`},
 		{name: "lookalike directive", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusNotFound, cacheControl: []string{"x-no-store, max-age=no-store"}, body: `{"message":"missing"}`},
+		{name: "quoted no-store", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusNotFound, cacheControl: []string{`extension="keep,no-store,keep"`}, body: `{"message":"missing"}`},
 		{name: "post", method: http.MethodPost, path: "/v4/unknown", status: http.StatusOK, body: `not json`},
 		{name: "empty body", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusOK, want: true},
 		{name: "multiple choices", method: http.MethodGet, path: "/v4/series/81189", status: http.StatusMultipleChoices, want: true},
@@ -282,7 +283,7 @@ func assertOriginBodyClosedOnce(t *testing.T, closes *int) {
 func cacheControlDirectiveNames(header http.Header) []string {
 	var names []string
 	for _, value := range header.Values("Cache-Control") {
-		for directive := range strings.SplitSeq(value, ",") {
+		for _, directive := range splitCacheControl(value) {
 			name, _, _ := strings.Cut(directive, "=")
 			name = strings.ToLower(strings.TrimSpace(name))
 			if name != "" {

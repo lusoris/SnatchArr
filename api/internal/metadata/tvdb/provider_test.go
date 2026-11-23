@@ -1642,6 +1642,7 @@ func TestCloseWaitsForAttachedLookup(t *testing.T) {
 	if _, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 424242}, "de"); err != nil {
 		t.Fatalf("prime TitlesFor() error = %v", err)
 	}
+	waitDetached(t, p, 0, time.After(2*time.Second), "prime lookup did not release its detached slot")
 	attachedStarted := make(chan struct{}, 1)
 	attachedCanceled := make(chan struct{}, 1)
 	releaseAttached := make(chan struct{})
@@ -1936,6 +1937,40 @@ func TestRedisL2UsesInjectedClientAndClosesIt(t *testing.T) {
 	}
 	if !client.closed.Load() {
 		t.Fatal("Close() did not close the injected Redis client")
+	}
+}
+
+type stuckCloseRedisClient struct {
+	rueidis.Client
+	release <-chan struct{}
+}
+
+func (c stuckCloseRedisClient) Close() { <-c.release }
+
+func TestCloseBoundsRedisTeardown(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	p, err := New(plantedKey, plantedPIN, testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler),
+		WithBaseURL(s.srv.URL), WithRetryWait(time.Millisecond), WithRate(""),
+		WithL2("redis", rediscache.Options{Addr: "dragonfly.test:6379"}),
+		withRedisClient(stuckCloseRedisClient{release: release}))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	closed := make(chan error, 1)
+	go func() { closed <- p.Close() }()
+	select {
+	case err := <-closed:
+		if !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "tvdb: close redis") {
+			t.Fatalf("Close() error = %v, want the close redis deadline", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close() did not return after the Redis close deadline")
+	}
+	if err := p.Close(); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("second Close() error = %v, want the first Close error", err)
 	}
 }
 
