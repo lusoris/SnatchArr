@@ -237,7 +237,6 @@ test_pack_failure() {
   printf 'ok   pack-failure\n'
 }
 
-# Build offline fixtures and execute all install-pnpm.sh test cases.
 # Skip with a reason off Linux when a GNU coreutils tool is missing; fail on Linux.
 require_tools() {
   local tool
@@ -253,6 +252,7 @@ require_tools() {
   done
 }
 
+# Build offline fixtures and execute all install-pnpm.sh test cases.
 main() {
   require_tools
   trap cleanup_work EXIT
