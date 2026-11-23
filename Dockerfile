@@ -8,8 +8,10 @@
 # ── web build ─────────────────────────────────────────────────────────────────
 FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS web
 WORKDIR /src/web
-RUN corepack enable
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+COPY web/scripts/install-pnpm.sh ./scripts/install-pnpm.sh
+# Node 25+ ships no corepack; install pnpm from npm at the packageManager version and verify any declared digest.
+RUN bash scripts/install-pnpm.sh
 # patchedDependencies in pnpm-workspace.yaml points here; install fails without it.
 COPY web/patches/ ./patches/
 RUN pnpm install --frozen-lockfile

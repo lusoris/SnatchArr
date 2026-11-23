@@ -441,6 +441,7 @@ web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	cd web
 	pnpm install --frozen-lockfile
 	sh ../tools/ci/clones_check_test.sh
+	bash ../tools/ci/install_pnpm_test.sh
 	PRAETORCTL='$(PRAETORCTL)' python3 ../tools/ci/clones_check.py
 	pnpm gen:api
 	git diff --exit-code -- src/lib/api/schema.d.ts
