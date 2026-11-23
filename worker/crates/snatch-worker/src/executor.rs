@@ -1343,7 +1343,6 @@ fn merge_refill_into(
 /// selections keep `plan_cursor`. On a filter failure, local re-read exclusions merge into
 /// ids the API already approved without introducing new ones.
 async fn apply_refill_batch(
-    _p: &Prepared,
     run: &Run,
     batch: RefillBatch,
     (selection, plan_cursor, refill_cursor): (Selection, u32, u32),
@@ -1431,20 +1430,23 @@ async fn collect_with_refill(
         .emit(Ev::run(Level::Debug, EventType::PageFetched, page_msg))
         .await;
     let fetched = fetch_unique_candidates(p, &more.pages, first, &collected.seen_ids).await;
-    let refill_busy_vec = if fetched.pages_fetched > 0 {
-        refill_busy_snapshot(p, run, &busy, events).await
+    let refill_busy = if fetched.pages_fetched > 0 {
+        Some(refill_busy_snapshot(p, run, &busy, events).await)
     } else {
-        Vec::new()
+        None
     };
-    let (filter_busy, refill_busy) = if fetched.pages_fetched > 0 {
-        (refill_busy_vec.as_slice(), Some(refill_busy_vec.as_slice()))
-    } else {
-        (busy.as_slice(), None)
-    };
+    let filter_busy = refill_busy.as_deref().unwrap_or(&busy);
     let batch = filter_refill_batch(client, p, run, fetched, filter_busy).await;
     let cursors = (selection, plan.next_cursor, more.next_cursor);
-    let cursor =
-        apply_refill_batch(p, run, batch, cursors, &mut collected, refill_busy, events).await;
+    let cursor = apply_refill_batch(
+        run,
+        batch,
+        cursors,
+        &mut collected,
+        refill_busy.as_deref(),
+        events,
+    )
+    .await;
     Ok((collected, cursor))
 }
 

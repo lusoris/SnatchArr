@@ -201,12 +201,18 @@ fn policy(run: &mut Run, per_cycle: u32, selection: CoreSelection, cursor: &str)
 }
 
 async fn send_raw_get(server: &MockServer, path: &str) -> TestResult {
-    use tokio::io::AsyncWriteExt;
-    let mut stream = tokio::net::TcpStream::connect(server.address()).await?;
-    let request = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
-    stream.write_all(request.as_bytes()).await?;
-    let mut response = Vec::new();
-    tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut response).await?;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let response = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let mut stream = tokio::net::TcpStream::connect(server.address()).await?;
+        let request =
+            format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+        stream.write_all(request.as_bytes()).await?;
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await?;
+        Ok::<_, Box<dyn std::error::Error>>(response)
+    })
+    .await
+    .map_err(|_| "raw GET timed out after 5 seconds")??;
     let status = String::from_utf8_lossy(&response);
     assert!(
         status.contains("200 OK") || status.starts_with("HTTP/1.1 200"),
@@ -215,30 +221,32 @@ async fn send_raw_get(server: &MockServer, path: &str) -> TestResult {
     Ok(())
 }
 
-#[tokio::test]
-async fn wanted_pages_at_requires_page_query_positive() -> TestResult {
+async fn mount_one_get_send_raw(
+    mock_path: &str,
+    request_path: &str,
+) -> Result<Vec<wiremock::Request>, Box<dyn std::error::Error>> {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/api/v3/wanted/missing"))
+        .and(path(mock_path))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
-    send_raw_get(&server, "/api/v3/wanted/missing?page=2").await?;
-    let requests = some(server.received_requests().await, "recorded requests")?;
+    send_raw_get(&server, request_path).await?;
+    some(server.received_requests().await, "recorded requests")
+}
+
+#[tokio::test]
+async fn wanted_pages_at_requires_page_query_positive() -> TestResult {
+    let requests =
+        mount_one_get_send_raw("/api/v3/wanted/missing", "/api/v3/wanted/missing?page=2").await?;
     assert_eq!(wanted_pages_at(&requests, "/api/v3")?, [2]);
     Ok(())
 }
 
 #[tokio::test]
 async fn wanted_pages_at_requires_page_query_negative() -> TestResult {
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/api/v3/wanted/missing"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&server)
-        .await;
-    send_raw_get(&server, "/api/v3/wanted/missing").await?;
-    let requests = some(server.received_requests().await, "recorded requests")?;
+    let requests =
+        mount_one_get_send_raw("/api/v3/wanted/missing", "/api/v3/wanted/missing").await?;
     assert!(
         wanted_pages_at(&requests, "/api/v3").is_err(),
         "missing page parameter should error"
@@ -248,14 +256,7 @@ async fn wanted_pages_at_requires_page_query_negative() -> TestResult {
 
 #[tokio::test]
 async fn wanted_pages_at_requires_page_query_boundary() -> TestResult {
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/api/v3/queue"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&server)
-        .await;
-    send_raw_get(&server, "/api/v3/queue").await?;
-    let requests = some(server.received_requests().await, "recorded requests")?;
+    let requests = mount_one_get_send_raw("/api/v3/queue", "/api/v3/queue").await?;
     assert_eq!(wanted_pages_at(&requests, "/api/v3")?, Vec::<u32>::new());
     Ok(())
 }
