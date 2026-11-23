@@ -6,7 +6,7 @@
 # idmatchparity target: docker build --target idmatchparity .
 
 # ── web build ─────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS web
+FROM --platform=$BUILDPLATFORM node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS web
 WORKDIR /src/web
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 COPY web/scripts/install-pnpm.sh ./scripts/install-pnpm.sh
