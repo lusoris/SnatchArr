@@ -121,6 +121,11 @@ def alias_bomb(levels: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def wide_loop(width: int) -> str:
+    """Return a pre-commit alias loop that guards against width x MAX_NODES stack growth."""
+    return "pre-commit: &loop [" + "x, " * (width - 1) + "*loop]\n"
+
+
 OTHER_HOOK = "pre-commit:\n  commands:\n    lint:\n      run: true\n"
 CUSTOM_HOOK = "my-hook:\n  commands:\n    lint:\n      run: true\n"
 
@@ -473,6 +478,16 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
             "guard-definition: lefthook.yml: more than 100000 YAML nodes after aliases and merges"
         ],
     ),
+    "wide-alias-loop-other-hook": (
+        {},
+        {"lefthook.yml": LEFTHOOK + wide_loop(1024)},
+        {},
+        [],
+        1,
+        [
+            "guard-definition: lefthook.yml: more than 100000 YAML nodes after aliases and merges"
+        ],
+    ),
     "hook-duplicate-key": (
         {},
         {"lefthook.yml": LEFTHOOK + OTHER_HOOK + OTHER_HOOK},
@@ -684,7 +699,40 @@ def run_self_imports(check: str) -> bool:
     return False
 
 
-EXTRA = {"no-pyyaml": run_no_yaml, "self-imports": run_self_imports}
+def run_node_budget(check: str) -> bool:
+    """Check load() at MAX_NODES (MAX_NODES - 2 scalars) and one scalar past MAX_NODES."""
+    module = load_checker(check)
+    yaml = module.load_yaml()
+    if yaml is None:
+        print("FAIL node-budget: PyYAML missing")
+        return False
+    limit = module.MAX_NODES
+    at_limit = "pre-commit: [" + ", ".join(["x"] * (limit - 2)) + "]\n"
+    doc = module.load(yaml, at_limit, "lefthook.yml")
+    items = doc.get("pre-commit") if isinstance(doc, dict) else None
+    if not isinstance(items, list) or len(items) != limit - 2:
+        got = len(items) if isinstance(items, list) else type(doc).__name__
+        print(f"FAIL node-budget: at MAX_NODES got {got}, want {limit - 2} items")
+        return False
+    past_limit = "pre-commit: [" + ", ".join(["x"] * (limit - 1)) + "]\n"
+    want = "lefthook.yml: more than 100000 YAML nodes after aliases and merges"
+    try:
+        module.load(yaml, past_limit, "lefthook.yml")
+    except module.GuardError as exc:
+        if str(exc) == want:
+            print("ok node-budget")
+            return True
+        print(f"FAIL node-budget: GuardError {str(exc)!r} != {want!r}")
+        return False
+    print("FAIL node-budget: MAX_NODES + 1 did not raise GuardError")
+    return False
+
+
+EXTRA = {
+    "no-pyyaml": run_no_yaml,
+    "self-imports": run_self_imports,
+    "node-budget": run_node_budget,
+}
 
 
 def main() -> int:

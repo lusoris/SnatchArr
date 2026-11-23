@@ -43,7 +43,7 @@ import re
 import subprocess  # nosec B404  # runs only git with a fixed argument list, never a shell
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 WORKFLOW = ".github/workflows/workflow-refs.yml"
 JOB = "workflow-refs"
@@ -222,51 +222,65 @@ def load(yaml: ModuleType, text: str | None, path: str) -> object:
 
 
 def plain(yaml: ModuleType, reader: ModuleType, root: object, path: str) -> object:
-    """Return the value of composed node root, built from a stack of at most MAX_NODES nodes.
+    """Return the value of composed node root, counting each node when it is queued.
 
     A str scalar becomes its text and any other scalar (tag, text); a sequence becomes a list
-    and a mapping a dict with keys made the same way. A node counts at every alias that reaches
-    it, so an alias bomb or a cycle raises GuardError instead of growing.
+    and a mapping a dict with keys made the same way. A node takes from MAX_NODES when it is
+    queued, at every alias that reaches it, so a wide alias loop, an alias bomb or a cycle
+    raises GuardError before the stack grows.
     """
     if root is None:
         return None
     out: dict[str, object] = {}
-    stack: list[tuple[object, dict | list, object]] = [(root, out, "root")]
+    pending = SimpleNamespace(stack=[(root, out, "root")], queued=1)
     for _ in range(MAX_NODES):
-        if not stack:
+        if not pending.stack:
             break
-        node, parent, slot = stack.pop()
-        parent[slot] = shell(yaml, reader, node, path, stack)
-    if stack:
-        raise GuardError(
-            f"{path}: more than {MAX_NODES} YAML nodes after aliases and merges"
-        )
+        node, parent, slot = pending.stack.pop()
+        parent[slot] = shell(yaml, reader, node, path, pending)
     return out["root"]
 
 
 def shell(
-    yaml: ModuleType, reader: ModuleType, node: object, path: str, stack: list
+    yaml: ModuleType,
+    reader: ModuleType,
+    node: object,
+    path: str,
+    pending: SimpleNamespace,
 ) -> object:
-    """Return the scalar value of node, or its empty list or dict after pushing its children.
+    """Return the scalar value of node, or its empty list or dict after queuing its children.
 
-    Mappings resolve merge keys through reader.resolve_mapping; its refusals (duplicate or
-    non-scalar key, merge past its bounds) raise GuardError.
+    Each child node is counted against MAX_NODES when queued, before its list or dict is
+    allocated. Mappings resolve merge keys through reader.resolve_mapping; its refusals
+    (duplicate or non-scalar key, merge past its bounds) raise GuardError.
     """
     if isinstance(node, yaml.ScalarNode):
         return node.value if node.tag == reader.STR_TAG else (node.tag, node.value)
     if isinstance(node, yaml.SequenceNode):
+        pending.queued += len(node.value)
+        if pending.queued > MAX_NODES:
+            raise GuardError(
+                f"{path}: more than {MAX_NODES} YAML nodes after aliases and merges"
+            )
         items: list[object] = [None] * len(node.value)
-        stack.extend((child, items, index) for index, child in enumerate(node.value))
+        pending.stack.extend(
+            (child, items, index) for index, child in enumerate(node.value)
+        )
         return items
     try:
         pairs = reader.resolve_mapping(node, path, any_scalar_key=True)
     except reader.UsesError as exc:
         raise GuardError(str(exc)) from exc
+    pending.queued += len(pairs)
+    if pending.queued > MAX_NODES:
+        raise GuardError(
+            f"{path}: more than {MAX_NODES} YAML nodes after aliases and merges"
+        )
     entries: dict[object, object] = {}
     for text, (key, child) in pairs.items():
         name = text if key.tag == reader.STR_TAG else (key.tag, text)
         entries[name] = None
-        stack.append((child, entries, name))
+        pending.stack.append((child, entries, name))
     return entries
 
 
