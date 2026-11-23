@@ -187,6 +187,20 @@ def check_max_refs_refusal(
         return []
 
 
+def check_max_refs_skips_dropped(three_doc: str) -> list[str]:
+    """Assert local and docker references, which extract mode drops, take no MAX_REFS slot."""
+    name = "max-refs-skips-dropped"
+    doc = f"{three_doc}      - uses: ./local\n      - uses: docker://alpine:3\n"
+    try:
+        got = collect_text_uses(doc, "dropped.yml", max_refs=3)
+    except UsesError as err:
+        return [f"{name}: unexpected error: {err}"]
+    if [line for _, line in got] != [4, 5, 6]:
+        return [f"{name}: got {got!r}, want the 3 named references"]
+    print(f"ok   {name}")
+    return []
+
+
 def run_max_refs_cases() -> list[str]:
     """Verify MAX_REFS bounds extract and --list-actions modes cleanly."""
     failures: list[str] = []
@@ -195,6 +209,7 @@ def run_max_refs_cases() -> list[str]:
         "      - uses: c/d@v1\n      - uses: e/f@v1\n"
     )
     four_doc = f"{three_doc}      - uses: g/h@v1\n"
+    failures.extend(check_max_refs_skips_dropped(three_doc))
     try:
         got = collect_text_uses(three_doc, "three.yml", max_refs=3)
         if len(got) != 3:
@@ -700,6 +715,27 @@ def check_version_inputs_case(
     return []
 
 
+def version_inputs_key_case_row(
+    helm_sha: str,
+) -> tuple[str, str, str, list[tuple[str, int, str, str]]]:
+    """Return the planted --version-inputs document whose version keys differ in letter case."""
+    case_rel = ".github/workflows/case.yml"
+    case_doc = (
+        f"jobs:\n  j:\n    steps:\n      - uses: {helm_sha}\n"
+        "        with:\n          Version: v4.3.1\n"
+        f"      - uses: {helm_sha}\n        with:\n          VERSION: latest\n"
+    )
+    return (
+        "version-inputs-key-case",
+        case_rel,
+        case_doc,
+        [
+            (case_rel, 4, "azure/setup-helm", "v4.3.1"),
+            (case_rel, 7, "azure/setup-helm", "latest"),
+        ],
+    )
+
+
 def version_inputs_positive_table() -> list[
     tuple[str, str, str, list[tuple[str, int, str, str]]]
 ]:
@@ -726,6 +762,7 @@ def version_inputs_positive_table() -> list[
         "      with:\n        version: v4.3.1\n"
     )
     return [
+        version_inputs_key_case_row(helm_sha),
         (
             "version-inputs-flow-and-scalars",
             flow_rel,
@@ -756,13 +793,37 @@ def version_inputs_positive_table() -> list[
     ]
 
 
+def check_version_input_twice(root: Path) -> list[str]:
+    """Verify a with mapping naming version in two letter cases raises UsesError."""
+    name = "version-inputs-key-twice"
+    rel = ".github/workflows/twice.yml"
+    full = root / rel
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_text(
+        "jobs:\n  j:\n    steps:\n"
+        "      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310\n"
+        "        with:\n          version: v4.3.1\n          Version: latest\n",
+        encoding="utf-8",
+    )
+    want = f"{rel}:7: with names the version input twice (lines 6, 7)"
+    try:
+        got = collect_files_version_inputs(str(root), [rel])
+    except UsesError as err:
+        if str(err) != want:
+            return [f"{name}: error {str(err)!r}, want {want!r}"]
+        print(f"ok   {name}")
+        return []
+    return [f"{name}: accepted {got!r}"]
+
+
 def run_version_inputs_cases() -> list[str]:
-    """Verify --version-inputs covers flow, numeric tags, aliases, merges and bad paths."""
+    """Verify --version-inputs covers flow, numeric tags, key case, aliases, merges and bad paths."""
     failures: list[str] = []
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         for name, rel, doc, want in version_inputs_positive_table():
             failures.extend(check_version_inputs_case(root, name, rel, doc, want))
+        failures.extend(check_version_input_twice(root))
         try:
             collect_files_version_inputs(
                 str(root), [".github/workflows/flow.yml"], max_refs=3

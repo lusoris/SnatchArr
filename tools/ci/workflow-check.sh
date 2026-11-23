@@ -14,6 +14,9 @@
 #
 # Exit status: 0 clean, 1 a finding or a failed run, 2 usage or unsupported bash.
 # Needs bash 4.4 or newer (mapfile -d), docker (actionlint), python3 with venv, jq, curl, network, token.
+# The Python in PYTHON_BIN (default python3) must import yaml (PyYAML): without it
+# workflow_uses.py exits 2 (PyYAML is required) and this script exits 1. On a clean host run
+# `tools/ci/pyyaml_venv.sh DIR` once and set PYTHON_BIN=DIR/bin/python.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

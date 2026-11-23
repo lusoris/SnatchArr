@@ -538,7 +538,11 @@ def extract_with_version(
     *,
     walk: DocWalk | None = None,
 ) -> str:
-    """Return raw scalar with.version text, or empty when absent, non-scalar or unsafe."""
+    """Return raw scalar with.version text, or empty when absent, non-scalar or unsafe.
+
+    The runner hands a with key to the action as INPUT_<key upper-cased>, so Version and
+    VERSION name the same input as version; two such keys in one with mapping raise UsesError.
+    """
     if "with" not in fields:
         return ""
     with_node = fields["with"][1]
@@ -553,9 +557,20 @@ def extract_with_version(
         if walk is not None
         else resolve_mapping(with_node, path)
     )
-    if "version" not in with_fields:
+    named = [
+        (key, value)
+        for name, (key, value) in with_fields.items()
+        if name.upper() == "VERSION"
+    ]
+    if not named:
         return ""
-    return clean_version_scalar(with_fields["version"][1])
+    if len(named) > 1:
+        lines = sorted(key.start_mark.line + 1 for key, _ in named)
+        raise UsesError(
+            f"{path}:{lines[-1]}: with names the version input twice"
+            f" (lines {', '.join(map(str, lines))})"
+        )
+    return clean_version_scalar(named[0][1])
 
 
 def collect_step_version_input(

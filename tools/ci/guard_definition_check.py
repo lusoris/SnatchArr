@@ -13,7 +13,18 @@ directory DIR and labels every changed guard item:
   count; scalar text, plain or quoted, tags, anchors, key order and duplicate keys do;
 - the validator files: every tools/ci path the run steps of job workflow-refs name, then every
   tools/ci path, $HERE/<name> path or Python import those files name, by mode and object id;
-- this check itself (SELF) and its commit-msg command in lefthook.yml.
+- this check itself and the module it imports (SELF), by mode and object id;
+- what lefthook.yml holds of this check: its commit-msg command, every other key of the
+  commit-msg hook (skip, only, files, piped, jobs and the rest; another command may change), and
+  every top-level key that is not another git hook (settings and custom hooks); a top-level
+  extends, remotes or rc key names files this check does not read, so its presence counts as a
+  change;
+- every lefthook local config file (LOCAL_CONFIGS), by mode and object id: lefthook merges the
+  first one present over lefthook.yml.
+
+The workflow and lefthook.yml load through a bounded reader: merge keys resolve through
+workflow_yaml.resolve_mapping, which reads each merged mapping once, every node an alias reaches
+counts again, and past MAX_NODES nodes, or on a duplicate key, the check fails.
 
 A change passes only with GUARD_DEFINITION_ACK='<N>: <reason>' in the environment, never from a
 commit message. Every git call runs under a 10 s timeout. Messages go to stdout; usage errors and
@@ -31,17 +42,64 @@ import os
 import re
 import subprocess  # nosec B404  # runs only git with a fixed argument list, never a shell
 import sys
+from pathlib import Path
 from types import ModuleType
 
 WORKFLOW = ".github/workflows/workflow-refs.yml"
 JOB = "workflow-refs"
-SELF = ("tools/ci/guard_definition_check.sh", "tools/ci/guard_definition_check.py")
+SELF = (
+    "tools/ci/guard_definition_check.sh",
+    "tools/ci/guard_definition_check.py",
+    "tools/ci/workflow_yaml.py",
+)
 HOOK_FILE = "lefthook.yml"
+HOOK = "commit-msg"
 HOOK_COMMAND = "guard-definition"
+# The git hooks lefthook 2.2.2 knows (internal/config/available_hooks.go) other than HOOK: their
+# definitions may change unacknowledged. Every other top-level key is compared.
+OTHER_GIT_HOOKS = frozenset(
+    {
+        "applypatch-msg",
+        "pre-applypatch",
+        "post-applypatch",
+        "pre-commit",
+        "pre-merge-commit",
+        "prepare-commit-msg",
+        "post-commit",
+        "pre-rebase",
+        "post-checkout",
+        "post-merge",
+        "pre-push",
+        "pre-receive",
+        "update",
+        "proc-receive",
+        "post-receive",
+        "post-update",
+        "reference-transaction",
+        "push-to-checkout",
+        "pre-auto-gc",
+        "post-rewrite",
+        "sendemail-validate",
+        "fsmonitor-watchman",
+        "p4-changelist",
+        "p4-prepare-changelist",
+        "p4-post-changelist",
+        "p4-pre-submit",
+        "post-index-change",
+    }
+)
+# lefthook 2.2.2 internal/config/loader.go: LocalConfigNames with each of its Extensions.
+LOCAL_CONFIGS = tuple(
+    f"{name}{extension}"
+    for extension in (".yml", ".yaml", ".json", ".jsonc", ".toml")
+    for name in ("lefthook-local", ".lefthook-local", ".config/lefthook-local")
+)
+FILE_KEYS = ("extends", "remotes", "rc")
 MAX_FILES = 64
 MAX_CANDIDATES = 512
 MAX_BYTES = 1024 * 1024
 MAX_EVENTS = 200_000
+MAX_NODES = 100_000
 GIT_TIMEOUT_SECONDS = 10
 PR_RE = re.compile(r"[1-9][0-9]{0,6}")
 ACK_RE = re.compile(r"([1-9][0-9]{0,6}): ([ -~]{20,200})")
@@ -129,14 +187,87 @@ def events(yaml: ModuleType, text: str | None) -> object:
     return out
 
 
-def load(yaml: ModuleType, text: str | None) -> object:
-    """Return yaml.safe_load of text, None for None or an unparsable document."""
+def node_reader() -> ModuleType:
+    """Return workflow_yaml from this file's directory, which python3 -I leaves off sys.path.
+
+    Imported only once PyYAML imports, so the module never caches a missing yaml.
+    """
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import workflow_yaml
+
+    return workflow_yaml
+
+
+def load(yaml: ModuleType, text: str | None, path: str) -> object:
+    """Return the value of the YAML document text at path, None for None or an unparsable one.
+
+    Raise GuardError past the line, depth or event bounds of workflow_yaml, or as plain() does.
+    """
     if text is None:
         return None
+    reader = node_reader()
     try:
-        return yaml.safe_load(text)
+        reader.check_line_limit(text, path)
+        reader.check_yaml_depth(text, path)
+        root = yaml.compose(text, Loader=yaml.SafeLoader)
     except yaml.YAMLError:
         return None
+    except reader.UsesError as exc:
+        if isinstance(exc.__cause__, yaml.YAMLError):
+            return None
+        raise GuardError(str(exc)) from exc
+    return plain(yaml, reader, root, path)
+
+
+def plain(yaml: ModuleType, reader: ModuleType, root: object, path: str) -> object:
+    """Return the value of composed node root, built from a stack of at most MAX_NODES nodes.
+
+    A str scalar becomes its text and any other scalar (tag, text); a sequence becomes a list
+    and a mapping a dict with keys made the same way. A node counts at every alias that reaches
+    it, so an alias bomb or a cycle raises GuardError instead of growing.
+    """
+    if root is None:
+        return None
+    out: dict[str, object] = {}
+    stack: list[tuple[object, dict | list, object]] = [(root, out, "root")]
+    for _ in range(MAX_NODES):
+        if not stack:
+            break
+        node, parent, slot = stack.pop()
+        parent[slot] = shell(yaml, reader, node, path, stack)
+    if stack:
+        raise GuardError(
+            f"{path}: more than {MAX_NODES} YAML nodes after aliases and merges"
+        )
+    return out["root"]
+
+
+def shell(
+    yaml: ModuleType, reader: ModuleType, node: object, path: str, stack: list
+) -> object:
+    """Return the scalar value of node, or its empty list or dict after pushing its children.
+
+    Mappings resolve merge keys through reader.resolve_mapping; its refusals (duplicate or
+    non-scalar key, merge past its bounds) raise GuardError.
+    """
+    if isinstance(node, yaml.ScalarNode):
+        return node.value if node.tag == reader.STR_TAG else (node.tag, node.value)
+    if isinstance(node, yaml.SequenceNode):
+        items: list[object] = [None] * len(node.value)
+        stack.extend((child, items, index) for index, child in enumerate(node.value))
+        return items
+    try:
+        pairs = reader.resolve_mapping(node, path, any_scalar_key=True)
+    except reader.UsesError as exc:
+        raise GuardError(str(exc)) from exc
+    entries: dict[object, object] = {}
+    for text, (key, child) in pairs.items():
+        name = text if key.tag == reader.STR_TAG else (key.tag, text)
+        entries[name] = None
+        stack.append((child, entries, name))
+    return entries
 
 
 def seeds(doc: object) -> list[str]:
@@ -193,11 +324,48 @@ def validator_files(git_dir: str, rev: str, doc: object) -> set[str]:
     raise GuardError(f"validator candidates passed MAX_CANDIDATES ({MAX_CANDIDATES})")
 
 
-def hook_entry(doc: object) -> object:
-    """Return the commit-msg command HOOK_COMMAND of a lefthook doc, or None when it has none."""
-    hook = doc.get("commit-msg") if isinstance(doc, dict) else None
+def hook_hold(doc: object) -> dict[str, object] | None:
+    """Return what a lefthook doc holds of this check, or None when it has no HOOK_COMMAND.
+
+    The parts: command (HOOK_COMMAND), hook (every key of HOOK but commands) and settings
+    (every top-level key but HOOK and OTHER_GIT_HOOKS).
+    """
+    hook = doc.get(HOOK) if isinstance(doc, dict) else None
     commands = hook.get("commands") if isinstance(hook, dict) else None
-    return commands.get(HOOK_COMMAND) if isinstance(commands, dict) else None
+    command = commands.get(HOOK_COMMAND) if isinstance(commands, dict) else None
+    if command is None:
+        return None
+    return {
+        "command": command,
+        "hook": {key: value for key, value in hook.items() if key != "commands"},
+        "settings": {
+            key: value
+            for key, value in doc.items()
+            if key != HOOK and key not in OTHER_GIT_HOOKS
+        },
+    }
+
+
+def hold_labels(base: dict | None, merge: dict | None) -> list[str]:
+    """Return a label for each part of the lefthook hold that merge changes from base."""
+    if base is None:
+        return []
+    if merge is None:
+        return [f"{HOOK_FILE}: {HOOK} {HOOK_COMMAND}"]
+    names = {
+        "command": f"{HOOK} {HOOK_COMMAND}",
+        "hook": f"{HOOK} hook controls",
+        "settings": "top-level settings and custom hooks",
+    }
+    labels = [
+        f"{HOOK_FILE}: {names[part]}" for part in names if base[part] != merge[part]
+    ]
+    labels.extend(
+        f"{HOOK_FILE}: {key} names files this check does not read"
+        for key in FILE_KEYS
+        if key in merge["settings"]
+    )
+    return labels
 
 
 def changes(
@@ -210,17 +378,16 @@ def changes(
         labels.append(WORKFLOW)
     files: set[str] = set()
     for rev, text in zip((base, merge), texts, strict=True):
-        files |= validator_files(git_dir, rev, load(yaml, text))
-    compared = sorted(files.union(SELF))
+        files |= validator_files(git_dir, rev, load(yaml, text, WORKFLOW))
+    compared = [*sorted(files.union(SELF)), *LOCAL_CONFIGS]
     for path in compared:
         if entry(git_dir, base, path) != entry(git_dir, merge, path):
             labels.append(path)
-    hooks = [
-        hook_entry(load(yaml, read_text(git_dir, rev, HOOK_FILE)))
+    holds = [
+        hook_hold(load(yaml, read_text(git_dir, rev, HOOK_FILE), HOOK_FILE))
         for rev in (base, merge)
     ]
-    if hooks[0] is not None and hooks[0] != hooks[1]:
-        labels.append(f"{HOOK_FILE}: commit-msg {HOOK_COMMAND}")
+    labels.extend(hold_labels(*holds))
     return sorted(labels), len(compared) + 2
 
 

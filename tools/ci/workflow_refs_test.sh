@@ -16,7 +16,8 @@
 # --max-time 20 and --retry-max-time 55 to 60 under the default lookup deadline
 # (lookup-max-time-default) and by 1 to 5 under a 5 s deadline (lookup-max-time-short),
 # WORKFLOW_REFS_DEADLINE_SECONDS at its bounds 1 and 9999 (deadline-env-1, deadline-env-9999), and
-# workflow-refs.yml running on a schedule with a non-empty cron string (guard-job-schedule).
+# workflow-refs.yml running on a schedule with a non-empty cron string (guard-job-schedule), and a
+# copy whose on key is quoted, which PyYAML reads as the string "on" (guard-job-quoted-on).
 # Refused: a reusable workflow under a moved repository name (moved-workflow), a composite action
 # step under a moved repository name (moved-action), a failed GraphQL HTTP call and an empty JSON
 # object on clean, a moved repository reached via YAML anchor and alias (moved-anchor), a
@@ -24,8 +25,9 @@
 # under a moved repository name (moved-bool-job-id), a leading-dot workflow file under a moved
 # repository name (moved-hidden-workflow), a nested composite action under a moved
 # repository name (moved-nested-action), a composite action outside .github/actions reached via
-# `uses: ./tools/actions/x` (moved-outside-action), a composite action reached via self-repository
-# `uses: $/.github/actions/planted` under a moved repository name (moved-self-repo-action), a
+# `uses: ./tools/actions/x` (moved-outside-action), a composite action outside .github/actions
+# reached only via self-repository `uses: $/tools/self-repo/planted` under a moved repository name
+# (moved-self-repo-action), a
 # self-repository reference carrying `@ref` (self-repo-with-ref), a composite action nested 9
 # directories under .github/actions (moved-deep-action), a missing local action `uses: ./missing`
 # (missing-local-action), a local action escaping ROOT `uses: ./../outside` (escape-local-action),
@@ -42,7 +44,8 @@
 # (no-pyyaml), pyyaml_venv.sh without a DIR argument (pyyaml-venv-no-arg), with the deadline word
 # abc (pyyaml-venv-deadline-word) or against a package index that never answers past a 12 s
 # deadline (pyyaml-venv-stalled-index), workflow-refs.yml copies with no schedule
-# (guard-job-no-schedule), a schedule with no cron line (guard-job-empty-schedule), a planted
+# (guard-job-no-schedule), a schedule with no cron line (guard-job-empty-schedule), both an
+# unquoted and a quoted on key (guard-job-on-twice), a planted
 # block uses step (guard-job-block-uses), flow uses step
 # (guard-job-flow-uses), local ./ uses step (guard-job-local-uses), escaped-key "\x75ses" step
 # (guard-job-escaped-key-uses), or escaped-key local uses step (guard-job-escaped-local-uses),
@@ -71,24 +74,8 @@ fi
 
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
-# ensure_pyyaml_python: export PYTHON_BIN to a PyYAML-capable python when unset and host python3 lacks yaml.
-ensure_pyyaml_python() {
-  local venv_dir="$REPO_ROOT/.cache/pyyaml-venv"
-  if [ -n "${PYTHON_BIN:-}" ]; then
-    export PYTHON_BIN
-    return 0
-  fi
-  if python3 -I -c 'import yaml' > /dev/null 2>&1; then
-    return 0
-  fi
-  if [ ! -x "$venv_dir/bin/python" ] || ! "$venv_dir/bin/python" -I -c 'import yaml' > /dev/null 2>&1; then
-    if ! bash "$HERE/pyyaml_venv.sh" "$venv_dir"; then
-      echo "error: failed to install PyYAML via tools/ci/pyyaml_venv.sh" >&2
-      exit 1
-    fi
-  fi
-  export PYTHON_BIN="$venv_dir/bin/python"
-}
+# shellcheck source=tools/ci/test_lib.sh
+. "$HERE/test_lib.sh"
 ensure_pyyaml_python
 
 WORK="$(mktemp -d)"
@@ -255,9 +242,10 @@ plant_guard_step() {
   [ "$steps_count" -eq 1 ] || return 1
 }
 
-# guard_has_schedule FILE: succeed when the on mapping of FILE (PyYAML reads the key on as True)
-# holds a schedule list with a mapping whose cron is a non-empty string; otherwise print
-# `no schedule entry with a cron string` and exit 1. Reads under a 10 s bound.
+# guard_has_schedule FILE: succeed when the on mapping of FILE holds a schedule list with a
+# mapping whose cron is a non-empty string. PyYAML reads an unquoted on key as True and a quoted
+# one as the string "on"; both serve. Both keys at once print `on key given twice`, no schedule
+# prints `no schedule entry with a cron string`; either exits 1. Reads under a 10 s bound.
 guard_has_schedule() {
   python3 -I "$RUN_BOUNDED_PY" 10 "${PYTHON_BIN:-python3}" -I -c '
 import sys
@@ -266,7 +254,11 @@ import yaml
 
 with open(sys.argv[1], encoding="utf-8") as handle:
     doc = yaml.safe_load(handle)
-on = doc.get(True) if isinstance(doc, dict) else None
+keys = [key for key in (True, "on") if isinstance(doc, dict) and key in doc]
+if len(keys) > 1:
+    print("on key given twice")
+    sys.exit(1)
+on = doc[keys[0]] if keys else None
 entries = on.get("schedule") if isinstance(on, dict) else None
 if not isinstance(entries, list):
     entries = []
@@ -299,6 +291,26 @@ plant_guard_unscheduled() {
   done < "$src" > "$dst"
   [ "$cron_n" -eq 1 ] || return 1
   [ "$mode" = cron ] || [ "$schedule_n" -eq 1 ]
+}
+
+# plant_guard_quoted_on CASE MODE: copy workflow-refs.yml to $WORK/CASE.yml with its single
+# top-level `on:` line written `"on":` (MODE quoted), or keep it and append a top-level
+# `"on": {}` line (MODE twice).
+plant_guard_quoted_on() {
+  local mode="$2" src="$REPO_ROOT/.github/workflows/workflow-refs.yml"
+  local dst="$WORK/$1.yml" line line_n=0 on_n=0
+  [ "$mode" = quoted ] || [ "$mode" = twice ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line_n=$((line_n + 1))
+    [ "$line_n" -le 65536 ] || return 1
+    if [ "$line" = "on:" ]; then
+      on_n=$((on_n + 1))
+      [ "$mode" = twice ] || line='"on":'
+    fi
+    printf '%s\n' "$line"
+  done < "$src" > "$dst"
+  [ "$on_n" -eq 1 ] || return 1
+  [ "$mode" = quoted ] || printf '%s\n' '"on": {}' >> "$dst"
 }
 
 # A fake GitHub GraphQL API: golusoris/<repo> moved to plurano/<repo> and moved/<repo> moved to
@@ -610,9 +622,10 @@ jobs:
 YAML
 expect_refusal moved-deep-action "refused .github/actions/$deep_dir/action.yml:6: moved/deep-repo moved to current/deep-repo" env CURL_BIN="$WORK/curl-moved"
 
-# A composite action reached via `uses: $/.github/actions/planted` is scanned and refused.
-mkdir -p "$WORK/moved-self-repo-action/.github/workflows" "$WORK/moved-self-repo-action/.github/actions/planted"
-cat > "$WORK/moved-self-repo-action/.github/actions/planted/action.yml" <<'YAML'
+# A composite action outside .github/actions, reached only via `uses: $/tools/self-repo/planted`,
+# is scanned and refused: no directory walk finds it, so the refusal proves workflow discovery.
+mkdir -p "$WORK/moved-self-repo-action/.github/workflows" "$WORK/moved-self-repo-action/tools/self-repo/planted"
+cat > "$WORK/moved-self-repo-action/tools/self-repo/planted/action.yml" <<'YAML'
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 name: planted
@@ -635,9 +648,9 @@ jobs:
       - uses: $CHECKOUT # v7.0.1
         with:
           persist-credentials: false
-      - uses: \$/.github/actions/planted
+      - uses: \$/tools/self-repo/planted
 YAML
-expect_refusal moved-self-repo-action "refused .github/actions/planted/action.yml:8: moved/repo moved to current/repo" env CURL_BIN="$WORK/curl-moved"
+expect_refusal moved-self-repo-action "refused tools/self-repo/planted/action.yml:8: moved/repo moved to current/repo" env CURL_BIN="$WORK/curl-moved"
 
 # A self-repository reference carrying `@ref` is refused before any directory lookup.
 plant self-repo-with-ref '$/.github/actions/planted@v1'
@@ -1065,6 +1078,31 @@ if ! guard_has_schedule "$REPO_ROOT/.github/workflows/workflow-refs.yml" > /dev/
 fi
 accepted=$((accepted + 1))
 echo "ok   guard-job-schedule: accepted (schedule with a cron string)"
+
+if ! plant_guard_quoted_on guard-job-quoted-on quoted; then
+  echo "FAIL guard-job-quoted-on: failed to quote the on line of workflow-refs.yml" >&2
+  exit 1
+fi
+if ! guard_has_schedule "$WORK/guard-job-quoted-on.yml" > /dev/null; then
+  echo "FAIL guard-job-quoted-on: quoted on key has no schedule entry with a cron string" >&2
+  exit 1
+fi
+accepted=$((accepted + 1))
+echo "ok   guard-job-quoted-on: accepted (quoted on key with a cron string)"
+
+if ! plant_guard_quoted_on guard-job-on-twice twice; then
+  echo "FAIL guard-job-on-twice: failed to append a quoted on key to workflow-refs.yml" >&2
+  exit 1
+fi
+on_twice_rc=0
+on_twice_out="$(guard_has_schedule "$WORK/guard-job-on-twice.yml")" || on_twice_rc=$?
+if [ "$on_twice_rc" -ne 1 ] || [ "$on_twice_out" != "on key given twice" ]; then
+  printf 'FAIL guard-job-on-twice: want exit 1 and on key given twice, got %s: %s\n' \
+    "$on_twice_rc" "$on_twice_out" >&2
+  exit 1
+fi
+refused=$((refused + 1))
+echo "ok   guard-job-on-twice: refused (on key given twice)"
 
 for schedule_mode in schedule cron; do
   schedule_case="guard-job-no-schedule"

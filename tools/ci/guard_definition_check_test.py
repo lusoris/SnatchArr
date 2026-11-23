@@ -12,6 +12,7 @@ deadline. Exit status: 0 = every case passed, 1 = a case failed, 2 = usage error
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import importlib.util
 import io
@@ -43,7 +44,7 @@ def unchanged(count: int) -> str:
     return f"guard-definition: pull request {PR} leaves the workflow-refs guard unchanged ({count} files compared)"
 
 
-UNCHANGED = unchanged(10)
+UNCHANGED = unchanged(26)
 WORKFLOW = """name: Workflow refs
 on:
   pull_request:
@@ -98,6 +99,30 @@ BASE = {
     "tools/ci/unrelated.sh": "echo unrelated\n",
     "README.md": "readme\n",
 }
+
+
+def merge_bomb(levels: int) -> str:
+    """Return a pre-commit hook whose merge keys name the level below ten times per level.
+
+    yaml.safe_load copies every merged pair into each mapping, 10**levels pairs at the top; the
+    checker reads each merged mapping once.
+    """
+    lines = ["pre-commit:", "  l0: &l0 {a: 1}"]
+    for n in range(1, levels + 1):
+        lines.append(f"  l{n}: &l{n} {{<<: [{', '.join([f'*l{n - 1}'] * 10)}]}}")
+    return "\n".join(lines) + "\n"
+
+
+def alias_bomb(levels: int) -> str:
+    """Return a pre-commit hook whose lists name the list below ten times per level."""
+    lines = ["pre-commit:", f"  a0: &a0 [{', '.join(['x'] * 10)}]"]
+    for n in range(1, levels + 1):
+        lines.append(f"  a{n}: &a{n} [{', '.join([f'*a{n - 1}'] * 10)}]")
+    return "\n".join(lines) + "\n"
+
+
+OTHER_HOOK = "pre-commit:\n  commands:\n    lint:\n      run: true\n"
+CUSTOM_HOOK = "my-hook:\n  commands:\n    lint:\n      run: true\n"
 
 
 def label(path: str) -> str:
@@ -259,7 +284,7 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
         {},
         [],
         1,
-        refused(WF),
+        [f"guard-definition: {WF}:10: duplicate key 'timeout-minutes'"],
     ),
     "step-removed": (
         {},
@@ -290,7 +315,7 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
         {},
         [],
         0,
-        [unchanged(4)],
+        [unchanged(20)],
     ),
     "ack-valid": (
         {},
@@ -354,6 +379,107 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
         [],
         0,
         [UNCHANGED],
+    ),
+    "hook-skip": (
+        {},
+        {"lefthook.yml": LEFTHOOK + "  skip: true\n"},
+        {},
+        [],
+        1,
+        refused("lefthook.yml: commit-msg hook controls"),
+    ),
+    "hook-jobs": (
+        {},
+        {"lefthook.yml": LEFTHOOK + "  jobs:\n    - run: true\n"},
+        {},
+        [],
+        1,
+        refused("lefthook.yml: commit-msg hook controls"),
+    ),
+    "top-level-setting": (
+        {},
+        {"lefthook.yml": "no_tty: true\n" + LEFTHOOK},
+        {},
+        [],
+        1,
+        refused("lefthook.yml: top-level settings and custom hooks"),
+    ),
+    "custom-hook-added": (
+        {},
+        {"lefthook.yml": LEFTHOOK + CUSTOM_HOOK},
+        {},
+        [],
+        1,
+        refused("lefthook.yml: top-level settings and custom hooks"),
+    ),
+    "other-git-hook-added": (
+        {},
+        {"lefthook.yml": LEFTHOOK + OTHER_HOOK},
+        {},
+        [],
+        0,
+        [UNCHANGED],
+    ),
+    "rc-key": (
+        {},
+        {"lefthook.yml": "rc: .lefthookrc\n" + LEFTHOOK},
+        {},
+        [],
+        1,
+        refused(
+            "lefthook.yml: rc names files this check does not read",
+            "lefthook.yml: top-level settings and custom hooks",
+        ),
+    ),
+    "extends-kept": (
+        {"lefthook.yml": "extends: [base.yml]\n" + LEFTHOOK},
+        {"README.md": "new\n"},
+        {},
+        [],
+        1,
+        refused("lefthook.yml: extends names files this check does not read"),
+    ),
+    "local-config-added": (
+        {},
+        {"lefthook-local.yml": "commit-msg:\n  skip: true\n"},
+        {},
+        [],
+        1,
+        refused("lefthook-local.yml"),
+    ),
+    "local-config-nested": (
+        {},
+        {".config/lefthook-local.toml": "[commit-msg]\nskip = true\n"},
+        {},
+        [],
+        1,
+        refused(".config/lefthook-local.toml"),
+    ),
+    "merge-bomb-other-hook": (
+        {},
+        {"lefthook.yml": LEFTHOOK + merge_bomb(13)},
+        {},
+        [],
+        0,
+        [UNCHANGED],
+    ),
+    "alias-bomb-other-hook": (
+        {},
+        {"lefthook.yml": LEFTHOOK + alias_bomb(6)},
+        {},
+        [],
+        1,
+        [
+            "guard-definition: lefthook.yml: more than 100000 YAML nodes after aliases and merges"
+        ],
+    ),
+    "hook-duplicate-key": (
+        {},
+        {"lefthook.yml": LEFTHOOK + OTHER_HOOK + OTHER_HOOK},
+        {},
+        [],
+        1,
+        ["guard-definition: lefthook.yml:11: duplicate key 'pre-commit'"],
     ),
     "here-dependency": (
         {},
@@ -420,7 +546,7 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
         1,
         ["guard-definition: validator file set passed MAX_FILES (64)"],
     ),
-    "max-files-boundary": (many_refs(60, True), {}, {}, [], 0, [unchanged(68)]),
+    "max-files-boundary": (many_refs(60, True), {}, {}, [], 0, [unchanged(84)]),
     "max-candidates": (
         many_refs(508, False),
         {},
@@ -429,7 +555,7 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
         1,
         ["guard-definition: validator candidates passed MAX_CANDIDATES (512)"],
     ),
-    "max-candidates-boundary": (many_refs(507, False), {}, {}, [], 0, [unchanged(8)]),
+    "max-candidates-boundary": (many_refs(507, False), {}, {}, [], 0, [unchanged(24)]),
     "self-in-workflow": (
         {WF: WORKFLOW + "      - run: bash tools/ci/guard_definition_check.sh\n"},
         {"tools/ci/guard_definition_check.sh": "exit 0\n"},
@@ -532,6 +658,35 @@ def run_no_yaml(check: str) -> bool:
     return False
 
 
+def run_self_imports(check: str) -> bool:
+    """Check that SELF names every module beside CHECK_PY that CHECK_PY imports."""
+    here = Path(check).resolve().parent
+    tree = ast.parse(Path(check).read_text(encoding="utf-8"))
+    names = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    names |= {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+    }
+    local = sorted(
+        f"tools/ci/{name}.py" for name in names if (here / f"{name}.py").is_file()
+    )
+    missing = [path for path in local if path not in load_checker(check).SELF]
+    if local and not missing:
+        print("ok self-imports")
+        return True
+    print(f"FAIL self-imports: local imports {local}, missing from SELF {missing}")
+    return False
+
+
+EXTRA = {"no-pyyaml": run_no_yaml, "self-imports": run_self_imports}
+
+
 def main() -> int:
     """Run the selected cases; return 0 when all pass."""
     if len(sys.argv) < 2 or not Path(sys.argv[1]).is_file():
@@ -539,14 +694,12 @@ def main() -> int:
             "usage: guard_definition_check_test.py CHECK_PY [CASE ...]", file=sys.stderr
         )
         return 2
-    check, names = sys.argv[1], sys.argv[2:] or [*CASES, "no-pyyaml"]
-    unknown = [n for n in names if n not in CASES and n != "no-pyyaml"]
+    check, names = sys.argv[1], sys.argv[2:] or [*CASES, *EXTRA]
+    unknown = [n for n in names if n not in CASES and n not in EXTRA]
     if unknown:
         print(f"unknown cases: {unknown}", file=sys.stderr)
         return 2
-    results = [
-        run_no_yaml(check) if n == "no-pyyaml" else run_case(check, n) for n in names
-    ]
+    results = [EXTRA[n](check) if n in EXTRA else run_case(check, n) for n in names]
     print(
         f"guard-definition cases: {results.count(True)} passed, {results.count(False)} failed"
     )

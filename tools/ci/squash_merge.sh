@@ -18,6 +18,11 @@
 #   rc 6  merged, but the commit on main does not carry the trailer
 #   rc 7  merge failed and the pull request is not confirmed MERGED
 #   rc 8  merged, but the main commit read-back failed
+#   rc 9  tools/ci/guard_definition_check.sh refuses the squash message: the pull request changes
+#         the workflow-refs guard without GUARD_DEFINITION_ACK, or the check could not run
+#
+# The guard check runs here as well as from lefthook commit-msg: the squash commit is built on
+# the forge, so no local commit-msg hook sees its message. GUARD_DEFINITION_ACK passes through.
 #
 # GH names the forge client (default gh), for the planted cases in squash_merge_test.sh.
 # Platforms: POSIX sh, runs in CI on the ubuntu workflows job and on Linux maintainer hosts; macOS and Windows skipped: the repository's CI and landing run on Linux only.
@@ -72,6 +77,7 @@ case "$subject" in
 esac
 { printf '%s\n\n' "$subject"; cat "$body"; } >"$work/msg"
 sh "$ROOT/.config/hooks/commit-msg.sh" "$work/msg" || exit 4
+(cd "$ROOT" && bash tools/ci/guard_definition_check.sh "$work/msg") || exit 9
 
 view="$("$GH" pr view "$pr" -R "$REPO" --json mergeStateStatus,headRefOid \
   --jq '[.mergeStateStatus, .headRefOid] | @tsv')" || {

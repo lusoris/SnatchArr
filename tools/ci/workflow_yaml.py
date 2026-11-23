@@ -309,27 +309,24 @@ def collect_steps_raw_uses(
     walk: DocWalk | None = None,
 ) -> list[tuple[str, int]]:
     """Collect raw (uses_value, line) pairs from steps_node within optional budget."""
-    active_walk = walk if walk is not None else DocWalk()
-    found: list[tuple[str, int]] = []
-    for step_node in check_steps_sequence(steps_node, path):
-        active_walk.visit(path, step_node.start_mark.line + 1)
-        hit = step_uses_scalar(step_node, path, walk=active_walk)
-        if hit is not None:
-            if budget is not None:
-                budget.take(path, hit[1])
-            found.append(hit)
-    return found
+    return collect_steps_uses(
+        steps_node, path, budget, decode=keep_uses_value, walk=walk
+    )
 
 
 def collect_steps_uses(
     steps_node: yaml.Node,
     path: str,
-    budget: RefBudget,
+    budget: RefBudget | None,
     *,
     decode: Callable[[str, str, int], str | None] = parse_uses_value,
     walk: DocWalk | None = None,
 ) -> list[tuple[str, int]]:
-    """Collect decoded (uses_value, line) pairs from steps_node within budget."""
+    """Collect decoded (uses_value, line) pairs from steps_node within optional budget.
+
+    decode maps each raw uses string to the kept value or None to drop it; budget counts
+    only kept references. keep_uses_value keeps every raw string.
+    """
     active_walk = walk if walk is not None else DocWalk()
     found: list[tuple[str, int]] = []
     for step_node in check_steps_sequence(steps_node, path):
@@ -338,9 +335,11 @@ def collect_steps_uses(
         if hit is None:
             continue
         decoded = decode(hit[0], path, hit[1])
-        if decoded is not None:
+        if decoded is None:
+            continue
+        if budget is not None:
             budget.take(path, hit[1])
-            found.append((decoded, hit[1]))
+        found.append((decoded, hit[1]))
     return found
 
 

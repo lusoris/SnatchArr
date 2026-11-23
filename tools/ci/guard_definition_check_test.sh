@@ -27,16 +27,17 @@
 # (fetch-deadline), and GIT_DIR, GIT_INDEX_FILE and GIT_OBJECT_DIRECTORY of the clone exported
 # as a git hook sees them, after which the clone holds no object of the fetched merge (hook-env).
 # Boundary: the largest number the subject rule reads, (#9999999) (pr-number-max).
-# Platform (HISS-21): Linux and macOS; requires bash, git, python3, and PyYAML for PYTHON_BIN
-# (default python3). Exit status: 0 every case passed; 1 a case failed.
+# Platform (HISS-21): Linux and macOS; requires bash, git and python3. An explicit PYTHON_BIN
+# must import yaml; without one, ensure_pyyaml_python (test_lib.sh) takes host python3 when it
+# imports yaml, else builds .cache/pyyaml-venv with tools/ci/pyyaml_venv.sh (needs the package
+# index). Exit status: 0 every case passed; 1 a case failed.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/ci/test_lib.sh
 . "$HERE/test_lib.sh"
 CHECK="$HERE/guard_definition_check.sh"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-export PYTHON_BIN
+ensure_pyyaml_python
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 CASES=0
@@ -66,6 +67,12 @@ g() {
   run_bounded 30 git "$@"
 }
 
+# bounded_new_repo DIR: run test_lib.sh new_repo DIR in a child bash under a 30 s deadline.
+bounded_new_repo() {
+  # shellcheck disable=SC2016 # the child bash expands $1 and $2, its own positional arguments
+  run_bounded 30 bash -c '. "$1/test_lib.sh" && new_repo "$2"' bounded_new_repo "$HERE" "$1"
+}
+
 # pr_branch REPO N WORKFLOW_TEXT: on a branch pr-N off main, write WORKFLOW_TEXT and a README
 # line naming N, commit, and print nothing.
 pr_branch() {
@@ -91,7 +98,7 @@ push_merge() {
 build_origin() {
   local src="$WORK/src"
   g init -q --bare "$WORK/origin.git"
-  new_repo "$src"
+  bounded_new_repo "$src"
   mkdir -p "$src/.github/workflows" "$src/tools/ci"
   printf '%s\n' "$WORKFLOW" > "$src/.github/workflows/workflow-refs.yml"
   printf 'bash tools/ci/workflow_refs.sh --planted\n' > "$src/tools/ci/workflow_refs_test.sh"
@@ -162,7 +169,7 @@ expect_args() {
 # no_origin_case: run the entry script from a repository without origin and require exit 1.
 no_origin_case() {
   local repo="$WORK/no-origin" rc=0 out
-  new_repo "$repo"
+  bounded_new_repo "$repo"
   printf 'fix: x (#7)\n' > "$WORK/no-origin.msg"
   out="$(cd "$repo" && run_bounded 40 bash "$CHECK" "$WORK/no-origin.msg" 2>&1)" || rc=$?
   check_case no-origin 1 "$rc" "guard-definition: no origin remote" "$out"
@@ -203,7 +210,7 @@ hook_env_case() {
 
 # main: run the comparison cases, build the origin, then every entry case in the header order.
 main() {
-  "$PYTHON_BIN" -I "$HERE/guard_definition_check_test.py" "$HERE/guard_definition_check.py"
+  run_bounded 300 "$PYTHON_BIN" -I "$HERE/guard_definition_check_test.py" "$HERE/guard_definition_check.py"
   build_origin
   local same="leaves the workflow-refs guard unchanged"
   expect unchanged 0 "$same" 'fix: x (#7)'

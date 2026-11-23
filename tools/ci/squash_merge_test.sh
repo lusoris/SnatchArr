@@ -5,9 +5,10 @@
 # Planted cases for squash_merge.sh and main_commit_check.sh against a stub gh that records its
 # calls. The landing helper must refuse a body without the sign-off of the git identity (the
 # #1007 body), a sign-off of another identity, an empty head, a missing identity, a subject
-# without the pull request number, a state other than CLEAN, a moved head and a main commit
-# that lost the trailer; it merges a signed snapshot, including after an ambiguous client
-# failure. Main checks every non-merge commit in a bounded range, with exact bot exceptions.
+# without the pull request number, a state other than CLEAN, a moved head, a guard change
+# without GUARD_DEFINITION_ACK (stub guard check) and a main commit that lost the trailer; it
+# merges a signed snapshot, including after an ambiguous client failure. Main checks every
+# non-merge commit in a bounded range, with exact bot exceptions.
 #
 #   tools/ci/squash_merge_test.sh
 #
@@ -35,6 +36,24 @@ cp "$HERE/squash_merge.sh" "$HERE/main_commit_check.sh" "$WORK/repo/tools/ci/"
 cp "$ROOT/.config/hooks/commit-msg.sh" "$WORK/repo/.config/hooks/"
 SHA=0123456789abcdef0123456789abcdef01234567
 SUBJECT='feat(prowlarr): select indexers for a language (#7)'
+
+# The stub guard check logs the subject it receives. STUB_GUARD=changed refuses unless
+# GUARD_DEFINITION_ACK is set, as guard_definition_check.py does for a changed guard.
+cat >"$WORK/repo/tools/ci/guard_definition_check.sh" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+head -n 1 "$1" >>"$STUB_GUARD_LOG"
+if [ "$STUB_GUARD" = unchanged ]; then
+  echo "guard-definition: pull request 7 leaves the workflow-refs guard unchanged"
+  exit 0
+fi
+if [ -n "${GUARD_DEFINITION_ACK:-}" ]; then
+  echo "guard-definition: change acknowledged for pull request 7: $GUARD_DEFINITION_ACK"
+  exit 0
+fi
+echo "refusing: pull request 7 changes the workflow-refs guard"
+exit 1
+EOF
 
 # The stub records argv and the received body; API messages derive from that body.
 cat >"$WORK/gh" <<'EOF'
@@ -104,10 +123,12 @@ printf 'Selects indexers.\n\nSigned-off-by: t <t@example.invalid>\n' >"$WORK/sig
 land() {
   : >"$WORK/log"
   : >"$WORK/all-args"
+  : >"$WORK/guard-log"
   rm -f "$WORK/received" "$WORK/body-path"
   cp "$5" "$WORK/validated"
   rc=0
-  out="$(GH="$WORK/gh" STUB_LOG="$WORK/log" STUB_STATE="${STATE:-CLEAN}" STUB_HEAD="${HEAD_OID:-$SHA}" \
+  out="$(STUB_GUARD="${GUARD:-unchanged}" STUB_GUARD_LOG="$WORK/guard-log" GUARD_DEFINITION_ACK="${ACK:-}" \
+    GH="$WORK/gh" STUB_LOG="$WORK/log" STUB_STATE="${STATE:-CLEAN}" STUB_HEAD="${HEAD_OID:-$SHA}" \
     STUB_ALL_ARGS="$WORK/all-args" STUB_ARGS="$WORK/args" STUB_BODY_PATH="$WORK/body-path" \
     STUB_RECEIVED="$WORK/received" STUB_SUBJECT="$WORK/subject" STUB_MERGE_RC="${MERGE_RC:-0}" \
     STUB_FINAL_STATE="${FINAL_STATE:-OPEN}" STUB_READ_RC="${READ_RC:-0}" \
@@ -130,6 +151,12 @@ STATE=BLOCKED land "not CLEAN" 5 "mergeStateStatus 'BLOCKED'" "pr view;" "$WORK/
 HEAD_OID=1111111111111111111111111111111111111111 land "head moved" 5 "not $SHA" "pr view;" "$WORK/signed"
 land "signed body, dry run" 0 "dry-run" "pr view;" "$WORK/signed" "$SHA" "$SUBJECT" --dry-run
 land "signed body merges" 0 "merged #7" "pr view;pr merge;pr view;api repos/lusoris/SnatchArr/commits/fedcba9876543210fedcba9876543210fedcba98;" "$WORK/signed"
+[ "$(cat "$WORK/guard-log")" = "$SUBJECT" ] || { echo "FAIL guard check did not receive the squash subject" >&2; exit 1; }
+GUARD=changed land "guard change without acknowledgement" 9 "changes the workflow-refs guard" "" "$WORK/signed"
+GUARD=changed ACK='7: reviewed the guard change in this pull request' land "guard change acknowledged" 0 \
+  "change acknowledged for pull request 7" \
+  "pr view;pr merge;pr view;api repos/lusoris/SnatchArr/commits/fedcba9876543210fedcba9876543210fedcba98;" "$WORK/signed"
+GUARD=changed land "guard change refused on dry run" 9 "changes the workflow-refs guard" "" "$WORK/signed" "$SHA" "$SUBJECT" --dry-run
 LOST_TRAILER=1 land "main lost the trailer" 6 "never rewrite main" \
   "pr view;pr merge;pr view;api repos/lusoris/SnatchArr/commits/fedcba9876543210fedcba9876543210fedcba98;" "$WORK/signed"
 
@@ -155,6 +182,16 @@ out="$(land "signed body merges" 0 "merged #7" \
   "pr view;pr merge;pr view;api repos/lusoris/SnatchArr/commits/fedcba9876543210fedcba9876543210fedcba98;" \
   "$WORK/signed" 2>&1)" || rc=$?
 check_case "planted helper drops body-file" 1 "$rc" "FAIL signed body merges: exit 7, want 0" "$out"
+printf '%s\n' "plant detected: $out"
+cp "$WORK/real-helper" "$WORK/repo/tools/ci/squash_merge.sh"
+
+# A planted helper skips the guard check: the unacknowledged guard change must still refuse.
+sed '/bash tools\/ci\/guard_definition_check.sh/d' \
+  "$WORK/real-helper" >"$WORK/repo/tools/ci/squash_merge.sh"
+rc=0
+out="$(GUARD=changed land "guard change without acknowledgement" 9 "changes the workflow-refs guard" "" \
+  "$WORK/signed" 2>&1)" || rc=$?
+check_case "planted helper skips the guard check" 1 "$rc" "FAIL guard change without acknowledgement: exit 0, want 9" "$out"
 printf '%s\n' "plant detected: $out"
 cp "$WORK/real-helper" "$WORK/repo/tools/ci/squash_merge.sh"
 
