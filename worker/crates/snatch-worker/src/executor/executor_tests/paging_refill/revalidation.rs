@@ -1,43 +1,8 @@
 use super::*;
 
-fn busy_queue_episodes(ids: &[i64]) -> serde_json::Value {
-    serde_json::json!({
-        "page": 1,
-        "pageSize": 10,
-        "totalRecords": ids.len(),
-        "records": ids
-            .iter()
-            .map(|id| serde_json::json!({"episodeId": id}))
-            .collect::<Vec<_>>(),
-    })
-}
-
-/// Sonarr queue mocks at priority 1, mounted before [`mount_paged`]'s default queue.
-async fn mount_busy_queue_reads(server: &MockServer, bodies: &[serde_json::Value]) {
-    let last = bodies.len().saturating_sub(1);
-    for (idx, body) in bodies.iter().enumerate() {
-        let mut mock = Mock::given(method("GET"))
-            .and(path("/api/v3/queue"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(body.clone()))
-            .with_priority(1);
-        if idx < last {
-            mock = mock.up_to_n_times(1);
-        }
-        mock.mount(server).await;
-    }
-}
-
 fn has_debug_title(events: &[SnatchEvent], needle: &str) -> bool {
     events.iter().any(|ev| {
         ev.level == Level::Debug as i32
-            && ev.r#type == EventType::CandidatesFiltered as i32
-            && ev.title.contains(needle)
-    })
-}
-
-fn has_warn_title(events: &[SnatchEvent], needle: &str) -> bool {
-    events.iter().any(|ev| {
-        ev.level == Level::Warn as i32
             && ev.r#type == EventType::CandidatesFiltered as i32
             && ev.title.contains(needle)
     })

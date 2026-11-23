@@ -1341,7 +1341,8 @@ fn merge_refill_into(
 /// (page 1 reuses the initial metadata read and never fails), so advancing to `failed_page`
 /// skips the refill pages already fetched without skipping the failed one; non-sequential
 /// selections keep `plan_cursor`. On a filter failure, local re-read exclusions merge into
-/// ids the API already approved without introducing new ones.
+/// ids the API already approved without introducing new ones, then the fresh busy snapshot
+/// from after refill pages are fetched drops any kept id that became busy during refill.
 async fn apply_refill_batch(
     run: &Run,
     batch: RefillBatch,
@@ -1381,7 +1382,7 @@ async fn apply_refill_batch(
         } => {
             let prior: BTreeSet<i64> = collected.keep.iter().map(|c| c.id).collect();
             additional.keep.retain(|c| prior.contains(&c.id));
-            collected.merge(additional);
+            merge_refill_into(collected, additional, refill_busy);
             let kept = collected.keep.len();
             tracing::warn!(
                 run = %run.run_id,
