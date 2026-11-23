@@ -915,6 +915,76 @@ fn replacement_pool(keep: &[Candidate], exclude: &BTreeSet<i64>, busy: &[i64]) -
         .collect()
 }
 
+struct ReplacementCtx<'a> {
+    original_ids: &'a BTreeSet<i64>,
+    busy_snapshot: &'a [i64],
+}
+
+struct ReplacementRound<'a, 'b> {
+    client: &'a mut Client,
+    p: &'a Prepared,
+    run: &'a Run,
+    c: &'a Collected,
+    selected: &'a mut Vec<Candidate>,
+    ctx: ReplacementCtx<'b>,
+    rng: &'a mut SmallRng,
+    events: &'a Events,
+}
+
+/// Picks replacements for vacated slots, revalidates them, then drops any that became busy.
+async fn replacement_round(round: ReplacementRound<'_, '_>) -> Result<(), ExecError> {
+    let ReplacementRound {
+        client,
+        p,
+        run,
+        c,
+        selected,
+        ctx,
+        rng,
+        events,
+    } = round;
+    let per_cycle = p.policy.per_cycle as usize;
+    let vacancies = per_cycle.saturating_sub(selected.len());
+    if vacancies == 0 {
+        return Ok(());
+    }
+    let pool = replacement_pool(&c.keep, ctx.original_ids, ctx.busy_snapshot);
+    if pool.is_empty() {
+        return Ok(());
+    }
+    let mut replacements = snatch_core::select_prioritised(
+        &pool,
+        vacancies,
+        selection_of(&p.policy),
+        &c.priority_ids,
+        &c.priority_groups,
+        rng,
+    );
+    if replacements.is_empty() {
+        return Ok(());
+    }
+    enrich_dynamic_seasons(p, &c.keep, &mut replacements, events).await;
+    revalidate_processed(client, p, run, &mut replacements, events).await?;
+    let fresh_busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
+    let dropped = drop_busy_selected(&mut replacements, &fresh_busy);
+    if dropped > 0 {
+        let msg =
+            format!("busy re-check dropped {dropped} replacement candidate(s) queued or grabbed");
+        events
+            .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+            .await;
+    }
+    let survivors = replacements.len();
+    if survivors > 0 {
+        let msg = format!("replacement round filled {survivors} of {vacancies} vacated slot(s)");
+        events
+            .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+            .await;
+        selected.append(&mut replacements);
+    }
+    Ok(())
+}
+
 /// Busy re-check, processed re-check, then one replacement round when slots stay empty.
 async fn revalidate_selected(
     client: &mut Client,
@@ -941,36 +1011,24 @@ async fn revalidate_selected(
             .await;
     }
     revalidate_processed(client, p, run, &mut selected, events).await?;
-    let kept = selected.len();
-    if kept >= per_cycle {
+    if selected.len() >= per_cycle {
         return Ok(selected);
     }
-    let vacancies = per_cycle.saturating_sub(kept);
-    let pool = replacement_pool(&c.keep, &original_ids, &busy);
-    if pool.is_empty() {
-        return Ok(selected);
-    }
-    let mut replacements = snatch_core::select_prioritised(
-        &pool,
-        vacancies,
-        selection_of(&p.policy),
-        &c.priority_ids,
-        &c.priority_groups,
+    let ctx = ReplacementCtx {
+        original_ids: &original_ids,
+        busy_snapshot: &busy,
+    };
+    replacement_round(ReplacementRound {
+        client,
+        p,
+        run,
+        c,
+        selected: &mut selected,
+        ctx,
         rng,
-    );
-    if !replacements.is_empty() {
-        enrich_dynamic_seasons(p, &c.keep, &mut replacements, events).await;
-        revalidate_processed(client, p, run, &mut replacements, events).await?;
-        let survivors = replacements.len();
-        if survivors > 0 {
-            let msg =
-                format!("replacement round filled {survivors} of {vacancies} vacated slot(s)");
-            events
-                .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
-                .await;
-            selected.append(&mut replacements);
-        }
-    }
+        events,
+    })
+    .await?;
     Ok(selected)
 }
 
@@ -1174,9 +1232,15 @@ async fn collect_candidates(
     filter_fetched_candidates(client, p, run, fetched.candidates, busy).await
 }
 
-async fn refresh_busy(p: &Prepared, run: &Run, collected: &mut Collected, events: &Events) {
+/// Reads queue/grab busy ids for a refill batch, falling back to the collect-time snapshot on error.
+async fn refill_busy_snapshot(
+    p: &Prepared,
+    run: &Run,
+    initial: &[i64],
+    events: &Events,
+) -> Vec<i64> {
     match p.arr.busy_ids(p.policy.recent_grab_hours).await {
-        Ok(fresh) => collected.drop_busy(&fresh),
+        Ok(fresh) => fresh,
         Err(err) => {
             tracing::warn!(
                 run = %run.run_id,
@@ -1187,6 +1251,7 @@ async fn refresh_busy(p: &Prepared, run: &Run, collected: &mut Collected, events
             events
                 .emit(Ev::run(Level::Warn, EventType::CandidatesFiltered, msg))
                 .await;
+            initial.to_vec()
         }
     }
 }
@@ -1207,19 +1272,14 @@ enum RefillBatch {
     },
 }
 
-/// Fetches and filters the refill `pages`, skipping cached page-1 records already in `seen_ids`
-/// so the older `first` snapshot never overrides an earlier page read on merge. When processed
-/// memory filtering fails, returns local exclusions for merge without adding unapproved ids.
-async fn collect_refill_batch(
+/// Filters a fetched refill batch with the given busy snapshot and processed-memory API.
+async fn filter_refill_batch(
     client: &mut Client,
     p: &Prepared,
     run: &Run,
-    pages: &[u32],
-    first: &WantedPage,
+    fetched: FetchedPages,
     busy: &[i64],
-    seen_ids: &BTreeSet<i64>,
 ) -> RefillBatch {
-    let fetched = fetch_unique_candidates(p, pages, first, seen_ids).await;
     let local = filter_fetched_candidates_locally(p, fetched.candidates, busy);
     let collected = match unprocessed_outcome(client, p, run, &local).await {
         Ok(outcome) => collected_with_outcome(local, outcome),
@@ -1265,6 +1325,17 @@ async fn emit_refill_page_warning(
         .await;
 }
 
+fn merge_refill_into(
+    collected: &mut Collected,
+    additional: Collected,
+    refill_busy: Option<&[i64]>,
+) {
+    collected.merge(additional);
+    if let Some(busy) = refill_busy {
+        collected.drop_busy(busy);
+    }
+}
+
 /// Merges a refill batch into `collected` and returns the cursor to persist. On a partial
 /// sequential refill, `failed_page` is the next unread page of the contiguous cursor walk
 /// (page 1 reuses the initial metadata read and never fails), so advancing to `failed_page`
@@ -1272,17 +1343,17 @@ async fn emit_refill_page_warning(
 /// selections keep `plan_cursor`. On a filter failure, local re-read exclusions merge into
 /// ids the API already approved without introducing new ones.
 async fn apply_refill_batch(
-    p: &Prepared,
+    _p: &Prepared,
     run: &Run,
     batch: RefillBatch,
     (selection, plan_cursor, refill_cursor): (Selection, u32, u32),
     collected: &mut Collected,
+    refill_busy: Option<&[i64]>,
     events: &Events,
 ) -> u32 {
     match batch {
         RefillBatch::Complete(additional) => {
-            collected.merge(additional);
-            refresh_busy(p, run, collected, events).await;
+            merge_refill_into(collected, additional, refill_busy);
             if selection == Selection::Sequential {
                 refill_cursor
             } else {
@@ -1295,10 +1366,8 @@ async fn apply_refill_batch(
             failed_page,
             error,
         } => {
-            collected.merge(additional);
-            if pages_fetched > 0 {
-                refresh_busy(p, run, collected, events).await;
-            }
+            let busy = if pages_fetched > 0 { refill_busy } else { None };
+            merge_refill_into(collected, additional, busy);
             let kept = collected.keep.len();
             emit_refill_page_warning(run, failed_page, pages_fetched, &error, kept, events).await;
             if selection == Selection::Sequential {
@@ -1361,18 +1430,21 @@ async fn collect_with_refill(
     events
         .emit(Ev::run(Level::Debug, EventType::PageFetched, page_msg))
         .await;
-    let batch = collect_refill_batch(
-        client,
-        p,
-        run,
-        &more.pages,
-        first,
-        &busy,
-        &collected.seen_ids,
-    )
-    .await;
+    let fetched = fetch_unique_candidates(p, &more.pages, first, &collected.seen_ids).await;
+    let refill_busy_vec = if fetched.pages_fetched > 0 {
+        refill_busy_snapshot(p, run, &busy, events).await
+    } else {
+        Vec::new()
+    };
+    let (filter_busy, refill_busy) = if fetched.pages_fetched > 0 {
+        (refill_busy_vec.as_slice(), Some(refill_busy_vec.as_slice()))
+    } else {
+        (busy.as_slice(), None)
+    };
+    let batch = filter_refill_batch(client, p, run, fetched, filter_busy).await;
     let cursors = (selection, plan.next_cursor, more.next_cursor);
-    let cursor = apply_refill_batch(p, run, batch, cursors, &mut collected, events).await;
+    let cursor =
+        apply_refill_batch(p, run, batch, cursors, &mut collected, refill_busy, events).await;
     Ok((collected, cursor))
 }
 

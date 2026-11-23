@@ -241,3 +241,210 @@ async fn busy_recheck_before_acquire_after_failed_refresh() -> TestResult {
     ));
     Ok(())
 }
+
+#[tokio::test]
+async fn replacement_busy_recheck_after_processed_positive() -> TestResult {
+    let api = FakeApi {
+        filter_script: vec![vec![10, 20, 30], vec![20], vec![30]],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    mount_busy_queue_reads(
+        &server,
+        &[
+            serde_json::json!({
+                "page": 1, "pageSize": 10, "totalRecords": 0, "records": [],
+            }),
+            serde_json::json!({
+                "page": 1, "pageSize": 10, "totalRecords": 0, "records": [],
+            }),
+            busy_queue_episodes(&[30]),
+        ],
+    )
+    .await;
+    mount_paged(
+        &server,
+        &[(1, episodes(&[(10, 100), (20, 200), (30, 300)]))],
+        10,
+    )
+    .await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 2, CoreSelection::Sequential, "1")?;
+    run_short_polling(client, run).await;
+    assert_eq!(completed_searched_ids(&api).await?, [20]);
+    let events = api.reported_events.lock().await;
+    assert!(has_debug_title(
+        &events,
+        "busy re-check dropped 1 replacement candidate(s)"
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn replacement_busy_recheck_after_processed_negative() -> TestResult {
+    let api = FakeApi {
+        filter_script: vec![vec![10, 20, 30], vec![20], vec![30]],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    mount_busy_queue_reads(
+        &server,
+        &[
+            serde_json::json!({
+                "page": 1, "pageSize": 10, "totalRecords": 0, "records": [],
+            }),
+            serde_json::json!({
+                "page": 1, "pageSize": 10, "totalRecords": 0, "records": [],
+            }),
+            serde_json::json!({
+                "page": 1, "pageSize": 10, "totalRecords": 0, "records": [],
+            }),
+        ],
+    )
+    .await;
+    mount_paged(
+        &server,
+        &[(1, episodes(&[(10, 100), (20, 200), (30, 300)]))],
+        10,
+    )
+    .await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 2, CoreSelection::Sequential, "1")?;
+    run_short_polling(client, run).await;
+    assert_eq!(completed_searched_ids(&api).await?, [20, 30]);
+    let events = api.reported_events.lock().await;
+    assert!(!has_debug_title(
+        &events,
+        "busy re-check dropped 1 replacement candidate(s)"
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn replacement_busy_recheck_after_processed_boundary() -> TestResult {
+    let api = FakeApi {
+        filter_script: vec![vec![10, 20, 30], vec![20], vec![30]],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    mount_busy_queue_reads(
+        &server,
+        &[
+            serde_json::json!({
+                "page": 1, "pageSize": 10, "totalRecords": 0, "records": [],
+            }),
+            serde_json::json!({
+                "page": 1, "pageSize": 10, "totalRecords": 0, "records": [],
+            }),
+            busy_queue_episodes(&[99]),
+        ],
+    )
+    .await;
+    mount_paged(
+        &server,
+        &[(1, episodes(&[(10, 100), (20, 200), (30, 300)]))],
+        10,
+    )
+    .await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 2, CoreSelection::Sequential, "1")?;
+    run_short_polling(client, run).await;
+    assert_eq!(completed_searched_ids(&api).await?, [20, 30]);
+    let events = api.reported_events.lock().await;
+    assert!(!has_debug_title(
+        &events,
+        "busy re-check dropped 1 replacement candidate(s)"
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn refill_fresh_busy_filter_positive() -> TestResult {
+    let api = FakeApi {
+        filter_unprocessed: vec![10, 20],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    mount_busy_queue_reads(
+        &server,
+        &[busy_queue_episodes(&[10, 20]), busy_queue_episodes(&[10])],
+    )
+    .await;
+    mount_paged(
+        &server,
+        &[(1, episodes(&[(10, 100)])), (2, episodes(&[(20, 200)]))],
+        20,
+    )
+    .await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 1, CoreSelection::Sequential, "1")?;
+    run_short_polling(client, run).await;
+    assert_eq!(completed_searched_ids(&api).await?, [20]);
+    let requests = some(server.received_requests().await, "recorded requests")?;
+    assert_eq!(wanted_pages(&requests)?, [1, 2]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn refill_fresh_busy_filter_negative() -> TestResult {
+    let api = FakeApi {
+        filter_unprocessed: vec![10, 20],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    mount_busy_queue_reads(&server, &[busy_queue_episodes(&[10, 20])]).await;
+    mount_paged(
+        &server,
+        &[(1, episodes(&[(10, 100)])), (2, episodes(&[(20, 200)]))],
+        20,
+    )
+    .await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 1, CoreSelection::Sequential, "1")?;
+    run_short_polling(client, run).await;
+    assert_eq!(completed_searched_ids(&api).await?, Vec::<i64>::new());
+    let requests = some(server.received_requests().await, "recorded requests")?;
+    assert_eq!(wanted_pages(&requests)?, [1, 2]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn refill_fresh_busy_filter_boundary() -> TestResult {
+    let api = FakeApi {
+        filter_unprocessed: vec![10, 20],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v3/queue"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(busy_queue_episodes(&[10, 20])))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v3/queue"))
+        .respond_with(ResponseTemplate::new(500))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    mount_paged(
+        &server,
+        &[(1, episodes(&[(10, 100)])), (2, episodes(&[(20, 200)]))],
+        20,
+    )
+    .await;
+    let mut run = default_run(&server.uri());
+    policy(&mut run, 1, CoreSelection::Sequential, "1")?;
+    run_short_polling(client, run).await;
+    assert_eq!(completed_searched_ids(&api).await?, Vec::<i64>::new());
+    let events = api.reported_events.lock().await;
+    assert!(has_warn_title(&events, "busy re-read after refill failed"));
+    Ok(())
+}
