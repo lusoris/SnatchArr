@@ -2,6 +2,7 @@ use super::*;
 use snatch_core::Selection as CoreSelection;
 use wiremock::matchers::query_param;
 
+mod filter_failure;
 mod latest_read;
 mod merge;
 mod pages;

@@ -47,6 +47,9 @@ struct FakeApi {
     pub filter_priority_script: Vec<Vec<i64>>,
     /// Every `FilterCandidates` call's `entity_ids`, in call order.
     pub filter_calls: Arc<Mutex<Vec<Vec<i64>>>>,
+    /// 0-based `FilterCandidates` call indexes answered with `Status::internal("planted filter failure")`
+    /// after the call is recorded in `filter_calls`.
+    pub filter_refused_calls: Vec<usize>,
     pub reported_events: Arc<Mutex<Vec<SnatchEvent>>>,
     pub completed_requests: Arc<Mutex<Vec<CompleteRunRequest>>>,
     /// True answers LeaseRun with no run; false refuses it as unimplemented.
@@ -78,6 +81,7 @@ impl Default for FakeApi {
             filter_script: Vec::new(),
             filter_priority_script: Vec::new(),
             filter_calls: Arc::new(Mutex::new(Vec::new())),
+            filter_refused_calls: Vec::new(),
             reported_events: Arc::new(Mutex::new(Vec::new())),
             completed_requests: Arc::new(Mutex::new(Vec::new())),
             lease_empty: false,
@@ -162,6 +166,9 @@ impl WorkerService for FakeApi {
         };
         if req.entity_ids.len() > super::MAX_FILTER_BATCH {
             return Err(Status::invalid_argument("at most 5000 ids per filter call"));
+        }
+        if self.filter_refused_calls.contains(&call_index) {
+            return Err(Status::internal("planted filter failure"));
         }
         let allow: BTreeSet<i64> = self
             .filter_script

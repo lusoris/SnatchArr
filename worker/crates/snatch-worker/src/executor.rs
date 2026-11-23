@@ -1054,15 +1054,20 @@ async fn fetch_unique_candidates(
     }
 }
 
-/// Filters one fetched batch by focus, policy, busy ids and processed memory; `priorities_read`
-/// records whether the API answered with Seerr priority lists.
-async fn filter_fetched_candidates(
-    client: &mut Client,
+/// One fetched batch after focus, policy and busy-id splitting, before processed-memory filtering.
+struct LocallyFiltered {
+    passing: Vec<Candidate>,
+    seen_ids: BTreeSet<i64>,
+    busy_ids: BTreeSet<i64>,
+    unavailable_ids: BTreeSet<i64>,
+}
+
+/// Applies focus, policy, and busy splitting to one fetched batch without calling the API.
+fn filter_fetched_candidates_locally(
     p: &Prepared,
-    run: &Run,
     mut candidates: Vec<Candidate>,
     busy: &[i64],
-) -> Result<Collected, ExecError> {
+) -> LocallyFiltered {
     let seen_ids: BTreeSet<i64> = candidates.iter().map(|c| c.id).collect();
     if let Some(focus) = p.focus {
         candidates.retain(|c| focus.matches(c));
@@ -1073,29 +1078,78 @@ async fn filter_fetched_candidates(
         .into_iter()
         .collect();
     let mut busy_ids = BTreeSet::new();
-    let mut unbusy = Vec::with_capacity(filtered.len());
+    let mut passing = Vec::with_capacity(filtered.len());
     for candidate in filtered {
         if busy.binary_search(&candidate.id).is_ok() {
             busy_ids.insert(candidate.id);
         } else {
-            unbusy.push(candidate);
+            passing.push(candidate);
         }
     }
-    let ids: Vec<i64> = unbusy.iter().map(|c| c.id).collect();
-    let outcome = filter_unprocessed(client, run, p.kind.entity_type(), &ids).await?;
-    let keep = unbusy
-        .into_iter()
-        .filter(|c| outcome.unprocessed_ids.binary_search(&c.id).is_ok())
-        .collect();
-    Ok(Collected {
-        keep,
+    LocallyFiltered {
+        passing,
         seen_ids,
         busy_ids,
         unavailable_ids,
+    }
+}
+
+/// Wraps a local view as a batch the API never answered: no processed-memory filtering and no
+/// Seerr priority lists (`priorities_read` false), so a merge keeps the prior priority lists.
+fn collected_from_local(local: LocallyFiltered) -> Collected {
+    Collected {
+        keep: local.passing,
+        seen_ids: local.seen_ids,
+        busy_ids: local.busy_ids,
+        unavailable_ids: local.unavailable_ids,
+        priority_ids: Vec::new(),
+        priority_groups: Vec::new(),
+        priorities_read: false,
+    }
+}
+
+/// Asks the API which locally passing candidates are not in processed-memory afterglow; borrows
+/// `local` so a caller keeps the local view when the call fails.
+async fn unprocessed_outcome(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    local: &LocallyFiltered,
+) -> Result<FilterOutcome, ExecError> {
+    let ids: Vec<i64> = local.passing.iter().map(|c| c.id).collect();
+    filter_unprocessed(client, run, p.kind.entity_type(), &ids).await
+}
+
+/// Keeps the locally passing candidates the API reported unprocessed, with its priority lists.
+fn collected_with_outcome(local: LocallyFiltered, outcome: FilterOutcome) -> Collected {
+    let keep = local
+        .passing
+        .into_iter()
+        .filter(|c| outcome.unprocessed_ids.binary_search(&c.id).is_ok())
+        .collect();
+    Collected {
+        keep,
+        seen_ids: local.seen_ids,
+        busy_ids: local.busy_ids,
+        unavailable_ids: local.unavailable_ids,
         priority_ids: outcome.priority_ids,
         priority_groups: outcome.priority_group_ids,
         priorities_read: outcome.answered,
-    })
+    }
+}
+
+/// Filters one fetched batch by focus, policy, busy ids and processed memory; `priorities_read`
+/// records whether the API answered with Seerr priority lists.
+async fn filter_fetched_candidates(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    candidates: Vec<Candidate>,
+    busy: &[i64],
+) -> Result<Collected, ExecError> {
+    let local = filter_fetched_candidates_locally(p, candidates, busy);
+    let outcome = unprocessed_outcome(client, p, run, &local).await?;
+    Ok(collected_with_outcome(local, outcome))
 }
 
 /// Fetches the planned pages, deduplicates repeated ids by keeping the record from the latest
@@ -1137,6 +1191,8 @@ async fn refresh_busy(p: &Prepared, run: &Run, collected: &mut Collected, events
     }
 }
 
+/// What a refill fetch produced: a merged batch, a page error with partial data, or a
+/// processed-memory filter error with local exclusions preserved.
 enum RefillBatch {
     Complete(Collected),
     Partial {
@@ -1145,11 +1201,15 @@ enum RefillBatch {
         failed_page: u32,
         error: ExecError,
     },
-    FilterFailed(ExecError),
+    FilterFailed {
+        collected: Collected,
+        error: ExecError,
+    },
 }
 
 /// Fetches and filters the refill `pages`, skipping cached page-1 records already in `seen_ids`
-/// so the older `first` snapshot never overrides an earlier page read on merge.
+/// so the older `first` snapshot never overrides an earlier page read on merge. When processed
+/// memory filtering fails, returns local exclusions for merge without adding unapproved ids.
 async fn collect_refill_batch(
     client: &mut Client,
     p: &Prepared,
@@ -1160,10 +1220,15 @@ async fn collect_refill_batch(
     seen_ids: &BTreeSet<i64>,
 ) -> RefillBatch {
     let fetched = fetch_unique_candidates(p, pages, first, seen_ids).await;
-    let collected = match filter_fetched_candidates(client, p, run, fetched.candidates, busy).await
-    {
-        Ok(collected) => collected,
-        Err(err) => return RefillBatch::FilterFailed(err),
+    let local = filter_fetched_candidates_locally(p, fetched.candidates, busy);
+    let collected = match unprocessed_outcome(client, p, run, &local).await {
+        Ok(outcome) => collected_with_outcome(local, outcome),
+        Err(err) => {
+            return RefillBatch::FilterFailed {
+                collected: collected_from_local(local),
+                error: err,
+            };
+        }
     };
     match fetched.error {
         None => RefillBatch::Complete(collected),
@@ -1204,7 +1269,8 @@ async fn emit_refill_page_warning(
 /// sequential refill, `failed_page` is the next unread page of the contiguous cursor walk
 /// (page 1 reuses the initial metadata read and never fails), so advancing to `failed_page`
 /// skips the refill pages already fetched without skipping the failed one; non-sequential
-/// selections keep `plan_cursor`.
+/// selections keep `plan_cursor`. On a filter failure, local re-read exclusions merge into
+/// ids the API already approved without introducing new ones.
 async fn apply_refill_batch(
     p: &Prepared,
     run: &Run,
@@ -1241,15 +1307,21 @@ async fn apply_refill_batch(
                 plan_cursor
             }
         }
-        RefillBatch::FilterFailed(err) => {
+        RefillBatch::FilterFailed {
+            collected: mut additional,
+            error,
+        } => {
+            let prior: BTreeSet<i64> = collected.keep.iter().map(|c| c.id).collect();
+            additional.keep.retain(|c| prior.contains(&c.id));
+            collected.merge(additional);
             let kept = collected.keep.len();
             tracing::warn!(
                 run = %run.run_id,
-                error = %err,
+                error = %error,
                 kept,
                 "refill failed; keeping collected candidates"
             );
-            let msg = format!("refill failed ({err}); keeping {kept} candidate(s)");
+            let msg = format!("refill failed ({error}); keeping {kept} candidate(s)");
             events
                 .emit(Ev::run(Level::Warn, EventType::PageFetched, msg))
                 .await;
