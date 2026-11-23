@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use arr_client::{ArrClient, CommandStatus, Kind, Options, RadarrRelease, Wanted, WantedPage};
+use rand::SeedableRng;
 use rand::rngs::SmallRng;
-use rand::{RngExt, SeedableRng};
 use snatch_core::{Candidate, Filter, IdRule, LidarrMode, PagePlan, Selection, SonarrMode, Target};
 use snatch_proto::worker_service_client::WorkerServiceClient;
 use snatch_proto::{
@@ -20,12 +20,12 @@ use snatch_proto::{
 };
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::Channel;
 use tonic::{Code, Request, Status};
 
 use crate::auth::AuthInterceptor;
+use crate::backoff::jitter;
 use crate::health::{Call, Health};
 use crate::resend;
 
@@ -374,11 +374,13 @@ pub(crate) async fn execute_with(
     health: &Health,
 ) {
     let (tx, rx) = mpsc::channel::<ReportEventsRequest>(MAX_EVENTS_BUFFER);
-    let mut reporter = client.clone();
+    let reporter = client.clone();
     let report = tokio::spawn(async move {
-        reporter
-            .report_events(Request::new(ReceiverStream::new(rx)))
-            .await
+        resend::stream_once_more(rx, |events| {
+            let mut c = reporter.clone();
+            async move { c.report_events(Request::new(events)).await }
+        })
+        .await
     });
     let events = Events {
         tx,
@@ -507,12 +509,6 @@ fn transient(code: Code) -> bool {
         code,
         Code::Unavailable | Code::DeadlineExceeded | Code::ResourceExhausted | Code::Aborted
     )
-}
-
-/// A random wait between half of `d` and `d`, so workers refused together do not retry together.
-fn jitter(d: Duration) -> Duration {
-    let half = d.checked_div(2).unwrap_or(Duration::ZERO);
-    rand::rng().random_range(half..=d)
 }
 
 /// Records the end of the event stream: an answer is contact, a refusal or a panic a failure.
