@@ -238,7 +238,23 @@ test_pack_failure() {
 }
 
 # Build offline fixtures and execute all install-pnpm.sh test cases.
+# Skip with a reason off Linux when a GNU coreutils tool is missing; fail on Linux.
+require_tools() {
+  local tool
+  for tool in sha512sum sha256sum sha224sum sha1sum timeout; do
+    if command -v "$tool" >/dev/null 2>&1; then
+      continue
+    fi
+    if [[ "$(uname -s)" == Linux ]]; then
+      fail_case "preflight" "${tool} not found"
+    fi
+    printf 'skip install_pnpm_test on %s: %s not found (GNU coreutils required)\n' "$(uname -s)" "$tool"
+    exit 0
+  done
+}
+
 main() {
+  require_tools
   trap cleanup_work EXIT
   WORK_DIR=$(mktemp -d)
   STUB_NPM="${WORK_DIR}/stub-npm.sh"
