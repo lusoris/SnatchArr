@@ -939,26 +939,44 @@ func TestConcurrentColdLookups(t *testing.T) {
 	cases := []struct {
 		ref  Ref
 		lang string
+		want []string
 	}{
-		{Ref{Kind: domain.KindSonarr, TVDBID: 81189}, "de"},
-		{Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de"},
-		{Ref{Kind: domain.KindRadarr, IMDBID: "tt0111161"}, "de"},
-		{Ref{Kind: domain.KindSonarr, TVDBID: 81189}, "en"},
+		{Ref{Kind: domain.KindSonarr, TVDBID: 81189}, "de", []string{"Breaking Bad DE", "Breaking Bad Alias"}},
+		{Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de", []string{"Other Series DE"}},
+		{Ref{Kind: domain.KindRadarr, IMDBID: "tt0111161"}, "de", []string{"Die Verurteilten", "Die Verurteilten Alias"}},
+		{Ref{Kind: domain.KindSonarr, TVDBID: 81189}, "en", []string{"English"}},
 	}
-	results := make(chan error, len(cases))
+	type concurrentResult struct {
+		i      int
+		titles []foreigntitle.LanguageTitle
+		err    error
+	}
+	results := make(chan concurrentResult, len(cases))
 	var wg sync.WaitGroup
-	for _, tc := range cases {
+	for i, row := range cases {
 		wg.Go(func() {
-			_, err := p.TitlesFor(t.Context(), tc.ref, tc.lang)
-			results <- err
+			titles, err := p.TitlesFor(t.Context(), row.ref, row.lang)
+			results <- concurrentResult{i: i, titles: titles, err: err}
 		})
 	}
 	wg.Wait()
 	close(results)
-	for err := range results {
-		if err != nil {
-			t.Errorf("concurrent TitlesFor() error = %v", err)
+	n := 0
+	for res := range results {
+		n++
+		row := cases[res.i]
+		if res.err != nil {
+			t.Errorf("concurrent TitlesFor() error = %v", res.err)
+			continue
 		}
+		got := strings.Join(titlesOf(res.titles), "|")
+		want := strings.Join(row.want, "|")
+		if got != want {
+			t.Errorf("concurrent TitlesFor(%+v, %q) = %q, want %q", row.ref, row.lang, got, want)
+		}
+	}
+	if n != len(cases) {
+		t.Errorf("concurrent result count = %d, want %d", n, len(cases))
 	}
 }
 
@@ -1629,37 +1647,40 @@ func isCacheOpen(p *Provider) bool {
 	return errors.Is(err, errCacheOpenProbe)
 }
 
-func TestCloseWaitsForAttachedLookup(t *testing.T) {
-	t.Parallel()
-	s := newStub(t)
-	s.series[81200] = "Other Series DE"
-	s.started = make(chan struct{}, maxDetached)
-	releaseDetached := make(chan struct{})
-	closeDetached := sync.OnceFunc(func() { close(releaseDetached) })
-	s.release = releaseDetached
-	p := s.provider(t, plantedKey, "", nil)
-	t.Cleanup(closeDetached)
-	if _, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 424242}, "de"); err != nil {
-		t.Fatalf("prime TitlesFor() error = %v", err)
+type attachedSeriesHook struct {
+	started               chan struct{}
+	canceled              chan struct{}
+	cacheOpenDuringWorker atomic.Bool
+	release               func()
+}
+
+// setupAttachedSeriesTransport hooks /series/81200 so Close can cancel a held attached lookup.
+func setupAttachedSeriesTransport(t *testing.T, p *Provider) *attachedSeriesHook {
+	t.Helper()
+	hook := &attachedSeriesHook{
+		started:  make(chan struct{}, 1),
+		canceled: make(chan struct{}, 1),
 	}
-	waitDetached(t, p, 0, time.After(2*time.Second), "prime lookup did not release its detached slot")
-	attachedStarted := make(chan struct{}, 1)
-	attachedCanceled := make(chan struct{}, 1)
 	releaseAttached := make(chan struct{})
-	closeAttached := sync.OnceFunc(func() { close(releaseAttached) })
-	t.Cleanup(closeAttached)
-	var cacheOpenDuringWorker atomic.Bool
+	hook.release = sync.OnceFunc(func() { close(releaseAttached) })
+	t.Cleanup(hook.release)
 	origTransport := p.http.Transport
 	p.http.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path == "/series/81200" {
-			attachedStarted <- struct{}{}
+			hook.started <- struct{}{}
 			<-req.Context().Done()
-			attachedCanceled <- struct{}{}
+			hook.canceled <- struct{}{}
 			<-releaseAttached
-			cacheOpenDuringWorker.Store(isCacheOpen(p))
+			hook.cacheOpenDuringWorker.Store(isCacheOpen(p))
 		}
 		return origTransport.RoundTrip(req)
 	})
+	return hook
+}
+
+// holdDetachedSlots fills detached capacity with canceled lookups and checks slot retention.
+func holdDetachedSlots(t *testing.T, p *Provider, s *stub, backstop context.Context) {
+	t.Helper()
 	detachedEntered := make(chan struct{}, maxDetached)
 	p.fetchStart = func(context.Context) {
 		select {
@@ -1667,12 +1688,10 @@ func TestCloseWaitsForAttachedLookup(t *testing.T) {
 		default:
 		}
 	}
-	backstop, stopBackstop := context.WithTimeout(t.Context(), 5*time.Second)
-	defer stopBackstop()
 	detachedResults := make(chan error, maxDetached)
 	cancels := make([]context.CancelFunc, 0, maxDetached)
 	for range maxDetached {
-		dctx, cancel := context.WithCancel(t.Context())
+		dctx, cancel := context.WithCancel(backstop)
 		cancels = append(cancels, cancel)
 		go func() {
 			_, err := p.TitlesFor(dctx, sonarrRef(), "de")
@@ -1707,32 +1726,18 @@ func TestCloseWaitsForAttachedLookup(t *testing.T) {
 	if got := len(p.detached); got != maxDetached {
 		t.Fatalf("held detached slots = %d, want %d", got, maxDetached)
 	}
-	attachedDone := make(chan error, 1)
-	go func() {
-		_, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
-		attachedDone <- err
-	}()
-	select {
-	case <-attachedStarted:
-	case <-backstop.Done():
-		t.Fatal("attached lookup did not start")
-	}
-	closeDone := make(chan error, 1)
-	go func() { closeDone <- p.Close() }()
-	select {
-	case <-attachedCanceled:
-	case <-backstop.Done():
-		t.Fatal("attached lookup did not observe Close cancellation")
-	}
-	select {
-	case err := <-closeDone:
-		t.Fatalf("Close() returned (%v) before attached lookup finished", err)
-	case <-time.After(100 * time.Millisecond):
-	}
-	if !isCacheOpen(p) {
-		t.Fatal("cache closed before attached lookup finished")
-	}
-	closeAttached()
+}
+
+// assertAttachedCloseFinishes checks Close and cache state after the attached series hook releases.
+func assertAttachedCloseFinishes(
+	t *testing.T,
+	p *Provider,
+	hook *attachedSeriesHook,
+	backstop context.Context,
+	closeDone <-chan error,
+	attachedDone <-chan error,
+) {
+	t.Helper()
 	select {
 	case err := <-closeDone:
 		if err != nil {
@@ -1749,12 +1754,59 @@ func TestCloseWaitsForAttachedLookup(t *testing.T) {
 	case <-backstop.Done():
 		t.Fatal("attached caller did not return")
 	}
-	if !cacheOpenDuringWorker.Load() {
+	if !hook.cacheOpenDuringWorker.Load() {
 		t.Fatal("cache was closed while attached worker was still running")
 	}
 	if isCacheOpen(p) {
 		t.Fatal("cache remained open after Close() returned")
 	}
+}
+
+func TestCloseWaitsForAttachedLookup(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.series[81200] = "Other Series DE"
+	s.started = make(chan struct{}, maxDetached)
+	releaseDetached := make(chan struct{})
+	closeDetached := sync.OnceFunc(func() { close(releaseDetached) })
+	s.release = releaseDetached
+	p := s.provider(t, plantedKey, "", nil)
+	t.Cleanup(closeDetached)
+	if _, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 424242}, "de"); err != nil {
+		t.Fatalf("prime TitlesFor() error = %v", err)
+	}
+	waitDetached(t, p, 0, time.After(2*time.Second), "prime lookup did not release its detached slot")
+	backstop, stopBackstop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stopBackstop()
+	hook := setupAttachedSeriesTransport(t, p)
+	holdDetachedSlots(t, p, s, backstop)
+	attachedDone := make(chan error, 1)
+	go func() {
+		_, err := p.TitlesFor(t.Context(), Ref{Kind: domain.KindSonarr, TVDBID: 81200}, "de")
+		attachedDone <- err
+	}()
+	select {
+	case <-hook.started:
+	case <-backstop.Done():
+		t.Fatal("attached lookup did not start")
+	}
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- p.Close() }()
+	select {
+	case <-hook.canceled:
+	case <-backstop.Done():
+		t.Fatal("attached lookup did not observe Close cancellation")
+	}
+	select {
+	case err := <-closeDone:
+		t.Fatalf("Close() returned (%v) before attached lookup finished", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if !isCacheOpen(p) {
+		t.Fatal("cache closed before attached lookup finished")
+	}
+	hook.release()
+	assertAttachedCloseFinishes(t, p, hook, backstop, closeDone, attachedDone)
 }
 
 func TestCloseStopsAdmittedLookupBeforeFetch(t *testing.T) {

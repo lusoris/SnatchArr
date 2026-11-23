@@ -519,9 +519,9 @@ func (p *Provider) Close() error {
 	return p.closeErr
 }
 
-// closeRedis closes the Redis client and waits at most closeWaitTimeout for it. rueidis
-// Client.Close takes no context and closes its connections one after another, so Close reports a
-// teardown that overruns instead of blocking shutdown on it.
+// closeRedis closes the Redis client and waits at most closeWaitTimeout for it. rueidis v1.0.79
+// Client.Close takes no context and can block on connection teardown (singleClient.Close in
+// client.go), so Close reports a teardown that overruns instead of blocking shutdown on it.
 func (p *Provider) closeRedis() error {
 	closed := make(chan struct{})
 	go func() {
