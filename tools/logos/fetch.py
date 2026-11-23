@@ -160,10 +160,15 @@ def verify_logo_files(
 ) -> None:
     """Verify file existence, hash integrity, stray files, and REUSE coverage."""
     expected_files: set[str] = set()
+    hashes: dict[str, str] = {}
 
     for key, entry in manifest.items():
         if "file" not in entry:
             continue
+        digest = entry.get("sha256")
+        if digest in hashes:
+            raise LogoError(key, f"sha256 duplicates manifest key {hashes[digest]}")
+        hashes[digest] = key
         filename = entry["file"]
         expected_files.add(filename)
         dest = logos_dir / filename
@@ -219,7 +224,9 @@ def check_offline(
     verify_manifest_keys(manifest, expected_keys)
     verify_exceptions(manifest)
     verify_logo_files(manifest, logos_dir, repo_root, reuse_data)
-    print("Logo check passed: all keys, hashes, exceptions, and REUSE annotations match.")
+    print(
+        "Logo check passed: all keys, hashes, exceptions, and REUSE annotations match."
+    )
 
 
 def fetch_all(manifest_path: Path, logos_dir: Path) -> None:
