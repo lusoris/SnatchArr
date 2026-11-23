@@ -660,7 +660,7 @@ async fn snatch(
         &mut rng,
     );
     enrich_dynamic_seasons(&p, &c.keep, &mut selected, events).await;
-    let selected = revalidate_selected(client, &p, run, selected, events).await?;
+    let selected = revalidate_selected(client, &p, run, &c, selected, &mut rng, events).await?;
     let targets = group(p.kind, &p.policy, &selected);
     let dispatch = acquire(client, run, targets, events).await?;
     let by_id: HashMap<i64, Candidate> = selected.iter().map(|c| (c.id, c.clone())).collect();
@@ -879,17 +879,23 @@ async fn filter_unprocessed(
     Ok(outcome)
 }
 
-/// Re-checks `selected` against processed memory before grouping so items processed while
-/// refilling or reading season totals are dropped before dispatch.
-async fn revalidate_selected(
+/// Drops `selected` entries whose id appears in sorted `busy`.
+fn drop_busy_selected(selected: &mut Vec<Candidate>, busy: &[i64]) -> usize {
+    let before = selected.len();
+    selected.retain(|c| busy.binary_search(&c.id).is_err());
+    before.saturating_sub(selected.len())
+}
+
+/// Re-checks `selected` against processed memory; emits a debug event when any id is dropped.
+async fn revalidate_processed(
     client: &mut Client,
     p: &Prepared,
     run: &Run,
-    mut selected: Vec<Candidate>,
+    selected: &mut Vec<Candidate>,
     events: &Events,
-) -> Result<Vec<Candidate>, ExecError> {
+) -> Result<(), ExecError> {
     if selected.is_empty() {
-        return Ok(selected);
+        return Ok(());
     }
     let ids: Vec<i64> = selected.iter().map(|c| c.id).collect();
     let fresh = filter_unprocessed(client, run, p.kind.entity_type(), &ids).await?;
@@ -901,6 +907,73 @@ async fn revalidate_selected(
         events
             .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
             .await;
+    }
+    Ok(())
+}
+
+/// Eligible replacements: `keep` minus ids from the original pick and minus sorted `busy`.
+fn replacement_pool(keep: &[Candidate], exclude: &BTreeSet<i64>, busy: &[i64]) -> Vec<Candidate> {
+    keep.iter()
+        .filter(|c| !exclude.contains(&c.id) && busy.binary_search(&c.id).is_err())
+        .cloned()
+        .collect()
+}
+
+/// Busy re-check, processed re-check, then one replacement round when slots stay empty.
+async fn revalidate_selected(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    c: &Collected,
+    mut selected: Vec<Candidate>,
+    rng: &mut SmallRng,
+    events: &Events,
+) -> Result<Vec<Candidate>, ExecError> {
+    if selected.is_empty() {
+        return Ok(selected);
+    }
+    let per_cycle = p.policy.per_cycle as usize;
+    let original_ids: BTreeSet<i64> = selected.iter().map(|c| c.id).collect();
+    let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
+    let busy_dropped = drop_busy_selected(&mut selected, &busy);
+    if busy_dropped > 0 {
+        let msg = format!(
+            "busy re-check dropped {busy_dropped} candidate(s) queued or grabbed since filter"
+        );
+        events
+            .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+            .await;
+    }
+    revalidate_processed(client, p, run, &mut selected, events).await?;
+    let kept = selected.len();
+    if kept >= per_cycle {
+        return Ok(selected);
+    }
+    let vacancies = per_cycle.saturating_sub(kept);
+    let pool = replacement_pool(&c.keep, &original_ids, &busy);
+    if pool.is_empty() {
+        return Ok(selected);
+    }
+    let mut replacements = snatch_core::select_prioritised(
+        &pool,
+        vacancies,
+        selection_of(&p.policy),
+        &c.priority_ids,
+        &c.priority_groups,
+        rng,
+    );
+    if !replacements.is_empty() {
+        enrich_dynamic_seasons(p, &c.keep, &mut replacements, events).await;
+        revalidate_processed(client, p, run, &mut replacements, events).await?;
+        let survivors = replacements.len();
+        if survivors > 0 {
+            let msg =
+                format!("replacement round filled {survivors} of {vacancies} vacated slot(s)");
+            events
+                .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+                .await;
+            selected.append(&mut replacements);
+        }
     }
     Ok(selected)
 }
