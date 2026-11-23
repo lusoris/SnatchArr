@@ -103,6 +103,28 @@ func TestAdultAllowed(t *testing.T) {
 			want:           false,
 		},
 		{
+			name: "negative overlay library not enabled for non-admin",
+			policy: jellyfin.Policy{
+				MaxParentalRating: new(18),
+				EnableAllFolders:  false,
+				EnabledFolders:    []string{"lib-movies", "lib-adult-source"},
+			},
+			threshold:      18,
+			adultLibraryID: "lib-adult-overlay",
+			want:           false,
+		},
+		{
+			name: "positive overlay library enabled",
+			policy: jellyfin.Policy{
+				MaxParentalRating: new(18),
+				EnableAllFolders:  false,
+				EnabledFolders:    []string{"lib-movies", "lib-adult-overlay"},
+			},
+			threshold:      18,
+			adultLibraryID: "lib-adult-overlay",
+			want:           true,
+		},
+		{
 			name: "positive enable all folders true ignores library list",
 			policy: jellyfin.Policy{
 				MaxParentalRating: new(18),

@@ -33,6 +33,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
+	"github.com/lusoris/SnatchArr/api/internal/pathsafe"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
 
@@ -125,13 +126,17 @@ func (s *Service) ScanImageSets(ctx context.Context) error {
 }
 
 func (s *Service) scanDir(ctx context.Context, baseDir string) error {
-	if err := writeStashIgnore(baseDir, s.logger); err != nil {
-		s.logger.WarnContext(ctx, "adult: write .stashignore error", "error", logSafeErr(err))
-	}
-
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		return fmt.Errorf("adult: read image set dir: %w", err)
+	}
+	// Read baseDir before writing .stashignore so a marker from a prior scan proves
+	// the real mount is present, and skip writing into an empty directory so a
+	// missing mount stays empty and preserves the index across scans.
+	if len(entries) > 0 {
+		if err = writeStashIgnore(baseDir, s.logger); err != nil {
+			s.logger.WarnContext(ctx, "adult: write .stashignore error", "error", logSafeErr(err))
+		}
 	}
 
 	maxSets := s.maxImageSets
@@ -139,52 +144,79 @@ func (s *Service) scanDir(ctx context.Context, baseDir string) error {
 		maxSets = MaxImageSets
 	}
 
-	var seenPaths []string
+	keepPaths, truncated, err := s.scanEntries(ctx, baseDir, maxSets, entries)
+	if err != nil {
+		return err
+	}
+	return s.maybeCleanVanishedSets(ctx, truncated, baseDir, len(entries), keepPaths)
+}
+
+func (s *Service) scanEntries(
+	ctx context.Context,
+	baseDir string,
+	maxSets int,
+	entries []os.DirEntry,
+) ([]string, bool, error) {
+	var keepPaths []string
 	setCount := 0
-	truncated := false
 	for _, entry := range entries {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil, false, ctx.Err()
 		}
 		if setCount >= maxSets {
 			s.logger.WarnContext(ctx, "adult: max image sets limit reached", "limit", maxSets)
-			truncated = true
-			break
+			return keepPaths, true, nil
 		}
 		subPath := filepath.Join(baseDir, entry.Name())
-		if !isValidSetDir(baseDir, subPath) {
+		scan, keep := classifySetDir(baseDir, subPath)
+		if keep {
+			keepPaths = append(keepPaths, subPath)
+		}
+		if !scan {
+			s.warnSkippedSetDir(ctx, keep, entry.Name())
 			continue
 		}
 		setCount++
-		seenPaths = append(seenPaths, subPath)
 		if err := s.scanSingleSet(ctx, baseDir, subPath); err != nil {
 			s.logger.ErrorContext(ctx, "adult: scan image set error", "error", logSafeErr(err))
 		}
 	}
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return nil, false, ctx.Err()
 	}
-	return s.maybeCleanVanishedSets(ctx, truncated, baseDir, len(entries), seenPaths)
+	return keepPaths, false, nil
 }
 
-func isValidSetDir(baseDir, subPath string) bool {
-	if !isCleanSubdir(baseDir, subPath) {
-		return false
+func (s *Service) warnSkippedSetDir(ctx context.Context, keep bool, dirName string) {
+	if !keep {
+		return
 	}
+	s.logger.WarnContext(
+		ctx,
+		"adult: image set directory skipped by portability check",
+		"dir", dirName,
+	)
+}
+
+func classifySetDir(baseDir, subPath string) (scan, keep bool) {
 	fi, err := os.Lstat(subPath)
-	return err == nil && fi.Mode()&os.ModeSymlink == 0 && fi.IsDir()
+	if err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return false, false
+	}
+	scan = pathsafe.StrictlyWithin(baseDir, subPath)
+	return scan, true
 }
 
-func (s *Service) maybeCleanVanishedSets(ctx context.Context, truncated bool, baseDir string, entryCount int, seenPaths []string) error {
+func (s *Service) maybeCleanVanishedSets(ctx context.Context, truncated bool, baseDir string, entryCount int, keepPaths []string) error {
 	if truncated {
 		return nil
 	}
-	return s.cleanVanishedSets(ctx, baseDir, entryCount, seenPaths)
+	return s.cleanVanishedSets(ctx, baseDir, entryCount, keepPaths)
 }
 
-func (s *Service) cleanVanishedSets(ctx context.Context, baseDir string, entryCount int, seenPaths []string) error {
-	if len(seenPaths) > 0 {
-		_, err := s.st.Q().DeleteAdultImageSetsNotInPaths(ctx, seenPaths)
+func (s *Service) cleanVanishedSets(ctx context.Context, baseDir string, entryCount int, keepPaths []string) error {
+	if len(keepPaths) > 0 {
+		_, err := s.st.Q().DeleteAdultImageSetsNotInPaths(ctx, keepPaths)
 		if err != nil {
 			return fmt.Errorf("delete vanished sets: %w", err)
 		}
@@ -271,7 +303,7 @@ type validEntry struct {
 
 func validateFileEntry(baseDir, setDir string, f os.DirEntry) (validEntry, bool) {
 	filePath := filepath.Join(setDir, f.Name())
-	if !isCleanSubdir(baseDir, filePath) {
+	if !pathsafe.StrictlyWithin(baseDir, filePath) {
 		return validEntry{}, false
 	}
 	fi, err := os.Lstat(filePath)
