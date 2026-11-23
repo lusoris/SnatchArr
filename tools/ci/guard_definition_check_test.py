@@ -126,6 +126,12 @@ def wide_loop(width: int) -> str:
     return "pre-commit: &loop [" + "x, " * (width - 1) + "*loop]\n"
 
 
+def wide_map_loop(width: int) -> str:
+    """Return a mapping alias loop, the mapping counterpart of width x MAX_NODES stack growth."""
+    entries = ", ".join(f"k{n}: *loop" for n in range(width))
+    return f"pre-commit: &loop {{{entries}}}\n"
+
+
 OTHER_HOOK = "pre-commit:\n  commands:\n    lint:\n      run: true\n"
 CUSTOM_HOOK = "my-hook:\n  commands:\n    lint:\n      run: true\n"
 
@@ -488,6 +494,16 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
             "guard-definition: lefthook.yml: more than 100000 YAML nodes after aliases and merges"
         ],
     ),
+    "wide-map-loop-other-hook": (
+        {},
+        {"lefthook.yml": LEFTHOOK + wide_map_loop(1024)},
+        {},
+        [],
+        1,
+        [
+            "guard-definition: lefthook.yml: more than 100000 YAML nodes after aliases and merges"
+        ],
+    ),
     "hook-duplicate-key": (
         {},
         {"lefthook.yml": LEFTHOOK + OTHER_HOOK + OTHER_HOOK},
@@ -708,7 +724,11 @@ def run_node_budget(check: str) -> bool:
         return False
     limit = module.MAX_NODES
     at_limit = "pre-commit: [" + ", ".join(["x"] * (limit - 2)) + "]\n"
-    doc = module.load(yaml, at_limit, "lefthook.yml")
+    try:
+        doc = module.load(yaml, at_limit, "lefthook.yml")
+    except module.GuardError as exc:
+        print(f"FAIL node-budget: at MAX_NODES raised GuardError {exc}")
+        return False
     items = doc.get("pre-commit") if isinstance(doc, dict) else None
     if not isinstance(items, list) or len(items) != limit - 2:
         got = len(items) if isinstance(items, list) else type(doc).__name__
