@@ -195,13 +195,67 @@ impl Focus {
 const FOCUS_PAGE_SIZE: u32 = 500;
 
 /// What candidate collection hands to selection.
+#[derive(Default)]
 struct Collected {
     keep: Vec<Candidate>,
-    busy: usize,
+    /// Every candidate id the batch fetched after page deduplication, before focus and filters.
+    seen_ids: BTreeSet<i64>,
+    busy_ids: BTreeSet<i64>,
     /// Dropped only because the app reports them as not yet available (#350).
-    unavailable: usize,
+    unavailable_ids: BTreeSet<i64>,
     priority_ids: Vec<i64>,
     priority_groups: Vec<i64>,
+    /// True when a `FilterCandidates` response set `priority_ids` and `priority_groups`.
+    priorities_read: bool,
+}
+
+impl Collected {
+    /// Folds a later batch into `self`: its reads replace earlier reads of the same ids, and its
+    /// Seerr priority lists replace the earlier ones only when it got a `FilterCandidates` answer.
+    fn merge(&mut self, other: Self) {
+        let order: Vec<i64> = other.keep.iter().map(|c| c.id).collect();
+        let mut fresh: BTreeMap<i64, Candidate> =
+            other.keep.into_iter().map(|c| (c.id, c)).collect();
+        self.keep.retain_mut(|kept| {
+            if !other.seen_ids.contains(&kept.id) {
+                fresh.remove(&kept.id);
+                return true;
+            }
+            if let Some(updated) = fresh.remove(&kept.id) {
+                *kept = updated;
+                true
+            } else {
+                false
+            }
+        });
+        self.keep
+            .extend(order.into_iter().filter_map(|id| fresh.remove(&id)));
+        self.busy_ids.retain(|id| !other.seen_ids.contains(id));
+        self.busy_ids.extend(other.busy_ids);
+        self.unavailable_ids
+            .retain(|id| !other.seen_ids.contains(id));
+        self.unavailable_ids.extend(other.unavailable_ids);
+        self.seen_ids.extend(other.seen_ids);
+        if other.priorities_read {
+            self.priority_ids = other.priority_ids;
+            self.priority_groups = other.priority_groups;
+            self.priorities_read = true;
+        }
+    }
+
+    fn drop_busy(&mut self, busy: &[i64]) {
+        let busy_ids = &mut self.busy_ids;
+        self.keep.retain(|c| {
+            if busy.binary_search(&c.id).is_ok() {
+                busy_ids.insert(c.id);
+                false
+            } else {
+                true
+            }
+        });
+        self.priority_ids
+            .retain(|id| busy.binary_search(id).is_err());
+    }
 }
 
 /// Everything derived from the lease before any I/O.
@@ -576,14 +630,14 @@ async fn snatch(
     events
         .emit(Ev::run(Level::Debug, EventType::PageFetched, page_msg))
         .await;
-    let c = collect_candidates(client, &p, run, &plan.pages, first).await?;
+    let (c, cursor) = collect_with_refill(client, &p, run, &plan, &first, &mut rng, events).await?;
     let eligible = u32::try_from(c.keep.len()).unwrap_or(u32::MAX);
     let filter_msg = format!(
         "{} candidate(s) after filters and afterglow; {} skipped as queued or grabbed within {} h; {} skipped as not yet available; {} requested via Seerr",
         c.keep.len(),
-        c.busy,
+        c.busy_ids.len(),
         p.policy.recent_grab_hours,
-        c.unavailable,
+        c.unavailable_ids.len(),
         c.priority_ids.len().saturating_add(c.priority_groups.len())
     );
     events
@@ -602,6 +656,7 @@ async fn snatch(
         &mut rng,
     );
     enrich_dynamic_seasons(&p, &c.keep, &mut selected, events).await;
+    let selected = revalidate_selected(client, &p, run, &c, selected, &mut rng, events).await?;
     let targets = group(p.kind, &p.policy, &selected);
     let dispatch = acquire(client, run, targets, events).await?;
     let by_id: HashMap<i64, Candidate> = selected.iter().map(|c| (c.id, c.clone())).collect();
@@ -609,7 +664,7 @@ async fn snatch(
         preview_all(&p, &dispatch, &by_id, events).await;
         return Ok(Outcome::at(p.policy.cursor.clone(), eligible));
     }
-    let mut outcome = Outcome::at(plan.next_cursor.to_string(), eligible);
+    let mut outcome = Outcome::at(cursor.to_string(), eligible);
     dispatch_all(&p, &dispatch, &by_id, events, &mut outcome, health).await;
     Ok(outcome)
 }
@@ -768,63 +823,632 @@ async fn plan_pages(p: &Prepared, rng: &mut SmallRng) -> Result<(PagePlan, Wante
     Ok((plan, first))
 }
 
-/// Fetches the planned pages, applies the local filters, drops what is already queued or
-/// freshly grabbed, and asks the API which ids are not in afterglow. Returns the
-/// candidates and how many were skipped as busy.
-async fn collect_candidates(
+/// Maximum entity ids per `FilterCandidates` call (`MaxFilterBatch` in
+/// `api/internal/snatch/memory.go`, HISS-02).
+const MAX_FILTER_BATCH: usize = 5000;
+
+#[derive(Default)]
+struct FilterOutcome {
+    unprocessed_ids: Vec<i64>,
+    priority_ids: Vec<i64>,
+    priority_group_ids: Vec<i64>,
+    /// True when at least one `FilterCandidates` response arrived.
+    answered: bool,
+}
+
+/// Asks the API which of `ids` are unprocessed, in batches of at most [`MAX_FILTER_BATCH`].
+/// Makes no call for empty `ids`; `answered` then stays false and the priority lists are no answer.
+async fn filter_unprocessed(
+    client: &mut Client,
+    run: &Run,
+    entity_type: &str,
+    ids: &[i64],
+) -> Result<FilterOutcome, ExecError> {
+    let mut outcome = FilterOutcome::default();
+    // Bounded by the chunk count: at most ceil(ids.len() / MAX_FILTER_BATCH) calls (HISS-02).
+    for chunk in ids.chunks(MAX_FILTER_BATCH) {
+        let req = FilterCandidatesRequest {
+            run_id: run.run_id.clone(),
+            entity_type: entity_type.to_owned(),
+            entity_ids: chunk.to_vec(),
+        };
+        let mut resp = resend::once_more(|| {
+            let mut c = client.clone();
+            let req = req.clone();
+            async move { c.filter_candidates(Request::new(req)).await }
+        })
+        .await?
+        .into_inner();
+        outcome.answered = true;
+        outcome.unprocessed_ids.append(&mut resp.unprocessed_ids);
+        outcome.priority_ids.append(&mut resp.priority_ids);
+        outcome
+            .priority_group_ids
+            .append(&mut resp.priority_group_ids);
+    }
+    outcome.unprocessed_ids.sort_unstable();
+    outcome.unprocessed_ids.dedup();
+    outcome.priority_ids.sort_unstable();
+    outcome.priority_ids.dedup();
+    outcome.priority_group_ids.sort_unstable();
+    outcome.priority_group_ids.dedup();
+    Ok(outcome)
+}
+
+/// Drops `selected` entries whose id appears in sorted `busy`.
+fn drop_busy_selected(selected: &mut Vec<Candidate>, busy: &[i64]) -> usize {
+    let before = selected.len();
+    selected.retain(|c| busy.binary_search(&c.id).is_err());
+    before.saturating_sub(selected.len())
+}
+
+/// Re-checks `selected` against processed memory; emits a debug event when any id is dropped.
+async fn revalidate_processed(
     client: &mut Client,
     p: &Prepared,
     run: &Run,
-    pages: &[u32],
-    first: WantedPage,
-) -> Result<Collected, ExecError> {
-    let mut candidates = Vec::new();
-    for page in pages {
-        let fetched = if *page == 1 {
-            first.clone()
-        } else {
-            p.arr
-                .wanted_page(p.wanted, *page, p.page_size, release_of(&p.policy))
-                .await?
-        };
-        candidates.extend(fetched.records);
+    selected: &mut Vec<Candidate>,
+    events: &Events,
+) -> Result<(), ExecError> {
+    if selected.is_empty() {
+        return Ok(());
     }
+    let ids: Vec<i64> = selected.iter().map(|c| c.id).collect();
+    let fresh = filter_unprocessed(client, run, p.kind.entity_type(), &ids).await?;
+    let before = selected.len();
+    selected.retain(|c| fresh.unprocessed_ids.binary_search(&c.id).is_ok());
+    let dropped = before.saturating_sub(selected.len());
+    if dropped > 0 {
+        let msg = format!("revalidation dropped {dropped} candidate(s) processed since filter");
+        events
+            .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+            .await;
+    }
+    Ok(())
+}
+
+/// Eligible replacements: `keep` minus ids from the original pick and minus sorted `busy`.
+fn replacement_pool(keep: &[Candidate], exclude: &BTreeSet<i64>, busy: &[i64]) -> Vec<Candidate> {
+    keep.iter()
+        .filter(|c| !exclude.contains(&c.id) && busy.binary_search(&c.id).is_err())
+        .cloned()
+        .collect()
+}
+
+struct ReplacementCtx<'a> {
+    original_ids: &'a BTreeSet<i64>,
+    busy_snapshot: &'a [i64],
+}
+
+struct ReplacementRound<'a, 'b> {
+    client: &'a mut Client,
+    p: &'a Prepared,
+    run: &'a Run,
+    c: &'a Collected,
+    selected: &'a mut Vec<Candidate>,
+    ctx: ReplacementCtx<'b>,
+    rng: &'a mut SmallRng,
+    events: &'a Events,
+}
+
+/// Picks replacements for vacated slots, revalidates them, then drops any that became busy.
+async fn replacement_round(round: ReplacementRound<'_, '_>) -> Result<(), ExecError> {
+    let ReplacementRound {
+        client,
+        p,
+        run,
+        c,
+        selected,
+        ctx,
+        rng,
+        events,
+    } = round;
+    let per_cycle = p.policy.per_cycle as usize;
+    let vacancies = per_cycle.saturating_sub(selected.len());
+    if vacancies == 0 {
+        return Ok(());
+    }
+    let pool = replacement_pool(&c.keep, ctx.original_ids, ctx.busy_snapshot);
+    if pool.is_empty() {
+        return Ok(());
+    }
+    let mut replacements = snatch_core::select_prioritised(
+        &pool,
+        vacancies,
+        selection_of(&p.policy),
+        &c.priority_ids,
+        &c.priority_groups,
+        rng,
+    );
+    if replacements.is_empty() {
+        return Ok(());
+    }
+    enrich_dynamic_seasons(p, &c.keep, &mut replacements, events).await;
+    revalidate_processed(client, p, run, &mut replacements, events).await?;
+    let fresh_busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
+    let dropped = drop_busy_selected(&mut replacements, &fresh_busy);
+    if dropped > 0 {
+        let msg =
+            format!("busy re-check dropped {dropped} replacement candidate(s) queued or grabbed");
+        events
+            .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+            .await;
+    }
+    let survivors = replacements.len();
+    if survivors > 0 {
+        let msg = format!("replacement round filled {survivors} of {vacancies} vacated slot(s)");
+        events
+            .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+            .await;
+        selected.append(&mut replacements);
+    }
+    Ok(())
+}
+
+/// Busy re-check, processed re-check, then one replacement round when slots stay empty.
+async fn revalidate_selected(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    c: &Collected,
+    mut selected: Vec<Candidate>,
+    rng: &mut SmallRng,
+    events: &Events,
+) -> Result<Vec<Candidate>, ExecError> {
+    if selected.is_empty() {
+        return Ok(selected);
+    }
+    let per_cycle = p.policy.per_cycle as usize;
+    let original_ids: BTreeSet<i64> = selected.iter().map(|c| c.id).collect();
+    let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
+    let busy_dropped = drop_busy_selected(&mut selected, &busy);
+    if busy_dropped > 0 {
+        let msg = format!(
+            "busy re-check dropped {busy_dropped} candidate(s) queued or grabbed since filter"
+        );
+        events
+            .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+            .await;
+    }
+    revalidate_processed(client, p, run, &mut selected, events).await?;
+    if selected.len() >= per_cycle {
+        return Ok(selected);
+    }
+    let ctx = ReplacementCtx {
+        original_ids: &original_ids,
+        busy_snapshot: &busy,
+    };
+    replacement_round(ReplacementRound {
+        client,
+        p,
+        run,
+        c,
+        selected: &mut selected,
+        ctx,
+        rng,
+        events,
+    })
+    .await?;
+    Ok(selected)
+}
+
+struct FetchedPages {
+    candidates: Vec<Candidate>,
+    pages_fetched: usize,
+    error: Option<(u32, ExecError)>,
+}
+
+/// Keeps, for each candidate id, the record from the latest wanted-page read (`read_order`,
+/// where `0` is the cached page-1 read from run start and later reads increase in fetch order),
+/// preserving slice order at each surviving record's position.
+fn keep_latest_candidates(tagged: Vec<(usize, Candidate)>) -> Vec<Candidate> {
+    let mut latest: BTreeMap<i64, (usize, usize)> = BTreeMap::new();
+    for (idx, (read_order, candidate)) in tagged.iter().enumerate() {
+        let rank = (*read_order, idx);
+        latest
+            .entry(candidate.id)
+            .and_modify(|prev| {
+                if rank > *prev {
+                    *prev = rank;
+                }
+            })
+            .or_insert(rank);
+    }
+    tagged
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, (_, candidate))| {
+            (latest.get(&candidate.id).map(|&(_, at)| at) == Some(idx)).then_some(candidate)
+        })
+        .collect()
+}
+
+/// Fetches `pages` in slice order, reusing `first` for page 1 while skipping cached page-1
+/// records whose id is already in `observed_ids`. For each remaining id, keeps the record from
+/// the latest read (`first` counts as the oldest read; other pages count in fetch order), leaving
+/// survivors in slice order at each surviving record's position.
+async fn fetch_unique_candidates(
+    p: &Prepared,
+    pages: &[u32],
+    first: &WantedPage,
+    observed_ids: &BTreeSet<i64>,
+) -> FetchedPages {
+    let mut tagged: Vec<(usize, Candidate)> = Vec::new();
+    let mut pages_fetched: usize = 0;
+    let mut live_reads: usize = 0;
+    let mut error = None;
+    for &page in pages {
+        if page == 1 {
+            pages_fetched = pages_fetched.saturating_add(1);
+            tagged.extend(
+                first
+                    .records
+                    .iter()
+                    .filter(|c| !observed_ids.contains(&c.id))
+                    .cloned()
+                    .map(|c| (0, c)),
+            );
+            continue;
+        }
+        let fetched = match p
+            .arr
+            .wanted_page(p.wanted, page, p.page_size, release_of(&p.policy))
+            .await
+        {
+            Ok(fetched) => fetched,
+            Err(err) => {
+                error = Some((page, ExecError::from(err)));
+                break;
+            }
+        };
+        pages_fetched = pages_fetched.saturating_add(1);
+        live_reads = live_reads.saturating_add(1);
+        tagged.extend(fetched.records.into_iter().map(|c| (live_reads, c)));
+    }
+    FetchedPages {
+        candidates: keep_latest_candidates(tagged),
+        pages_fetched,
+        error,
+    }
+}
+
+/// One fetched batch after focus, policy and busy-id splitting, before processed-memory filtering.
+struct LocallyFiltered {
+    passing: Vec<Candidate>,
+    seen_ids: BTreeSet<i64>,
+    busy_ids: BTreeSet<i64>,
+    unavailable_ids: BTreeSet<i64>,
+}
+
+/// Applies focus, policy, and busy splitting to one fetched batch without calling the API.
+fn filter_fetched_candidates_locally(
+    p: &Prepared,
+    mut candidates: Vec<Candidate>,
+    busy: &[i64],
+) -> LocallyFiltered {
+    let seen_ids: BTreeSet<i64> = candidates.iter().map(|c| c.id).collect();
     if let Some(focus) = p.focus {
         candidates.retain(|c| focus.matches(c));
     }
     let filter = filter_of(&p.policy, OffsetDateTime::now_utc().unix_timestamp());
     let filtered = snatch_core::filter(&candidates, &filter);
-    let unavailable = snatch_core::unavailable_count(&candidates, &filter);
-    let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
-    let before = filtered.len();
-    let filtered: Vec<Candidate> = filtered
+    let unavailable_ids: BTreeSet<i64> = snatch_core::unavailable_ids(&candidates, &filter)
         .into_iter()
-        .filter(|c| busy.binary_search(&c.id).is_err())
         .collect();
-    let skipped = before.saturating_sub(filtered.len());
-    let req = FilterCandidatesRequest {
-        run_id: run.run_id.clone(),
-        entity_type: p.kind.entity_type().to_owned(),
-        entity_ids: filtered.iter().map(|c| c.id).collect(),
-    };
-    let resp = resend::once_more(|| {
-        let mut c = client.clone();
-        let req = req.clone();
-        async move { c.filter_candidates(Request::new(req)).await }
-    })
-    .await?
-    .into_inner();
-    let keep = filtered
+    let mut busy_ids = BTreeSet::new();
+    let mut passing = Vec::with_capacity(filtered.len());
+    for candidate in filtered {
+        if busy.binary_search(&candidate.id).is_ok() {
+            busy_ids.insert(candidate.id);
+        } else {
+            passing.push(candidate);
+        }
+    }
+    LocallyFiltered {
+        passing,
+        seen_ids,
+        busy_ids,
+        unavailable_ids,
+    }
+}
+
+/// Wraps a local view as a batch the API never answered: no processed-memory filtering and no
+/// Seerr priority lists (`priorities_read` false), so a merge keeps the prior priority lists.
+fn collected_from_local(local: LocallyFiltered) -> Collected {
+    Collected {
+        keep: local.passing,
+        seen_ids: local.seen_ids,
+        busy_ids: local.busy_ids,
+        unavailable_ids: local.unavailable_ids,
+        priority_ids: Vec::new(),
+        priority_groups: Vec::new(),
+        priorities_read: false,
+    }
+}
+
+/// Asks the API which locally passing candidates are not in processed-memory afterglow; borrows
+/// `local` so a caller keeps the local view when the call fails.
+async fn unprocessed_outcome(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    local: &LocallyFiltered,
+) -> Result<FilterOutcome, ExecError> {
+    let ids: Vec<i64> = local.passing.iter().map(|c| c.id).collect();
+    filter_unprocessed(client, run, p.kind.entity_type(), &ids).await
+}
+
+/// Keeps the locally passing candidates the API reported unprocessed, with its priority lists.
+fn collected_with_outcome(local: LocallyFiltered, outcome: FilterOutcome) -> Collected {
+    let keep = local
+        .passing
         .into_iter()
-        .filter(|c| resp.unprocessed_ids.contains(&c.id))
+        .filter(|c| outcome.unprocessed_ids.binary_search(&c.id).is_ok())
         .collect();
-    Ok(Collected {
+    Collected {
         keep,
-        busy: skipped,
-        unavailable,
-        priority_ids: resp.priority_ids,
-        priority_groups: resp.priority_group_ids,
-    })
+        seen_ids: local.seen_ids,
+        busy_ids: local.busy_ids,
+        unavailable_ids: local.unavailable_ids,
+        priority_ids: outcome.priority_ids,
+        priority_groups: outcome.priority_group_ids,
+        priorities_read: outcome.answered,
+    }
+}
+
+/// Filters one fetched batch by focus, policy, busy ids and processed memory; `priorities_read`
+/// records whether the API answered with Seerr priority lists.
+async fn filter_fetched_candidates(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    candidates: Vec<Candidate>,
+    busy: &[i64],
+) -> Result<Collected, ExecError> {
+    let local = filter_fetched_candidates_locally(p, candidates, busy);
+    let outcome = unprocessed_outcome(client, p, run, &local).await?;
+    Ok(collected_with_outcome(local, outcome))
+}
+
+/// Fetches the planned pages, deduplicates repeated ids by keeping the record from the latest
+/// read (`first` counts as the oldest read; other pages count in fetch order) at its slice
+/// position, applies the local filters, drops what is already queued or freshly grabbed, and asks
+/// the API which ids are not in afterglow. Reuses `first` for page 1 so a run sends at most
+/// [`snatch_core::MAX_PAGES_PER_CYCLE`] distinct wanted-page requests, the page-1 metadata read
+/// included.
+async fn collect_candidates(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    pages: &[u32],
+    first: &WantedPage,
+    busy: &[i64],
+) -> Result<Collected, ExecError> {
+    let empty = BTreeSet::new();
+    let fetched = fetch_unique_candidates(p, pages, first, &empty).await;
+    if let Some((_, err)) = fetched.error {
+        return Err(err);
+    }
+    filter_fetched_candidates(client, p, run, fetched.candidates, busy).await
+}
+
+/// Reads queue/grab busy ids for a refill batch, falling back to the collect-time snapshot on error.
+async fn refill_busy_snapshot(
+    p: &Prepared,
+    run: &Run,
+    initial: &[i64],
+    events: &Events,
+) -> Vec<i64> {
+    match p.arr.busy_ids(p.policy.recent_grab_hours).await {
+        Ok(fresh) => fresh,
+        Err(err) => {
+            tracing::warn!(
+                run = %run.run_id,
+                error = %err,
+                "busy re-read after refill failed; keeping initial snapshot"
+            );
+            let msg = format!("busy re-read after refill failed ({err}); keeping initial snapshot");
+            events
+                .emit(Ev::run(Level::Warn, EventType::CandidatesFiltered, msg))
+                .await;
+            initial.to_vec()
+        }
+    }
+}
+
+/// What a refill fetch produced: a merged batch, a page error with partial data, or a
+/// processed-memory filter error with local exclusions preserved.
+enum RefillBatch {
+    Complete(Collected),
+    Partial {
+        collected: Collected,
+        pages_fetched: usize,
+        failed_page: u32,
+        error: ExecError,
+    },
+    FilterFailed {
+        collected: Collected,
+        error: ExecError,
+    },
+}
+
+/// Filters a fetched refill batch with the given busy snapshot and processed-memory API.
+async fn filter_refill_batch(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    fetched: FetchedPages,
+    busy: &[i64],
+) -> RefillBatch {
+    let local = filter_fetched_candidates_locally(p, fetched.candidates, busy);
+    let collected = match unprocessed_outcome(client, p, run, &local).await {
+        Ok(outcome) => collected_with_outcome(local, outcome),
+        Err(err) => {
+            return RefillBatch::FilterFailed {
+                collected: collected_from_local(local),
+                error: err,
+            };
+        }
+    };
+    match fetched.error {
+        None => RefillBatch::Complete(collected),
+        Some((failed_page, error)) => RefillBatch::Partial {
+            collected,
+            pages_fetched: fetched.pages_fetched,
+            failed_page,
+            error,
+        },
+    }
+}
+
+async fn emit_refill_page_warning(
+    run: &Run,
+    failed_page: u32,
+    pages_fetched: usize,
+    err: &ExecError,
+    kept: usize,
+    events: &Events,
+) {
+    tracing::warn!(
+        run = %run.run_id,
+        page = failed_page,
+        pages_fetched,
+        error = %err,
+        kept,
+        "refill page failed; keeping collected candidates"
+    );
+    let msg = format!(
+        "refill page {failed_page} failed ({err}); keeping {kept} candidate(s) from {pages_fetched} refill page(s)"
+    );
+    events
+        .emit(Ev::run(Level::Warn, EventType::PageFetched, msg))
+        .await;
+}
+
+fn merge_refill_into(
+    collected: &mut Collected,
+    additional: Collected,
+    refill_busy: Option<&[i64]>,
+) {
+    collected.merge(additional);
+    if let Some(busy) = refill_busy {
+        collected.drop_busy(busy);
+    }
+}
+
+/// Merges a refill batch into `collected` and returns the cursor to persist. On a partial
+/// sequential refill, `failed_page` is the next unread page of the contiguous cursor walk
+/// (page 1 reuses the initial metadata read and never fails), so advancing to `failed_page`
+/// skips the refill pages already fetched without skipping the failed one; non-sequential
+/// selections keep `plan_cursor`. On a filter failure, local re-read exclusions merge into
+/// ids the API already approved without introducing new ones, then the fresh busy snapshot
+/// from after refill pages are fetched drops any kept id that became busy during refill.
+async fn apply_refill_batch(
+    run: &Run,
+    batch: RefillBatch,
+    (selection, plan_cursor, refill_cursor): (Selection, u32, u32),
+    collected: &mut Collected,
+    refill_busy: Option<&[i64]>,
+    events: &Events,
+) -> u32 {
+    match batch {
+        RefillBatch::Complete(additional) => {
+            merge_refill_into(collected, additional, refill_busy);
+            if selection == Selection::Sequential {
+                refill_cursor
+            } else {
+                plan_cursor
+            }
+        }
+        RefillBatch::Partial {
+            collected: additional,
+            pages_fetched,
+            failed_page,
+            error,
+        } => {
+            let busy = if pages_fetched > 0 { refill_busy } else { None };
+            merge_refill_into(collected, additional, busy);
+            let kept = collected.keep.len();
+            emit_refill_page_warning(run, failed_page, pages_fetched, &error, kept, events).await;
+            if selection == Selection::Sequential {
+                failed_page
+            } else {
+                plan_cursor
+            }
+        }
+        RefillBatch::FilterFailed {
+            collected: mut additional,
+            error,
+        } => {
+            let prior: BTreeSet<i64> = collected.keep.iter().map(|c| c.id).collect();
+            additional.keep.retain(|c| prior.contains(&c.id));
+            merge_refill_into(collected, additional, refill_busy);
+            let kept = collected.keep.len();
+            tracing::warn!(
+                run = %run.run_id,
+                error = %error,
+                kept,
+                "refill failed; keeping collected candidates"
+            );
+            let msg = format!("refill failed ({error}); keeping {kept} candidate(s)");
+            events
+                .emit(Ev::run(Level::Warn, EventType::PageFetched, msg))
+                .await;
+            plan_cursor
+        }
+    }
+}
+
+/// Collects candidates across planned and refill pages so a run sends at most
+/// [`snatch_core::MAX_PAGES_PER_CYCLE`] distinct wanted-page requests, the page-1 metadata
+/// read included.
+async fn collect_with_refill(
+    client: &mut Client,
+    p: &Prepared,
+    run: &Run,
+    plan: &PagePlan,
+    first: &WantedPage,
+    rng: &mut SmallRng,
+    events: &Events,
+) -> Result<(Collected, u32), ExecError> {
+    let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
+    let mut collected = collect_candidates(client, p, run, &plan.pages, first, &busy).await?;
+    if collected.keep.len() >= p.policy.per_cycle as usize {
+        return Ok((collected, plan.next_cursor));
+    }
+    let selection = selection_of(&p.policy);
+    let more = plan.refill(first.total_records, p.page_size, selection, rng);
+    if more.pages.is_empty() {
+        return Ok((collected, plan.next_cursor));
+    }
+    let page_msg = format!(
+        "{} candidate(s) on {} page(s); fetching {} more page(s)",
+        collected.keep.len(),
+        plan.pages.len(),
+        more.pages.len()
+    );
+    events
+        .emit(Ev::run(Level::Debug, EventType::PageFetched, page_msg))
+        .await;
+    let fetched = fetch_unique_candidates(p, &more.pages, first, &collected.seen_ids).await;
+    let refill_busy = if fetched.pages_fetched > 0 {
+        Some(refill_busy_snapshot(p, run, &busy, events).await)
+    } else {
+        None
+    };
+    let filter_busy = refill_busy.as_deref().unwrap_or(&busy);
+    let batch = filter_refill_batch(client, p, run, fetched, filter_busy).await;
+    let cursors = (selection, plan.next_cursor, more.next_cursor);
+    let cursor = apply_refill_batch(
+        run,
+        batch,
+        cursors,
+        &mut collected,
+        refill_busy.as_deref(),
+        events,
+    )
+    .await;
+    Ok((collected, cursor))
 }
 
 /// Asks the API for stamina per target and keeps what was granted: a target searched item by
