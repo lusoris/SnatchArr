@@ -349,7 +349,7 @@ func TestSync_Boundary_EmptyAnd500CapAndDisabledTick(t *testing.T) {
 				t.Errorf("boundary violated: performer request %d made beyond 500 cap", reqNum)
 			}
 			var pageItems []map[string]any
-			for i := 0; i < 50; i++ {
+			for i := range 50 {
 				pageItems = append(pageItems, map[string]any{
 					"id":   fmt.Sprintf("cap-p-%d-%d", reqNum, i),
 					"name": fmt.Sprintf("Cap Performer %d-%d", reqNum, i),

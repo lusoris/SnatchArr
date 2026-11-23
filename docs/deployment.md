@@ -574,7 +574,7 @@ SMOKE_SKIP_BUILD=1 E2E_API_IMAGE=<api-image> E2E_WORKER_IMAGE=<worker-image> mak
 - any failed run;
 - a last worker contact (`worker_last_contact_at` in `/api/v1/system/status`) older than `SOAK_MAX_CONTACT_AGE` seconds (default 45: the long-poll plus 15).
 
-At the end, at least two runs per round must be done. The workflow `.github/workflows/soak.yml` runs it nightly and on demand; a failure on main opens or comments on the issue "Soak fails on main". The soak catches lease calls cut at a connection rotation and calls a closing connection refused before sending them, which a shorter smoke run does not reach.
+At the end, at least two runs per round must be done. The workflow `.github/workflows/soak.yml` runs it nightly and on demand; a failure on main opens or comments on the issue "Soak fails on main". The soak catches lease calls cut at a connection rotation, calls a closing connection refused before sending them, and an event stream a closing connection refused before sending it (resent once on the next connection), which a shorter smoke run does not reach.
 
 ```sh
 SOAK_SECONDS=1800 make e2e-soak

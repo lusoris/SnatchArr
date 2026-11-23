@@ -24,6 +24,7 @@ import (
 	gerr "github.com/golusoris/golusoris/core/errors"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/pathsafe"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -106,7 +107,7 @@ func thumbSourceBase(cfg adultSettings, item sqlcgen.AdultImageItem) (string, er
 		return "", fmt.Errorf("adult: image_set_dir not configured: %w", domain.ErrInvalid)
 	}
 	cleanBase := filepath.Clean(*cfg.ImageSetDir)
-	if !isCleanSubdir(cleanBase, item.FilePath) {
+	if !pathsafe.StrictlyWithin(cleanBase, item.FilePath) {
 		return "", fmt.Errorf("adult: file path escapes image set dir: %w", domain.ErrInvalid)
 	}
 	return cleanBase, nil
