@@ -78,10 +78,15 @@ func (s *Service) Update(ctx context.Context, p domain.Policy) (domain.Policy, e
 
 // SaveCursor persists the sequential-selection cursor for one snatch kind.
 func (s *Service) SaveCursor(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind, cursor string) error {
+	return s.SaveCursorIn(ctx, s.st.Q(), instanceID, kind, cursor)
+}
+
+// SaveCursorIn is SaveCursor through q, such as the queries of the transaction that closes the run.
+func (s *Service) SaveCursorIn(ctx context.Context, q *sqlcgen.Queries, instanceID uuid.UUID, kind domain.SnatchKind, cursor string) error {
 	if len(cursor) > 256 {
 		return fmt.Errorf("%w: cursor too long", domain.ErrInvalid)
 	}
-	err := s.st.Q().SavePolicyCursor(ctx, sqlcgen.SavePolicyCursorParams{
+	err := q.SavePolicyCursor(ctx, sqlcgen.SavePolicyCursorParams{
 		Kind: string(kind), Cursor: cursor, UpdatedAt: s.clk.Now(), InstanceID: instanceID,
 	})
 	if err != nil {

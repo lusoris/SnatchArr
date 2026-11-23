@@ -222,33 +222,73 @@ func (r *Runs) Get(ctx context.Context, runID uuid.UUID) (domain.Run, error) {
 	return runFromRow(row), nil
 }
 
+// Completion is one worker's request to close the run it leased.
+type Completion struct {
+	RunID    uuid.UUID
+	WorkerID string
+	Status   domain.RunStatus
+	Searched int
+	Error    string
+	Eligible *uint32
+}
+
 // Complete closes a leased run.
 func (r *Runs) Complete(ctx context.Context, runID uuid.UUID, workerID string, status domain.RunStatus, searched int, errMsg string, eligible *uint32) (domain.Run, error) {
-	if status != domain.RunDone && status != domain.RunFailed && status != domain.RunCancelled {
-		return domain.Run{}, fmt.Errorf("%w: run status %q is not terminal", domain.ErrInvalid, status)
-	}
-	var errPtr *string
-	if errMsg != "" {
-		errPtr = &errMsg
-	}
-	var eligibleItems *int32
-	if eligible != nil {
-		// PostgreSQL INTEGER cannot represent the upper half of uint32.
-		eligibleItems = new(int32(min(*eligible, math.MaxInt32))) // #nosec G115 -- clamped to INTEGER range
-	}
-	row, err := r.st.Q().CompleteRun(ctx, sqlcgen.CompleteRunParams{
-		ID: runID, LeasedBy: &workerID, Status: string(status), FinishedAt: new(r.clk.Now()),
-		SearchedCount: int32(min(searched, 1<<30)), // #nosec G115 -- clamped
-		Error:         errPtr,
-		EligibleItems: eligibleItems,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Run{}, fmt.Errorf("%w: run %s is not leased by %s", domain.ErrConflict, runID, workerID)
-	}
+	return r.CompleteWithProgress(ctx, Completion{
+		RunID: runID, WorkerID: workerID, Status: status, Searched: searched, Error: errMsg, Eligible: eligible,
+	}, nil)
+}
+
+// CompleteWithProgress closes a leased run, then runs persist with the queries of the same transaction.
+// The closing UPDATE checks the holder and takes the run's row lock first, and LeaseRun skips locked
+// rows, so the lease cannot pass to another worker while persist writes; an error from persist rolls
+// the run back to leased. A nil persist only closes the run.
+func (r *Runs) CompleteWithProgress(ctx context.Context, c Completion, persist func(q *sqlcgen.Queries) error) (domain.Run, error) {
+	params, err := r.completeParams(c)
 	if err != nil {
-		return domain.Run{}, fmt.Errorf("snatch: complete: %w", store.MapError(err))
+		return domain.Run{}, err
+	}
+	var row sqlcgen.SnatchRun
+	err = r.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+		var txErr error
+		row, txErr = q.CompleteRun(ctx, params)
+		if errors.Is(txErr, pgx.ErrNoRows) {
+			return fmt.Errorf("%w: run %s is not leased by %s", domain.ErrConflict, c.RunID, c.WorkerID)
+		}
+		if txErr != nil {
+			return fmt.Errorf("snatch: complete: %w", store.MapError(txErr))
+		}
+		if persist == nil {
+			return nil
+		}
+		return persist(q)
+	})
+	if err != nil {
+		return domain.Run{}, err
 	}
 	return runFromRow(row), nil
+}
+
+// completeParams checks that c ends the run in a terminal status and builds the closing UPDATE.
+func (r *Runs) completeParams(c Completion) (sqlcgen.CompleteRunParams, error) {
+	if c.Status != domain.RunDone && c.Status != domain.RunFailed && c.Status != domain.RunCancelled {
+		return sqlcgen.CompleteRunParams{}, fmt.Errorf("%w: run status %q is not terminal", domain.ErrInvalid, c.Status)
+	}
+	var errPtr *string
+	if c.Error != "" {
+		errPtr = &c.Error
+	}
+	var eligibleItems *int32
+	if c.Eligible != nil {
+		// PostgreSQL INTEGER cannot represent the upper half of uint32.
+		eligibleItems = new(int32(min(*c.Eligible, math.MaxInt32))) // #nosec G115 -- clamped to INTEGER range
+	}
+	return sqlcgen.CompleteRunParams{
+		ID: c.RunID, LeasedBy: &c.WorkerID, Status: string(c.Status), FinishedAt: new(r.clk.Now()),
+		SearchedCount: int32(min(c.Searched, 1<<30)), // #nosec G115 -- clamped
+		Error:         errPtr,
+		EligibleItems: eligibleItems,
+	}, nil
 }
 
 // Cancel marks a queued or leased run cancelled; the worker learns via Heartbeat.
