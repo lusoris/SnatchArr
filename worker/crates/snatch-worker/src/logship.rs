@@ -21,6 +21,8 @@ use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::layer::{Context, Layer};
 
+use crate::backoff::jitter;
+
 /// Records the channel holds before the layer drops new ones.
 pub const CAPACITY: usize = 1024;
 /// Records sent in one batch; a full batch is sent at once.
@@ -175,13 +177,6 @@ fn transient(code: Code) -> bool {
         code,
         Code::Unavailable | Code::DeadlineExceeded | Code::ResourceExhausted | Code::Aborted
     )
-}
-
-/// A random wait between half of `d` and `d`.
-fn jitter(d: Duration) -> Duration {
-    use rand::RngExt;
-    let half = d.checked_div(2).unwrap_or(Duration::ZERO);
-    rand::rng().random_range(half..=d)
 }
 
 /// Sends one batch with bounded retries; records the API never took count as dropped.
