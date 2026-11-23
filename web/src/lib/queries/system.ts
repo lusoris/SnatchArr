@@ -6,8 +6,10 @@ import { createSentioQuery } from '@sveltesentio/query';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { keys } from '#lib/query.js';
+import { session } from '#lib/session.svelte.js';
 
 export type SystemStatus = components['schemas']['SystemStatus'];
+export type ModuleState = components['schemas']['ModuleState'];
 
 /**
  * Shared query helper for system status.
@@ -18,6 +20,18 @@ export function systemStatusQuery() {
 		queryKey: keys.systemStatus,
 		queryFn: async () => (await api.GET('/system/status')).data
 	});
+}
+
+/**
+ * Shared query helper for optional modules.
+ * Reuses keys.modules and typed API client GET /system/modules while authenticated.
+ */
+export function systemModulesQuery() {
+	return createSentioQuery<ModuleState[]>(() => ({
+		queryKey: keys.modules,
+		enabled: session.state === 'authenticated',
+		queryFn: async () => (await api.GET('/system/modules')).data ?? []
+	}));
 }
 
 /**

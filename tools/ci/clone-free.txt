@@ -63,3 +63,6 @@ web/src/routes/adult/studios/+page.svelte
 web/src/lib/components/adult/AdultCatalogList.svelte
 web/src/lib/components/adult/AdultCatalogList.svelte.test.ts
 web/src/routes/settings/requests/page.svelte.test.ts
+web/src/routes/+layout.svelte
+web/src/routes/automation/+page.svelte
+web/src/routes/system/ModulesTab.svelte

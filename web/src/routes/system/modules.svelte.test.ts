@@ -5,7 +5,7 @@
 import { fireEvent, screen } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { toast } from 'svelte-sonner';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
@@ -31,6 +31,14 @@ const sampleModuleDetail: Module = {
 
 describe('ModulesTab', () => {
 	useAdminSession();
+
+	beforeEach(() => {
+		session.state = 'authenticated';
+	});
+
+	afterEach(() => {
+		session.state = 'unknown';
+	});
 
 	it('renders module list with status and toggle buttons for admin', async () => {
 		stubGet({
