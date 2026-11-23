@@ -737,6 +737,65 @@ func TestImageSetEmptyMountKeepsIndex(t *testing.T) {
 	}
 }
 
+func TestImageSetEmptyMountKeepsIndexAcrossScans(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	env := setupTestEnv(ctx, t)
+
+	tmp := t.TempDir()
+	imagesDir := filepath.Join(tmp, "images_empty_mount_scans_test")
+	thumbDir := filepath.Join(tmp, "thumbs_empty_mount_scans_test")
+	set1Dir := filepath.Join(imagesDir, "gallery_1")
+	set2Dir := filepath.Join(imagesDir, "gallery_2")
+
+	var err error
+	for _, d := range []string{set1Dir, set2Dir} {
+		if err = os.MkdirAll(d, 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+		createTestPNG(t, filepath.Join(d, "img.png"), 30, 30)
+	}
+
+	configureAdultModule(ctx, t, env, imagesDir, thumbDir)
+
+	if err = env.svc.ScanImageSets(ctx); err != nil {
+		t.Fatalf("initial scan: %v", err)
+	}
+	var sets []sqlcgen.AdultImageSet
+	sets, err = env.st.Q().ListAdultImageSets(ctx)
+	if err != nil {
+		t.Fatalf("list sets after initial scan: %v", err)
+	}
+	if len(sets) != 2 {
+		t.Fatalf("initial scan: got %d sets, want 2", len(sets))
+	}
+
+	if err = os.RemoveAll(imagesDir); err != nil {
+		t.Fatalf("remove imagesDir: %v", err)
+	}
+	if err = os.MkdirAll(imagesDir, 0o750); err != nil {
+		t.Fatalf("mkdir empty imagesDir: %v", err)
+	}
+
+	for scan := 1; scan <= 3; scan++ {
+		if err = env.svc.ScanImageSets(ctx); err != nil {
+			t.Fatalf("empty scan %d: %v", scan, err)
+		}
+		sets, err = env.st.Q().ListAdultImageSets(ctx)
+		if err != nil {
+			t.Fatalf("empty scan %d list sets: %v", scan, err)
+		}
+		if len(sets) != 2 {
+			t.Fatalf("empty scan %d: got %d sets, want 2", scan, len(sets))
+		}
+	}
+
+	_, err = os.Stat(filepath.Join(imagesDir, StashIgnoreFilename))
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("marker written into empty dir: stat err %v", err)
+	}
+}
+
 func TestImageSetSymlinkSwapAfterScan(t *testing.T) {
 	ctx := context.Background()
 	env := setupTestEnv(ctx, t)
@@ -799,4 +858,77 @@ func TestImageSetSymlinkSwapAfterScan(t *testing.T) {
 	if !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("Thumbnail on symlink swap error = %v, want ErrInvalid", err)
 	}
+}
+
+func assertHasSetDirectory(t *testing.T, sets []sqlcgen.AdultImageSet, dir string) {
+	t.Helper()
+	for _, s := range sets {
+		if s.DirectoryPath == dir {
+			return
+		}
+	}
+	t.Fatalf("set for directory %q not found in %d sets", dir, len(sets))
+}
+
+func TestImageSetPortabilitySkippedDirKeepsRow(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	env := setupTestEnv(ctx, t)
+
+	tmp := t.TempDir()
+	imagesDir := filepath.Join(tmp, "images_portability_skip_test")
+	thumbDir := filepath.Join(tmp, "thumbs_portability_skip_test")
+	galleryDir := filepath.Join(imagesDir, "gallery_1")
+	skippedDir := filepath.Join(imagesDir, ".. ")
+	for _, d := range []string{galleryDir, skippedDir} {
+		if err := os.MkdirAll(d, 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+		createTestPNG(t, filepath.Join(d, "img.png"), 30, 30)
+	}
+
+	configureAdultModule(ctx, t, env, imagesDir, thumbDir)
+
+	skippedID, err := env.ids.NewUUID()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	now := env.clk.Now()
+	if _, err = env.st.Q().UpsertAdultImageSet(ctx, sqlcgen.UpsertAdultImageSetParams{
+		ID:            skippedID,
+		Title:         filepath.Base(skippedDir),
+		DirectoryPath: skippedDir,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}); err != nil {
+		t.Fatalf("upsert skipped image set: %v", err)
+	}
+
+	if err = env.svc.ScanImageSets(ctx); err != nil {
+		t.Fatalf("first scan: %v", err)
+	}
+	setsAfterFirst, err := env.st.Q().ListAdultImageSets(ctx)
+	if err != nil {
+		t.Fatalf("list sets after first scan: %v", err)
+	}
+	if len(setsAfterFirst) != 2 {
+		t.Fatalf("first scan got %d sets, want 2", len(setsAfterFirst))
+	}
+	assertHasSetDirectory(t, setsAfterFirst, galleryDir)
+	assertHasSetDirectory(t, setsAfterFirst, skippedDir)
+
+	if err = os.RemoveAll(galleryDir); err != nil {
+		t.Fatalf("remove gallery_1: %v", err)
+	}
+	if err = env.svc.ScanImageSets(ctx); err != nil {
+		t.Fatalf("second scan: %v", err)
+	}
+	setsAfterSecond, err := env.st.Q().ListAdultImageSets(ctx)
+	if err != nil {
+		t.Fatalf("list sets after second scan: %v", err)
+	}
+	if len(setsAfterSecond) != 1 {
+		t.Fatalf("second scan got %d sets, want 1", len(setsAfterSecond))
+	}
+	assertHasSetDirectory(t, setsAfterSecond, skippedDir)
 }
