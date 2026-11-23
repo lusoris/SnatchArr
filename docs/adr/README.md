@@ -46,7 +46,7 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0038](0038-vmafx-library-quality-scoring.md) | 2026-10-26 | VMAFx perceptual video quality scoring and unified video hashing across media libraries | Accepted |
 | [0039](0039-metadata-single-source.md) | 2026-10-26 | Single source of truth for metadata across *arr, Stash, Jellyfin and SnatchArr | Proposed |
 | [0040](0040-audiobookshelf-integration.md) | 2026-10-26 | Audiobookshelf full integration | Accepted |
-| [0041](0041-rule-driven-library-processing.md) | 2026-10-26 | Rule-driven library processing (remux and re-encode by rules) | Accepted |
+| [0041](0041-rule-driven-library-processing.md) | 2026-10-26 | Rule-driven library processing (remux and re-encode by rules) | Accepted; execution superseded by 0050 |
 | [0042](0042-brand-mark-choice-and-sfw-mode.md) | 2026-10-26 | Brand mark choice (vulva, penis, hand) and SFW mode | Accepted |
 | [0043](0043-adult-served-surface.md) | 2026-10-27 | Adult module served HTTP surface and UI screens | Accepted |
 | [0044](0044-runtime-settings-parity.md) | 2026-10-29 | Runtime settings parity between environment, API and UI | Accepted |
@@ -55,3 +55,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0047](0047-list-sync-across-instances.md) | 2026-11-10 | List sync across instances | Accepted |
 | [0048](0048-tvdb-metadata-provider.md) | 2026-11-13 | TheTVDB as opt-in metadata provider | Accepted; amends 0019 |
 | [0049](0049-metadata-proxy.md) | 2026-11-13 | Metadata proxy | Accepted |
+| [0050](0050-media-execution-in-torcul.md) | 2026-11-23 | Media execution moves to torcul; SnatchArr triggers jobs and shows their state | Accepted; supersedes execution parts of 0041 |
