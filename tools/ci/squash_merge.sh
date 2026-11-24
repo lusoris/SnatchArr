@@ -11,13 +11,20 @@
 # written by hand drops their Signed-off-by trailers (main c2c711e6, #1007). This script refuses
 # such a body instead of merging it:
 #
-#   rc 2  usage, or no git user.name / user.email to sign off with
+#   rc 2  usage, a non-canonical <pr> number, or no git user.name / user.email to sign off with
 #   rc 3  the body's last non-blank line is not "Signed-off-by: <user.name> <user.email>"
-#   rc 4  subject plus body fail .config/hooks/commit-msg.sh, or the subject lacks "(#<pr>)"
+#   rc 4  subject plus body fail .config/hooks/commit-msg.sh, or the subject holds a control character or lacks "(#<pr>)"
 #   rc 5  mergeStateStatus is not CLEAN, or the head moved from <head-sha>
 #   rc 6  merged, but the commit on main does not carry the trailer
 #   rc 7  merge failed and the pull request is not confirmed MERGED
 #   rc 8  merged, but the main commit read-back failed
+#   rc 9  origin is missing, the origin lookup ran past 10 seconds, or origin is not
+#         github.com/<REPO>, or tools/ci/guard_definition_check.sh refuses the squash message:
+#         guard changed without GUARD_DEFINITION_ACK, refs/pull/<pr>/merge merges a head other
+#         than <head-sha>, or the check could not run
+#
+# The guard check runs here as well as from lefthook commit-msg: the squash commit is built on
+# the forge, so no local commit-msg hook sees its message. GUARD_DEFINITION_ACK passes through.
 #
 # GH names the forge client (default gh), for the planted cases in squash_merge_test.sh.
 # Platforms: POSIX sh, runs in CI on the ubuntu workflows job and on Linux maintainer hosts; macOS and Windows skipped: the repository's CI and landing run on Linux only.
@@ -33,9 +40,40 @@ usage() {
   exit 2
 }
 
+# check_origin: exit 9 unless the origin remote of ROOT names REPO on github.com.
+check_origin() {
+  origin_rc=0
+  origin="$(python3 -I "$ROOT/tools/ci/run_bounded.py" 10 \
+    git -C "$ROOT" remote get-url origin 2>/dev/null)" || origin_rc=$?
+  if [ "$origin_rc" -ne 0 ] || [ -z "$origin" ]; then
+    if [ "$origin_rc" -eq 124 ]; then
+      echo "refusing: the origin lookup ran past 10 seconds; the guard check would have no github.com/$REPO remote to read" >&2
+    else
+      echo "refusing: no origin remote; the guard check would have no github.com/$REPO remote to read" >&2
+    fi
+    exit 9
+  fi
+  origin_lc="$(printf '%s' "$origin" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
+  repo_lc="$(printf '%s' "$REPO" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
+  case "$origin_lc" in
+    "https://github.com/$repo_lc" | "https://github.com/$repo_lc.git" | \
+      "git@github.com:$repo_lc" | "git@github.com:$repo_lc.git" | \
+      "ssh://git@github.com/$repo_lc" | "ssh://git@github.com/$repo_lc.git") ;;
+    *)
+      echo "refusing: origin '$origin' is not github.com/$REPO; the guard check would read another repository" >&2
+      exit 9
+      ;;
+  esac
+}
+
 [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || usage
 pr="$1" sha="$2" subject="$3" body="$4" dry="${5:-}"
 case "$pr" in '' | *[!0-9]*) usage ;; esac
+# Match PR_SUBJECT_RE in tools/ci/guard_definition_check.sh so every accepted <pr> runs the guard.
+printf '%s' "$pr" | grep -Eq '^[1-9][0-9]{0,6}$' || {
+  echo "refusing: <pr> must be a pull request number of 1 to 7 digits without a leading zero, got '$pr'" >&2
+  exit 2
+}
 # An empty head (a failed gh read) would make --match-head-commit a no-op.
 printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$' || {
   echo "refusing: head-sha must be 40 hex characters, got '$sha'" >&2
@@ -66,12 +104,16 @@ if [ "$last" != "$trailer" ]; then
   exit 3
 fi
 
+# commit-msg.sh and the guard read only the first line, so a newline would let the rest of the subject skip both.
+case "$subject" in *[[:cntrl:]]*) echo "refusing: the subject must be one line without control characters such as a newline" >&2; exit 4 ;; esac
 case "$subject" in
   *" (#$pr)") ;;
   *) echo "refusing: the subject must end with ' (#$pr)'" >&2; exit 4 ;;
 esac
 { printf '%s\n\n' "$subject"; cat "$body"; } >"$work/msg"
 sh "$ROOT/.config/hooks/commit-msg.sh" "$work/msg" || exit 4
+check_origin
+(cd "$ROOT" && GUARD_DEFINITION_HEAD="$sha" bash tools/ci/guard_definition_check.sh "$work/msg") || exit 9
 
 view="$("$GH" pr view "$pr" -R "$REPO" --json mergeStateStatus,headRefOid \
   --jq '[.mergeStateStatus, .headRefOid] | @tsv')" || {
