@@ -62,13 +62,13 @@ SPDX-License-Identifier: EUPL-1.2
 		{@render children()}
 		<div class="flex flex-wrap gap-2">
 			{#if ontest}
-				<button type="button" class="btn" disabled={testing} onclick={test}
-					>{m.action_test()}</button
-				>
+				<button type="button" class="btn" disabled={testing} onclick={test}>
+					{m.action_test()}
+				</button>
 			{/if}
-			<button type="submit" class="btn btn-primary" disabled={pending}
-				>{submitLabel ?? m.action_save()}</button
-			>
+			<button type="submit" class="btn btn-primary" disabled={pending}>
+				{submitLabel ?? m.action_save()}
+			</button>
 			{#if editing && oncancel}
 				<button type="button" class="btn" onclick={oncancel}>{m.action_cancel()}</button>
 			{/if}

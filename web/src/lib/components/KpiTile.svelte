@@ -46,9 +46,9 @@ SPDX-License-Identifier: EUPL-1.2
 {:else}
 	<div class="card flex min-w-0 flex-col justify-between gap-2 p-4">
 		<div class="flex min-w-0 items-center justify-between gap-2">
-			<span class="truncate text-xs font-semibold tracking-wider text-subtle uppercase"
-				>{label}</span
-			>
+			<span class="truncate text-xs font-semibold tracking-wider text-subtle uppercase">
+				{label}
+			</span>
 			{#if status && statusLabel}
 				<StatusIcon {status} label={statusLabel} size={18} />
 			{/if}

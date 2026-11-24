@@ -108,9 +108,9 @@ SPDX-License-Identifier: EUPL-1.2
 				/>
 			</Field>
 		</div>
-		<button type="submit" class="btn btn-sm" disabled={busy || count >= 20}
-			>{m.settings_named_preset_save()}</button
-		>
+		<button type="submit" class="btn btn-sm" disabled={busy || count >= 20}>
+			{m.settings_named_preset_save()}
+		</button>
 		<p class="basis-full text-xs text-subtle">{m.settings_named_presets_count({ count })}</p>
 	</form>
 	<ul class="flex flex-col gap-2">
@@ -121,9 +121,9 @@ SPDX-License-Identifier: EUPL-1.2
 			>
 				<div class="flex min-w-0 grow flex-wrap items-center gap-2">
 					<span class="min-w-0 grow font-medium break-words">{preset.name}</span>
-					{#if preset.builtin}<span class="text-xs text-subtle"
-							>{m.settings_named_preset_builtin()}</span
-						>{/if}
+					{#if preset.builtin}<span class="text-xs text-subtle">
+							{m.settings_named_preset_builtin()}
+						</span>{/if}
 				</div>
 				<div class="flex flex-wrap gap-2">
 					<button
@@ -131,8 +131,10 @@ SPDX-License-Identifier: EUPL-1.2
 						class="btn btn-sm"
 						disabled={busy}
 						aria-label={m.settings_named_preset_apply_label({ name: preset.name })}
-						onclick={() => apply.mutate(preset)}>{m.settings_named_preset_apply()}</button
+						onclick={() => apply.mutate(preset)}
 					>
+						{m.settings_named_preset_apply()}
+					</button>
 					{#if !preset.builtin}
 						<button
 							type="button"
@@ -142,15 +144,19 @@ SPDX-License-Identifier: EUPL-1.2
 							onclick={() => {
 								editing = preset.id ?? null;
 								renamed = preset.name;
-							}}>{m.settings_named_preset_rename()}</button
+							}}
 						>
+							{m.settings_named_preset_rename()}
+						</button>
 						<button
 							type="button"
 							class="btn btn-sm"
 							disabled={busy}
 							aria-label={m.settings_named_preset_delete_label({ name: preset.name })}
-							onclick={() => remove.mutate(preset)}>{m.settings_named_preset_delete()}</button
+							onclick={() => remove.mutate(preset)}
 						>
+							{m.settings_named_preset_delete()}
+						</button>
 					{/if}
 				</div>
 				{#if editing && editing === preset.id}
@@ -169,17 +175,19 @@ SPDX-License-Identifier: EUPL-1.2
 								bind:value={renamed}
 							/>
 						</Field>
-						<button type="submit" class="btn btn-sm" disabled={busy}
-							>{m.settings_named_preset_rename_save()}</button
-						>
+						<button type="submit" class="btn btn-sm" disabled={busy}>
+							{m.settings_named_preset_rename_save()}
+						</button>
 						<button
 							type="button"
 							class="btn btn-sm"
 							disabled={busy}
 							onclick={() => {
 								editing = null;
-							}}>{m.settings_named_preset_cancel()}</button
+							}}
 						>
+							{m.settings_named_preset_cancel()}
+						</button>
 					</form>
 				{/if}
 			</li>

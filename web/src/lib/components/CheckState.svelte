@@ -21,10 +21,10 @@ SPDX-License-Identifier: EUPL-1.2
 {#if instance.last_error}
 	<p role="status" class="flex items-center gap-1.5 text-sm text-danger">
 		<StatusIcon status="danger" label={m.instance_check_failed()} size={16} />
-		<span
-			><span class="font-medium">{m.instance_check_failed()}:</span>
-			{instance.last_error}</span
-		>
+		<span>
+			<span class="font-medium">{m.instance_check_failed()}:</span>
+			{instance.last_error}
+		</span>
 	</p>
 {:else if instance.last_check_at}
 	<p class="flex items-center gap-1.5 text-xs text-subtle">
