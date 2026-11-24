@@ -11,6 +11,17 @@ const pages = [
 	{ name: 'Activity', path: '/activity' }
 ] as const;
 
+/** Page commands listed on every target: the primary navigation and Account; none depends on a module. */
+const pageTitles = [
+	'Overview',
+	'Activity',
+	'Instances',
+	'Automation',
+	'Connections',
+	'System',
+	'Account'
+];
+
 /** The palette's option list; the page also renders native `<option>`s (language select). */
 function commandList(page: Page): Locator {
 	return page.getByRole('listbox', { name: 'Commands' });
@@ -39,9 +50,9 @@ for (const target of pages) {
 	test.describe(`search palette on ${target.name}`, () => {
 		test('positive: Ctrl+K lists every command with a title', async ({ page }) => {
 			await openPalette(page, target.path);
-			const labels = await optionTitles(page).allInnerTexts();
-			expect(labels.length).toBeGreaterThan(1);
-			expect(labels.filter((label) => label.trim() === '')).toEqual([]);
+			const labels = (await optionTitles(page).allInnerTexts()).map((label) => label.trim());
+			expect(labels).toEqual(expect.arrayContaining(pageTitles));
+			expect(labels.filter((label) => label === '')).toEqual([]);
 		});
 
 		test('negative: no option repeats its title as subtitle', async ({ page }) => {
