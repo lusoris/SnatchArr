@@ -1,0 +1,226 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
+package arrclient
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/golusoris/goenvoy/arr/lidarr"
+	"github.com/golusoris/goenvoy/arr/radarr"
+	"github.com/golusoris/goenvoy/arr/readarr"
+	"github.com/golusoris/goenvoy/arr/sonarr"
+	"github.com/golusoris/goenvoy/arr/v2"
+	"github.com/golusoris/goenvoy/arr/whisparr"
+
+	"github.com/lusoris/SnatchArr/api/internal/domain"
+)
+
+const (
+	maxFolderEntries = 10000
+	maxFolderBody    = 8 << 20
+)
+
+// ListFolder lists the directory names the *arr process can see in dir.
+func (p *GoenvoyProber) ListFolder(ctx context.Context, kind domain.AppKind, baseURL, apiKey, dir string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.opts.Timeout)
+	defer cancel()
+	names, err := p.listFolder(ctx, kind, baseURL, apiKey, dir)
+	if err != nil {
+		return nil, fmt.Errorf("arrclient: list folder %q for %s: %w", dir, kind, err)
+	}
+	return names, nil
+}
+
+func (p *GoenvoyProber) listFolder(ctx context.Context, kind domain.AppKind, baseURL, apiKey, dir string) ([]string, error) {
+	o, err := p.opts.OptionsCapped(maxFolderBody)
+	if err != nil {
+		return nil, fmt.Errorf("arrclient: %w", err)
+	}
+	switch kind {
+	case domain.KindSonarr:
+		return sonarrFolder(ctx, baseURL, apiKey, dir, o)
+	case domain.KindRadarr:
+		return radarrFolder(ctx, baseURL, apiKey, dir, o)
+	case domain.KindLidarr:
+		return lidarrFolder(ctx, baseURL, apiKey, dir, o)
+	case domain.KindReadarr:
+		return readarrFolder(ctx, baseURL, apiKey, dir, o)
+	case domain.KindWhisparrV2:
+		return whisparrV2Folder(ctx, baseURL, apiKey, dir, o)
+	case domain.KindWhisparrV3:
+		return whisparrV3Folder(ctx, baseURL, apiKey, dir, o)
+	case domain.KindStash:
+		return nil, fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)
+	default:
+		return nil, fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)
+	}
+}
+
+func sonarrFolder(ctx context.Context, baseURL, apiKey, dir string, o []arr.Option) ([]string, error) {
+	c, err := sonarr.New(baseURL, apiKey, o...)
+	if err != nil {
+		return nil, fmt.Errorf("sonarr filesystem client: %w", err)
+	}
+	r, err := c.BrowseFileSystem(ctx, dir, false)
+	if err != nil {
+		return nil, fmt.Errorf("sonarr filesystem %q: %w", dir, err)
+	}
+	names, err := sonarrNames(r)
+	if err != nil {
+		return nil, fmt.Errorf("sonarr filesystem %q response: %w", dir, err)
+	}
+	return names, nil
+}
+
+func radarrFolder(ctx context.Context, baseURL, apiKey, dir string, o []arr.Option) ([]string, error) {
+	c, err := radarr.New(baseURL, apiKey, o...)
+	if err != nil {
+		return nil, fmt.Errorf("radarr filesystem client: %w", err)
+	}
+	r, err := c.BrowseFileSystem(ctx, dir, false)
+	if err != nil {
+		return nil, fmt.Errorf("radarr filesystem %q: %w", dir, err)
+	}
+	names, err := radarrNames(r)
+	if err != nil {
+		return nil, fmt.Errorf("radarr filesystem %q response: %w", dir, err)
+	}
+	return names, nil
+}
+
+func lidarrFolder(ctx context.Context, baseURL, apiKey, dir string, o []arr.Option) ([]string, error) {
+	c, err := lidarr.New(baseURL, apiKey, o...)
+	if err != nil {
+		return nil, fmt.Errorf("lidarr filesystem client: %w", err)
+	}
+	r, err := c.BrowseFileSystem(ctx, dir, false)
+	if err != nil {
+		return nil, fmt.Errorf("lidarr filesystem %q: %w", dir, err)
+	}
+	names, err := lidarrNames(r)
+	if err != nil {
+		return nil, fmt.Errorf("lidarr filesystem %q response: %w", dir, err)
+	}
+	return names, nil
+}
+
+func readarrFolder(ctx context.Context, baseURL, apiKey, dir string, o []arr.Option) ([]string, error) {
+	c, err := readarr.New(baseURL, apiKey, o...)
+	if err != nil {
+		return nil, fmt.Errorf("readarr filesystem client: %w", err)
+	}
+	r, err := c.BrowseFileSystem(ctx, dir)
+	if err != nil {
+		return nil, fmt.Errorf("readarr filesystem %q: %w", dir, err)
+	}
+	names, err := readarrNames(r)
+	if err != nil {
+		return nil, fmt.Errorf("readarr filesystem %q response: %w", dir, err)
+	}
+	return names, nil
+}
+
+func whisparrV2Folder(ctx context.Context, baseURL, apiKey, dir string, o []arr.Option) ([]string, error) {
+	c, err := whisparr.New(baseURL, apiKey, o...)
+	if err != nil {
+		return nil, fmt.Errorf("whisparr v2 filesystem client: %w", err)
+	}
+	r, err := c.BrowseFileSystem(ctx, dir)
+	if err != nil {
+		return nil, fmt.Errorf("whisparr v2 filesystem %q: %w", dir, err)
+	}
+	names, err := whisparrNames(r)
+	if err != nil {
+		return nil, fmt.Errorf("whisparr v2 filesystem %q response: %w", dir, err)
+	}
+	return names, nil
+}
+
+func whisparrV3Folder(ctx context.Context, baseURL, apiKey, dir string, o []arr.Option) ([]string, error) {
+	c, err := whisparr.NewV3(baseURL, apiKey, o...)
+	if err != nil {
+		return nil, fmt.Errorf("whisparr v3 filesystem client: %w", err)
+	}
+	r, err := c.BrowseFileSystem(ctx, dir)
+	if err != nil {
+		return nil, fmt.Errorf("whisparr v3 filesystem %q: %w", dir, err)
+	}
+	names, err := whisparrNames(r)
+	if err != nil {
+		return nil, fmt.Errorf("whisparr v3 filesystem %q response: %w", dir, err)
+	}
+	return names, nil
+}
+
+func sonarrNames(r *sonarr.FileSystemResource) ([]string, error) {
+	if r == nil {
+		return nil, nil
+	}
+	return entryNames(r.Directories, func(entry sonarr.FileSystemEntry) string { return entry.Name })
+}
+
+func radarrNames(r *radarr.FileSystemResource) ([]string, error) {
+	if r == nil {
+		return nil, nil
+	}
+	return entryNames(r.Directories, func(entry radarr.FileSystemEntry) string { return entry.Name })
+}
+
+func lidarrNames(r *lidarr.FileSystemResource) ([]string, error) {
+	if r == nil {
+		return nil, nil
+	}
+	return entryNames(r.Directories, func(entry lidarr.FileSystemEntry) string { return entry.Name })
+}
+
+func readarrNames(r *readarr.FileSystemResource) ([]string, error) {
+	if r == nil {
+		return nil, nil
+	}
+	return entryNames(r.Directories, func(entry readarr.FileSystemEntry) string { return entry.Name })
+}
+
+func entryNames[E any](dirs []E, name func(E) string) ([]string, error) {
+	if err := checkFolderEntryCount(len(dirs)); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(dirs))
+	for _, entry := range dirs {
+		names = append(names, name(entry))
+	}
+	return names, nil
+}
+
+func whisparrNames(raw map[string]any) ([]string, error) {
+	entries, ok := raw["directories"].([]any)
+	if !ok {
+		return nil, errors.New("invalid filesystem directories entries")
+	}
+	if err := checkFolderEntryCount(len(entries)); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		value, ok := entry.(map[string]any)
+		if !ok {
+			return nil, errors.New("invalid filesystem directories entry")
+		}
+		name, ok := value["name"].(string)
+		if !ok {
+			return nil, errors.New("invalid filesystem directories name")
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+func checkFolderEntryCount(count int) error {
+	if count > maxFolderEntries {
+		return fmt.Errorf("filesystem has %d entries; maximum is %d", count, maxFolderEntries)
+	}
+	return nil
+}

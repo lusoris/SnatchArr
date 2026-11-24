@@ -9,8 +9,9 @@
 #
 # Provides check_case for exit code and needle assertions, run_bounded for a
 # deadline on one command, new_repo for initializing throwaway test git
-# repositories, track and run_repo_case for staged-fixture checker cases, and
-# assert_wired for holding CI and the Makefile to both readers of a checker.
+# repositories, track and run_repo_case for staged-fixture checker cases,
+# assert_wired for holding CI and the Makefile to both readers of a checker, and
+# ensure_pyyaml_python for the PyYAML-capable interpreter the workflow checks need.
 #
 # Callers run under set -eu already; the lib states it for its own lines.
 set -eu
@@ -45,6 +46,32 @@ check_case() {
 # before sourcing this lib; set -u fails a caller that does not.
 run_bounded() {
   python3 -I "$HERE/run_bounded.py" "$@"
+}
+
+# ensure_pyyaml_python: export PYTHON_BIN as a PyYAML-capable python. An
+# explicit PYTHON_BIN is kept as given; with none, host python3 serves when it
+# imports yaml, else the venv under .cache/pyyaml-venv of the repository above
+# HERE, built by tools/ci/pyyaml_venv.sh when absent or broken. Exits 1 when
+# that build fails.
+ensure_pyyaml_python() {
+  if [ -n "${PYTHON_BIN:-}" ]; then
+    export PYTHON_BIN
+    return 0
+  fi
+  if python3 -I -c 'import yaml' > /dev/null 2>&1; then
+    PYTHON_BIN=python3
+    export PYTHON_BIN
+    return 0
+  fi
+  pyyaml_venv="$(cd "$HERE/../.." && pwd)/.cache/pyyaml-venv"
+  if [ ! -x "$pyyaml_venv/bin/python" ] || ! "$pyyaml_venv/bin/python" -I -c 'import yaml' > /dev/null 2>&1; then
+    if ! bash "$HERE/pyyaml_venv.sh" "$pyyaml_venv"; then
+      echo "error: failed to install PyYAML via tools/ci/pyyaml_venv.sh" >&2
+      exit 1
+    fi
+  fi
+  PYTHON_BIN="$pyyaml_venv/bin/python"
+  export PYTHON_BIN
 }
 
 # assert_wired CHECK FILE...: checks that each FILE, relative to the repository

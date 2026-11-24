@@ -33,12 +33,12 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0025](0025-module-switches.md) | 2026-10-24 | Architecture and mechanism of optional module switches | Accepted |
 | [0026](0026-accounts-and-roles.md) | 2026-10-24 | Accounts, roles and Jellyfin sign-in | Proposed |
 | [0027](0027-adult-module.md) | 2026-10-24 | Adult module: stash-box sources, Whisparr requests and image sets | Proposed |
-| [0028](0028-jellyfin-plugin.md) | 2026-10-24 | Jellyfin companion plugin and its contract | Accepted; extended by 0035 |
+| [0028](0028-jellyfin-plugin.md) | 2026-10-24 | Jellyfin companion plugin and its contract | Accepted; extended by 0035; proposed [mixed adult library overlay](0028-jellyfin-plugin.md#mixed-adult-library-through-an-overlay-tree-amendment-2026-11-17) |
 | [0029](0029-task-flow-ui.md) | 2026-10-24 | Task-flow navigation, one activity view, desktop-first density and context help | Accepted |
 | [0030](0030-pnpm-boot-document-dependency-graph.md) | 2026-10-26 | pnpm boot document and GitHub dependency graph snapshot submission | Accepted |
 | [0031](0031-creator-content-fansdb.md) | 2026-10-26 | Creator content catalogued in FansDB inside the adult module | Accepted |
 | [0032](0032-stash-own-or-integrate.md) | 2026-10-26 | Stash: own or integrate — adult library engine evaluation | Accepted |
-| [0033](0033-adult-identity-and-model.md) | 2026-10-26 | Adult identity resolution and normalized data model | Accepted; amended by 0037 |
+| [0033](0033-adult-identity-and-model.md) | 2026-10-26 | Adult identity resolution and normalized data model | Accepted; amended by 0037; proposed [mixed adult library overlay in 0028](0028-jellyfin-plugin.md#mixed-adult-library-through-an-overlay-tree-amendment-2026-11-17) |
 | [0034](0034-matching-engine-and-model-connection.md) | 2026-10-26 | Adult metadata matching engine, attribute reconciliation, audit workbench and outbound model connection | Accepted |
 | [0035](0035-jellyfin-integration.md) | 2026-10-26 | Complete SnatchArr integration inside Jellyfin without an external identity provider | Accepted |
 | [0036](0036-community-requests-and-voting.md) | 2026-10-26 | Community requests and voting across media types | Accepted |
@@ -53,4 +53,5 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0045](0045-quality-availability-and-split-series.md) | 2026-10-29 | Quality availability, profile mismatch and split-quality series | Accepted |
 | [0046](0046-download-client-priority-writes.md) | 2026-11-01 | Download client priority and queue-order writes | Accepted |
 | [0047](0047-list-sync-across-instances.md) | 2026-11-10 | List sync across instances | Accepted |
+| [0048](0048-tvdb-metadata-provider.md) | 2026-11-13 | TheTVDB as opt-in metadata provider | Accepted; amends 0019 |
 | [0049](0049-metadata-proxy.md) | 2026-11-13 | Metadata proxy | Accepted |

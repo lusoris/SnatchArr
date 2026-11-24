@@ -166,6 +166,18 @@
       "versioningTemplate": "docker"
     },
     {
+      "description": "The CloudNativePG current-major operand image in the chart upgrade deployment example",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "docs/deployment.md"
+      ],
+      "matchStrings": [
+        "postgres\\.cnpg\\.imageName=(?<depName>ghcr\\.io/cloudnative-pg/postgresql):(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
       "description": "The S3 store of the chart backup and restore test, pinned by version and digest (tools/e2e/cnpg_backup_restore.sh, C14-04)",
       "customType": "regex",
       "managerFilePatterns": [
@@ -214,6 +226,19 @@
         "(?m)^[\\t ]*(PRAETOR_REF)[\\t ]*[:=][\\t ]*[\"']?(?<currentDigest>[0-9a-fA-F]{7,40})[\"']?[\\t ]*(#[^\\r\\n]*)?\\r?$"
       ],
       "packageNameTemplate": "https://github.com/cordanaLLM/praetor"
+    },
+    {
+      "description": "The workspace rust-version in Cargo.toml, moved with the rust-toolchain.toml release so the declared minimum is the release CI builds with (tools/ci/rust_msrv_check.py)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Cargo\\.toml$/"
+      ],
+      "matchStrings": [
+        "(?m)^\\[workspace\\.package\\][\\t ]*\\r?\\n(?:[^\\[\\r\\n]*\\r?\\n){0,32}[\\t ]*rust-version[\\t ]*=[\\t ]*\"(?<currentValue>[0-9]+\\.[0-9]+(?:\\.[0-9]+)?)\"[\\t ]*(#[^\\r\\n]*)?\\r?$"
+      ],
+      "depNameTemplate": "rust",
+      "datasourceTemplate": "rust-version",
+      "versioningTemplate": "rust-release-channel"
     }
   ],
   "postUpdateOptions": [
@@ -369,6 +394,16 @@
       "groupName": "tonic"
     },
     {
+      "description": "Rust release: rust-toolchain.toml channel and Cargo.toml rust-version in one pull request",
+      "matchDepNames": [
+        "rust"
+      ],
+      "matchDatasources": [
+        "rust-version"
+      ],
+      "groupName": "rust"
+    },
+    {
       "description": "Automerge non-major updates once the required checks pass; majors stay manual",
       "matchUpdateTypes": [
         "minor",
@@ -419,6 +454,16 @@
       "allowedVersions": "<7"
     },
     {
+      "description": "praetorctl dedupe runs the foreign clone scan only when jscpd reports the exact version the engine pins (engine internal/dedupe JscpdVersion), so a Renovate jscpd bump fails tools/ci/clones_check.py (PR 1229, jscpd 5.4.3); web/package.json moves jscpd by hand in the engine pin update that changes JscpdVersion; revisit when the engine accepts a version range or ships its own jscpd",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "jscpd"
+      ],
+      "enabled": false
+    },
+    {
       "description": "The upgrade test moves a database from the previous Postgres major to the current one (storetest.PreviousMajorImage, #252): that pin takes digest and minor updates but stays on major 17. Move it with the current major when Postgres 19 is adopted",
       "matchFileNames": [
         "api/internal/store/storetest/storetest.go"
@@ -441,15 +486,26 @@
       "allowedVersions": "/^17\\./"
     },
     {
-      "description": "See the rule above: the current-major operand pin of the chart upgrade test stays on 18",
+      "description": "See the rule above: the current-major operand pin of the chart upgrade test and deployment example stays on 18",
       "matchFileNames": [
-        "tools/e2e/cnpg_pg_upgrade.sh"
+        "tools/e2e/cnpg_pg_upgrade.sh",
+        "docs/deployment.md"
       ],
       "matchDepNames": [
         "ghcr.io/cloudnative-pg/postgresql"
       ],
       "matchCurrentValue": "/^18\\./",
       "allowedVersions": "/^18\\./"
+    },
+    {
+      "description": "The deployment example pins the CloudNativePG operand by version only, so digest pinning stays off for it.",
+      "matchFileNames": [
+        "docs/deployment.md"
+      ],
+      "matchDepNames": [
+        "ghcr.io/cloudnative-pg/postgresql"
+      ],
+      "pinDigests": false
     },
     {
       "description": "linuxserver keeps old Ubuntu-base tags 18.04.1 / 20.04.1 that read as majors (dashboard #55 proposed deluge v18, qbittorrent v20)",
@@ -581,6 +637,16 @@
         "ghcr.io/lusoris/snatcharr-worker"
       ],
       "minimumReleaseAge": null
+    },
+    {
+      "description": "plurano/horistes reusable workflows get their own update PR outside the batch groups above, so a consumer takes a horistes change without a hand repin. Keep this rule last: a later package rule overrides an earlier one, and groupName null turns grouping off.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "plurano/horistes"
+      ],
+      "groupName": null
     }
   ],
   "platformCommit": "enabled",

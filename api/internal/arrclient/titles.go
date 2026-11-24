@@ -34,6 +34,10 @@ type ItemTitles struct {
 	OriginalTitle    string
 	OriginalLanguage string
 	Aliases          []Alias
+	// External IDs the metadata provider needs; zero or empty when the app holds none.
+	TVDBID int
+	TMDBID int
+	IMDBID string
 }
 
 // Alias holds an alternative title; a nil SeasonNumber applies to the whole item.
@@ -94,6 +98,7 @@ func sonarrTitles(ctx context.Context, baseURL, apiKey string, itemID int, opts 
 	titles := ItemTitles{
 		Kind: domain.KindSonarr, ItemID: itemID, Title: series.Title,
 		Year: series.Year, OriginalLanguage: series.OriginalLanguage.Name,
+		TVDBID: series.TvdbID, TMDBID: series.TmdbID, IMDBID: strings.TrimSpace(series.ImdbID),
 	}
 	for i := range len(series.AlternateTitles) {
 		alias := series.AlternateTitles[i]
@@ -121,6 +126,7 @@ func radarrTitles(ctx context.Context, baseURL, apiKey string, itemID int, opts 
 	titles := ItemTitles{
 		Kind: domain.KindRadarr, ItemID: itemID, Title: movie.Title, Year: movie.Year,
 		OriginalTitle: movie.OriginalTitle, OriginalLanguage: movie.OriginalLanguage.Name,
+		TMDBID: movie.TmdbID, IMDBID: strings.TrimSpace(movie.ImdbID),
 	}
 	for i := range len(movie.AlternateTitles) {
 		if addItemAlias(&titles, movie.AlternateTitles[i].Title, nil) {

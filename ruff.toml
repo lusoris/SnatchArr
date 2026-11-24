@@ -13,8 +13,10 @@ target-version = "py314"
 # - DTZ011: date.today() reads the runner's local time zone, so a date check such as a baseline
 #   expiry can pass on one runner and fail on another. Use datetime.now(UTC).date().
 #   Codacy applies it too once its Ruff tool reads this file; that parity is issue #1104.
+# - S101: python -O drops every assert statement, so a check written as an assert stops checking.
+#   Codacy's Bandit tool refuses it as B101 (PR 1259); this keeps make py-lint at the same bar.
 [lint]
-extend-select = ["DTZ011"]
+extend-select = ["DTZ011", "S101"]
 
 # Exceptions: one file and its rules per entry. The comment above each entry
 # names its category, entry date, expiry and reason. tools/ci/ruff_check.sh

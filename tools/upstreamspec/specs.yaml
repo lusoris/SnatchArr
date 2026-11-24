@@ -6,8 +6,9 @@
 # refuses it when its sha256 differs. Nothing listed here is committed or copied into an image.
 #
 # Upstream OpenAPI spec pins (repository, release tag or branch, commit, path, sha256, license,
-# prefix) are owned by golusoris/goenvoy and pinned below in `source`. SnatchArr lists only its
-# consumer operations and C# command classes.
+# prefix, and optionally the goenvoy client module its own endpoint check reads) are owned by
+# golusoris/goenvoy and pinned below in `source`. SnatchArr lists only its consumer operations and
+# C# command classes.
 #
 # Renovate reads source.repository and source.commit (customManagers in renovate.json) and proposes
 # the newest commit of goenvoy's main branch. When the goenvoy manifest changed with the proposed
@@ -24,7 +25,7 @@
 # it receives with them. An entry with a `POST .../command` operation must list its classes.
 source:
   repository: golusoris/goenvoy
-  commit: 865c047dc20f2a0df77855f1bdb6f0e19b88ef6c
+  commit: f2942ab334990a3087a917c1a2c6070eb0fca19a
   path: upstream/specs.yaml
   sha256: a7e9e87da936184e71ad93f70a4f83d7f007edcc6353c52288956ec46f1d6830
 specs:

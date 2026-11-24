@@ -38,6 +38,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
+	"github.com/lusoris/SnatchArr/api/internal/foreigntitles"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
@@ -268,86 +269,69 @@ type integrationFixture struct {
 
 func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, res *stubResolver) (*Handlers, *notify.Service, *notify.WebhookStore, *notify.Engine, *snatch.Recorder, *crypto.Encryptor, *prowlarr.Service) {
 	t.Helper()
+	h := &Handlers{}
+	webhookStore, notifyEngine, enc, prowlarrSvc := populateHandlers(t, h, st, clk, ids, probe, dlSnap, dlDisc, m, logger, seerrClient, res)
+	h.auth = authSvc
+	h.apiKeys = apiKeys
+	h.sessions = sessMgr
+	return h, h.notify, webhookStore, notifyEngine, h.rec, enc, prowlarrSvc
+}
+
+func populateHandlers(t *testing.T, h *Handlers, st *store.Store, clk clock.Clock, ids id.Generator, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, res *stubResolver) (*notify.WebhookStore, *notify.Engine, *crypto.Encryptor, *prowlarr.Service) {
+	t.Helper()
 	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
 	if err != nil {
 		t.Fatalf("buildHandlers: encryptor: %v", err)
 	}
-	instSvc := instances.New(st, enc, clk, ids, probe, logger)
-	polSvc := policies.New(st, clk)
+	h.instances = instances.New(st, enc, clk, ids, probe, logger)
+	h.policies = policies.New(st, clk)
 	// The stub discoverer also answers the filter options; a fixture without one has none.
 	labeler, _ := dlDisc.(arrclient.Labeler)
 	profileLangs, _ := dlDisc.(arrclient.ProfileLanguager)
 	bus := events.New(logger)
 	webhookStore := notify.NewWebhookStore(st, enc)
-	notifySvc := notify.NewService(st, webhookStore, enc, clk, ids, logger)
-	notifyEngine := notify.NewEngine(st, webhookStore, notifySvc, enc, clk, logger)
-	rec := snatch.NewRecorder(st, clk, bus, notifyEngine)
-	notifyEngine.SetRecorder(rec)
-	runs := snatch.NewRuns(st, clk, ids)
-	workers := snatch.NewWorkers(st, clk)
-	budget := snatch.NewBudget(st, clk)
-	memory := snatch.NewMemory(st, clk)
-	planner := snatch.NewPlanner(st, clk, runs, rec, logger, m, snatch.AllowAll{})
-	schedules := snatch.NewSchedules(st, clk, ids)
-	settingsSvc := settings.New(st, clk)
-	clients := dlclients.New(st, enc, clk, ids, dlSnap, dlDisc, instSvc, logger)
-	seerrSvc := seerr.New(st, enc, clk, ids, seerrClient, res, instSvc, runs, rec, logger)
+	h.notify = notify.NewService(st, webhookStore, enc, clk, ids, logger)
+	notifyEngine := notify.NewEngine(st, webhookStore, h.notify, enc, clk, logger)
+	h.rec = snatch.NewRecorder(st, clk, bus, notifyEngine)
+	notifyEngine.SetRecorder(h.rec)
+	h.runs = snatch.NewRuns(st, clk, ids)
+	h.workers = snatch.NewWorkers(st, clk)
+	h.budget = snatch.NewBudget(st, clk)
+	h.memory = snatch.NewMemory(st, clk)
+	h.planner = snatch.NewPlanner(st, clk, h.runs, h.rec, logger, m, snatch.AllowAll{})
+	h.schedules = snatch.NewSchedules(st, clk, ids)
+	h.settings = settings.New(st, clk)
+	h.clients = dlclients.New(st, enc, clk, ids, dlSnap, dlDisc, h.instances, logger)
+	h.seerr = seerr.New(st, enc, clk, ids, seerrClient, res, h.instances, h.runs, h.rec, logger)
 	prowlarrClient := prowlarrclient.New(5*time.Second, "snatcharr-test")
 	disc, _ := dlDisc.(arrclient.IndexerDiscoverer)
-	prowlarrSvc := prowlarr.New(st, enc, clk, ids, prowlarrClient, disc, instSvc, logger, config.Options{Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9}})
-	cfg := config.Options{
+	h.prowlarr = prowlarr.New(st, enc, clk, ids, prowlarrClient, disc, h.instances, logger, config.Options{Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9}})
+	h.cfg = config.Options{
 		Profile: config.ProfileDev,
 		Session: config.SessionOptions{TTL: 8 * time.Hour, Secure: false},
 	}
-	queueStore := queue.NewStore(st, clk)
-	queueSvc := queue.NewService(queueStore, queue.NewDBInstanceSource(st, enc), probe, clk, queue.NewRecorderAdapter(rec, bus, logger), m, logger)
-	configarrSvc := configarr.New(cfg, instSvc, clients, polSvc, queueStore, probe, clk, logger)
+	h.queue = queue.NewStore(st, clk)
+	h.queueSvc = queue.NewService(h.queue, queue.NewDBInstanceSource(st, enc), probe, clk, queue.NewRecorderAdapter(h.rec, bus, logger), m, logger)
+	h.configarr = configarr.New(h.cfg, h.instances, h.clients, h.policies, h.queue, probe, clk, logger)
 	reg, err := modules.DefaultRegistry()
 	if err != nil {
 		t.Fatalf("buildHandlers: modules.DefaultRegistry: %v", err)
 	}
-	modulesSvc := modules.New(st, clk, reg)
-	if err := modulesSvc.Ensure(context.Background()); err != nil {
+	h.modules = modules.New(st, clk, reg)
+	if err := h.modules.Ensure(context.Background()); err != nil {
 		t.Fatalf("buildHandlers: modules.Ensure: %v", err)
 	}
-	watchawareSvc := watchaware.NewService(st, enc, clk, ids, logger, modulesSvc, instSvc, nil, nil, nil)
-	adultSvc := adult.NewService(st, enc, clk, ids, modulesSvc, logger)
-	requestsSvc := requests.NewService(requests.NewStore(st, clk))
-	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
-	h := &Handlers{
-		build:           build,
-		cfg:             cfg,
-		clk:             clk,
-		auth:            authSvc,
-		apiKeys:         apiKeys,
-		sessions:        sessMgr,
-		instances:       instSvc,
-		policies:        polSvc,
-		queue:           queueStore,
-		queueSvc:        queueSvc,
-		options:         policies.NewOptions(instSvc, labeler, profileLangs),
-		runs:            runs,
-		workers:         workers,
-		rec:             rec,
-		budget:          budget,
-		memory:          memory,
-		planner:         planner,
-		schedules:       schedules,
-		clients:         clients,
-		settings:        settingsSvc,
-		requests:        requestsSvc,
-		modules:         modulesSvc,
-		configarr:       configarrSvc,
-		seerr:           seerrSvc,
-		prowlarr:        prowlarrSvc,
-		notify:          notifySvc,
-		watchaware:      watchawareSvc,
-		adult:           adultSvc,
-		runtimeSettings: runtimesettings.New(st, enc, clk, config.BaseOptions{Options: cfg}, logger),
-		logs:            logring.New(logring.MinSize),
-		logger:          logger,
-	}
-	return h, notifySvc, webhookStore, notifyEngine, rec, enc, prowlarrSvc
+	h.watchaware = watchaware.NewService(st, enc, clk, ids, logger, h.modules, h.instances, nil, nil, nil)
+	h.adult = adult.NewService(st, enc, clk, ids, h.modules, logger)
+	h.requests = requests.NewService(requests.NewStore(st, clk))
+	h.build = buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
+	h.clk = clk
+	h.options = policies.NewOptions(h.instances, labeler, profileLangs)
+	h.runtimeSettings = runtimesettings.New(st, enc, clk, config.BaseOptions{Options: h.cfg}, logger)
+	h.logs = logring.New(logring.MinSize)
+	h.foreignTitles = &stubForeignTitles{res: foreigntitles.Result{Language: "de", TVDB: foreigntitles.StatusDisabled}}
+	h.logger = logger
+	return webhookStore, notifyEngine, enc, h.prowlarr
 }
 
 func newIntegrationFixture(t *testing.T) *integrationFixture {

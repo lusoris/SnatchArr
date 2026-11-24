@@ -451,15 +451,16 @@ With the chart the whole upgrade is one value change:
 
 ```sh
 helm upgrade snatcharr oci://ghcr.io/lusoris/charts/snatcharr --reuse-values \
-  --set postgres.cnpg.imageName=ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
+  --set postgres.cnpg.imageName=ghcr.io/cloudnative-pg/postgresql:18.7-system-trixie
 kubectl wait cluster/snatcharr-db --timeout=30m \
   --for=jsonpath='{.status.pgDataImageInfo.majorVersion}'=18
 ```
 
-`make e2e-cnpg-pg-upgrade` runs this in CI on a kind cluster with the operator. It installs
-the chart on `17.10-system-trixie`, completes the setup and changes the image to
-`18.6-system-trixie`. It then checks that the operator reports major 18, that every table
-reads back unchanged, that the migration version is at least 7, and that the API starts with
+`make e2e-cnpg-pg-upgrade` runs this in CI on a kind cluster with the operator. It installs the
+chart on the previous-major operand image `OLD_IMAGE` and changes the image to the current-major
+image `NEW_IMAGE`, both pinned in `tools/e2e/cnpg_pg_upgrade.sh` (Postgres 17 to 18). It then
+checks that the operator reports major 18, that every table reads back unchanged, that the
+migration version is at least 7, and that the API starts with
 the setup complete and the old password. A planted chart upgrade without the image change
 must be refused first (`tools/e2e/cnpg_pg_upgrade.sh`). CI runs it on the API and worker
 images built from the checkout (`UPGRADE_API_IMAGE`, `UPGRADE_WORKER_IMAGE`), because a release
@@ -573,7 +574,7 @@ SMOKE_SKIP_BUILD=1 E2E_API_IMAGE=<api-image> E2E_WORKER_IMAGE=<worker-image> mak
 - any failed run;
 - a last worker contact (`worker_last_contact_at` in `/api/v1/system/status`) older than `SOAK_MAX_CONTACT_AGE` seconds (default 45: the long-poll plus 15).
 
-At the end, at least two runs per round must be done. The workflow `.github/workflows/soak.yml` runs it nightly and on demand; a failure on main opens or comments on the issue "Soak fails on main". The soak catches lease calls cut at a connection rotation and calls a closing connection refused before sending them, which a shorter smoke run does not reach.
+At the end, at least two runs per round must be done. The workflow `.github/workflows/soak.yml` runs it nightly and on demand; a failure on main opens or comments on the issue "Soak fails on main". The soak catches lease calls cut at a connection rotation, calls a closing connection refused before sending them, and an event stream a closing connection refused before sending it (resent once on the next connection), which a shorter smoke run does not reach.
 
 ```sh
 SOAK_SECONDS=1800 make e2e-soak

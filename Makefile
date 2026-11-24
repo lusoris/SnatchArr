@@ -105,11 +105,8 @@ api-openapi-breaking: ## OpenAPI breaking change check vs origin/main (HISS-14 a
 	if ! git rev-parse --verify -q origin/main >/dev/null; then
 	  echo "api-openapi-breaking: no origin/main to check breaking changes against; run git fetch origin main" >&2; exit 1
 	fi
-	base=$$(mktemp)
-	trap 'rm -f "$$base"' EXIT
-	git show origin/main:api/openapi/openapi.yaml >"$$base"
 	sh tools/oasdiff/breaking_test.sh
-	sh tools/oasdiff/breaking.sh "$$base" api/openapi/openapi.yaml "$$(git log -1 --format=%s)"
+	sh tools/oasdiff/local_check.sh origin/main api/openapi/openapi.yaml
 
 settings-parity: ## Generate docs/settings-parity.tsv from config registry
 	go run ./api/cmd/settingsparity
@@ -245,6 +242,8 @@ tools-opengrep: ## Codacy Opengrep Python rules over tracked Python files, again
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────
 worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
+	bash tools/ci/rust_msrv_check_test.sh
+	python3 -I tools/ci/rust_msrv_check.py
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets --locked -- -D warnings
 	cargo audit
@@ -267,7 +266,7 @@ worker-cover: ## cargo-llvm-cov line coverage gate for the Rust workspace
 # ── end-to-end smoke (#19) ────────────────────────────────────────────────────
 E2E_BIN := api/tmp/e2e
 # The Postgres the integration tests pin (storetest), through the Docker Hub mirror.
-E2E_POSTGRES ?= mirror.gcr.io/library/postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+E2E_POSTGRES ?= mirror.gcr.io/library/postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
 E2E_API_IMAGE ?= snatcharr-api:e2e
 E2E_WORKER_IMAGE ?= snatcharr-worker:e2e
 e2e-smoke: ## Postgres + api + two workers + fakearr end to end (needs Docker unless SMOKE_DSN is set)
@@ -445,6 +444,7 @@ web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	cd web
 	pnpm install --frozen-lockfile
 	sh ../tools/ci/clones_check_test.sh
+	bash ../tools/ci/install_pnpm_test.sh
 	PRAETORCTL='$(PRAETORCTL)' python3 ../tools/ci/clones_check.py
 	pnpm gen:api
 	git diff --exit-code -- src/lib/api/schema.d.ts
@@ -526,6 +526,8 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	if ! helm plugin list 2>/dev/null | grep -E -q '^unittest[[:space:]]'; then \
 	  echo "deploy-verify: helm plugin 'unittest' is missing; install helm-unittest (https://github.com/helm-unittest/helm-unittest)" >&2; exit 1; \
 	fi
+	python3 -I tools/deploy/unittest_lint.py --self-test
+	python3 -I tools/deploy/unittest_lint.py
 	helm unittest deploy/helm/snatcharr
 	sh tools/deploy/render_test.sh
 	helm lint --strict deploy/helm/snatcharr
@@ -730,6 +732,8 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/image_release_age_check.py
 	python3 -I tools/ci/image_release_age_check.py --index
 	bash tools/ci/renovate_presets_test.sh
+	bash tools/ci/workflow_refs_test.sh
+	bash tools/ci/guard_definition_check_test.sh
 	bash tools/ci/release_body_check_test.sh
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test
@@ -737,6 +741,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/release_publish_order_check.py --self-test
 	python3 -I tools/ci/release_publish_order_check.py
 	python3 -I tools/ci/release_closes_check.py --self-test
+	python3 -I tools/jellyfin/naming_census.py --self-test
 
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.

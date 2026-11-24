@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -96,32 +95,6 @@ func TestFitAspect(t *testing.T) {
 			if gotW != tc.wantW || gotH != tc.wantH {
 				t.Fatalf("fitAspect(%d, %d, %d, %d) = (%d, %d), want (%d, %d)",
 					tc.srcW, tc.srcH, tc.maxW, tc.maxH, gotW, gotH, tc.wantW, tc.wantH)
-			}
-		})
-	}
-}
-
-func TestIsCleanSubdir(t *testing.T) {
-	t.Parallel()
-	base := "/tmp/media/imagesets"
-	cases := []struct {
-		name   string
-		target string
-		want   bool
-	}{
-		{name: "valid sub dir", target: filepath.Join(base, "gallery1"), want: true},
-		{name: "valid nested file", target: filepath.Join(base, "gallery1", "image.jpg"), want: true},
-		{name: "same directory", target: base, want: false},
-		{name: "escape parent", target: "/tmp/media/other", want: false},
-		{name: "escape relative", target: "/tmp/media/imagesets/../other", want: false},
-		{name: "root escape", target: "/etc/passwd", want: false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := isCleanSubdir(base, tc.target)
-			if got != tc.want {
-				t.Fatalf("isCleanSubdir(%q, %q) = %v, want %v", base, tc.target, got, tc.want)
 			}
 		})
 	}

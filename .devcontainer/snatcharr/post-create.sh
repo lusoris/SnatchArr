@@ -23,12 +23,12 @@ ln -sf "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
 # Rust toolchain: the release, components and targets pinned in rust-toolchain.toml
 rustup toolchain install
 cargo install --locked cargo-audit@0.23.0
-cargo install --locked cargo-deny@0.20.2
+cargo install --locked cargo-deny@0.21.0
 cargo install --locked cargo-watch@8.5.3
 
 # Node
-# pnpm at the packageManager version of web/package.json.
-corepack enable && (cd web && corepack install)
+# Install pnpm from npm into $HOME/.local at the packageManager version of web/package.json, verifying any declared digest; Node 25+ ships no corepack.
+(cd web && bash scripts/install-pnpm.sh --prefix "$HOME/.local")
 
 # Kubernetes tooling (kubectl and helm come from the kubectl-helm-minikube feature in devcontainer.json)
 go install github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0

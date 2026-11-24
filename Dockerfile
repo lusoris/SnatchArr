@@ -6,10 +6,12 @@
 # idmatchparity target: docker build --target idmatchparity .
 
 # ── web build ─────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS web
+FROM --platform=$BUILDPLATFORM node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS web
 WORKDIR /src/web
-RUN corepack enable
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+COPY web/scripts/install-pnpm.sh ./scripts/install-pnpm.sh
+# Node 25+ ships no corepack; install pnpm from npm at the packageManager version and verify any declared digest.
+RUN bash scripts/install-pnpm.sh
 # patchedDependencies in pnpm-workspace.yaml points here; install fails without it.
 COPY web/patches/ ./patches/
 RUN pnpm install --frozen-lockfile
@@ -50,13 +52,13 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -p 4 -trimpath 
       -o /out/idmatchparity ./tools/idmatchparity
 
 # ── idmatchparity runtime ─────────────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931 AS idmatchparity
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5 AS idmatchparity
 COPY --from=idmatchparity-build /out/idmatchparity /idmatchparity
 USER 65532:65532
 ENTRYPOINT ["/idmatchparity"]
 
 # ── runtime ───────────────────────────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5
 COPY --from=build /out/snatcharr-api /snatcharr-api
 USER 65532:65532
 EXPOSE 8080 9090
