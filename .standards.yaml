@@ -74,6 +74,8 @@ exceptions:
       auditConfig.ignoreGhsas lists this one advisory so pnpm audit --audit-level=high passes; tracked in
       #1215; ends when a patched picomatch is released and locked; no --ignore-unfixable, no alert dismissal
     expires: "2026-12-04"
+    category: C
+    entered: "2026-11-24"
 register:
   sources:
     expected: 13
