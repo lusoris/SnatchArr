@@ -28,8 +28,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from workflow_actions import (
-    collect_files_step_text,
-    collect_files_version_inputs,
+    iter_files_step_text,
+    iter_files_version_inputs,
     list_action_files,
 )
 from workflow_yaml import (
@@ -37,7 +37,7 @@ from workflow_yaml import (
     MAX_OUTPUT_BYTES,
     OutputBudget,
     UsesError,
-    collect_files_uses,
+    iter_files_uses,
     keep_uses_value,
     yaml,
 )
@@ -92,27 +92,27 @@ def format_tsv_mode(
     if args.all_uses:
         return [
             active.line((f"{file_path}:{line}", value))
-            for value, file_path, line in collect_files_uses(
+            for value, file_path, line in iter_files_uses(
                 args.files, decode=keep_uses_value
             )
         ]
     if args.step_text is not None:
         return [
             active.line((f"{rel_path}:{line_no}", line_text))
-            for rel_path, line_no, line_text in collect_files_step_text(
+            for rel_path, line_no, line_text in iter_files_step_text(
                 args.step_text, args.files
             )
         ]
     if args.version_inputs is not None:
         return [
             active.line((f"{rel_path}:{line_no}", repo, version))
-            for rel_path, line_no, repo, version in collect_files_version_inputs(
+            for rel_path, line_no, repo, version in iter_files_version_inputs(
                 args.version_inputs, args.files
             )
         ]
     return [
         active.line((repo, f"{file_path}:{line}"))
-        for repo, file_path, line in collect_files_uses(args.files)
+        for repo, file_path, line in iter_files_uses(args.files)
     ]
 
 

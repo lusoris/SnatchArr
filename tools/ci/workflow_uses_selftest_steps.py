@@ -519,18 +519,22 @@ def check_version_inputs_max_refs(root: Path) -> list[str]:
     return failures
 
 
-def check_output_budget_unit_cases() -> list[str]:
-    """Verify OutputBudget exact limit, over limit, aggregate and 2-byte UTF-8 boundary."""
-    failures: list[str] = []
-    needle = "output exceeds 10 bytes"
+def check_output_budget_exact_10() -> list[str]:
+    """Verify OutputBudget(10) accepts an ASCII line of 9 chars plus newline."""
     try:
         got = OutputBudget(10).line(("abcdefghi",))
-        if got != "abcdefghi":
-            failures.append(f"output-budget-exact-10: got {got!r}")
-        else:
-            print("ok   output-budget-exact-10")
     except UsesError as err:
-        failures.append(f"output-budget-exact-10: unexpected error: {err}")
+        return [f"output-budget-exact-10: unexpected error: {err}"]
+    if got != "abcdefghi":
+        return [f"output-budget-exact-10: got {got!r}"]
+    print("ok   output-budget-exact-10")
+    return []
+
+
+def check_output_budget_over_10() -> list[str]:
+    """Verify OutputBudget(10) refuses 11-byte ASCII and 2-byte UTF-8 lines."""
+    failures: list[str] = []
+    needle = "output exceeds 10 bytes"
     for name, fields in (
         ("output-budget-over-10", ("abcdefghij",)),
         ("output-budget-utf8-over-10", ("éabcdefgh",)),
@@ -543,32 +547,50 @@ def check_output_budget_unit_cases() -> list[str]:
                 failures.append(f"{name}: error {str(err)!r}, want {needle!r}")
             else:
                 print(f"ok   {name}")
+    return failures
+
+
+def check_output_budget_aggregate() -> list[str]:
+    """Verify OutputBudget(10) sums byte counts across consecutive lines."""
+    needle = "output exceeds 10 bytes"
     agg = OutputBudget(10)
     try:
         first = agg.line(("abcd",))
         second = agg.line(("efgh",))
-        if (first, second) != ("abcd", "efgh"):
-            failures.append(f"output-budget-aggregate: got {(first, second)!r}")
-        else:
-            try:
-                agg.line(("ijkl",))
-                failures.append("output-budget-aggregate: accepted third 4-char line")
-            except UsesError as err:
-                if str(err) != needle:
-                    failures.append(f"output-budget-aggregate: error {str(err)!r}")
-                else:
-                    print("ok   output-budget-aggregate")
     except UsesError as err:
-        failures.append(f"output-budget-aggregate: unexpected early error: {err}")
+        return [f"output-budget-aggregate: unexpected early error: {err}"]
+    if (first, second) != ("abcd", "efgh"):
+        return [f"output-budget-aggregate: got {(first, second)!r}"]
+    try:
+        agg.line(("ijkl",))
+        return ["output-budget-aggregate: accepted third 4-char line"]
+    except UsesError as err:
+        if str(err) != needle:
+            return [f"output-budget-aggregate: error {str(err)!r}"]
+    print("ok   output-budget-aggregate")
+    return []
+
+
+def check_output_budget_utf8_exact_10() -> list[str]:
+    """Verify OutputBudget(10) accepts a 2-byte UTF-8 character plus 7 ASCII chars."""
     try:
         utf8_ok = OutputBudget(10).line(("éabcdefg",))
-        if utf8_ok != "éabcdefg":
-            failures.append(f"output-budget-utf8-exact-10: got {utf8_ok!r}")
-        else:
-            print("ok   output-budget-utf8-exact-10")
     except UsesError as err:
-        failures.append(f"output-budget-utf8-exact-10: unexpected error: {err}")
-    return failures
+        return [f"output-budget-utf8-exact-10: unexpected error: {err}"]
+    if utf8_ok != "éabcdefg":
+        return [f"output-budget-utf8-exact-10: got {utf8_ok!r}"]
+    print("ok   output-budget-utf8-exact-10")
+    return []
+
+
+def check_output_budget_unit_cases() -> list[str]:
+    """Verify OutputBudget exact limit, over limit, aggregate and 2-byte UTF-8 boundary."""
+    return [
+        *check_output_budget_exact_10(),
+        *check_output_budget_over_10(),
+        *check_output_budget_aggregate(),
+        *check_output_budget_utf8_exact_10(),
+    ]
 
 
 def check_output_budget_version_inputs() -> list[str]:
@@ -658,12 +680,50 @@ def check_output_budget_other_modes() -> list[str]:
     return failures
 
 
+def check_output_budget_streams() -> list[str]:
+    """Verify all four TSV modes stop at OutputBudget(5) before reading a second broken file."""
+    failures: list[str] = []
+    first_rel = ".github/workflows/first.yml"
+    broken_rel = ".github/workflows/broken.yml"
+    first_doc = (
+        "jobs:\n  j:\n    steps:\n"
+        "      - uses: actions/checkout@v4\n        with:\n          version: v1\n"
+        "      - run: echo ok\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        first = root / first_rel
+        broken = root / broken_rel
+        first.parent.mkdir(parents=True, exist_ok=True)
+        first.write_text(first_doc, encoding="utf-8")
+        broken.write_text("jobs: [\n", encoding="utf-8")
+        for mode, argv in (
+            ("default", [str(first), str(broken)]),
+            ("all-uses", ["--all-uses", str(first), str(broken)]),
+            ("step-text", ["--step-text", str(root), first_rel, broken_rel]),
+            ("version-inputs", ["--version-inputs", str(root), first_rel, broken_rel]),
+        ):
+            args = build_parser().parse_args(argv)
+            try:
+                format_tsv_mode(args, budget=OutputBudget(5))
+                failures.append(
+                    f"output-budget-streams ({mode}): accepted past 5 bytes"
+                )
+            except UsesError as err:
+                if str(err) != "output exceeds 5 bytes":
+                    failures.append(f"output-budget-streams ({mode}): {str(err)!r}")
+                else:
+                    print(f"ok   output-budget-streams ({mode})")
+    return failures
+
+
 def run_output_budget_cases() -> list[str]:
-    """Run unit and end-to-end OutputBudget cases across all four TSV modes."""
+    """Run unit, streaming and end-to-end OutputBudget cases across all four TSV modes."""
     return [
         *check_output_budget_unit_cases(),
         *check_output_budget_version_inputs(),
         *check_output_budget_other_modes(),
+        *check_output_budget_streams(),
     ]
 
 

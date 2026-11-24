@@ -14,7 +14,7 @@ import contextlib
 import os
 import re
 import stat
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 try:
@@ -620,6 +620,21 @@ def collect_file_uses(
     )
 
 
+def iter_files_uses(
+    files: list[str],
+    max_refs: int = MAX_REFS,
+    *,
+    decode: Callable[[str, str, int], str | None] = parse_uses_value,
+) -> Iterator[tuple[str, str, int]]:
+    """Yield decoded (uses_value, file_path, line) triples across files within max_refs."""
+    if len(files) > MAX_FILES:
+        raise UsesError(f"more than {MAX_FILES} workflow files")
+    budget = RefBudget(max_refs)
+    for file_path in files:
+        for value, line in collect_file_uses(file_path, budget=budget, decode=decode):
+            yield (value, file_path, line)
+
+
 def collect_files_uses(
     files: list[str],
     max_refs: int = MAX_REFS,
@@ -627,14 +642,7 @@ def collect_files_uses(
     decode: Callable[[str, str, int], str | None] = parse_uses_value,
 ) -> list[tuple[str, str, int]]:
     """Collect decoded (uses_value, file_path, line) triples across files within max_refs."""
-    if len(files) > MAX_FILES:
-        raise UsesError(f"more than {MAX_FILES} workflow files")
-    budget = RefBudget(max_refs)
-    out: list[tuple[str, str, int]] = []
-    for file_path in files:
-        for value, line in collect_file_uses(file_path, budget=budget, decode=decode):
-            out.append((value, file_path, line))
-    return out
+    return list(iter_files_uses(files, max_refs, decode=decode))
 
 
 def filter_local_uses(

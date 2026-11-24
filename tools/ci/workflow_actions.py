@@ -12,7 +12,7 @@ import os
 import stat
 import sys
 from collections import deque
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 
 try:
@@ -483,45 +483,38 @@ def collect_text_step_lines(text: str, rel_path: str) -> list[tuple[int, str]]:
     return out
 
 
-def append_step_records(
-    rel_path: str,
-    pairs: list[tuple[int, str]],
-    seen_records: set[tuple[str, int, str]],
-    records: list[tuple[str, int, str]],
-) -> None:
-    """Append distinct (rel_path, line_no, text) records within MAX_STEP_TEXT_LINES."""
-    for line_no, line_text in pairs:
-        rec = (rel_path, line_no, line_text)
-        if rec in seen_records:
-            continue
-        if len(records) >= MAX_STEP_TEXT_LINES:
-            raise UsesError(
-                f"{rel_path}:{line_no}: more than {MAX_STEP_TEXT_LINES} step text lines"
-            )
-        seen_records.add(rec)
-        records.append(rec)
-
-
-def collect_files_step_text(
+def iter_files_step_text(
     root_arg: str, files: list[str]
-) -> list[tuple[str, int, str]]:
-    """Return distinct (rel_path, line_no, text) records in document order under root_arg."""
+) -> Iterator[tuple[str, int, str]]:
+    """Yield distinct (rel_path, line_no, text) records in document order under root_arg."""
     if len(files) > MAX_FILES:
         raise UsesError(f"more than {MAX_FILES} workflow files under {root_arg}")
     root = resolve_root_dir(root_arg)
     seen_files: set[str] = set()
     seen_records: set[tuple[str, int, str]] = set()
-    records: list[tuple[str, int, str]] = []
     for file_arg in files:
         rel_path = normalize_step_file(root, file_arg)
         if rel_path in seen_files:
             continue
         seen_files.add(rel_path)
         text = read_workflow_text(root / rel_path, rel_path)
-        append_step_records(
-            rel_path, collect_text_step_lines(text, rel_path), seen_records, records
-        )
-    return records
+        for line_no, line_text in collect_text_step_lines(text, rel_path):
+            rec = (rel_path, line_no, line_text)
+            if rec in seen_records:
+                continue
+            if len(seen_records) >= MAX_STEP_TEXT_LINES:
+                raise UsesError(
+                    f"{rel_path}:{line_no}: more than {MAX_STEP_TEXT_LINES} step text lines"
+                )
+            seen_records.add(rec)
+            yield rec
+
+
+def collect_files_step_text(
+    root_arg: str, files: list[str]
+) -> list[tuple[str, int, str]]:
+    """Return distinct (rel_path, line_no, text) records in document order under root_arg."""
+    return list(iter_files_step_text(root_arg, files))
 
 
 def clean_version_scalar(ver_node: yaml.Node) -> str:
@@ -631,17 +624,16 @@ def collect_text_version_inputs(
     return out
 
 
-def collect_files_version_inputs(
+def iter_files_version_inputs(
     root_arg: str, files: list[str], max_refs: int = MAX_REFS
-) -> list[tuple[str, int, str, str]]:
-    """Return distinct (rel_path, line, owner/repo, version) records under root_arg."""
+) -> Iterator[tuple[str, int, str, str]]:
+    """Yield distinct (rel_path, line, owner/repo, version) records under root_arg."""
     if len(files) > MAX_FILES:
         raise UsesError(f"more than {MAX_FILES} workflow files under {root_arg}")
     root = resolve_root_dir(root_arg)
     budget = RefBudget(max_refs)
     seen_files: set[str] = set()
     seen_records: set[tuple[str, int, str, str]] = set()
-    records: list[tuple[str, int, str, str]] = []
     for file_arg in files:
         rel_path = normalize_step_file(root, file_arg)
         if rel_path in seen_files:
@@ -652,5 +644,11 @@ def collect_files_version_inputs(
             rec = (rel_path, line, repo, version)
             if rec not in seen_records:
                 seen_records.add(rec)
-                records.append(rec)
-    return records
+                yield rec
+
+
+def collect_files_version_inputs(
+    root_arg: str, files: list[str], max_refs: int = MAX_REFS
+) -> list[tuple[str, int, str, str]]:
+    """Return distinct (rel_path, line, owner/repo, version) records under root_arg."""
+    return list(iter_files_version_inputs(root_arg, files, max_refs))
