@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
-"""Extract uses references, list composite actions, or emit step text and version inputs.
+"""Extract uses references, list composite actions, or emit uses keys, step text and version inputs.
 
 Reads each file with yaml.compose so YAML anchors, aliases, merge keys and flow
 collections resolve while every node keeps its 1-based start line. Default mode
@@ -10,11 +10,13 @@ prints one tab-separated line per remote reference (`owner/repo\\tpath:line`) fr
 `./`, `$/` and `docker://` values and enforcing MAX_REFS across the run.
 `--all-uses FILE...` prints `<file>:<line>\\t<value>` for every decoded job-level
 and step-level `uses` value, remote and local alike.
+`--uses-keys FILE...` prints `<file>:<line>` for every YAML mapping key named
+`uses` in the token stream.
 `--list-actions ROOT FILE...` prints NUL-separated repo-relative paths of every
 action.yml / action.yaml under ROOT/.github/actions plus composite actions reached
 from step-level `./<dir>` and `$/<dir>`, skipping Docker-only local actions.
-`--step-text ROOT FILE...` prints `<file>:<line>\\t<text>` for scalar value lines
-of step `run` and scalar `with` entries. `--version-inputs ROOT FILE...` prints
+`--step-text ROOT FILE...` prints `<file>:<line>\\t<text>` for step `run` scalar
+lines. `--version-inputs ROOT FILE...` prints
 `<file>:<line>\\t<owner/repo>\\t<version>` for remote step `uses` references.
 Exits 2 on missing PyYAML or validation error.
 """
@@ -38,6 +40,7 @@ from workflow_yaml import (
     OutputBudget,
     UsesError,
     iter_files_uses,
+    iter_files_uses_keys,
     keep_uses_value,
     yaml,
 )
@@ -56,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="print every decoded job and step uses value as file:line\\tvalue",
     )
     mode.add_argument(
+        "--uses-keys",
+        action="store_true",
+        help="print the line of every YAML mapping key named uses as file:line",
+    )
+    mode.add_argument(
         "--list-actions",
         metavar="ROOT",
         help="print NUL-separated composite action paths under ROOT",
@@ -63,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--step-text",
         metavar="ROOT",
-        help="print step run and with scalar lines under ROOT as file:line\\ttext",
+        help="print step run scalar lines under ROOT as file:line\\ttext",
     )
     mode.add_argument(
         "--version-inputs",
@@ -96,6 +104,11 @@ def format_tsv_mode(
                 args.files, decode=keep_uses_value
             )
         ]
+    if args.uses_keys:
+        return [
+            active.line((f"{file_path}:{line}",))
+            for file_path, line in iter_files_uses_keys(args.files)
+        ]
     if args.step_text is not None:
         return [
             active.line((f"{rel_path}:{line_no}", line_text))
@@ -126,7 +139,7 @@ def dispatch_mode(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None, *, yaml_mod: object = yaml) -> int:
-    """Run --self-test, --all-uses, --list-actions, --step-text, --version-inputs or print uses."""
+    """Run --self-test, --all-uses, --uses-keys, --list-actions, --step-text, --version-inputs or print uses."""
     if yaml_mod is None:
         print(
             "error: PyYAML is required; run tools/ci/pyyaml_venv.sh DIR"
@@ -142,8 +155,8 @@ def main(argv: list[str] | None = None, *, yaml_mod: object = yaml) -> int:
     if not args.files or len(args.files) > MAX_FILES:
         print(
             "usage: workflow_uses.py"
-            " [--self-test | --all-uses | --list-actions ROOT | --step-text ROOT"
-            " | --version-inputs ROOT] FILE [FILE ...]",
+            " [--self-test | --all-uses | --uses-keys | --list-actions ROOT"
+            " | --step-text ROOT | --version-inputs ROOT] FILE [FILE ...]",
             file=sys.stderr,
         )
         return 2

@@ -13,7 +13,7 @@
 #
 #   rc 2  usage, a non-canonical <pr> number, or no git user.name / user.email to sign off with
 #   rc 3  the body's last non-blank line is not "Signed-off-by: <user.name> <user.email>"
-#   rc 4  subject plus body fail .config/hooks/commit-msg.sh, or the subject lacks "(#<pr>)"
+#   rc 4  subject plus body fail .config/hooks/commit-msg.sh, or the subject holds a control character or lacks "(#<pr>)"
 #   rc 5  mergeStateStatus is not CLEAN, or the head moved from <head-sha>
 #   rc 6  merged, but the commit on main does not carry the trailer
 #   rc 7  merge failed and the pull request is not confirmed MERGED
@@ -96,6 +96,8 @@ if [ "$last" != "$trailer" ]; then
   exit 3
 fi
 
+# commit-msg.sh and the guard read only the first line, so a newline would let the rest of the subject skip both.
+case "$subject" in *[[:cntrl:]]*) echo "refusing: the subject must be one line without control characters such as a newline" >&2; exit 4 ;; esac
 case "$subject" in
   *" (#$pr)") ;;
   *) echo "refusing: the subject must end with ' (#$pr)'" >&2; exit 4 ;;

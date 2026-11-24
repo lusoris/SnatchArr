@@ -414,34 +414,16 @@ def append_scalar_lines(
         out.append((line_no, clean_line))
 
 
-def collect_with_lines(
-    with_node: yaml.Node,
-    path: str,
-    out: list[tuple[int, str]],
-    seen_nodes: set[int],
-) -> None:
-    """Append scalar value lines for every scalar entry inside a step with mapping."""
-    if isinstance(with_node, yaml.ScalarNode) and with_node.tag == NULL_TAG:
-        return
-    if not isinstance(with_node, yaml.MappingNode):
-        raise UsesError(
-            f"{path}:{with_node.start_mark.line + 1}: with must be a mapping"
-        )
-    if id(with_node) in seen_nodes:
-        return
-    seen_nodes.add(id(with_node))
-    for _, val_node in resolve_mapping(with_node, path).values():
-        if isinstance(val_node, yaml.ScalarNode):
-            append_scalar_lines(val_node, path, out, seen_nodes)
-
-
 def collect_step_lines(
     step_node: yaml.Node,
     path: str,
     out: list[tuple[int, str]],
     seen_nodes: set[int],
 ) -> None:
-    """Append value lines of run and scalar with entries from one step mapping."""
+    """Append value lines of the run entry from one step mapping.
+
+    `with` inputs are data passed to an action, not commands.
+    """
     if not isinstance(step_node, yaml.MappingNode):
         raise UsesError(
             f"{path}:{step_node.start_mark.line + 1}: step must be a mapping"
@@ -453,8 +435,6 @@ def collect_step_lines(
                     f"{path}:{node_line(key_node, val_node)}: run value must be a scalar"
                 )
             append_scalar_lines(val_node, path, out, seen_nodes)
-        elif key == "with":
-            collect_with_lines(val_node, path, out, seen_nodes)
 
 
 def collect_steps_seq_lines(
@@ -463,7 +443,7 @@ def collect_steps_seq_lines(
     out: list[tuple[int, str]],
     seen_nodes: set[int],
 ) -> None:
-    """Append step run and with scalar lines for every step in steps_node."""
+    """Append step run scalar lines for every step in steps_node."""
     if id(steps_node) in seen_nodes:
         return
     seen_nodes.add(id(steps_node))

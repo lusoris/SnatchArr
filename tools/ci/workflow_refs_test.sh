@@ -10,7 +10,8 @@
 # Dockerfile (docker-local-action), three distinct repositories batched into one GraphQL POST
 # (three-repos), GITHUB_GRAPHQL_URL overriding the REST v3 URL variable (graphql-url-override),
 # default GraphQL URL when only the REST v3 URL variable is set (graphql-url-ignores-v3-url),
-# workflow-refs.yml carrying no uses entry (guard-job-no-uses), bash versions 4.4, 5.0 and 5.2
+# workflow-refs.yml carrying no uses entry (guard-job-no-uses) or uses-shaped scalar text in run or
+# step name (guard-job-run-uses-text, guard-job-name-uses-text), bash versions 4.4, 5.0 and 5.2
 # (bash-version-4-4, bash-version-5-0, bash-version-5-2), stubs in this file and in
 # workflow-check_test.sh that run no GNU timeout (stubs-no-gnu-timeout), curl bounded by
 # --max-time 20 and --retry-max-time 55 to 60 under the default lookup deadline
@@ -48,7 +49,8 @@
 # unquoted and a quoted on key (guard-job-on-twice), a planted
 # block uses step (guard-job-block-uses), flow uses step
 # (guard-job-flow-uses), local ./ uses step (guard-job-local-uses), escaped-key "\x75ses" step
-# (guard-job-escaped-key-uses), or escaped-key local uses step (guard-job-escaped-local-uses),
+# (guard-job-escaped-key-uses), escaped-key local uses step (guard-job-escaped-local-uses), or
+# uses key outside the step path (guard-job-nested-uses-key),
 # and unsupported bash versions 3.2, 4.3, 4.x and empty (bash-version-3-2, bash-version-4-3,
 # bash-version-4-x, bash-version-empty).
 # Platform (HISS-21): runs on Linux and macOS with bash 4.4 or newer (workflow_refs.sh uses
@@ -209,20 +211,13 @@ expect_refusal() {
   esac
 }
 
-# guard_has_no_uses FILE: succeed when workflow_uses.py --all-uses and a bounded line scan find no uses entry in FILE.
+# guard_has_no_uses FILE: succeed when workflow_uses.py --all-uses and --uses-keys both exit 0 with empty output on FILE.
 guard_has_no_uses() {
-  local file="$1" uses_out line line_n=0
-  local uses_re="(^|[[:space:]{,-])[\"']?uses[\"']?[[:space:]]*:"
+  local file="$1" uses_out keys_out
   uses_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" --all-uses "$file")" || return 1
   [ -z "$uses_out" ] || return 1
-  while IFS= read -r line || [ -n "$line" ]; do
-    line_n=$((line_n + 1))
-    [ "$line_n" -le 65536 ] || return 1
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    if [[ "$line" =~ $uses_re ]]; then
-      return 1
-    fi
-  done < "$file"
+  keys_out="$("${PYTHON_BIN:-python3}" -I "$HERE/workflow_uses.py" --uses-keys "$file")" || return 1
+  [ -z "$keys_out" ] || return 1
   return 0
 }
 
@@ -1038,7 +1033,7 @@ case "$stall_out" in
     ;;
 esac
 
-# workflow-refs.yml carries no uses entry, and planted block, flow, local and escaped-key uses are refused.
+# workflow-refs.yml carries no uses entry, ignores uses-shaped scalar text, and refuses planted block, flow, local, escaped-key and nested uses keys.
 if ! guard_has_no_uses "$REPO_ROOT/.github/workflows/workflow-refs.yml"; then
   echo "FAIL guard-job-no-uses: workflow-refs.yml carried a uses entry" >&2
   exit 1
@@ -1046,14 +1041,38 @@ fi
 accepted=$((accepted + 1))
 echo "ok   guard-job-no-uses: accepted (no uses in workflow-refs.yml)"
 
+for guard_case in guard-job-run-uses-text guard-job-name-uses-text; do
+  case "$guard_case" in
+    guard-job-run-uses-text)
+      guard_label="uses text in run scalar"
+      guard_step='      - run: "echo '\''uses: x/y@v1'\''"'
+      ;;
+    guard-job-name-uses-text)
+      guard_label="uses text in step name"
+      guard_step="      - {name: 'uses: x/y@v1', run: echo ok}"
+      ;;
+  esac
+  if ! plant_guard_step "$guard_case" "$guard_step"; then
+    printf 'FAIL %s: failed to plant step in workflow-refs.yml\n' "$guard_case" >&2
+    exit 1
+  fi
+  if ! guard_has_no_uses "$WORK/$guard_case.yml"; then
+    printf 'FAIL %s: refused planted %s\n' "$guard_case" "$guard_label" >&2
+    exit 1
+  fi
+  accepted=$((accepted + 1))
+  echo "ok   $guard_case: accepted ($guard_label)"
+done
+
 guard_refused_cases=(
   "guard-job-block-uses|block uses|      - uses: $CHECKOUT # v7.0.1"
   "guard-job-flow-uses|flow uses|      - {uses: $CHECKOUT, with: {persist-credentials: false}}"
   "guard-job-local-uses|local uses|      - uses: ./.github/actions/planted"
   'guard-job-escaped-key-uses|escaped-key uses|      - {"\x75ses": '"$CHECKOUT"'}'
   'guard-job-escaped-local-uses|escaped-key local uses|      - {"\x75ses": ./.github/actions/planted}'
+  "guard-job-nested-uses-key|uses key outside the step path|      - {run: echo ok, with: {uses: x/y@v1}}"
 )
-for ((guard_i = 0; guard_i < 5 && guard_i < ${#guard_refused_cases[@]}; guard_i++)); do
+for ((guard_i = 0; guard_i < 6 && guard_i < ${#guard_refused_cases[@]}; guard_i++)); do
   guard_entry="${guard_refused_cases[$guard_i]}"
   guard_case="${guard_entry%%|*}"
   guard_rest="${guard_entry#*|}"

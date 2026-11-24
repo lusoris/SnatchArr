@@ -65,6 +65,7 @@ def step_text_manifest_cases() -> list[
         "      run: |\n        echo first\n        go install example.com/cmd@v1.2.3\n"
         "    - name: single\n      shell: bash\n      run: go install x@v1.0.0\n"
         "    - uses: actions/checkout@v4\n      with:\n        ref: main\n"
+        "        message: 'Example: go install example.com/tool'\n"
     )
     flow_rel = ".github/actions/flow/action.yml"
     flow_doc = (
@@ -80,7 +81,6 @@ def step_text_manifest_cases() -> list[
                 (act_rel, 12, "echo first"),
                 (act_rel, 13, "go install example.com/cmd@v1.2.3"),
                 (act_rel, 16, "go install x@v1.0.0"),
-                (act_rel, 19, "main"),
             ],
             True,
         ),

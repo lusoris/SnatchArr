@@ -368,6 +368,43 @@ jobs:
 YAML
 expect_accepted go-install-flow-description "no version comment names another tag"
 
+# go install text passed through a step with input is data, not a command, and passes.
+mkdir -p "$WORK/go-install-with-input/.github/workflows" "$WORK/go-install-with-input/.github/actions/planted"
+cat > "$WORK/go-install-with-input/.github/actions/planted/action.yml" <<'YAML'
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: planted
+description: planted action
+inputs:
+  message:
+    description: message input
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: noop
+      shell: bash
+      run: echo ok
+YAML
+cat > "$WORK/go-install-with-input/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/planted
+        with:
+          message: 'Example: go install golang.org/x/vuln/cmd/govulncheck@latest'
+YAML
+expect_accepted go-install-with-input "no version comment names another tag"
+
 plant_install go-install-quoted-run "'go install golang.org/x/vuln/cmd/govulncheck@latest'"
 expect_refusal go-install-quoted-run "refused .github/workflows/planted.yml:14: go install not pinned to a version"
 

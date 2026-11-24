@@ -618,6 +618,66 @@ def run_all_uses_cases() -> list[str]:
     return failures
 
 
+def run_uses_keys_cases() -> list[str]:
+    """Verify --uses-keys emits every uses mapping key, refuses alias keys and accepts empty."""
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        wf = base / "keys.yml"
+        wf.write_text(
+            "on: push\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n"
+            "      - uses: actions/checkout@v4\n"
+            "      - {uses: ./a}\n"
+            '      - {"\\x75ses": ./b}\n'
+            "      - {'uses': ./c}\n"
+            "      - {!!str uses: ./d}\n"
+            "      - run: echo ok\n        with: {uses: e}\n"
+            "      - run: \"echo 'uses: x/y@v1'\"\n"
+            "      - run: |\n          uses: a/b@v1\n"
+            "      # uses: z\n"
+            '      - name: "uses: q"\n        run: echo done\n',
+            encoding="utf-8",
+        )
+        out_buf = io.StringIO()
+        with contextlib.redirect_stdout(out_buf):
+            rc = uses_main(["--uses-keys", str(wf)])
+        want = [f"{wf}:{ln}" for ln in (6, 7, 8, 9, 10, 12)]
+        got = out_buf.getvalue().splitlines()
+        if rc != 0 or got != want:
+            failures.append(f"uses-keys-keys-only: rc={rc}, got {got!r}, want {want!r}")
+        else:
+            print("ok   uses-keys-keys-only")
+        alias_wf = base / "alias.yml"
+        alias_wf.write_text("a: {&k uses: 1}\nb: {*k : x}\n", encoding="utf-8")
+        err_buf = io.StringIO()
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(err_buf),
+        ):
+            alias_rc = uses_main(["--uses-keys", str(alias_wf)])
+        if alias_rc != 2 or "alias as a mapping key" not in err_buf.getvalue():
+            failures.append(
+                f"uses-keys-alias-key: rc={alias_rc}, err={err_buf.getvalue()!r}"
+            )
+        else:
+            print("ok   uses-keys-alias-key")
+        empty_wf = base / "empty.yml"
+        empty_wf.write_text(
+            "on: push\njobs:\n  j:\n    steps:\n      - run: echo ok\n",
+            encoding="utf-8",
+        )
+        empty_buf = io.StringIO()
+        with contextlib.redirect_stdout(empty_buf):
+            empty_rc = uses_main(["--uses-keys", str(empty_wf)])
+        if empty_rc != 0 or empty_buf.getvalue() != "":
+            failures.append(
+                f"uses-keys-empty: rc={empty_rc}, out={empty_buf.getvalue()!r}"
+            )
+        else:
+            print("ok   uses-keys-empty")
+    return failures
+
+
 def run_file_bounds_cases() -> list[str]:
     """Verify MAX_FILE_BYTES pre-read refusal and MAX_FILE_LINES boundary in compose_top_mapping."""
     failures: list[str] = []
@@ -922,6 +982,7 @@ def self_test() -> int:
             *run_negative_cases(),
             *run_max_refs_cases(),
             *run_all_uses_cases(),
+            *run_uses_keys_cases(),
             *run_file_bounds_cases(),
             *run_yaml_depth_cases(),
             *run_list_positive_case(),

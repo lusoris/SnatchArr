@@ -645,6 +645,47 @@ def collect_files_uses(
     return list(iter_files_uses(files, max_refs, decode=decode))
 
 
+def uses_key_lines(text: str, path: str) -> list[int]:
+    """Scan YAML tokens in text and return 1-based lines of mapping keys named uses."""
+    check_line_limit(text, path)
+    check_yaml_depth(text, path)
+    lines: list[int] = []
+    in_key = False
+    try:
+        with contextlib.closing(yaml.scan(text, Loader=yaml.SafeLoader)) as tokens:
+            for count, token in enumerate(tokens, start=1):
+                if count > MAX_YAML_EVENTS:
+                    raise UsesError(
+                        f"{path}:{token.start_mark.line + 1}:"
+                        f" exceeds {MAX_YAML_EVENTS} YAML events"
+                    )
+                if isinstance(token, yaml.KeyToken):
+                    in_key = True
+                elif in_key:
+                    if isinstance(token, (yaml.AnchorToken, yaml.TagToken)):
+                        continue
+                    in_key = False
+                    if isinstance(token, yaml.AliasToken):
+                        raise UsesError(
+                            f"{path}:{token.start_mark.line + 1}: alias as a mapping key"
+                        )
+                    if isinstance(token, yaml.ScalarToken) and token.value == "uses":
+                        lines.append(token.start_mark.line + 1)
+    except yaml.YAMLError as err:
+        raise UsesError(f"{path}: {err}") from err
+    return lines
+
+
+def iter_files_uses_keys(files: list[str]) -> Iterator[tuple[str, int]]:
+    """Yield (file_path, line) pairs for every YAML mapping key named uses across files."""
+    if len(files) > MAX_FILES:
+        raise UsesError(f"more than {MAX_FILES} workflow files")
+    for file_path in files:
+        text = read_workflow_text(Path(file_path), file_path)
+        for line in uses_key_lines(text, file_path):
+            yield (file_path, line)
+
+
 def filter_local_uses(
     raw_steps: list[tuple[str, int]], path: str
 ) -> list[tuple[str, int]]:

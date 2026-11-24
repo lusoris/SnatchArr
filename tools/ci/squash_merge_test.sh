@@ -176,6 +176,17 @@ land "planted #1007 body without the trailer" 3 "must end with 'Signed-off-by: t
 land "trailer of another identity" 3 "must end with" "" "$WORK/other"
 land "empty head from a failed read" 2 "40 hex" "" "$WORK/signed" ""
 land "subject without the number" 4 "(#7)" "" "$WORK/signed" "$SHA" "feat(prowlarr): select indexers"
+# Three subjects holding a control character, bounded by this three-element literal list.
+for ctrl_kind in newline cr tab; do
+  case "$ctrl_kind" in
+    newline) ctrl_subject="$(printf 'feat(prowlarr): select indexers\nmore text (#7)')" ;;
+    cr) ctrl_subject="$(printf 'feat(prowlarr): select indexers\r (#7)')" ;;
+    tab) ctrl_subject="$(printf 'feat(prowlarr):\tselect indexers (#7)')" ;;
+  esac
+  land "subject holding $ctrl_kind control character" 4 "without control characters" "" \
+    "$WORK/signed" "$SHA" "$ctrl_subject"
+  [ ! -s "$WORK/guard-log" ] || { echo "FAIL subject holding $ctrl_kind control character: guard check ran" >&2; exit 1; }
+done
 # Three non-canonical PR numbers, bounded by this three-element literal list.
 for bad_pr in 0007 0 12345678; do
   PR_ARG="$bad_pr" land "non-canonical pr number $bad_pr" 2 "without a leading zero" "" \
