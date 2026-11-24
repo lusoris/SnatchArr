@@ -2,22 +2,37 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Lints every workflow file and refuses an action that is not pinned to a commit, or whose
-# version comment names a tag that is not that commit. Adapted from tools/workflow-check.sh
-# of github.com/golusoris/goenvoy.
+# Lints every workflow file and refuses an action that is not pinned to a commit, whose
+# version comment names a tag that is not that commit, or whose repository has moved to
+# another name. Adapted from tools/workflow-check.sh of github.com/golusoris/goenvoy (now
+# github.com/plurano/goenvoy).
+#
+# Platform (HISS-21): runs on Linux in CI and on macOS/Linux hosts with bash 4.4 or newer (mapfile -d,
+# ${var,,}); exits 2 naming bash 4.4 or newer on older bash such as macOS stock bash 3.2.
 #
 #   tools/ci/workflow-check.sh [ROOT]      (default: this repository)
 #
-# Exit status: 0 clean, 1 a finding or a failed run, 2 usage.
-# Needs docker (actionlint), python3 with venv, jq, network, token.
+# Exit status: 0 clean, 1 a finding or a failed run, 2 usage or unsupported bash.
+# Needs bash 4.4 or newer (mapfile -d), docker (actionlint), python3 with venv, jq, curl, network, token.
+# The Python in PYTHON_BIN (default python3) must import yaml (PyYAML): without it
+# workflow_uses.py exits 2 (PyYAML is required) and this script exits 1. On a clean host run
+# `tools/ci/pyyaml_venv.sh DIR` once and set PYTHON_BIN=DIR/bin/python.
 set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tools/ci/bash_version.sh
+. "$HERE/bash_version.sh"
+if ! bash_version_supported "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"; then
+  echo "error: ${0##*/} requires bash 4.4 or newer (mapfile -d), found $BASH_VERSION" >&2
+  exit 2
+fi
 
 if [ $# -gt 1 ]; then
   echo "usage: ${0##*/} [ROOT]" >&2
   exit 2
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 ROOT="$(cd "${1:-$REPO_ROOT}" && pwd)"
 DOCKER="${DOCKER_BIN:-docker}"
 
@@ -50,7 +65,7 @@ if [ ! -f "$ZIZMOR_REQ" ] || \
   exit 1
 fi
 
-shopt -s nullglob
+shopt -s nullglob dotglob
 FILES=()
 for f in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/workflows/*.yaml; do
   FILES+=("${f#"$ROOT"/}")
@@ -60,10 +75,20 @@ if [ ${#FILES[@]} -eq 0 ]; then
   exit 1
 fi
 
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+PYTHON="${PYTHON_BIN:-python3}"
+if ! "$PYTHON" -I "$HERE/workflow_uses.py" --list-actions "$ROOT" -- "${FILES[@]}" > "$WORK/actions.nul"; then
+  exit 1
+fi
+MAX_ACTION_FILES=4096
 ACTION_FILES=()
-for f in "$ROOT"/.github/actions/*/*.yml "$ROOT"/.github/actions/*/*.yaml; do
-  ACTION_FILES+=("${f#"$ROOT"/}")
-done
+mapfile -d '' -n "$((MAX_ACTION_FILES + 1))" -t ACTION_FILES < "$WORK/actions.nul"
+if [ "${#ACTION_FILES[@]}" -gt "$MAX_ACTION_FILES" ]; then
+  echo "error: more than $MAX_ACTION_FILES composite action files under $ROOT" >&2
+  exit 1
+fi
 
 # go_install_pinned ARGS: whether every package after `go install` names a release (v + semver)
 # or a workflow variable (${...}). @latest, a branch, or no version at all floats.
@@ -87,19 +112,29 @@ go_install_pinned() {
 
 # A Go tool installed at a floating version changes under an unchanged workflow; Renovate moves
 # the pinned ones (renovate.json, manager for go install in workflows).
+if ! "$PYTHON" -I "$HERE/workflow_uses.py" --step-text "$ROOT" -- "${FILES[@]}" "${ACTION_FILES[@]}" > "$WORK/step-text.tsv"; then
+  exit 1
+fi
+MAX_STEP_LINES=262144
+step_line_count=0
 floating=0
-for file in "${FILES[@]}" "${ACTION_FILES[@]}"; do
-  lineno=0
-  while IFS= read -r line || [ -n "$line" ]; do
-    lineno=$((lineno + 1))
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ "$line" =~ (^|[;\&|[:space:]])go[[:space:]]+install([[:space:]]+(.*)|$) ]] || continue
-    if ! go_install_pinned "${BASH_REMATCH[3]}"; then
-      echo "refused $file:$lineno: go install not pinned to a version" >&2
-      floating=1
-    fi
-  done < "$ROOT/$file"
-done
+while IFS= read -r record || [ -n "$record" ]; do
+  step_line_count=$((step_line_count + 1))
+  if [ "$step_line_count" -gt "$MAX_STEP_LINES" ]; then
+    echo "error: more than $MAX_STEP_LINES step text lines under $ROOT" >&2
+    exit 1
+  fi
+  loc="${record%%$'\t'*}"
+  line="${record#*$'\t'}"
+  file="${loc%:*}"
+  lineno="${loc##*:}"
+  [[ "$line" =~ ^[[:space:]]*# ]] && continue
+  [[ "$line" =~ (^|[;\&|[:space:]])go[[:space:]]+install([[:space:]]+(.*)|$) ]] || continue
+  if ! go_install_pinned "${BASH_REMATCH[3]}"; then
+    echo "refused $file:$lineno: go install not pinned to a version" >&2
+    floating=1
+  fi
+done < "$WORK/step-text.tsv"
 
 # Actions that install a tool and fall back to a floating default when `with: version` is
 # missing. azure/setup-helm asks the GitHub API for the newest release and, when that call
@@ -107,45 +142,41 @@ done
 # 6a83713996. Allow-list: an action listed here must carry a semver `version` in its step.
 VERSION_INPUT_ACTIONS=(azure/setup-helm)
 
-# step_version_pinned INDEX COL: whether the step whose `uses:` key sits at column COL on
-# STEP_LINES[INDEX] sets `version:` to a release. The step ends at the first non-empty line
-# indented less than COL.
-step_version_pinned() {
-  local i line indent
-  for ((i = $1 + 1; i < ${#STEP_LINES[@]}; i++)); do
-    line="${STEP_LINES[i]}"
-    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
-    indent="${line%%[![:space:]]*}"
-    [ "${#indent}" -lt "$2" ] && return 1
-    [[ "$line" =~ ^[[:space:]]+version:[[:space:]]*[\"\']?v?[0-9]+(\.[0-9]+)+[\"\']?[[:space:]]*(#.*)?$ ]] && return 0
+if ! "$PYTHON" -I "$HERE/workflow_uses.py" --version-inputs "$ROOT" -- "${FILES[@]}" "${ACTION_FILES[@]}" > "$WORK/version-inputs.tsv"; then
+  exit 1
+fi
+MAX_VERSION_RECORDS=16384
+version_record_count=0
+while IFS= read -r record || [ -n "$record" ]; do
+  version_record_count=$((version_record_count + 1))
+  if [ "$version_record_count" -gt "$MAX_VERSION_RECORDS" ]; then
+    echo "error: more than $MAX_VERSION_RECORDS step uses records under $ROOT" >&2
+    exit 1
+  fi
+  loc="${record%%$'\t'*}"
+  rest="${record#*$'\t'}"
+  action="${rest%%$'\t'*}"
+  version="${rest#*$'\t'}"
+  for guarded_action in "${VERSION_INPUT_ACTIONS[@]}"; do
+    [ "${action,,}" = "${guarded_action,,}" ] || continue
+    if ! [[ "$version" =~ ^v?[0-9]+(\.[0-9]+)+$ ]]; then
+      echo "refused $loc: $guarded_action without a pinned version input" >&2
+      floating=1
+    fi
   done
-  return 1
-}
-
-for file in "${FILES[@]}" "${ACTION_FILES[@]}"; do
-  mapfile -t STEP_LINES < "$ROOT/$file"
-  for ((idx = 0; idx < ${#STEP_LINES[@]}; idx++)); do
-    [[ "${STEP_LINES[idx]}" =~ ^([[:space:]]*(-[[:space:]]+)?)uses:[[:space:]]*([^@[:space:]]+)@ ]] || continue
-    for action in "${VERSION_INPUT_ACTIONS[@]}"; do
-      [ "${BASH_REMATCH[3]}" = "$action" ] || continue
-      if ! step_version_pinned "$idx" "${#BASH_REMATCH[1]}"; then
-        echo "refused $file:$((idx + 1)): $action without a pinned version input" >&2
-        floating=1
-      fi
-    done
-  done
-done
+done < "$WORK/version-inputs.tsv"
 if [ "$floating" -ne 0 ]; then
   exit 1
 fi
+
+# Check that every remote `uses:` repository in workflows and composite actions still carries its
+# current owner/name (shared with .github/workflows/workflow-refs.yml).
+GH_TOKEN="$TOKEN" bash "$HERE/workflow_refs.sh" "$ROOT"
 
 "$DOCKER" run --rm -v "$ROOT:/repo:ro" -w /repo \
   -v "$REPO_ROOT/.github/actionlint.yaml:/actionlint.yaml:ro" \
   "$ACTIONLINT_IMAGE" -no-color -config-file /actionlint.yaml "${FILES[@]}"
 echo "actionlint: ${#FILES[@]} workflow files passed"
-
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
 
 ZIZMOR="${ZIZMOR_BIN:-}"
 if [ -z "$ZIZMOR" ]; then

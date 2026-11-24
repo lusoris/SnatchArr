@@ -7,7 +7,8 @@
 # (b) logo file deleted -> red naming it
 # (c) hash changed -> red naming it
 # (d) a 7th exception added -> red naming it
-# (e) clean -> green
+# (e) duplicate logo hash -> red naming both keys
+# (f) clean -> green
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -132,9 +133,38 @@ fi
 echo "ok   case d: 7th exception refused with key named (exit 1)"
 cat "$WORK/case_d.err"
 
-echo "case e: clean -> green"
+echo "case e: duplicate logo hash -> red naming both keys"
 cp "$MANIFEST_ORIG" "$MANIFEST_TMP"
-python3 tools/logos/fetch.py --check --manifest "$MANIFEST_TMP" --logos-dir "$LOGOS_TMP"
-echo "ok   case e: clean check passed (exit 0)"
+python3 -c "
+import json
+with open('$MANIFEST_TMP', 'r') as f:
+    d = json.load(f)
+d['whisparr_v3']['sha256'] = d['whisparr_v2']['sha256']
+with open('$MANIFEST_TMP', 'w') as f:
+    json.dump(d, f, indent=2)
+"
+cp "$LOGOS_TMP/whisparr_v2.svg" "$LOGOS_TMP/whisparr_v3.svg"
+set +e
+python3 tools/logos/fetch.py --check --manifest "$MANIFEST_TMP" --logos-dir "$LOGOS_TMP" > "$WORK/case_e.out" 2> "$WORK/case_e.err"
+status=$?
+set -e
+if [ "$status" -ne 1 ]; then
+  echo "FAIL case e: expected exit 1 on duplicate logo hash, got $status" >&2
+  cat "$WORK/case_e.err" >&2
+  exit 1
+fi
+if ! grep -q "whisparr_v2" "$WORK/case_e.err" || ! grep -q "whisparr_v3" "$WORK/case_e.err"; then
+  echo "FAIL case e: error output did not name both duplicate keys" >&2
+  cat "$WORK/case_e.err" >&2
+  exit 1
+fi
+echo "ok   case e: duplicate logo hashes refused with both keys named (exit 1)"
+cat "$WORK/case_e.err"
 
-echo "fetch_test: all 5 planted cases verified (clean pass + 4 planted mutations refused)"
+echo "case f: clean -> green"
+cp "$MANIFEST_ORIG" "$MANIFEST_TMP"
+cp "$LOGOS_ORIG/whisparr_v3.svg" "$LOGOS_TMP/whisparr_v3.svg"
+python3 tools/logos/fetch.py --check --manifest "$MANIFEST_TMP" --logos-dir "$LOGOS_TMP"
+echo "ok   case f: clean check passed (exit 0)"
+
+echo "fetch_test: all 6 planted cases verified (clean pass + 5 planted mutations refused)"

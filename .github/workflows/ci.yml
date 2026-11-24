@@ -120,13 +120,21 @@ jobs:
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases
         run: bash tools/ci/ruff_check_test.sh && sh tools/ci/ruff_check.sh "$RUNNER_TEMP/ruff"
+      - name: PyYAML for the workflow parser (pinned by hash)
+        run: bash tools/ci/pyyaml_venv.sh "$RUNNER_TEMP/pyyaml"
       - name: The workflow check refuses its planted cases
         env:
           GH_TOKEN: ${{ github.token }}
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
         run: bash tools/ci/workflow-check_test.sh
+      - name: The merge-time guard check refuses its planted cases
+        env:
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
+        run: bash tools/ci/guard_definition_check_test.sh
       - name: Lint workflows and check action pins
         env:
           GH_TOKEN: ${{ github.token }}
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
         run: bash tools/ci/workflow-check.sh
 
   # The three scanners run on every change, with no filter: a secret or a vulnerable lockfile can
@@ -161,7 +169,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: The Opengrep ratchet refuses its recorded regressions
         run: |
           sh tools/ci/codacy_opengrep_scan_test.sh
@@ -486,7 +494,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
@@ -781,7 +789,7 @@ jobs:
           package_json_file: web/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Install Playwright browsers
         run: cd web && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
       # The repository's own web checks of make web-verify, which the shared sveltesentio
@@ -1023,7 +1031,7 @@ jobs:
           package_json_file: web/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Install web dependencies
         run: cd web && pnpm install --frozen-lockfile
       - name: Clone gate
