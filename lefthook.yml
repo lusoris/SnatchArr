@@ -78,6 +78,10 @@ commit-msg:
   commands:
     commit-policy:
       run: sh .config/hooks/commit-msg.sh {1}
+    # The merge script runs commit-msg in a default-branch clone, so this refuses a squash whose pull
+    # request changes the workflow-refs guard unless GUARD_DEFINITION_ACK names that pull request.
+    guard-definition:
+      run: bash tools/ci/guard_definition_check.sh {1}
 
 post-commit:
   commands:

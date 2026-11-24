@@ -4,16 +4,26 @@
 #
 # Planted cases for workflow-check.sh. Accepted: a commit pin whose comment names its tag,
 # a commit pin whose comment names a branch (printed as a note), a go install pinned to a
-# release, and a go install pinned by a variable. Refused: a tag pin, a comment that names
+# release, a go install pinned by a variable, go install text in composite action
+# descriptions (go-install-description) and in a flow-style composite action manifest
+# (go-install-flow-description), and setup-helm pinned to a release in block style (helm-pinned)
+# and flow style (helm-flow-pinned). Refused: a tag pin, a comment that names
 # another tag, a missing comment, a broken workflow, a missing token, a repository without
 # workflow files, a zizmor run that fails or writes no report, a gate image without a digest,
-# a zizmor requirements file without hashes, a go install at @latest, at @main or without a
-# package, and azure/setup-helm without a version, at latest, or with the version in the next
-# step, and a ${{ }} expression expanded into a run script (accepted: setup-helm pinned to a
-# release). Last: Renovate reads all three workflow-gate image
+# a zizmor requirements file without hashes, a go install at @latest, at @main, without a
+# package, single-quoted at @latest (go-install-quoted-run), or at @latest in a composite action
+# step (go-install-action-latest), and azure/setup-helm without a version, at latest, with the
+# version in the next step, in flow style without a version (helm-flow-no-version), anchored and
+# aliased without a version (helm-alias-no-version), or in a leading-dot workflow file without a
+# version (helm-hidden-workflow), and a ${{ }} expression expanded into a run script. Last: Renovate reads all three workflow-gate image
 # pins, zizmor-requirements.txt, every go install pin and every setup-helm version in the
-# workflows, and neither @latest, a variable nor a helm version of latest.
-# Adapted from github.com/golusoris/goenvoy.
+# workflows, and neither @latest, a variable nor a helm version of latest. Every case runs
+# workflow_refs.sh against a local GraphQL CURL_BIN stub (verified on clean with CURL_COUNT_FILE;
+# golusoris/<repo> reports plurano/<repo> to refuse moved reusable workflows and composite actions,
+# while further repository-name cases live in workflow_refs_test.sh). Network is still read by
+# zizmor's online ref-version-mismatch audit, which queries the GitHub API with GH_TOKEN to resolve
+# upstream tags and branches against pinned commit SHAs (without network or a token zizmor drops
+# that audit). Adapted from github.com/golusoris/goenvoy (now github.com/plurano/goenvoy).
 #
 #   tools/ci/workflow-check_test.sh
 #
@@ -21,6 +31,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Stubs run their reads under this portable deadline runner instead of GNU timeout.
+export RUN_BOUNDED_PY="$HERE/run_bounded.py"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -29,6 +41,9 @@ trap 'rm -rf "$WORK"' EXIT
 CHECKOUT=actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 # The commit of the azure/setup-helm v5.0.1 tag.
 SETUP_HELM=azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
+
+accepted=0
+refused=0
 
 # plant CASE USES [RUNS_ON_KEY]: one workflow whose only step uses USES.
 plant() {
@@ -100,6 +115,21 @@ jobs:
 YAML
 }
 
+# plant_call CASE USES: one workflow whose only job calls the reusable workflow USES.
+plant_call() {
+  mkdir -p "$WORK/$1/.github/workflows"
+  cat > "$WORK/$1/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    uses: $2
+YAML
+}
+
 # plant_helm CASE [WITH...]: one workflow whose step uses azure/setup-helm, then the WITH lines.
 plant_helm() {
   local name="$1"
@@ -122,15 +152,19 @@ YAML
   } > "$WORK/$name/.github/workflows/planted.yml"
 }
 
-# expect_accepted CASE NEEDLE: the check must pass and its output must name NEEDLE.
+# expect_accepted CASE NEEDLE [COMMAND PREFIX...]: the check must pass and its output must name NEEDLE.
 expect_accepted() {
   local name="$1" needle="$2" out
-  if ! out="$(bash "$HERE/workflow-check.sh" "$WORK/$name" 2>&1)"; then
+  shift 2
+  if ! out="$("$@" bash "$HERE/workflow-check.sh" "$WORK/$name" 2>&1)"; then
     printf 'FAIL %s: refused\n%s\n' "$name" "$out" >&2
     exit 1
   fi
   case "$out" in
-    *"$needle"*) echo "ok   $name: accepted ($needle)" ;;
+    *"$needle"*)
+      accepted=$((accepted + 1))
+      echo "ok   $name: accepted ($needle)"
+      ;;
     *)
       printf 'FAIL %s: accepted without "%s"\n%s\n' "$name" "$needle" "$out" >&2
       exit 1
@@ -147,7 +181,10 @@ expect_refusal() {
     exit 1
   fi
   case "$out" in
-    *"$needle"*) echo "ok   $name: refused ($needle)" ;;
+    *"$needle"*)
+      refused=$((refused + 1))
+      echo "ok   $name: refused ($needle)"
+      ;;
     *)
       printf 'FAIL %s: refused without "%s"\n%s\n' "$name" "$needle" "$out" >&2
       exit 1
@@ -156,7 +193,55 @@ expect_refusal() {
 }
 
 plant clean "$CHECKOUT # v7.0.1"
-expect_accepted clean "no version comment names another tag"
+# A fake GitHub GraphQL API used by every case so workflow_refs.sh never queries live GitHub:
+# golusoris/<repo> moved to plurano/<repo> and moved/<repo> moved to current/<repo>; any other
+# repository answers its own name. Optionally counts invocations in CURL_COUNT_FILE.
+cat > "$WORK/curl-moved" <<'SH'
+#!/bin/sh
+set -eu
+python3 -I "$RUN_BOUNDED_PY" 5 head -c 65536 > /dev/null
+if [ -n "${CURL_COUNT_FILE:-}" ]; then
+  count=0
+  if [ -f "$CURL_COUNT_FILE" ]; then
+    read -r count < "$CURL_COUNT_FILE"
+  fi
+  printf '%s\n' "$((count + 1))" > "$CURL_COUNT_FILE"
+fi
+payload=""
+prev=""
+arg_n=0
+for arg in "$@"; do
+  arg_n=$((arg_n + 1))
+  [ "$arg_n" -le 64 ] || exit 2
+  if [ "$prev" = "--data-raw" ] || [ "$prev" = "-d" ]; then
+    payload="$arg"
+    break
+  fi
+  prev="$arg"
+done
+[ -n "$payload" ] || exit 22
+printf '%s\n' "$payload" | python3 -I "$RUN_BOUNDED_PY" 5 jq -c '
+  .query as $q
+  | reduce ([ $q | match("(?<a>r[0-9]+):\\s*repository\\(owner:\\s*\"(?<o>[A-Za-z0-9_.-]+)\",\\s*name:\\s*\"(?<n>[A-Za-z0-9_.-]+)\"\\)"; "g") ][:200][]) as $m (
+      {};
+      ($m.captures | map({(.name): .string}) | add) as $c
+      | (if $c.o == "golusoris" then "plurano/\($c.n)"
+         elif $c.o == "moved" then "current/\($c.n)"
+         else "\($c.o)/\($c.n)" end) as $full
+      | .[$c.a] = {nameWithOwner: $full}
+    )
+  | {data: .}
+'
+SH
+chmod +x "$WORK/curl-moved"
+export CURL_BIN="$WORK/curl-moved"
+
+rm -f "$WORK/curl.count"
+expect_accepted clean "no version comment names another tag" env CURL_COUNT_FILE="$WORK/curl.count"
+if [ ! -s "$WORK/curl.count" ] || [ "$(cat "$WORK/curl.count")" -lt 1 ]; then
+  echo "FAIL clean: expected at least 1 stubbed GraphQL call via CURL_BIN, got $(cat "$WORK/curl.count" 2> /dev/null || echo 0)" >&2
+  exit 1
+fi
 
 plant branch-comment "$CHECKOUT # master"
 expect_accepted branch-comment "note .github/workflows/planted.yml:10: ref-version-mismatch: branch points to commit"
@@ -191,6 +276,138 @@ expect_accepted go-install-pinned "no version comment names another tag"
 plant_install go-install-variable "go install \"github.com/cordanaLLM/praetor/cmd/standardsctl@\${PRAETOR_REF}\""
 expect_accepted go-install-variable "no version comment names another tag"
 
+# go install text in top-level or input descriptions of a composite action is not run and passes.
+mkdir -p "$WORK/go-install-description/.github/workflows" "$WORK/go-install-description/.github/actions/planted"
+cat > "$WORK/go-install-description/.github/actions/planted/action.yml" <<'YAML'
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: planted
+description: >-
+  go install golang.org/x/vuln/cmd/govulncheck@latest
+inputs:
+  tool:
+    description: go install golang.org/x/vuln/cmd/govulncheck@latest
+    required: false
+    default: ok
+runs:
+  using: composite
+  steps:
+    - name: noop
+      shell: bash
+      run: echo ok
+YAML
+cat > "$WORK/go-install-description/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/planted
+YAML
+expect_accepted go-install-description "no version comment names another tag"
+
+# An unpinned go install in a composite action step run is refused naming the action file and line.
+mkdir -p "$WORK/go-install-action-latest/.github/workflows" "$WORK/go-install-action-latest/.github/actions/planted"
+cat > "$WORK/go-install-action-latest/.github/actions/planted/action.yml" <<'YAML'
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: planted
+description: planted action
+runs:
+  using: composite
+  steps:
+    - name: install
+      shell: bash
+      run: go install golang.org/x/vuln/cmd/govulncheck@latest
+YAML
+cat > "$WORK/go-install-action-latest/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/planted
+YAML
+expect_refusal go-install-action-latest "refused .github/actions/planted/action.yml:10: go install not pinned to a version"
+
+# A flow-style composite action manifest whose description mentions go install passes.
+mkdir -p "$WORK/go-install-flow-description/.github/workflows" "$WORK/go-install-flow-description/.github/actions/planted"
+cat > "$WORK/go-install-flow-description/.github/actions/planted/action.yml" <<'YAML'
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+{name: sample, description: 'Example: go install example.com/tool', runs: {using: composite, steps: [{shell: bash, run: echo ok}]}}
+YAML
+cat > "$WORK/go-install-flow-description/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/planted
+YAML
+expect_accepted go-install-flow-description "no version comment names another tag"
+
+# go install text passed through a step with input is data, not a command, and passes.
+mkdir -p "$WORK/go-install-with-input/.github/workflows" "$WORK/go-install-with-input/.github/actions/planted"
+cat > "$WORK/go-install-with-input/.github/actions/planted/action.yml" <<'YAML'
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: planted
+description: planted action
+inputs:
+  message:
+    description: message input
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: noop
+      shell: bash
+      run: echo ok
+YAML
+cat > "$WORK/go-install-with-input/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/planted
+        with:
+          message: 'Example: go install golang.org/x/vuln/cmd/govulncheck@latest'
+YAML
+expect_accepted go-install-with-input "no version comment names another tag"
+
+plant_install go-install-quoted-run "'go install golang.org/x/vuln/cmd/govulncheck@latest'"
+expect_refusal go-install-quoted-run "refused .github/workflows/planted.yml:14: go install not pinned to a version"
+
 plant_install template-injection "echo \${{ github.event.inputs.tag }}"
 expect_refusal template-injection "refused .github/workflows/planted.yml:14: template-injection"
 
@@ -206,6 +423,72 @@ expect_refusal helm-latest "refused .github/workflows/planted.yml:10: azure/setu
 # A version in the next step does not pin this one.
 plant_helm helm-next-step "      - run: echo" "        with:" "          version: v4.3.1"
 expect_refusal helm-next-step "refused .github/workflows/planted.yml:10: azure/setup-helm without a pinned version input"
+
+# A flow-style setup-helm step pinned to a release passes; without version it is refused.
+mkdir -p "$WORK/helm-flow-pinned/.github/workflows"
+cat > "$WORK/helm-flow-pinned/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - {uses: $SETUP_HELM, with: {version: v4.3.1}} # v5.0.1
+YAML
+expect_accepted helm-flow-pinned "no version comment names another tag"
+
+mkdir -p "$WORK/helm-flow-no-version/.github/workflows"
+cat > "$WORK/helm-flow-no-version/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - {uses: $SETUP_HELM, with: {}} # v5.0.1
+YAML
+expect_refusal helm-flow-no-version "refused .github/workflows/planted.yml:10: azure/setup-helm without a pinned version input"
+
+# Steps anchored in one job and aliased in another without a version input are refused.
+mkdir -p "$WORK/helm-alias-no-version/.github/workflows"
+cat > "$WORK/helm-alias-no-version/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  first:
+    runs-on: ubuntu-26.04
+    steps: &helm-steps
+      - {uses: $SETUP_HELM} # v5.0.1
+  second:
+    runs-on: ubuntu-26.04
+    steps: *helm-steps
+YAML
+expect_refusal helm-alias-no-version "refused .github/workflows/planted.yml:10: azure/setup-helm without a pinned version input"
+
+# A leading-dot workflow file `.github/workflows/.hidden.yml` is matched by dotglob and refused.
+mkdir -p "$WORK/helm-hidden-workflow/.github/workflows"
+cat > "$WORK/helm-hidden-workflow/.github/workflows/.hidden.yml" <<YAML
+name: hidden
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $SETUP_HELM # v5.0.1
+YAML
+expect_refusal helm-hidden-workflow "refused .github/workflows/.hidden.yml:10: azure/setup-helm without a pinned version input"
 
 plant_action action-pinned "$CHECKOUT # v7.0.1"
 expect_accepted action-pinned "no version comment names another tag"
@@ -231,9 +514,16 @@ expect_refusal clean "zizmor exit 3" env ZIZMOR_BIN="$WORK/zizmor-fails"
 stub zizmor-silent 0
 expect_refusal clean "zizmor wrote no report" env ZIZMOR_BIN="$WORK/zizmor-silent"
 
+plant_call moved-workflow "golusoris/sveltesentio/.github/workflows/ci-sveltekit.yml@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # main"
+expect_refusal moved-workflow "refused .github/workflows/planted.yml:8: golusoris/sveltesentio moved to plurano/sveltesentio"
+
+plant_action moved-action "golusoris/goenvoy/.github/actions/setup@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # main"
+expect_refusal moved-action "refused .github/actions/planted/action.yml:8: golusoris/goenvoy moved to plurano/goenvoy"
+
 # A copy of the check whose actionlint image carries no digest.
 mkdir -p "$WORK/copy/tools/ci" "$WORK/copy/.github"
 cp "$HERE/workflow-check.sh" "$WORK/copy/tools/ci/"
+cp "$HERE/bash_version.sh" "$WORK/copy/tools/ci/"
 cp "$HERE/zizmor-requirements.txt" "$WORK/copy/tools/ci/"
 sed 's/^\(ACTIONLINT_IMAGE=.*\)@sha256:.*$/\1/' "$HERE/tool-versions.env" > "$WORK/copy/tools/ci/tool-versions.env"
 HERE="$WORK/copy/tools/ci" expect_refusal clean "is not an image pinned by version and digest"
@@ -241,6 +531,7 @@ HERE="$WORK/copy/tools/ci" expect_refusal clean "is not an image pinned by versi
 # A copy of the check whose zizmor requirements carry no hashes.
 mkdir -p "$WORK/copy-nohash/tools/ci" "$WORK/copy-nohash/.github"
 cp "$HERE/workflow-check.sh" "$WORK/copy-nohash/tools/ci/"
+cp "$HERE/bash_version.sh" "$WORK/copy-nohash/tools/ci/"
 cp "$HERE/tool-versions.env" "$WORK/copy-nohash/tools/ci/"
 grep -v '^[[:space:]]*--hash=' "$HERE/zizmor-requirements.txt" > "$WORK/copy-nohash/tools/ci/zizmor-requirements.txt"
 HERE="$WORK/copy-nohash/tools/ci" expect_refusal clean "zizmor is not pinned by version and hash"
@@ -384,4 +675,4 @@ if jq -e -n --arg file "tools/ci/zizmor.txt" --arg pat "$PIP_PATTERN" '$file | t
 fi
 echo "ok   renovate: pip_requirements reads tools/ci/zizmor-requirements.txt and ignores zizmor.txt"
 
-echo "workflow check: 7 accepted, 19 refused; Renovate reads 3 image pins, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
+echo "workflow check: $accepted accepted, $refused refused; Renovate reads 3 image pins, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
