@@ -122,7 +122,7 @@ printf 'Selects indexers.\n\nRefs #696\n' >"$WORK/unsigned"
 printf 'Selects indexers.\n\nSigned-off-by: someone <s@example.invalid>\n' >"$WORK/other"
 printf 'Selects indexers.\n\nSigned-off-by: t <t@example.invalid>\n' >"$WORK/signed"
 
-# land NAME WANT_RC NEEDLE WANT_CALLS BODY [SHA] [SUBJECT] [--dry-run]: run the copy with the stub.
+# land NAME WANT_RC NEEDLE WANT_CALLS BODY [SHA] [SUBJECT] [--dry-run]: run the copy with the stub (PR_ARG defaults to 7).
 land() {
   : >"$WORK/log"
   : >"$WORK/all-args"
@@ -138,7 +138,7 @@ land() {
     STUB_RECEIVED="$WORK/received" STUB_SUBJECT="$WORK/subject" STUB_MERGE_RC="${MERGE_RC:-0}" \
     STUB_FINAL_STATE="${FINAL_STATE:-OPEN}" STUB_READ_RC="${READ_RC:-0}" \
     STUB_LOST_TRAILER="${LOST_TRAILER:-0}" STUB_MUTATE_BODY="${MUTATE_BODY:-}" \
-    sh "$WORK/repo/tools/ci/squash_merge.sh" 7 "${6-$SHA}" "${7-$SUBJECT}" "$5" ${8:+"$8"} 2>&1)" || rc=$?
+    sh "$WORK/repo/tools/ci/squash_merge.sh" "${PR_ARG:-7}" "${6-$SHA}" "${7-$SUBJECT}" "$5" ${8:+"$8"} 2>&1)" || rc=$?
   check_case "$1" "$2" "$rc" "$3" "$out"
   calls="$(tr '\n' ';' <"$WORK/log")"
   [ "$calls" = "$4" ] || { printf 'FAIL %s: calls "%s", want "%s"\n' "$1" "$calls" "$4" >&2; exit 1; }
@@ -176,6 +176,14 @@ land "planted #1007 body without the trailer" 3 "must end with 'Signed-off-by: t
 land "trailer of another identity" 3 "must end with" "" "$WORK/other"
 land "empty head from a failed read" 2 "40 hex" "" "$WORK/signed" ""
 land "subject without the number" 4 "(#7)" "" "$WORK/signed" "$SHA" "feat(prowlarr): select indexers"
+# Three non-canonical PR numbers, bounded by this three-element literal list.
+for bad_pr in 0007 0 12345678; do
+  PR_ARG="$bad_pr" land "non-canonical pr number $bad_pr" 2 "without a leading zero" "" \
+    "$WORK/signed" "$SHA" "feat(prowlarr): select indexers (#$bad_pr)"
+  [ ! -s "$WORK/guard-log" ] || { echo "FAIL non-canonical pr number $bad_pr: guard check ran" >&2; exit 1; }
+done
+PR_ARG=9999999 land "seven-digit pr number, dry run" 0 "dry-run" "pr view;" \
+  "$WORK/signed" "$SHA" "feat(prowlarr): select indexers (#9999999)" --dry-run
 STATE=BLOCKED land "not CLEAN" 5 "mergeStateStatus 'BLOCKED'" "pr view;" "$WORK/signed"
 HEAD_OID=1111111111111111111111111111111111111111 land "head moved" 5 "not $SHA" "pr view;" "$WORK/signed"
 land "signed body, dry run" 0 "dry-run" "pr view;" "$WORK/signed" "$SHA" "$SUBJECT" --dry-run

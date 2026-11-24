@@ -11,7 +11,7 @@
 # written by hand drops their Signed-off-by trailers (main c2c711e6, #1007). This script refuses
 # such a body instead of merging it:
 #
-#   rc 2  usage, or no git user.name / user.email to sign off with
+#   rc 2  usage, a non-canonical <pr> number, or no git user.name / user.email to sign off with
 #   rc 3  the body's last non-blank line is not "Signed-off-by: <user.name> <user.email>"
 #   rc 4  subject plus body fail .config/hooks/commit-msg.sh, or the subject lacks "(#<pr>)"
 #   rc 5  mergeStateStatus is not CLEAN, or the head moved from <head-sha>
@@ -61,6 +61,11 @@ check_origin() {
 [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || usage
 pr="$1" sha="$2" subject="$3" body="$4" dry="${5:-}"
 case "$pr" in '' | *[!0-9]*) usage ;; esac
+# Match PR_SUBJECT_RE in tools/ci/guard_definition_check.sh so every accepted <pr> runs the guard.
+printf '%s' "$pr" | grep -Eq '^[1-9][0-9]{0,6}$' || {
+  echo "refusing: <pr> must be a pull request number of 1 to 7 digits without a leading zero, got '$pr'" >&2
+  exit 2
+}
 # An empty head (a failed gh read) would make --match-head-commit a no-op.
 printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$' || {
   echo "refusing: head-sha must be 40 hex characters, got '$sha'" >&2
