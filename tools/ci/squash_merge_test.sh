@@ -161,6 +161,17 @@ land_origin() {
   git -C "$WORK/repo" remote set-url origin https://github.com/lusoris/SnatchArr.git
 }
 
+# head_case: land the signed body and require the guard check to have received GUARD_DEFINITION_HEAD=$SHA.
+head_case() {
+  land "signed body merges" 0 "merged #7" \
+    "pr view;pr merge;pr view;api repos/lusoris/SnatchArr/commits/fedcba9876543210fedcba9876543210fedcba98;" \
+    "$WORK/signed"
+  [ "$(cat "$WORK/guard-head-log")" = "$SHA" ] || {
+    echo "FAIL guard check did not receive GUARD_DEFINITION_HEAD=$SHA" >&2
+    exit 1
+  }
+}
+
 land "planted #1007 body without the trailer" 3 "must end with 'Signed-off-by: t <t@example.invalid>'" "" "$WORK/unsigned"
 land "trailer of another identity" 3 "must end with" "" "$WORK/other"
 land "empty head from a failed read" 2 "40 hex" "" "$WORK/signed" ""
@@ -168,9 +179,8 @@ land "subject without the number" 4 "(#7)" "" "$WORK/signed" "$SHA" "feat(prowla
 STATE=BLOCKED land "not CLEAN" 5 "mergeStateStatus 'BLOCKED'" "pr view;" "$WORK/signed"
 HEAD_OID=1111111111111111111111111111111111111111 land "head moved" 5 "not $SHA" "pr view;" "$WORK/signed"
 land "signed body, dry run" 0 "dry-run" "pr view;" "$WORK/signed" "$SHA" "$SUBJECT" --dry-run
-land "signed body merges" 0 "merged #7" "pr view;pr merge;pr view;api repos/lusoris/SnatchArr/commits/fedcba9876543210fedcba9876543210fedcba98;" "$WORK/signed"
+head_case
 [ "$(cat "$WORK/guard-log")" = "$SUBJECT" ] || { echo "FAIL guard check did not receive the squash subject" >&2; exit 1; }
-[ "$(cat "$WORK/guard-head-log")" = "$SHA" ] || { echo "FAIL guard check did not receive GUARD_DEFINITION_HEAD=$SHA" >&2; exit 1; }
 land_origin https://github.com/someone/SnatchArr.git "fork origin" 9 \
   "is not github.com/lusoris/SnatchArr" "" "$WORK/signed"
 git -C "$WORK/repo" remote remove origin
@@ -264,17 +274,7 @@ if cmp -s "$WORK/real-helper" "$WORK/repo/tools/ci/squash_merge.sh"; then
   exit 1
 fi
 rc=0
-out="$(
-  {
-    land "signed body merges" 0 "merged #7" \
-      "pr view;pr merge;pr view;api repos/lusoris/SnatchArr/commits/fedcba9876543210fedcba9876543210fedcba98;" \
-      "$WORK/signed"
-    [ "$(cat "$WORK/guard-head-log")" = "$SHA" ] || {
-      echo "FAIL guard check did not receive GUARD_DEFINITION_HEAD=$SHA" >&2
-      exit 1
-    }
-  } 2>&1
-)" || rc=$?
+out="$(head_case 2>&1)" || rc=$?
 check_case "planted helper omits GUARD_DEFINITION_HEAD" 1 "$rc" \
   "FAIL guard check did not receive GUARD_DEFINITION_HEAD=$SHA" "$out"
 printf '%s\n' "plant detected: $out"
