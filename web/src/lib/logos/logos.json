@@ -204,12 +204,12 @@
 		"trademark": "Whisparr: no published policy"
 	},
 	"whisparr_v3": {
-		"commit": "c55fdc66a410ad94f2d09261ed2fbb5e00dbc8c0",
-		"copyright": "2010-2022 Whisparr Contributors",
+		"commit": "b4c184ba48e083c2f3126cce94e7f6458fdc3871",
+		"copyright": "2010-2025 Whisparr Contributors",
 		"file": "whisparr_v3.svg",
 		"path": "Logo/Whisparr.svg",
 		"repo": "https://github.com/Whisparr/Whisparr",
-		"sha256": "bdc1b44dd5437ebb8695d19b26e4785c182e0a24e5d11415608f809e7b27681d",
+		"sha256": "00ff86bdbdbb4b6eec5b59318aa36bc78c3b28747fe751d5ce87099cd62e6ae8",
 		"spdx": "GPL-3.0-or-later",
 		"trademark": "Whisparr: no published policy"
 	}

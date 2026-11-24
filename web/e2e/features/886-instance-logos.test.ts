@@ -44,6 +44,14 @@ test('886: every instance row shows the logo of its own app', async ({ page }) =
 	}
 });
 
+test('886: Whisparr v3 serves its own logo, not the v2 art', async ({ page }) => {
+	const v2 = await page.request.get('/logos/whisparr_v2.svg');
+	const v3 = await page.request.get('/logos/whisparr_v3.svg');
+	expect(v2.ok()).toBe(true);
+	expect(v3.ok()).toBe(true);
+	expect(await v3.body()).not.toEqual(await v2.body());
+});
+
 test('886: download client rows show vendor logos and rTorrent its category icon', async ({
 	page
 }) => {

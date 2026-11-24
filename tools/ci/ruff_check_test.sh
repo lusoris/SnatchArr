@@ -53,22 +53,26 @@ planted_rule() {
 }
 
 dtz011_source=$(printf '%s\n' 'import datetime' '' 'x = datetime.date.today()')
+s101_source='assert 1 + 1 == 2'
 
-# test_planted_rules: implicit string concatenation (ISC004, default set) and a local-time date
-# (DTZ011, added by ruff.toml extend-select) are refused.
+# test_planted_rules: implicit string concatenation (ISC004, default set), a local-time date
+# (DTZ011) and an assert statement (S101), both added by ruff.toml extend-select, are refused.
 test_planted_rules() {
     planted_rule isc004 'x = ["a" "b", "c"]' ISC004
     planted_rule dtz011 "$dtz011_source" DTZ011
+    planted_rule s101 "$s101_source" S101
 }
 
-# test_dtz011_needs_extend_select: the planted DTZ011 file passes once the extend-select line is
-# gone, so the refusal above comes from that line. If a ruff bump adds DTZ011 to the default set,
-# this case fails and the line can go.
-test_dtz011_needs_extend_select() {
-    local repo="$work/repo-dtz011-default"
+# needs_extend_select NAME RULE SOURCE: main.py holding SOURCE passes once RULE is gone from the
+# extend-select list, so its refusal in test_planted_rules comes from that list. If a ruff bump adds
+# RULE to the default set, this case fails and the entry can go.
+needs_extend_select() {
+    local name=$1 rule=$2 source=$3
+    local repo="$work/repo-$name-default"
     new_repo "$repo"
-    sed -e '/^\[lint.per-file-ignores\]/,$d' -e '/^extend-select = \["DTZ011"\]$/d' "$REPO_ROOT/ruff.toml" > "$repo/ruff.toml"
-    printf '%s\n' "$dtz011_source" > "$repo/main.py"
+    sed -E -e '/^\[lint.per-file-ignores\]/,$d' -e "/^extend-select = /s/\"$rule\", |, \"$rule\"|\"$rule\"//" \
+        "$REPO_ROOT/ruff.toml" > "$repo/ruff.toml"
+    printf '%s\n' "$source" > "$repo/main.py"
     git -C "$repo" add ruff.toml main.py
     git -C "$repo" commit -q -m "initial"
 
@@ -77,15 +81,21 @@ test_dtz011_needs_extend_select() {
     status=$?
     set -e
 
-    if grep -v '^#' "$repo/ruff.toml" | grep -q DTZ011; then
-        echo "FAIL dtz011-default: the extend-select line was not removed from the copy"
+    if grep -v '^#' "$repo/ruff.toml" | grep -q "$rule"; then
+        echo "FAIL $name-default: $rule was not removed from the extend-select copy"
         failed=1
     elif [ "$status" -ne 0 ]; then
-        echo "FAIL dtz011-default: without extend-select the planted file should pass, got $status: $out"
+        echo "FAIL $name-default: without $rule in extend-select the planted file should pass, got $status: $out"
         failed=1
     else
-        echo "ok   planted DTZ011 passes without extend-select"
+        echo "ok   planted $rule passes without its extend-select entry"
     fi
+}
+
+# test_extend_select_entries: every rule ruff.toml adds is refused only because ruff.toml adds it.
+test_extend_select_entries() {
+    needs_extend_select dtz011 DTZ011 "$dtz011_source"
+    needs_extend_select s101 S101 "$s101_source"
 }
 
 # test_clean: verify that clean code matching ruff.toml rules passes with exit status 0.
@@ -309,7 +319,7 @@ test_hook_floor() {
 }
 
 test_planted_rules
-test_dtz011_needs_extend_select
+test_extend_select_entries
 test_clean
 test_req_without_hash
 test_version_mismatch
