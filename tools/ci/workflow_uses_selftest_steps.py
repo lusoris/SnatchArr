@@ -16,10 +16,14 @@ from workflow_actions import (
     collect_files_step_text,
     collect_files_version_inputs,
     collect_text_step_lines,
+    consume_folded_rest,
     scalar_value_lines,
 )
+from workflow_uses import build_parser, format_tsv_mode
 from workflow_yaml import (
+    MAX_FILE_LINES,
     MAX_STEP_TEXT_LINES,
+    OutputBudget,
     UsesError,
     compose_top_mapping,
 )
@@ -261,6 +265,52 @@ def check_bad_path_cases(
     return failures
 
 
+def consume_folded_rest_table() -> list[tuple[str, list[str], int, str, int]]:
+    """Return positive, negative and boundary rows for consume_folded_rest."""
+    return [
+        (
+            "consume-folded-three-lines",
+            ["  head", "  one", "  two", "  three", "  stop"],
+            1,
+            " one two three",
+            4,
+        ),
+        (
+            "consume-folded-stops-second-line",
+            ["  head", "  one", "  other", "  three"],
+            1,
+            " one two three",
+            2,
+        ),
+        (
+            "consume-folded-empty-rest",
+            ["  head", "  one", "  two"],
+            1,
+            "",
+            1,
+        ),
+        (
+            "consume-folded-max-file-lines",
+            ["  x"] * (MAX_FILE_LINES + 2),
+            0,
+            " x" * (MAX_FILE_LINES + 2),
+            MAX_FILE_LINES,
+        ),
+    ]
+
+
+def run_consume_folded_rest_cases() -> list[str]:
+    """Verify consume_folded_rest across positive, negative and MAX_FILE_LINES boundary rows."""
+    failures: list[str] = []
+    for name, body, start_idx, rest, want in consume_folded_rest_table():
+        got = consume_folded_rest(body, start_idx, rest)
+        if got != want:
+            failures.append(f"{name}: got {got}, want {want}")
+        else:
+            print(f"ok   {name}")
+    return failures
+
+
 def check_folded_missing_buffer() -> list[str]:
     """Verify scalar_value_lines refuses a folded ScalarNode whose mark buffer is None."""
     top = compose_top_mapping("run: >\n  echo hi\n", "nobuf.yml")
@@ -422,6 +472,201 @@ def check_version_input_twice(root: Path) -> list[str]:
     return [f"{name}: accepted {got!r}"]
 
 
+def check_version_inputs_max_refs(root: Path) -> list[str]:
+    """Verify collect_files_version_inputs enforces max_refs=3 on 5- and 3-ref files.
+
+    The limit 3 refuses the five-reference flow.yml at its fourth reference (line 9)
+    and accepts a three-reference file.
+    """
+    failures: list[str] = []
+    want_err = ".github/workflows/flow.yml:9: more than 3 uses references"
+    try:
+        collect_files_version_inputs(
+            str(root), [".github/workflows/flow.yml"], max_refs=3
+        )
+        failures.append("version-inputs-max-refs: accepted >3 refs")
+    except UsesError as err:
+        if str(err) != want_err:
+            failures.append(
+                f"version-inputs-max-refs: error {str(err)!r}, want {want_err!r}"
+            )
+        else:
+            print("ok   version-inputs-max-refs")
+    three_rel = ".github/workflows/three.yml"
+    (root / three_rel).write_text(
+        "jobs:\n  j:\n    steps:\n"
+        "      - uses: actions/checkout@v4\n        with:\n          version: v1\n"
+        "      - uses: actions/checkout@v4\n        with:\n          version: v2\n"
+        "      - uses: actions/checkout@v4\n",
+        encoding="utf-8",
+    )
+    want = [
+        (three_rel, 4, "actions/checkout", "v1"),
+        (three_rel, 7, "actions/checkout", "v2"),
+        (three_rel, 10, "actions/checkout", ""),
+    ]
+    try:
+        got = collect_files_version_inputs(str(root), [three_rel], max_refs=3)
+    except UsesError as err:
+        failures.append(f"version-inputs-max-refs-exact-3: unexpected error: {err}")
+    else:
+        if got != want:
+            failures.append(
+                f"version-inputs-max-refs-exact-3: got {got!r}, want {want!r}"
+            )
+        else:
+            print("ok   version-inputs-max-refs-exact-3")
+    return failures
+
+
+def check_output_budget_unit_cases() -> list[str]:
+    """Verify OutputBudget exact limit, over limit, aggregate and 2-byte UTF-8 boundary."""
+    failures: list[str] = []
+    needle = "output exceeds 10 bytes"
+    try:
+        got = OutputBudget(10).line(("abcdefghi",))
+        if got != "abcdefghi":
+            failures.append(f"output-budget-exact-10: got {got!r}")
+        else:
+            print("ok   output-budget-exact-10")
+    except UsesError as err:
+        failures.append(f"output-budget-exact-10: unexpected error: {err}")
+    for name, fields in (
+        ("output-budget-over-10", ("abcdefghij",)),
+        ("output-budget-utf8-over-10", ("éabcdefgh",)),
+    ):
+        try:
+            OutputBudget(10).line(fields)
+            failures.append(f"{name}: accepted {fields!r} at limit 10")
+        except UsesError as err:
+            if str(err) != needle:
+                failures.append(f"{name}: error {str(err)!r}, want {needle!r}")
+            else:
+                print(f"ok   {name}")
+    agg = OutputBudget(10)
+    try:
+        first = agg.line(("abcd",))
+        second = agg.line(("efgh",))
+        if (first, second) != ("abcd", "efgh"):
+            failures.append(f"output-budget-aggregate: got {(first, second)!r}")
+        else:
+            try:
+                agg.line(("ijkl",))
+                failures.append("output-budget-aggregate: accepted third 4-char line")
+            except UsesError as err:
+                if str(err) != needle:
+                    failures.append(f"output-budget-aggregate: error {str(err)!r}")
+                else:
+                    print("ok   output-budget-aggregate")
+    except UsesError as err:
+        failures.append(f"output-budget-aggregate: unexpected early error: {err}")
+    try:
+        utf8_ok = OutputBudget(10).line(("éabcdefg",))
+        if utf8_ok != "éabcdefg":
+            failures.append(f"output-budget-utf8-exact-10: got {utf8_ok!r}")
+        else:
+            print("ok   output-budget-utf8-exact-10")
+    except UsesError as err:
+        failures.append(f"output-budget-utf8-exact-10: unexpected error: {err}")
+    return failures
+
+
+def check_output_budget_version_inputs() -> list[str]:
+    """Verify 1 KiB aliased version across 5 uses steps refuses at 3000 and passes default."""
+    failures: list[str] = []
+    ver = "v" + "1" * 1023
+    steps = "".join(
+        "      - uses: actions/checkout@v4\n        with:\n          version: *ver\n"
+        for _ in range(5)
+    )
+    doc = f"x-ver: &ver {ver}\njobs:\n  j:\n    steps:\n{steps}"
+    rel = ".github/workflows/aliased_ver.yml"
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        full = root / rel
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_text(doc, encoding="utf-8")
+        args = build_parser().parse_args(["--version-inputs", str(root), rel])
+        try:
+            format_tsv_mode(args, budget=OutputBudget(3000))
+            failures.append(
+                "version-inputs-output-budget-refusal: accepted >3000 bytes"
+            )
+        except UsesError as err:
+            if str(err) != "output exceeds 3000 bytes":
+                failures.append(
+                    f"version-inputs-output-budget-refusal: error {str(err)!r}"
+                )
+            else:
+                print("ok   version-inputs-output-budget-refusal")
+        try:
+            lines = format_tsv_mode(args)
+        except UsesError as err:
+            failures.append(
+                f"version-inputs-output-budget-default: unexpected error: {err}"
+            )
+        else:
+            if len(lines) != 5 or not all(
+                line.endswith(f"\tactions/checkout\t{ver}") for line in lines
+            ):
+                failures.append(
+                    f"version-inputs-output-budget-default: got {len(lines)} lines"
+                )
+            else:
+                print("ok   version-inputs-output-budget-default")
+    return failures
+
+
+def check_output_budget_other_modes() -> list[str]:
+    """Verify default, --all-uses and --step-text modes format via OutputBudget."""
+    failures: list[str] = []
+    rel = ".github/workflows/modes.yml"
+    doc = (
+        "jobs:\n  j:\n    steps:\n"
+        "      - uses: actions/checkout@v4\n      - run: echo ok\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        wf = root / rel
+        wf.parent.mkdir(parents=True, exist_ok=True)
+        wf.write_text(doc, encoding="utf-8")
+        for label, argv, want in (
+            ("default", [str(wf)], [f"actions/checkout\t{wf}:4"]),
+            ("all-uses", ["--all-uses", str(wf)], [f"{wf}:4\tactions/checkout@v4"]),
+            ("step-text", ["--step-text", str(root), rel], [f"{rel}:5\techo ok"]),
+        ):
+            args = build_parser().parse_args(argv)
+            try:
+                format_tsv_mode(args, budget=OutputBudget(5))
+                failures.append(
+                    f"output-budget-other-tsv-modes ({label}): accepted past 5"
+                )
+                continue
+            except UsesError as err:
+                if str(err) != "output exceeds 5 bytes":
+                    failures.append(
+                        f"output-budget-other-tsv-modes ({label}): {str(err)!r}"
+                    )
+                    continue
+            got = format_tsv_mode(args)
+            if got != want:
+                failures.append(
+                    f"output-budget-other-tsv-modes ({label}): {got!r} != {want!r}"
+                )
+    if not failures:
+        print("ok   output-budget-other-tsv-modes")
+    return failures
+
+
+def run_output_budget_cases() -> list[str]:
+    """Run unit and end-to-end OutputBudget cases across all four TSV modes."""
+    return [
+        *check_output_budget_unit_cases(),
+        *check_output_budget_version_inputs(),
+        *check_output_budget_other_modes(),
+    ]
+
+
 def run_version_inputs_cases() -> list[str]:
     """Verify --version-inputs covers flow, numeric tags, key case, aliases, merges and bad paths."""
     failures: list[str] = []
@@ -430,13 +675,7 @@ def run_version_inputs_cases() -> list[str]:
         for name, rel, doc, want in version_inputs_positive_table():
             failures.extend(check_version_inputs_case(root, name, rel, doc, want))
         failures.extend(check_version_input_twice(root))
-        try:
-            collect_files_version_inputs(
-                str(root), [".github/workflows/flow.yml"], max_refs=3
-            )
-            failures.append("version-inputs-max-refs: accepted >3 refs")
-        except UsesError:
-            print("ok   version-inputs-max-refs")
+        failures.extend(check_version_inputs_max_refs(root))
         failures.extend(
             check_bad_path_cases(root, "version-inputs", collect_files_version_inputs)
         )

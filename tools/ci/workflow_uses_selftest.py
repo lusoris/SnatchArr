@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import signal
 import sys
 import tempfile
 from collections.abc import Callable, Iterable
@@ -21,7 +22,12 @@ from workflow_actions import (
     walk_github_actions,
 )
 from workflow_uses import main as uses_main
-from workflow_uses_selftest_steps import run_step_text_cases, run_version_inputs_cases
+from workflow_uses_selftest_steps import (
+    run_consume_folded_rest_cases,
+    run_output_budget_cases,
+    run_step_text_cases,
+    run_version_inputs_cases,
+)
 from workflow_yaml import (
     MAX_FILE_BYTES,
     MAX_FILE_LINES,
@@ -29,12 +35,17 @@ from workflow_yaml import (
     MAX_STEP_VISITS,
     MAX_STEPS,
     MAX_YAML_DEPTH,
+    DocWalk,
+    EntryBudget,
+    RefBudget,
     UsesError,
+    collect_jobs_uses,
     collect_text_uses,
     compose_top_mapping,
     filter_local_uses,
     parse_uses_value,
     read_workflow_text,
+    resolve_mapping,
 )
 
 
@@ -696,6 +707,212 @@ def run_yaml_depth_cases() -> list[str]:
     return failures
 
 
+def run_merge_key_cases() -> list[str]:
+    """Verify duplicate << keys fail on the second key's line while single and list << pass."""
+    failures: list[str] = []
+    dup_doc = (
+        "x-a: &a\n  name: first\nx-b: &b\n  uses: org/repo@v1\n"
+        "jobs:\n  j:\n    steps:\n      - <<: *a\n        <<: *b\n"
+    )
+    needle = "dupmerge.yml:9: duplicate merge key"
+    try:
+        got = collect_text_uses(dup_doc, "dupmerge.yml")
+        failures.append(f"duplicate-merge-key: accepted {got!r}, want {needle!r}")
+    except UsesError as err:
+        if str(err) != needle:
+            failures.append(f"duplicate-merge-key: error {str(err)!r}, want {needle!r}")
+        else:
+            print("ok   duplicate-merge-key")
+    seq_doc = (
+        "x-a: &a\n  uses: first/repo@v1\nx-b: &b\n  uses: second/repo@v1\n  name: seq\n"
+        "jobs:\n  j:\n    steps:\n      - <<: [*a, *b]\n"
+    )
+    for name, doc, want in (
+        ("merge-key-sequence", seq_doc, [("first/repo", 2)]),
+        (
+            "merge-key-single",
+            "x-a: &a\n  uses: solo/repo@v1\njobs:\n  j:\n    steps:\n      - <<: *a\n",
+            [("solo/repo", 2)],
+        ),
+    ):
+        try:
+            got = collect_text_uses(doc, f"{name}.yml")
+        except UsesError as err:
+            failures.append(f"{name}: unexpected error: {err}")
+        else:
+            if got != want:
+                failures.append(f"{name}: got {got!r}, want {want!r}")
+            else:
+                print(f"ok   {name}")
+    return failures
+
+
+def check_fifo_nonblocking(base: Path) -> list[str]:
+    """Verify read_workflow_text refuses a writerless FIFO without blocking."""
+    name = "read-workflow-fifo-nonblocking"
+    if not (
+        hasattr(os, "mkfifo")
+        and hasattr(signal, "setitimer")
+        and hasattr(signal, "ITIMER_REAL")
+        and hasattr(signal, "SIGALRM")
+    ):
+        print(f"skip {name}: os.mkfifo or signal.setitimer unavailable")
+        return []
+    fifo = base / "named.fifo"
+    try:
+        os.mkfifo(fifo)
+    except OSError as err:
+        print(f"skip {name}: {err}")
+        return []
+
+    def raise_alarm(_signum: int, _frame: object) -> None:
+        """Raise TimeoutError if read_workflow_text blocks opening the FIFO."""
+        raise TimeoutError("read_workflow_text blocked on FIFO")
+
+    prev = signal.signal(signal.SIGALRM, raise_alarm)
+    signal.setitimer(signal.ITIMER_REAL, 5)
+    try:
+        read_workflow_text(fifo, "named.fifo", max_bytes=16)
+        return [f"{name}: accepted FIFO"]
+    except TimeoutError as err:
+        return [f"{name}: {err}"]
+    except UsesError as err:
+        if "named.fifo: not a regular file" not in str(err):
+            return [f"{name}: error {str(err)!r} lacks 'not a regular file'"]
+        print(f"ok   {name}")
+        return []
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, prev)
+
+
+def run_read_workflow_text_cases() -> list[str]:
+    """Verify read_workflow_text enforces max_bytes=16, regular-file check and missing path."""
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        exact = base / "exact16.yml"
+        exact.write_bytes(b"k: 123456789012\n")
+        try:
+            got = read_workflow_text(exact, "exact16.yml", max_bytes=16)
+            if got != "k: 123456789012\n":
+                failures.append(f"read-workflow-exact-16: got {got!r}")
+            else:
+                print("ok   read-workflow-exact-16")
+        except UsesError as err:
+            failures.append(f"read-workflow-exact-16: unexpected error: {err}")
+        over = base / "over16.yml"
+        over.write_bytes(b"k: 1234567890123\n")
+        for name, target, display, needle in (
+            (
+                "read-workflow-over-16",
+                over,
+                "over16.yml",
+                "over16.yml: exceeds 16 bytes",
+            ),
+            ("read-workflow-directory", base, "adir", "adir: not a regular file"),
+        ):
+            try:
+                read_workflow_text(target, display, max_bytes=16)
+                failures.append(f"{name}: accepted {display}")
+            except UsesError as err:
+                if needle not in str(err):
+                    failures.append(f"{name}: error {str(err)!r} lacks {needle!r}")
+                else:
+                    print(f"ok   {name}")
+        failures.extend(check_fifo_nonblocking(base))
+        try:
+            read_workflow_text(base / "missing.yml", "missing.yml", max_bytes=16)
+            failures.append("read-workflow-missing: accepted missing path")
+        except UsesError as err:
+            if not str(err).startswith("missing.yml:") or not isinstance(
+                err.__cause__, FileNotFoundError
+            ):
+                failures.append(f"read-workflow-missing: unexpected error {err!r}")
+            else:
+                print("ok   read-workflow-missing")
+    return failures
+
+
+def walk_uses_with_entry_limit(
+    doc: str, path: str, entry_limit: int
+) -> list[tuple[str, int]]:
+    """Compose doc and collect job uses with a single DocWalk(entry_limit=entry_limit)."""
+    walk = DocWalk(entry_limit=entry_limit)
+    top = compose_top_mapping(doc, path, walk=walk)
+    return collect_jobs_uses(top["jobs"][1], path, RefBudget(), walk=walk)
+
+
+def check_entry_budget_boundary() -> list[str]:
+    """Verify exact N resolved entries pass and N+1 refuse under DocWalk(entry_limit=N)."""
+    failures: list[str] = []
+    exact_10_doc = (
+        "x-base: &base\n  a: 1\n  b: 2\n"
+        "x-step: &shared_step\n  uses: org/repo@v1\n  with: {}\n"
+        "jobs:\n  j:\n    steps:\n      - *shared_step\n      - *shared_step\n"
+        "      - <<: *base\n        uses: org/repo@v2\n"
+    )
+    try:
+        got = walk_uses_with_entry_limit(exact_10_doc, "entry10.yml", 10)
+        want = [("org/repo", 5), ("org/repo", 5), ("org/repo", 13)]
+        if got != want:
+            failures.append(f"entry-budget-exact-limit: got {got!r}, want {want!r}")
+        else:
+            print("ok   entry-budget-exact-limit")
+    except UsesError as err:
+        failures.append(f"entry-budget-exact-limit: unexpected error: {err}")
+    over_10_doc = exact_10_doc.replace("  b: 2\n", "  b: 2\n  c: 3\n", 1)
+    try:
+        walk_uses_with_entry_limit(over_10_doc, "entry11.yml", 10)
+        failures.append("entry-budget-over-limit: accepted 11 entries at limit 10")
+    except UsesError as err:
+        if "more than 10 resolved mapping entries" not in str(err):
+            failures.append(f"entry-budget-over-limit: error {str(err)!r}")
+        else:
+            print("ok   entry-budget-over-limit")
+    return failures
+
+
+def run_entry_budget_cases() -> list[str]:
+    """Verify EntryBudget across exact N, N+1, merged steps, aliased node and direct resolve."""
+    failures = check_entry_budget_boundary()
+    wide = "".join(f"  k{i}: {i}\n" for i in range(32))
+    steps = "".join("      - <<: *wide\n        uses: a/b@v1\n" for _ in range(10))
+    wide_doc = f"x-wide: &wide\n{wide}jobs:\n  j:\n    steps:\n{steps}"
+    try:
+        walk_uses_with_entry_limit(wide_doc, "wide.yml", 100)
+        failures.append("entry-budget-merged-steps-wide: accepted 10x33 entries at 100")
+    except UsesError as err:
+        if "more than 100 resolved mapping entries" not in str(err):
+            failures.append(f"entry-budget-merged-steps-wide: error {str(err)!r}")
+        else:
+            print("ok   entry-budget-merged-steps-wide")
+    alias_doc = (
+        "x-step: &step\n  uses: a/b@v1\n  name: s\n  if: always()\n  id: x\n"
+        "jobs:\n  j:\n    steps:\n" + "      - *step\n" * 20
+    )
+    try:
+        got = walk_uses_with_entry_limit(alias_doc, "aliased.yml", 8)
+        if len(got) != 20:
+            failures.append(f"entry-budget-aliased-anchor-once: got {len(got)} uses")
+        else:
+            print("ok   entry-budget-aliased-anchor-once")
+    except UsesError as err:
+        failures.append(f"entry-budget-aliased-anchor-once: unexpected error: {err}")
+    node = workflow_yaml.yaml.compose(
+        "a: 1\nb: 2\nc: 3\n", Loader=workflow_yaml.yaml.SafeLoader
+    )
+    try:
+        resolve_mapping(node, "direct.yml", budget=EntryBudget(2))
+        failures.append("entry-budget-direct-resolve: accepted 3 entries at limit 2")
+    except UsesError as err:
+        if "direct.yml:1: more than 2 resolved mapping entries" not in str(err):
+            failures.append(f"entry-budget-direct-resolve: error {str(err)!r}")
+        else:
+            print("ok   entry-budget-direct-resolve")
+    return failures
+
+
 def self_test() -> int:
     """Run all planted positive and negative cases; exit 1 naming any failed case."""
     buf = io.StringIO()
@@ -714,6 +931,11 @@ def self_test() -> int:
             *run_windows_local_path_cases(),
             *run_step_visit_bound_cases(),
             *run_docwalk_cache_case(),
+            *run_consume_folded_rest_cases(),
+            *run_output_budget_cases(),
+            *run_entry_budget_cases(),
+            *run_merge_key_cases(),
+            *run_read_workflow_text_cases(),
         ]
     out = buf.getvalue()
     sys.stdout.write(out)

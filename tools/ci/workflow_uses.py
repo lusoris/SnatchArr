@@ -34,6 +34,8 @@ from workflow_actions import (
 )
 from workflow_yaml import (
     MAX_FILES,
+    MAX_OUTPUT_BYTES,
+    OutputBudget,
     UsesError,
     collect_files_uses,
     keep_uses_value,
@@ -82,31 +84,34 @@ def write_nul_items(items: list[str]) -> None:
         )
 
 
-def format_tsv_mode(args: argparse.Namespace) -> list[str]:
-    """Collect tab-separated output lines for the selected non-NUL mode."""
+def format_tsv_mode(
+    args: argparse.Namespace, budget: OutputBudget | None = None
+) -> list[str]:
+    """Collect bounded tab-separated output lines for the selected non-NUL mode."""
+    active = budget if budget is not None else OutputBudget(MAX_OUTPUT_BYTES)
     if args.all_uses:
         return [
-            f"{file_path}:{line}\t{value}"
+            active.line((f"{file_path}:{line}", value))
             for value, file_path, line in collect_files_uses(
                 args.files, decode=keep_uses_value
             )
         ]
     if args.step_text is not None:
         return [
-            f"{rel_path}:{line_no}\t{line_text}"
+            active.line((f"{rel_path}:{line_no}", line_text))
             for rel_path, line_no, line_text in collect_files_step_text(
                 args.step_text, args.files
             )
         ]
     if args.version_inputs is not None:
         return [
-            f"{rel_path}:{line_no}\t{repo}\t{version}"
+            active.line((f"{rel_path}:{line_no}", repo, version))
             for rel_path, line_no, repo, version in collect_files_version_inputs(
                 args.version_inputs, args.files
             )
         ]
     return [
-        f"{repo}\t{file_path}:{line}"
+        active.line((repo, f"{file_path}:{line}"))
         for repo, file_path, line in collect_files_uses(args.files)
     ]
 

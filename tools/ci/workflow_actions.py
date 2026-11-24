@@ -344,12 +344,13 @@ def next_folded_body_idx(
 def consume_folded_rest(body: list[str], start_idx: int, rest: str) -> int:
     """Advance past folded continuation lines in body matching rest within MAX_FILE_LINES."""
     limit = min(len(body), MAX_FILE_LINES)
+    offset = 0
     after = start_idx
     for idx in range(start_idx, limit):
         nxt = body[idx].lstrip(" ")
-        if not nxt or not rest.startswith(f" {nxt}"):
+        if not nxt or not rest.startswith(" " + nxt, offset):
             break
-        rest = rest[len(nxt) + 1 :]
+        offset += len(nxt) + 1
         after = idx + 1
     return after
 

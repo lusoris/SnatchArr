@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import stat
 from collections.abc import Callable
 from pathlib import Path
 
@@ -43,7 +44,9 @@ MAX_STEPS = 4096
 MAX_STEP_VISITS = 65536
 MAX_MAPPING_PAIRS = 4096
 MAX_MERGE_NODES = 1024
+MAX_RESOLVED_ENTRIES = 262144
 MAX_REFS = 16384
+MAX_OUTPUT_BYTES = 4 * MAX_FILE_BYTES
 
 
 class UsesError(Exception):
@@ -65,13 +68,57 @@ class RefBudget:
             raise UsesError(f"{path}:{line}: more than {self.limit} uses references")
 
 
+class EntryBudget:
+    """Count resolved YAML mapping entries and enforce a fixed upper bound."""
+
+    def __init__(self, limit: int = MAX_RESOLVED_ENTRIES) -> None:
+        """Initialize the entry counter with maximum allowed entry count limit."""
+        self.limit = limit
+        self.count = 0
+
+    def take(self, count: int, path: str, line: int) -> None:
+        """Record count resolved entries at path:line, raising UsesError past self.limit."""
+        self.count += count
+        if self.count > self.limit:
+            raise UsesError(
+                f"{path}:{line}: more than {self.limit} resolved mapping entries"
+            )
+
+
+class OutputBudget:
+    """Count formatted TSV output bytes across a run and enforce a fixed upper bound."""
+
+    def __init__(self, limit: int = MAX_OUTPUT_BYTES) -> None:
+        """Initialize the byte counter with maximum allowed output byte limit."""
+        self.limit = limit
+        self.used = 0
+
+    def line(self, fields: tuple[str, ...], sep: str = "\t") -> str:
+        """Join fields with sep and count UTF-8 bytes plus newline within self.limit."""
+        sep_chars = (len(fields) - 1) * len(sep) if fields else 0
+        min_bytes = sum(len(field) for field in fields) + sep_chars + 1
+        if self.used + min_bytes > self.limit:
+            raise UsesError(f"output exceeds {self.limit} bytes")
+        joined = sep.join(fields)
+        line_bytes = len(joined.encode("utf-8")) + 1
+        if self.used + line_bytes > self.limit:
+            raise UsesError(f"output exceeds {self.limit} bytes")
+        self.used += line_bytes
+        return joined
+
+
 class DocWalk:
     """Track step visits and cache resolved YAML mappings within one document."""
 
-    def __init__(self, limit: int = MAX_STEP_VISITS) -> None:
-        """Initialize step visit counter at zero with limit and empty mapping cache."""
+    def __init__(
+        self,
+        limit: int = MAX_STEP_VISITS,
+        entry_limit: int = MAX_RESOLVED_ENTRIES,
+    ) -> None:
+        """Initialize step visit and resolved entry budgets with an empty mapping cache."""
         self.limit = limit
         self.visits = 0
+        self.entry_budget = EntryBudget(entry_limit)
         self.cache: dict[
             tuple[int, bool], dict[str, tuple[yaml.ScalarNode, yaml.Node]]
         ] = {}
@@ -90,11 +137,16 @@ class DocWalk:
         *,
         any_scalar_key: bool = False,
     ) -> dict[str, tuple[yaml.ScalarNode, yaml.Node]]:
-        """Return cached resolve_mapping(node, path, any_scalar_key=any_scalar_key)."""
+        """Return cached resolve_mapping(node, path) bounded by self.entry_budget."""
         key = (id(node), any_scalar_key)
         cached = self.cache.get(key)
         if cached is None:
-            cached = resolve_mapping(node, path, any_scalar_key=any_scalar_key)
+            cached = resolve_mapping(
+                node,
+                path,
+                budget=self.entry_budget,
+                any_scalar_key=any_scalar_key,
+            )
             self._nodes.append(node)
             self.cache[key] = cached
         return cached
@@ -136,7 +188,7 @@ def merge_sources(val_node: yaml.Node, path: str) -> list[yaml.MappingNode]:
 def explicit_entries(
     node: yaml.MappingNode, path: str, *, any_scalar_key: bool = False
 ) -> tuple[dict[str, tuple[yaml.ScalarNode, yaml.Node]], list[yaml.MappingNode]]:
-    """Read direct scalar keys (refusing duplicates) and queued merge mappings from node."""
+    """Read direct scalar keys (refusing duplicates and second <<) and merge sources."""
     if len(node.value) > MAX_MAPPING_PAIRS:
         raise UsesError(
             f"{path}:{node.start_mark.line + 1}: mapping exceeds {MAX_MAPPING_PAIRS} entries"
@@ -144,12 +196,18 @@ def explicit_entries(
     entries: dict[str, tuple[yaml.ScalarNode, yaml.Node]] = {}
     merges: list[yaml.MappingNode] = []
     seen_keys: set[tuple[str, str]] = set()
+    seen_merge = False
     for key_node, val_node in node.value:
         if not isinstance(key_node, yaml.ScalarNode):
             raise UsesError(
                 f"{path}:{key_node.start_mark.line + 1}: mapping key is not a scalar"
             )
         if key_node.tag == MERGE_TAG:
+            if seen_merge:
+                raise UsesError(
+                    f"{path}:{key_node.start_mark.line + 1}: duplicate merge key"
+                )
+            seen_merge = True
             merges.extend(merge_sources(val_node, path))
             continue
         ident = (
@@ -166,21 +224,26 @@ def explicit_entries(
 
 
 def resolve_mapping(
-    node: yaml.MappingNode, path: str, *, any_scalar_key: bool = False
+    node: yaml.MappingNode,
+    path: str,
+    budget: EntryBudget | None = None,
+    *,
+    any_scalar_key: bool = False,
 ) -> dict[str, tuple[yaml.ScalarNode, yaml.Node]]:
-    """Resolve a YAML mapping node including merge keys without recursion."""
+    """Resolve a YAML mapping node including merge keys within EntryBudget."""
+    active = budget if budget is not None else EntryBudget(MAX_RESOLVED_ENTRIES)
+    line = node.start_mark.line + 1
     resolved, initial_merges = explicit_entries(
         node, path, any_scalar_key=any_scalar_key
     )
+    active.take(len(resolved), path, line)
     stack = list(reversed(initial_merges))
     visited: set[int] = {id(node)}
-    steps = 0
-    while stack:
-        steps += 1
-        if steps > MAX_MERGE_NODES:
-            raise UsesError(
-                f"{path}:{node.start_mark.line + 1}: merge depth exceeds {MAX_MERGE_NODES}"
-            )
+    for step in range(1, MAX_MERGE_NODES + 2):
+        if not stack:
+            break
+        if step > MAX_MERGE_NODES:
+            raise UsesError(f"{path}:{line}: merge depth exceeds {MAX_MERGE_NODES}")
         cur = stack.pop()
         if id(cur) in visited:
             continue
@@ -188,8 +251,10 @@ def resolve_mapping(
         sub_entries, sub_merges = explicit_entries(
             cur, path, any_scalar_key=any_scalar_key
         )
+        before = len(resolved)
         for key, pair in sub_entries.items():
             resolved.setdefault(key, pair)
+        active.take(len(resolved) - before, path, line)
         stack.extend(reversed(sub_merges))
     return resolved
 
@@ -409,19 +474,48 @@ def check_line_limit(text: str, display: str, max_lines: int = MAX_FILE_LINES) -
         raise UsesError(f"{display}: exceeds {max_lines} lines")
 
 
+def read_bounded_fd(fd: int, max_bytes: int) -> bytes:
+    """Read at most max_bytes + 1 bytes from open regular-file descriptor fd."""
+    target = max(max_bytes, 0) + 1
+    chunks: list[bytes] = []
+    total = 0
+    for _ in range(target):
+        remaining = target - total
+        if remaining <= 0:
+            break
+        chunk = os.read(fd, remaining)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    return b"".join(chunks)
+
+
 def read_workflow_text(
     path: Path, display: str, max_bytes: int = MAX_FILE_BYTES
 ) -> str:
-    """Stat path against max_bytes, read UTF-8 text, and enforce MAX_FILE_LINES."""
+    """Read regular files only; regular-file check needs no deadline (never waits for a peer)."""
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
     try:
-        size = os.stat(path).st_size
+        fd = os.open(path, flags)
+    except IsADirectoryError as err:
+        raise UsesError(f"{display}: not a regular file") from err
     except OSError as err:
         raise UsesError(f"{display}: {err}") from err
-    if size > max_bytes:
+    try:
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise UsesError(f"{display}: not a regular file")
+            raw = read_bounded_fd(fd, max_bytes)
+        finally:
+            os.close(fd)
+    except OSError as err:
+        raise UsesError(f"{display}: {err}") from err
+    if len(raw) > max_bytes:
         raise UsesError(f"{display}: exceeds {max_bytes} bytes")
     try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as err:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as err:
         raise UsesError(f"{display}: {err}") from err
     check_line_limit(text, display)
     return text
