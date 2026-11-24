@@ -18,9 +18,10 @@
 #   rc 6  merged, but the commit on main does not carry the trailer
 #   rc 7  merge failed and the pull request is not confirmed MERGED
 #   rc 8  merged, but the main commit read-back failed
-#   rc 9  origin is missing or is not github.com/<REPO>, or tools/ci/guard_definition_check.sh
-#         refuses the squash message: guard changed without GUARD_DEFINITION_ACK,
-#         refs/pull/<pr>/merge merges a head other than <head-sha>, or the check could not run
+#   rc 9  origin is missing, the origin lookup ran past 10 seconds, or origin is not
+#         github.com/<REPO>, or tools/ci/guard_definition_check.sh refuses the squash message:
+#         guard changed without GUARD_DEFINITION_ACK, refs/pull/<pr>/merge merges a head other
+#         than <head-sha>, or the check could not run
 #
 # The guard check runs here as well as from lefthook commit-msg: the squash commit is built on
 # the forge, so no local commit-msg hook sees its message. GUARD_DEFINITION_ACK passes through.
@@ -41,8 +42,15 @@ usage() {
 
 # check_origin: exit 9 unless the origin remote of ROOT names REPO on github.com.
 check_origin() {
-  if ! origin="$(git -C "$ROOT" remote get-url origin 2>/dev/null)" || [ -z "$origin" ]; then
-    echo "refusing: no origin remote; the guard check would have no github.com/$REPO remote to read" >&2
+  origin_rc=0
+  origin="$(python3 -I "$ROOT/tools/ci/run_bounded.py" 10 \
+    git -C "$ROOT" remote get-url origin 2>/dev/null)" || origin_rc=$?
+  if [ "$origin_rc" -ne 0 ] || [ -z "$origin" ]; then
+    if [ "$origin_rc" -eq 124 ]; then
+      echo "refusing: the origin lookup ran past 10 seconds; the guard check would have no github.com/$REPO remote to read" >&2
+    else
+      echo "refusing: no origin remote; the guard check would have no github.com/$REPO remote to read" >&2
+    fi
     exit 9
   fi
   origin_lc="$(printf '%s' "$origin" | LC_ALL=C tr '[:upper:]' '[:lower:]')"

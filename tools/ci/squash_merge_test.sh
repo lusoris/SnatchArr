@@ -5,11 +5,12 @@
 # Planted cases for squash_merge.sh and main_commit_check.sh against a stub gh that records its
 # calls. The landing helper must refuse a body without the sign-off of the git identity (the
 # #1007 body), a sign-off of another identity, an empty head, a missing identity, a subject
-# without the pull request number, a missing or non-matching origin remote (fork, absent origin,
-# SQUASH_MERGE_REPO mismatch and URL boundaries), a state other than CLEAN, a moved head, a guard
-# change without GUARD_DEFINITION_ACK (stub guard check, receiving GUARD_DEFINITION_HEAD) and a
-# main commit that lost the trailer; it merges a signed snapshot, including after an ambiguous
-# client failure. Main checks every non-merge commit in a bounded range, with exact bot exceptions.
+# without the pull request number, a missing, timed-out or non-matching origin remote (fork,
+# absent origin, origin lookup past the deadline, SQUASH_MERGE_REPO mismatch and URL boundaries),
+# a state other than CLEAN, a moved head, a guard change without GUARD_DEFINITION_ACK (stub guard
+# check, receiving GUARD_DEFINITION_HEAD) and a main commit that lost the trailer; it merges a
+# signed snapshot, including after an ambiguous client failure. Main checks every non-merge commit
+# in a bounded range, with exact bot exceptions.
 #
 #   tools/ci/squash_merge_test.sh
 #
@@ -34,7 +35,7 @@ done
 new_repo "$WORK/repo"
 git -C "$WORK/repo" remote add origin https://github.com/lusoris/SnatchArr.git
 mkdir -p "$WORK/repo/tools/ci" "$WORK/repo/.config/hooks"
-cp "$HERE/squash_merge.sh" "$HERE/main_commit_check.sh" "$WORK/repo/tools/ci/"
+cp "$HERE/squash_merge.sh" "$HERE/main_commit_check.sh" "$HERE/run_bounded.py" "$WORK/repo/tools/ci/"
 cp "$ROOT/.config/hooks/commit-msg.sh" "$WORK/repo/.config/hooks/"
 SHA=0123456789abcdef0123456789abcdef01234567
 SUBJECT='feat(prowlarr): select indexers for a language (#7)'
@@ -206,6 +207,27 @@ git -C "$WORK/repo" remote remove origin
 land "no origin remote" 9 "no origin remote" "" "$WORK/signed"
 [ ! -s "$WORK/guard-log" ] || { echo "FAIL no origin remote: guard check ran" >&2; exit 1; }
 git -C "$WORK/repo" remote add origin https://github.com/lusoris/SnatchArr.git
+real_git="$(command -v git)"
+mkdir -p "$WORK/slow-git"
+{
+  printf "#!/bin/sh\nset -eu\nreal_git='%s'\n" "$(printf '%s' "$real_git" | sed "s/'/'\\\\''/g")"
+  cat <<'EOF'
+case " $* " in
+  *" remote get-url "*)
+    sleep 30
+    echo https://github.com/lusoris/SnatchArr.git
+    exit 0
+    ;;
+esac
+exec "$real_git" "$@"
+EOF
+} >"$WORK/slow-git/git"
+chmod +x "$WORK/slow-git/git"
+saved_path="$PATH"
+PATH="$WORK/slow-git:$PATH"
+land "origin lookup past the deadline" 9 "ran past 10 seconds" "" "$WORK/signed"
+PATH="$saved_path"
+[ ! -s "$WORK/guard-log" ] || { echo "FAIL origin lookup past the deadline: guard check ran" >&2; exit 1; }
 SQUASH_MERGE_REPO=someone/SnatchArr land "SQUASH_MERGE_REPO mismatch" 9 \
   "is not github.com/someone/SnatchArr" "" "$WORK/signed"
 [ ! -s "$WORK/guard-log" ] || { echo "FAIL SQUASH_MERGE_REPO mismatch: guard check ran" >&2; exit 1; }
