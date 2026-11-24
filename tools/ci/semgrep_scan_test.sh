@@ -12,12 +12,16 @@
 #   tools/ci/semgrep_scan_test.sh
 #
 # Exit status: 0 every case behaved as recorded, 1 otherwise. Needs python3, git and jq.
+# Wiring cases need a PyYAML-capable python. ensure_pyyaml_python (test_lib.sh) takes an explicit
+# PYTHON_BIN, then host python3 if it imports yaml, else .cache/pyyaml-venv built by
+# tools/ci/pyyaml_venv.sh (needs the package index).
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/ci/test_lib.sh
 # shellcheck disable=SC1091 # shellcheck without -x does not follow this local helper.
 . "$HERE/test_lib.sh"
+ensure_pyyaml_python
 SCAN="$HERE/semgrep_scan.py"
 ROOT="${SEMGREP_WIRING_ROOT:-$(cd "$HERE/../.." && pwd)}"
 WORK="$(mktemp -d)"
@@ -382,9 +386,9 @@ for wired in \
 done
 WIRING="$HERE/lane_brief_wiring.py"
 wiring_rc=0
-wiring_out="$(python3 -I "$WIRING" "$ROOT/.config/lane-brief.yaml" 2>&1)" || wiring_rc=$?
+wiring_out="$("$PYTHON_BIN" -I "$WIRING" "$ROOT/.config/lane-brief.yaml" 2>&1)" || wiring_rc=$?
 check_case "lane brief impl and fix wiring" 0 "$wiring_rc" "" "$wiring_out"
-python3 -I - "$ROOT/.config/lane-brief.yaml" "$WORK" <<'PY'
+"$PYTHON_BIN" -I - "$ROOT/.config/lane-brief.yaml" "$WORK" <<'PY'
 import pathlib
 import sys
 
@@ -405,7 +409,7 @@ prefix_only = {"required_by_stage": {"impl": [prefix], "fix": [prefix]}}
 PY
 for case_name in review-only missing-fix prefix-only; do
   wiring_rc=0
-  wiring_out="$(python3 -I "$WIRING" "$WORK/$case_name.yaml" 2>&1)" || wiring_rc=$?
+  wiring_out="$("$PYTHON_BIN" -I "$WIRING" "$WORK/$case_name.yaml" 2>&1)" || wiring_rc=$?
   case "$case_name" in
     review-only) missing_stage=impl ;;
     missing-fix) missing_stage=fix ;;
@@ -416,9 +420,13 @@ for case_name in review-only missing-fix prefix-only; do
 done
 mkfifo "$WORK/fifo-brief.yaml"
 wiring_rc=0
-wiring_out="$(timeout 30 python3 -I "$WIRING" "$WORK/fifo-brief.yaml" 2>&1)" || wiring_rc=$?
+wiring_out="$(timeout 30 "$PYTHON_BIN" -I "$WIRING" "$WORK/fifo-brief.yaml" 2>&1)" || wiring_rc=$?
 check_case "lane brief FIFO" 1 "$wiring_rc" "lane brief unreadable" "$wiring_out"
 echo "ok   lane brief FIFO"
+wiring_rc=0
+wiring_out="$(timeout 30 python3 -I -S "$WIRING" "$ROOT/.config/lane-brief.yaml" 2>&1)" || wiring_rc=$?
+check_case "lane brief without PyYAML" 2 "$wiring_rc" "PyYAML not importable" "$wiring_out"
+echo "ok   lane brief without PyYAML"
 echo "ok   Makefile (verify-all, semgrep-scan), lefthook pre-push, CI semgrep job, Renovate and lane briefs wire semgrep_scan.py and SEMGREP_IMAGE"
 
 echo "semgrep scan: $accepted accepted, $refused refused"
