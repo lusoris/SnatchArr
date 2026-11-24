@@ -1809,6 +1809,83 @@ func TestCloseWaitsForAttachedLookup(t *testing.T) {
 	assertAttachedCloseFinishes(t, p, hook, backstop, closeDone, attachedDone)
 }
 
+type heldOriginBody struct {
+	io.ReadCloser
+	once    sync.Once
+	held    atomic.Bool
+	reqDone <-chan struct{}
+	started chan struct{}
+	release chan struct{}
+}
+
+func (b *heldOriginBody) Read(p []byte) (int, error) {
+	b.once.Do(func() {
+		close(b.started)
+		<-b.release
+	})
+	return b.ReadCloser.Read(p)
+}
+
+func TestCloseWaitsForOriginBodyRead(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	s.series[81300] = "Held Origin Series DE"
+	p := s.provider(t, plantedKey, "", nil)
+	cloned := http.DefaultTransport.(*http.Transport).Clone()
+	t.Cleanup(cloned.CloseIdleConnections)
+	held := &heldOriginBody{started: make(chan struct{}), release: make(chan struct{})}
+	closeRelease := sync.OnceFunc(func() { close(held.release) })
+	t.Cleanup(closeRelease)
+	p.transport.RegisterProtocol("http", roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		resp, err := cloned.RoundTrip(req)
+		if err == nil && req.Method == http.MethodGet && req.URL.Path == "/series/81300" && held.held.CompareAndSwap(false, true) {
+			held.reqDone, held.ReadCloser, resp.Body = req.Context().Done(), resp.Body, held
+		}
+		return resp, err
+	}))
+	backstop, stopBackstop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stopBackstop()
+	lookupDone, closeDone := make(chan error, 1), make(chan error, 1)
+	ref := Ref{Kind: domain.KindSonarr, TVDBID: 81300}
+	go func() { _, err := p.TitlesFor(t.Context(), ref, "de"); lookupDone <- err }()
+	select {
+	case <-held.started:
+	case <-backstop.Done():
+		t.Fatal("origin body read did not start")
+	}
+	go func() { closeDone <- p.Close() }()
+	select {
+	case <-held.reqDone:
+	case <-backstop.Done():
+		t.Fatal("origin request did not observe Close cancellation")
+	}
+	select {
+	case err := <-closeDone:
+		t.Fatalf("Close() returned before the origin body read finished: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if !isCacheOpen(p) {
+		t.Fatal("cache closed while the origin body read was held")
+	}
+	closeRelease()
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	case <-backstop.Done():
+		t.Fatal("Close() did not return after the origin body read finished")
+	}
+	select {
+	case err := <-lookupDone:
+		if !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("TitlesFor() error = %v, want ErrUnavailable", err)
+		}
+	case <-backstop.Done():
+		t.Fatal("TitlesFor() did not return")
+	}
+}
+
 func TestCloseStopsAdmittedLookupBeforeFetch(t *testing.T) {
 	t.Parallel()
 	s := newStub(t)

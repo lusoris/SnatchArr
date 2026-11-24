@@ -492,8 +492,10 @@ func (r *boundRedis) bound(ctx context.Context) (context.Context, context.Cancel
 }
 
 // Close cancels every lookup, waits for admitted lookups, then releases the HTTP cache, idle
-// connections and Redis client. The lookup wait and the Redis teardown each stop after
-// closeWaitTimeout, and Close reports either overrun, so shutdown remains bounded.
+// connections and Redis client. An admitted lookup includes its origin fetch: the golusoris
+// singleflight joins a running fetch before a canceled caller returns. The lookup wait and the
+// Redis teardown each stop after closeWaitTimeout, and Close reports either overrun, so
+// shutdown remains bounded.
 func (p *Provider) Close() error {
 	if p == nil {
 		return nil
@@ -519,7 +521,7 @@ func (p *Provider) Close() error {
 	return p.closeErr
 }
 
-// closeRedis closes the Redis client and waits at most closeWaitTimeout for it. rueidis v1.0.79
+// closeRedis closes the Redis client and waits at most closeWaitTimeout for it. rueidis v1.0.80
 // Client.Close takes no context and can block on connection teardown (singleClient.Close in
 // client.go), so Close reports a teardown that overruns instead of blocking shutdown on it.
 func (p *Provider) closeRedis() error {
