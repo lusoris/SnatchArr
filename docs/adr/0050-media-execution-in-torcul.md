@@ -43,12 +43,13 @@ No execution code was ever written in SnatchArr. At `main` commit `1ae38363` no 
 | `library_processing` module switch | SnatchArr | ADR-0041 section 1, [ADR-0025](0025-module-switches.md) |
 | Queue of library items, schedule windows that decide when a job is triggered | SnatchArr | this record, section 2 |
 | Probe, stream plan, header edit, remux, audio transcode and loudness tags, video encode | torcul | torcul ADR-0002 decisions 1 to 3; torcul issues 2 to 10 |
-| Staging, verification before write, apply, rollback copy, restore | torcul | torcul ADR-0002 decision 4; extension ordered in `torcul-media-execution-owner-20261123` |
+| Staging, verification before write, apply, rollback copy, restore | torcul | torcul ADR-0002 decision 4; ADR-0041 section 8 gates kept as requirements in section 3 below; apply and rollback extension of torcul ADR-0002 ordered in ledger `torcul-media-execution-owner-20261123` (open order, not written at torcul commit `f3929d4d`) |
 | Bounded execution pools, yield to live playback, GPU placement | torcul | torcul ADR-0002 decision 6; torcul issue 6 |
 | Quality scores of encodes | VMAFx, called by torcul | torcul ADR-0001 |
 | GPU pre-encode processing and its telemetry | Pelorus, as the media handoff names it | ledger `media-execution-ownership-20261123` |
 | `*arr` refresh and rename, media server refresh after an apply | SnatchArr | ADR-0041 section 8, last paragraph (`OQ-0041-15`) |
 | Custom Format cutoff guard, `snatcharr-processed` `*arr` tag, planner `RuleNotAnUpgrade` | SnatchArr | ADR-0041 section 12 |
+| `SNATCHARR_PROCESSED_FROM` container tag written into the processed file | torcul | ADR-0041 section 12 and this record, section 2 |
 | Rule builder, dry-run preview, queue view, verification verdicts, rollback state and restore action | SnatchArr | ADR-0041 section 11 |
 
 SnatchArr starts, links and ships no media tool and no media library. torcul is the one implementation of every step that reads or writes a media file.
@@ -56,7 +57,7 @@ SnatchArr starts, links and ships no media tool and no media library. torcul is 
 ### 2. Trigger and state surface
 
 - **Client side.** The SnatchArr `api` is the torcul client, the same way it is the client of every other integration. The Rust `worker` stays the stateless snatch data plane of [ADR-0001](0001-go-control-plane-rust-snatch-worker.md) and [ADR-0010](0010-keep-api-worker-split.md); it gains no media capability, no library mount and no processing lease.
-- **What SnatchArr sends.** Per library item: the file reference as torcul resolves it, the rule after scoping, the metadata inputs from section 1, and the operation (plan, run, apply, rollback).
+- **What SnatchArr sends.** Per library item: the file reference as torcul resolves it, the rule after scoping, the metadata inputs from section 1, the source quality from `*arr`, and the operation (plan, run, apply, rollback). torcul joins that source quality with the content hash of its plan-time source fingerprint (torcul ADR-0002 decision 4, apply step 3) into the `<orig_hash_and_quality>` value of the `SNATCHARR_PROCESSED_FROM` container tag (ADR-0041 section 12) and writes the tag.
 - **What SnatchArr keeps.** Per job: the torcul job id, the state and verdicts torcul reports, and the plan report. SnatchArr stores them in PostgreSQL next to the item, streams changes over SSE and shows them in the web app and the Jellyfin plugin.
 - **After an apply.** When torcul reports an apply as done, SnatchArr triggers the `*arr` refresh and optional rename and the media server item refresh through their APIs, as ADR-0041 section 8 states.
 - **Dry run.** The ADR-0041 `RuleTrace` preview shows torcul's plan report (its `plan` stage writes a dry-run report, torcul ADR-0002 decision 6) instead of SnatchArr-built command lines.
@@ -74,7 +75,7 @@ SnatchArr starts, links and ships no media tool and no media library. torcul is 
 | Section 3, tiers 0 to 2 | SnatchArr runs tiers 0 and 1 and delegates tier 2 to VMAFx | torcul plans the cheapest change that meets the rule |
 | Sections 4 to 7, "requirements on VMAFx" | requirements on VMAFx | requirements on torcul, which uses VMAFx (torcul issues 2 to 9) |
 | Section 7, audio execution | SnatchArr transcodes audio and writes loudness tags | torcul does; the audio options stay rule data |
-| Section 8, staging, battery, swap, trash | SnatchArr stages, verifies, swaps and keeps `.snatcharr-trash/` | torcul ADR-0002 decision 4 and its apply and rollback extension |
+| Section 8, staging, battery, swap, trash | SnatchArr stages, verifies, swaps and keeps `.snatcharr-trash/` | torcul stages, verifies, swaps and keeps the rollback copy (torcul ADR-0002 decision 4); the ADR-0041 section 8 battery stays the pass condition before any replacement; at torcul commit `f3929d4d`, ADR-0002 decision 4 already covers it for a remux (per-packet equality with the source, stricter than items 1 to 3) and covers only the VMAFx score for an encode; for an encode, items 1 to 4 (container and stream count matching the plan, duration delta at most 1.0 s, zero decode errors on start, middle and end packet probes, size below `max_encoded_percent` of the source) and the DCT `phash` Hamming distance of item 5 (at most 8) are requirements on torcul's verify verdict, to be stated in the apply and rollback extension of torcul ADR-0002 ordered in ledger `torcul-media-execution-owner-20261123` (not written at `f3929d4d`); apply refuses replacement unless the verdict passed (decision 4, apply step 1) |
 | Section 9, playback yield and pools | SnatchArr freezes worker processes and runs `remux_io` and audio pools | torcul runs bounded pools and yields; SnatchArr schedule windows decide when to trigger |
 | Section 10, `RuleTrace` command column | SnatchArr shows the CLI commands it would run | SnatchArr shows torcul's plan report |
 | Context item 8, licence hygiene | SnatchArr isolates GPL tools behind subprocesses | SnatchArr ships none; torcul carries its own licence record (torcul ADR-0002 decision 7) |
