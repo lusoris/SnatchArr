@@ -8,6 +8,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ADR-0038: VMAFx Perceptual Video Quality Scoring and Unified Video Hashing Across Media Libraries
 
 - **Status:** Accepted (operator answers recorded 2026-10-26, ledger ids `snatcharr-oq-0038-1` to `snatcharr-oq-0038-9`)
+- **Partially superseded by** [ADR-0050](0050-media-execution-in-torcul.md) (2026-11-24, answer to `OQ-0050-1`): torcul runs the shared hasher (`oshash`, DCT `phash`, duration and frame-rate probe) and VMAFx scoring of library copies as jobs, so SnatchArr builds no `worker/crates/snatch-vhash` crate (`OQ-0038-1`) and deploys no VMAFx scoring container (`OQ-0038-2`). SnatchArr triggers those jobs, stores the reported hashes and scores and keeps importing hashes from a linked Stash; the rest of this record still binds.
 - **Date:** 2026-10-26
 - **Deciders:** lusoris
 

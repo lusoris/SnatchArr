@@ -9,7 +9,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 - **Status:** Accepted
 - **Date:** 2026-11-23
 - **Deciders:** lusoris
-- **Supersedes:** the execution parts of [ADR-0041](0041-rule-driven-library-processing.md), listed in section 3 below; the rest of ADR-0041 still binds
+- **Supersedes:** the execution parts of [ADR-0041](0041-rule-driven-library-processing.md), listed in section 3 below; the rest of ADR-0041 still binds. It also supersedes where two [ADR-0038](0038-vmafx-library-quality-scoring.md) answers place their library file reads, `OQ-0038-1` and `OQ-0038-2`, by the answer to `OQ-0050-1` in section 5; the rest of ADR-0038 still binds
 - **Related:** [ADR-0001](0001-go-control-plane-rust-snatch-worker.md), [ADR-0010](0010-keep-api-worker-split.md), [ADR-0038](0038-vmafx-library-quality-scoring.md), [ADR-0041](0041-rule-driven-library-processing.md); torcul ADR-0001 and ADR-0002; issues #789 to #797
 
 ## Context
@@ -52,7 +52,7 @@ No execution code was ever written in SnatchArr. At `main` commit `1ae38363` no 
 | `SNATCHARR_PROCESSED_FROM` container tag written into the processed file | torcul | ADR-0041 section 12 and this record, section 2 |
 | Rule builder, dry-run preview, queue view, verification verdicts, rollback state and restore action | SnatchArr | ADR-0041 section 11 |
 
-SnatchArr starts, links and ships no media tool and no media library. torcul is the one implementation of every step that reads or writes a media file; the one case still open is the set of ADR-0038 steps that read library files, whose owner is open question `OQ-0050-1` (section 5).
+SnatchArr starts, links and ships no media tool and no media library. torcul is the one implementation of every step that reads or writes a media file; that includes the ADR-0038 steps that read library files, the shared hasher and VMAFx scoring of library copies, which torcul runs as jobs (answer to `OQ-0050-1`, section 5).
 
 ### 2. Trigger and state surface
 
@@ -87,7 +87,7 @@ SnatchArr starts, links and ships no media tool and no media library. torcul is 
 | Section 10, `RuleTrace` command column | SnatchArr shows the CLI commands it would run | SnatchArr shows torcul's plan report |
 | Context item 8, licence hygiene | SnatchArr isolates GPL tools behind subprocesses | SnatchArr ships none; torcul carries its own licence record (torcul ADR-0002 decision 7) |
 
-Everything else in ADR-0041 still binds: the module switch, the rule scoping hierarchy and schema, the UI, the Custom Format guard and the planner integration. [ADR-0038](0038-vmafx-library-quality-scoring.md) is not changed by this record, but two of its answers read library files, which section 1 gives to torcul: the shared hasher in the Rust crate `worker/crates/snatch-vhash` (`OQ-0038-1`) and the optional VMAFx scoring container that the SnatchArr Compose file and Helm chart would deploy (`OQ-0038-2`). Neither exists at `main` commit `1ae38363`. Open question `OQ-0050-1` (section 5) decides their owner, and no code for either is written before it is answered.
+Everything else in ADR-0041 still binds: the module switch, the rule scoping hierarchy and schema, the UI, the Custom Format guard and the planner integration. [ADR-0038](0038-vmafx-library-quality-scoring.md) still binds except for two answers that place steps reading library files, which section 1 gives to torcul: the shared hasher in the Rust crate `worker/crates/snatch-vhash` (`OQ-0038-1`) and the optional VMAFx scoring container that the SnatchArr Compose file and Helm chart would deploy (`OQ-0038-2`). Neither exists at `main` commit `1ae38363`. The answer to `OQ-0050-1` (section 5) supersedes both placements: torcul runs the hasher (`oshash`, DCT `phash`, duration and frame-rate probe) and VMAFx scoring of library copies as jobs, VMAFx stays the scoring implementation, and SnatchArr builds neither the crate nor the container. SnatchArr triggers the jobs, stores the reported hashes and scores, and keeps importing hashes from a linked Stash.
 
 ### 4. Slice issues
 
@@ -105,11 +105,11 @@ Everything else in ADR-0041 still binds: the module switch, the rule scoping hie
 
 S3, S5, S6, S8 and S9 wait on torcul's job interface record, and so does the dry-run preview of S1; the S1 module switch, rule schema and scoping do not.
 
-### 5. Open question
+### 5. Answered question
 
 | ID | Question | Options | Ledger |
 | :--- | :--- | :--- | :--- |
-| `OQ-0050-1` | Who runs the ADR-0038 steps that read library files: the shared hasher (`oshash`, DCT `phash`, duration and frame-rate probe) and VMAFx scoring of library copies? | a) torcul runs both as jobs; SnatchArr stores the reported hashes and scores and keeps importing hashes from a linked Stash. b) Both stay SnatchArr parts, as read-only exceptions to section 1. c) The hasher moves to torcul and the scoring container stays in the SnatchArr deploy. | `snatcharr-adr-0038-file-reads-owner`, open |
+| `OQ-0050-1` | Who runs the ADR-0038 steps that read library files: the shared hasher (`oshash`, DCT `phash`, duration and frame-rate probe) and VMAFx scoring of library copies? | a) torcul runs both as jobs; SnatchArr stores the reported hashes and scores and keeps importing hashes from a linked Stash. b) Both stay SnatchArr parts, as read-only exceptions to section 1. c) The hasher moves to torcul and the scoring container stays in the SnatchArr deploy. | `snatcharr-adr-0038-file-reads-owner`, answered 2026-11-24: **a** |
 
 ## Consequences
 
@@ -131,4 +131,4 @@ S3, S5, S6, S8 and S9 wait on torcul's job interface record, and so does the dry
 - [ADR-0041](0041-rule-driven-library-processing.md): rule-driven library processing, 2026-10-26.
 - torcul `README.md` and `docs/adr/0001-vmafx-integration.md`, `docs/adr/0002-pipeline-architecture.md` at `github.com/vidiko/torcul` commit `f3929d4ded5b3bb0c07ad2aff053e93927ee86a1` (2026-11-17).
 - torcul open issues 2 to 10 (encode job slices, pools, pipeline and remux slice), read 2026-11-23.
-- Ledger `media-execution-ownership-20261123` (operator decision, 2026-11-23, paraphrased above), `fleet-decided-media-execution-torcul-20261123`, `snatcharr-media-execution-rescope-20261123`, `torcul-media-execution-owner-20261123`, `snatcharr-media-track-policy-20261117-withdrawn`, `snatcharr-adr-0038-file-reads-owner` (open, `OQ-0050-1`). Ledger ids name entries of the operator's decision ledger, which is not published; this record paraphrases each decision it relies on where it cites it, with date and topic, as [ADR-0047](0047-list-sync-across-instances.md) does in its references, and the torcul documents and issues above are the published sources for every torcul claim.
+- Ledger `media-execution-ownership-20261123` (operator decision, 2026-11-23, paraphrased above), `fleet-decided-media-execution-torcul-20261123`, `snatcharr-media-execution-rescope-20261123`, `torcul-media-execution-owner-20261123`, `snatcharr-media-track-policy-20261117-withdrawn`, `snatcharr-adr-0038-file-reads-owner` (2026-11-24, `OQ-0050-1`, answered with option a, derived from the 2026-11-23 ownership decision: torcul runs the ADR-0038 library file reads as jobs, VMAFx keeps scoring, SnatchArr triggers the jobs and stores the results). Ledger ids name entries of the operator's decision ledger, which is not published; this record paraphrases each decision it relies on where it cites it, with date and topic, as [ADR-0047](0047-list-sync-across-instances.md) does in its references, and the torcul documents and issues above are the published sources for every torcul claim.
