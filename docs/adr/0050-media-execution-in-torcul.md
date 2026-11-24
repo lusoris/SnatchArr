@@ -52,16 +52,21 @@ No execution code was ever written in SnatchArr. At `main` commit `1ae38363` no 
 | `SNATCHARR_PROCESSED_FROM` container tag written into the processed file | torcul | ADR-0041 section 12 and this record, section 2 |
 | Rule builder, dry-run preview, queue view, verification verdicts, rollback state and restore action | SnatchArr | ADR-0041 section 11 |
 
-SnatchArr starts, links and ships no media tool and no media library. torcul is the one implementation of every step that reads or writes a media file.
+SnatchArr starts, links and ships no media tool and no media library. torcul is the one implementation of every step that reads or writes a media file; the one case still open is the set of ADR-0038 steps that read library files, whose owner is open question `OQ-0050-1` (section 5).
 
 ### 2. Trigger and state surface
 
 - **Client side.** The SnatchArr `api` is the torcul client, the same way it is the client of every other integration. The Rust `worker` stays the stateless snatch data plane of [ADR-0001](0001-go-control-plane-rust-snatch-worker.md) and [ADR-0010](0010-keep-api-worker-split.md); it gains no media capability, no library mount and no processing lease.
-- **What SnatchArr sends.** Per library item: the file reference as torcul resolves it, the rule after scoping, the metadata inputs from section 1, the source quality from `*arr`, and the operation (plan, run, apply, rollback). torcul joins that source quality with the content hash of its plan-time source fingerprint (torcul ADR-0002 decision 4, apply step 3) into the `<orig_hash_and_quality>` value of the `SNATCHARR_PROCESSED_FROM` container tag (ADR-0041 section 12) and writes the tag.
-- **What SnatchArr keeps.** Per job: the torcul job id, the state and verdicts torcul reports, and the plan report. SnatchArr stores them in PostgreSQL next to the item, streams changes over SSE and shows them in the web app and the Jellyfin plugin.
-- **After an apply.** When torcul reports an apply as done, SnatchArr triggers the `*arr` refresh and optional rename and the media server item refresh through their APIs, as ADR-0041 section 8 states.
+- **What SnatchArr sends.** Per library item: the file reference (the `*arr` file path rewritten by the path mapping in the next item), the file size `*arr` reports, the rule after scoping, the metadata inputs from section 1, the source quality from `*arr`, and the operation (plan, run, apply, rollback). torcul joins that source quality with the content hash of its plan-time source fingerprint (torcul ADR-0002 decision 4, apply step 3) into the `<orig_hash_and_quality>` value of the `SNATCHARR_PROCESSED_FROM` container tag (ADR-0041 section 12) and writes the tag.
+- **File references.** Each torcul connection configured in SnatchArr carries a path mapping with one entry per library root: from the root folder path an `*arr` instance reports through its `rootfolder` endpoint to the path of the same storage inside torcul, the way [ADR-0047](0047-list-sync-across-instances.md) maps root aliases to paths. SnatchArr triggers no job for a file outside every mapped root. As a requirement on torcul's job interface, its `plan` stage refuses a reference that does not resolve to a regular file under a library root configured in torcul, or whose size differs from the size `*arr` reports; its apply already refuses when the source fingerprint taken at plan time (device, inode, size, modification time, content hash) has changed (torcul ADR-0002 decision 4, apply step 3).
+- **What SnatchArr keeps.** Per job: the torcul job id, the submission key, the state and verdicts torcul reports with the highest report revision seen, and the plan report. SnatchArr stores them in PostgreSQL next to the item, streams changes over SSE and shows them in the web app and the Jellyfin plugin.
+- **After an apply.** When torcul reports an apply as done, SnatchArr triggers the `*arr` refresh and optional rename and the media server item refresh through their APIs, as ADR-0041 section 8 states. SnatchArr writes one refresh row per target service in the same transaction that stores the done report; a loop in the `leader_loops` fx group retries open rows with bounded, jittered backoff up to a retry limit, and a row that reaches the limit shows as failed in the queue view with a retry action, so a restart between the apply and the refreshes loses no refresh.
 - **Dry run.** The ADR-0041 `RuleTrace` preview shows torcul's plan report (its `plan` stage writes a dry-run report, torcul ADR-0002 decision 6) instead of SnatchArr-built command lines.
 - **Shapes.** Field names, transport and job states come from torcul's job interface. torcul records that interface; SnatchArr adds the client after the record merges, generates or pins it from torcul's published schema, and hand-writes no shape torcul publishes.
+- **Requirements on torcul's job interface.** Whatever shapes torcul publishes, SnatchArr relies on the three properties in the next items; torcul's job interface record states how it meets them.
+- **One mutating job per file.** torcul runs at most one `run`, `apply` or `rollback` job per source file at a time and refuses an operation that is not a valid next step for that file, for example an `apply` without a passed verdict or a `rollback` without a rollback copy, so two requests for one item cannot race their file swaps.
+- **Idempotent submission.** Every request carries a submission key that SnatchArr stores in PostgreSQL before it sends the request, and torcul returns the existing job for a key it has seen. After a timeout or a lost response SnatchArr looks the key up and submits again only when torcul holds no job for it.
+- **Ordered reports.** Every job report carries a revision that rises with each change of that job. SnatchArr keeps the highest revision per job and drops a report whose revision is not higher, so a late report never replaces a newer state.
 - **Module switch.** `library_processing` stays off by default. With the switch on and no torcul connection configured, SnatchArr shows rules and the queue but triggers nothing.
 
 ### 3. Parts of ADR-0041 this record supersedes
@@ -80,7 +85,7 @@ SnatchArr starts, links and ships no media tool and no media library. torcul is 
 | Section 10, `RuleTrace` command column | SnatchArr shows the CLI commands it would run | SnatchArr shows torcul's plan report |
 | Context item 8, licence hygiene | SnatchArr isolates GPL tools behind subprocesses | SnatchArr ships none; torcul carries its own licence record (torcul ADR-0002 decision 7) |
 
-Everything else in ADR-0041 still binds: the module switch, the rule scoping hierarchy and schema, the UI, the Custom Format guard and the planner integration. [ADR-0038](0038-vmafx-library-quality-scoring.md) is not changed by this record.
+Everything else in ADR-0041 still binds: the module switch, the rule scoping hierarchy and schema, the UI, the Custom Format guard and the planner integration. [ADR-0038](0038-vmafx-library-quality-scoring.md) is not changed by this record, but two of its answers read library files, which section 1 gives to torcul: the shared hasher in the Rust crate `worker/crates/snatch-vhash` (`OQ-0038-1`) and the optional VMAFx scoring container that the SnatchArr Compose file and Helm chart would deploy (`OQ-0038-2`). Neither exists at `main` commit `1ae38363`. Open question `OQ-0050-1` (section 5) decides their owner, and no code for either is written before it is answered.
 
 ### 4. Slice issues
 
@@ -96,7 +101,13 @@ Everything else in ADR-0041 still binds: the module switch, the rule scoping hie
 | S8 | #796 | Unchanged in kind; views read torcul job states |
 | S9 | #797 | Display of the VMAFx results torcul reports (scores, comparison); no VMAFx call from SnatchArr |
 
-S3, S5, S6 and S9 wait on torcul's job interface record.
+S3, S5, S6, S8 and S9 wait on torcul's job interface record, and so does the dry-run preview of S1; the S1 module switch, rule schema and scoping do not.
+
+### 5. Open question
+
+| ID | Question | Options | Ledger |
+| :--- | :--- | :--- | :--- |
+| `OQ-0050-1` | Who runs the ADR-0038 steps that read library files: the shared hasher (`oshash`, DCT `phash`, duration and frame-rate probe) and VMAFx scoring of library copies? | a) torcul runs both as jobs; SnatchArr stores the reported hashes and scores and keeps importing hashes from a linked Stash. b) Both stay SnatchArr parts, as read-only exceptions to section 1. c) The hasher moves to torcul and the scoring container stays in the SnatchArr deploy. | `snatcharr-adr-0038-file-reads-owner`, open |
 
 ## Consequences
 
@@ -118,4 +129,4 @@ S3, S5, S6 and S9 wait on torcul's job interface record.
 - [ADR-0041](0041-rule-driven-library-processing.md): rule-driven library processing, 2026-10-26.
 - torcul `README.md` and `docs/adr/0001-vmafx-integration.md`, `docs/adr/0002-pipeline-architecture.md` at `github.com/vidiko/torcul` commit `f3929d4ded5b3bb0c07ad2aff053e93927ee86a1` (2026-11-17).
 - torcul open issues 2 to 10 (encode job slices, pools, pipeline and remux slice), read 2026-11-23.
-- Ledger `media-execution-ownership-20261123` (operator decision, 2026-11-23, paraphrased above), `fleet-decided-media-execution-torcul-20261123`, `snatcharr-media-execution-rescope-20261123`, `torcul-media-execution-owner-20261123`, `snatcharr-media-track-policy-20261117-withdrawn`.
+- Ledger `media-execution-ownership-20261123` (operator decision, 2026-11-23, paraphrased above), `fleet-decided-media-execution-torcul-20261123`, `snatcharr-media-execution-rescope-20261123`, `torcul-media-execution-owner-20261123`, `snatcharr-media-track-policy-20261117-withdrawn`, `snatcharr-adr-0038-file-reads-owner` (open, `OQ-0050-1`). Ledger ids name entries of the operator's decision ledger, which is not published; this record paraphrases each decision it relies on where it cites it, with date and topic, as [ADR-0047](0047-list-sync-across-instances.md) does in its references, and the torcul documents and issues above are the published sources for every torcul claim.
