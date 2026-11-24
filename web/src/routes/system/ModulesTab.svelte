@@ -12,7 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { keys, queryClient } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
-	const modulesQuery = systemModulesQuery();
+	const modulesQuery = systemModulesQuery({ requireSession: false });
 
 	let togglingId = $state<string | null>(null);
 	let toggleError = $state<unknown>(null);

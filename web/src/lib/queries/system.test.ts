@@ -11,13 +11,13 @@ import { keys } from '#lib/query.js';
 import { session } from '#lib/session.svelte.js';
 import { formatVersionLabel, systemModulesQuery, type ModuleState } from './system.js';
 
-function mountModulesQuery(): QueryClient {
+function mountModulesQuery(options?: { requireSession?: boolean }): QueryClient {
 	const client = new QueryClient({
 		defaultOptions: { queries: { retry: false } }
 	});
 	const children = createRawSnippet(() => ({
 		render: () => {
-			systemModulesQuery();
+			systemModulesQuery(options);
 			return '<div></div>';
 		}
 	}));
@@ -83,6 +83,19 @@ describe('systemModulesQuery', () => {
 
 		await vi.waitFor(() => {
 			expect(client.getQueryData(keys.modules)).toEqual([]);
+		});
+		expect(getSpy).toHaveBeenCalledWith('/system/modules');
+	});
+
+	it('boundary: requireSession false fetches while the session is anonymous', async () => {
+		const modules: ModuleState[] = [{ id: 'watchaware', enabled: true }];
+		session.state = 'anonymous';
+		const getSpy = vi.spyOn(api, 'GET').mockResolvedValue({ data: modules } as never);
+
+		const client = mountModulesQuery({ requireSession: false });
+
+		await vi.waitFor(() => {
+			expect(client.getQueryData(keys.modules)).toEqual(modules);
 		});
 		expect(getSpy).toHaveBeenCalledWith('/system/modules');
 	});

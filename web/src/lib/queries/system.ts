@@ -24,12 +24,14 @@ export function systemStatusQuery() {
 
 /**
  * Shared query helper for optional modules.
- * Reuses keys.modules and typed API client GET /system/modules while authenticated.
+ * Reuses keys.modules and typed API client GET /system/modules; by default it fetches only while
+ * authenticated. Passing `requireSession: false` fetches in every session state, so a caller that
+ * renders the pending state shows the API problem instead of waiting for a session that never comes.
  */
-export function systemModulesQuery() {
+export function systemModulesQuery({ requireSession = true }: { requireSession?: boolean } = {}) {
 	return createSentioQuery<ModuleState[]>(() => ({
 		queryKey: keys.modules,
-		enabled: session.state === 'authenticated',
+		enabled: !requireSession || session.state === 'authenticated',
 		queryFn: async () => (await api.GET('/system/modules')).data ?? []
 	}));
 }
