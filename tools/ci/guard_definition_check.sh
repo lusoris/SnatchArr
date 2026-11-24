@@ -12,13 +12,16 @@
 #
 # The subject is the first line of MSGFILE that is neither empty nor a '#' comment; one without
 # (#N) passes silently. GUARD_DEFINITION_FETCH_SECONDS (default 60, whole seconds from 1 to
-# 9999) bounds the fetch; every other git call gets 10 s and the comparison 60 s. PYTHON_BIN
-# (default python3) runs guard_definition_check.py; GUARD_DEFINITION_ACK passes through to it.
-# The GIT_* variables git exports to hooks are dropped after origin is read, so nothing is
-# fetched into the calling repository.
-# Exit status: 0 no (#N), guard unchanged or change acknowledged; 1 change refused, no origin,
-# fetch or comparison failed, or a deadline passed; 2 usage, unreadable MSGFILE, a bad
-# GUARD_DEFINITION_FETCH_SECONDS or PYTHON_BIN, or PyYAML missing.
+# 9999) bounds the fetch; every other git call gets 10 s and the comparison 60 s.
+# GUARD_DEFINITION_HEAD (optional, 40 lower-case hex digits; unset from commit-msg) requires
+# refs/pull/N/merge to merge that exact pull-request head. PYTHON_BIN (default python3) runs
+# guard_definition_check.py; GUARD_DEFINITION_ACK passes through to it. The GIT_* variables git
+# exports to hooks are dropped after origin is read, so nothing is fetched into the calling
+# repository.
+# Exit status: 0 no (#N), guard unchanged or change acknowledged; 1 change refused, head
+# mismatch, no origin, fetch or comparison failed, or a deadline passed; 2 usage, unreadable
+# MSGFILE, a bad GUARD_DEFINITION_FETCH_SECONDS, GUARD_DEFINITION_HEAD or PYTHON_BIN, or PyYAML
+# missing.
 set -euo pipefail
 
 if [ $# -ne 1 ] || [ -z "$1" ]; then
@@ -36,6 +39,14 @@ PR_SUBJECT_RE='\(#([1-9][0-9]{0,6})\)$'
 # bounded SECONDS CMD...: run CMD under tools/ci/run_bounded.py, which exits 124 at the deadline.
 bounded() {
   python3 -I "$HERE/run_bounded.py" "$@"
+}
+
+# check_expected_head MERGE_HEAD: exit 1 when GUARD_DEFINITION_HEAD is set and differs from MERGE_HEAD.
+check_expected_head() {
+  if [ -n "${GUARD_DEFINITION_HEAD+x}" ] && [ "$1" != "$GUARD_DEFINITION_HEAD" ]; then
+    echo "guard-definition: refs/pull/$PR/merge merges $1, not the head $GUARD_DEFINITION_HEAD"
+    exit 1
+  fi
 }
 
 # subject_of FILE: print the first of the first 4096 lines of FILE that is neither empty nor a
@@ -65,6 +76,10 @@ PR="${BASH_REMATCH[1]}"
 FETCH_SECONDS="${GUARD_DEFINITION_FETCH_SECONDS:-60}"
 if ! [[ "$FETCH_SECONDS" =~ ^[1-9][0-9]{0,3}$ ]]; then
   echo "error: GUARD_DEFINITION_FETCH_SECONDS must be a whole number of seconds from 1 to 9999, got '$FETCH_SECONDS'" >&2
+  exit 2
+fi
+if [ -n "${GUARD_DEFINITION_HEAD+x}" ] && ! [[ "$GUARD_DEFINITION_HEAD" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "error: GUARD_DEFINITION_HEAD must be 40 lower-case hex digits, got '$GUARD_DEFINITION_HEAD'" >&2
   exit 2
 fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -103,6 +118,7 @@ if [ "${#parents[@]}" -ne 3 ]; then
   echo "guard-definition: refs/pull/$PR/merge is not a merge commit"
   exit 1
 fi
+check_expected_head "${parents[2]}"
 
 rc=0
 bounded 60 "$PYTHON_BIN" -I "$HERE/guard_definition_check.py" --git-dir "$tmp" \

@@ -44,7 +44,7 @@ def unchanged(count: int) -> str:
     return f"guard-definition: pull request {PR} leaves the workflow-refs guard unchanged ({count} files compared)"
 
 
-UNCHANGED = unchanged(26)
+UNCHANGED = unchanged(27)
 WORKFLOW = """name: Workflow refs
 on:
   pull_request:
@@ -96,6 +96,7 @@ BASE = {
     "tools/ci/run_bounded.py": "import os\n",
     "tools/ci/guard_definition_check.sh": "echo sh\n",
     "tools/ci/guard_definition_check.py": "print('py')\n",
+    "tools/ci/squash_merge.sh": "echo merge\n",
     "tools/ci/unrelated.sh": "echo unrelated\n",
     "README.md": "readme\n",
 }
@@ -326,7 +327,7 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
         {},
         [],
         0,
-        [unchanged(20)],
+        [unchanged(21)],
     ),
     "ack-valid": (
         {},
@@ -371,6 +372,14 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
         [],
         1,
         refused("tools/ci/guard_definition_check.sh"),
+    ),
+    "self-landing-helper-changed": (
+        {},
+        {"tools/ci/squash_merge.sh": "exit 0\n"},
+        {},
+        [],
+        1,
+        refused("tools/ci/squash_merge.sh"),
     ),
     "hook-removed": (
         {},
@@ -577,7 +586,7 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
         1,
         ["guard-definition: validator file set passed MAX_FILES (64)"],
     ),
-    "max-files-boundary": (many_refs(60, True), {}, {}, [], 0, [unchanged(84)]),
+    "max-files-boundary": (many_refs(60, True), {}, {}, [], 0, [unchanged(85)]),
     "max-candidates": (
         many_refs(508, False),
         {},
@@ -586,7 +595,7 @@ CASES: dict[str, tuple[dict, dict, dict, list[str], int, list[str]]] = {
         1,
         ["guard-definition: validator candidates passed MAX_CANDIDATES (512)"],
     ),
-    "max-candidates-boundary": (many_refs(507, False), {}, {}, [], 0, [unchanged(24)]),
+    "max-candidates-boundary": (many_refs(507, False), {}, {}, [], 0, [unchanged(25)]),
     "self-in-workflow": (
         {WF: WORKFLOW + "      - run: bash tools/ci/guard_definition_check.sh\n"},
         {"tools/ci/guard_definition_check.sh": "exit 0\n"},

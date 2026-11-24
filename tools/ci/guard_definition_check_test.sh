@@ -12,21 +12,26 @@
 #
 #   tools/ci/guard_definition_check_test.sh
 #
-# Positive: pull request 7 edits README only (unchanged), a '#' comment line before the subject
-# is skipped (comment-subject), a subject without (#N) passes silently (no-pr-number), so do
-# (#0) (pr-number-zero), (#N) inside the subject (pr-number-mid-subject) and an eight-digit
-# number (pr-number-eight-digits), pull request 8 drops a guard step and carries a valid
-# GUARD_DEFINITION_ACK (ack-valid), GUARD_DEFINITION_FETCH_SECONDS at its bounds 1 and 9999
-# (deadline-env-1, deadline-env-9999).
+# Positive: pull request 7 edits README only (unchanged) and passes with GUARD_DEFINITION_HEAD at
+# the pull/7 head (head-match), a '#' comment line before the subject is skipped (comment-subject),
+# a subject without (#N) passes silently (no-pr-number), so do (#0) (pr-number-zero), (#N) inside
+# the subject (pr-number-mid-subject) and an eight-digit number (pr-number-eight-digits), pull
+# request 8 drops a guard step and carries a valid GUARD_DEFINITION_ACK (ack-valid),
+# GUARD_DEFINITION_FETCH_SECONDS at its bounds 1 and 9999 (deadline-env-1, deadline-env-9999).
 # Negative: no MSGFILE or two arguments (usage, usage-two-args), a MSGFILE that does not exist
 # (unreadable-msgfile), a clone without origin (no-origin), pull request 8 drops a guard step
 # (step-removed), refs/pull/9/merge is a plain commit (not-a-merge), refs/pull/10/merge does
-# not exist (merge-ref-missing), PYTHON_BIN with a space (python-bin-word),
-# GUARD_DEFINITION_FETCH_SECONDS 0, 10000, 05 and abc (deadline-env-0, deadline-env-10000,
-# deadline-env-05, deadline-env-abc), a git whose fetch never ends past a 1 s deadline
-# (fetch-deadline), and GIT_DIR, GIT_INDEX_FILE and GIT_OBJECT_DIRECTORY of the clone exported
-# as a git hook sees them, after which the clone holds no object of the fetched merge (hook-env).
-# Boundary: the largest number the subject rule reads, (#9999999) (pr-number-max).
+# not exist (merge-ref-missing), GUARD_DEFINITION_HEAD at another 40-hex commit (head-mismatch) and
+# a planted entry script without the head check turning that case red (planted-no-head-check),
+# GUARD_DEFINITION_HEAD abc, 39 or 41 hex digits, 40 upper-case hex digits and empty
+# (head-env-word, head-env-short, head-env-long, head-env-upper, head-env-empty), PYTHON_BIN with a
+# space (python-bin-word), GUARD_DEFINITION_FETCH_SECONDS 0, 10000, 05 and abc (deadline-env-0,
+# deadline-env-10000, deadline-env-05, deadline-env-abc), a git whose fetch never ends past a 1 s
+# deadline (fetch-deadline), and GIT_DIR, GIT_INDEX_FILE and GIT_OBJECT_DIRECTORY of the clone
+# exported as a git hook sees them, after which the clone holds no object of the fetched merge
+# (hook-env).
+# Boundary: the largest number the subject rule reads, (#9999999) (pr-number-max), and 39, 40 and
+# 41 hex digits on GUARD_DEFINITION_HEAD.
 # Platform (HISS-21): Linux and macOS; requires bash, git and python3. An explicit PYTHON_BIN
 # must import yaml; without one, ensure_pyyaml_python (test_lib.sh) takes host python3 when it
 # imports yaml, else builds .cache/pyyaml-venv with tools/ci/pyyaml_venv.sh (needs the package
@@ -41,6 +46,7 @@ ensure_pyyaml_python
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 CASES=0
+unset GUARD_DEFINITION_HEAD
 WORKFLOW='name: Workflow refs
 on:
   pull_request:
@@ -94,7 +100,7 @@ push_merge() {
 # build_origin: create $WORK/origin.git with main holding the guard set, refs/pull/7/merge and
 # refs/pull/9999999/merge leaving the guard unchanged, refs/pull/8/merge dropping a guard step
 # and refs/pull/9/merge pointing at a plain commit; then clone main alone to $WORK/clone and
-# record the object id of refs/pull/7/merge in MERGE7.
+# record the object id of refs/pull/7/merge in MERGE7 and its second parent (the PR head) in HEAD7.
 build_origin() {
   local src="$WORK/src"
   g init -q --bare "$WORK/origin.git"
@@ -111,6 +117,7 @@ build_origin() {
   pr_branch "$src" 7 "$WORKFLOW"
   push_merge "$src" 7
   MERGE7="$(g -C "$src" rev-parse HEAD)"
+  HEAD7="$(g -C "$src" rev-parse "$MERGE7^2")"
   g -C "$src" push -q origin "HEAD:refs/pull/9999999/merge"
   pr_branch "$src" 8 "$NO_STEP"
   push_merge "$src" 8
@@ -208,12 +215,50 @@ hook_env_case() {
   fi
 }
 
+# planted_head_check_case: strip check_expected_head from a copy of the entry script and require head-mismatch to turn red.
+planted_head_check_case() {
+  local dir="$WORK/planted" rc=0 out
+  local zero=0000000000000000000000000000000000000000
+  mkdir -p "$dir"
+  cp "$HERE/run_bounded.py" "$HERE/guard_definition_check.py" "$HERE/workflow_yaml.py" "$dir/"
+  sed '/^check_expected_head /d' "$CHECK" > "$dir/guard_definition_check.sh"
+  if cmp -s "$CHECK" "$dir/guard_definition_check.sh"; then
+    echo "FAIL planted-no-head-check: sed left guard_definition_check.sh unchanged" >&2
+    exit 1
+  fi
+  out="$(
+    CHECK="$dir/guard_definition_check.sh"
+    expect head-mismatch 1 "not the head" 'fix: x (#7)' "GUARD_DEFINITION_HEAD=$zero" 2>&1
+  )" || rc=$?
+  check_case planted-no-head-check 1 "$rc" "FAIL head-mismatch: exit 0, want 1" "$out"
+  CASES=$((CASES + 1))
+  echo "ok   planted-no-head-check"
+}
+
+# head_env_cases: hold GUARD_DEFINITION_HEAD to mismatch (exit 1), planted removal, and malformed values (exit 2).
+head_env_cases() {
+  local zero=0000000000000000000000000000000000000000
+  local prefix="GUARD_DEFINITION_HEAD must be 40 lower-case hex digits, got"
+  expect head-mismatch 1 "refs/pull/7/merge merges $HEAD7, not the head $zero" 'fix: x (#7)' \
+    "GUARD_DEFINITION_HEAD=$zero"
+  planted_head_check_case
+  expect head-env-word 2 "$prefix 'abc'" 'fix: x (#7)' GUARD_DEFINITION_HEAD=abc
+  expect head-env-short 2 "$prefix '0123456789abcdef0123456789abcdef0123456'" 'fix: x (#7)' \
+    GUARD_DEFINITION_HEAD=0123456789abcdef0123456789abcdef0123456
+  expect head-env-long 2 "$prefix '0123456789abcdef0123456789abcdef012345678'" 'fix: x (#7)' \
+    GUARD_DEFINITION_HEAD=0123456789abcdef0123456789abcdef012345678
+  expect head-env-upper 2 "$prefix 'ABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD'" 'fix: x (#7)' \
+    GUARD_DEFINITION_HEAD=ABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD
+  expect head-env-empty 2 "$prefix ''" 'fix: x (#7)' "GUARD_DEFINITION_HEAD="
+}
+
 # main: run the comparison cases, build the origin, then every entry case in the header order.
 main() {
   run_bounded 300 "$PYTHON_BIN" -I "$HERE/guard_definition_check_test.py" "$HERE/guard_definition_check.py"
   build_origin
   local same="leaves the workflow-refs guard unchanged"
   expect unchanged 0 "$same" 'fix: x (#7)'
+  expect head-match 0 "$same" 'fix: x (#7)' "GUARD_DEFINITION_HEAD=$HEAD7"
   expect comment-subject 0 "$same" "$(printf '# Please enter the message\n#\nfix: x (#7)')"
   expect_silent no-pr-number 'fix: x'
   expect_silent pr-number-zero 'fix: x (#0)'
@@ -230,6 +275,7 @@ main() {
   expect step-removed 1 ".github/workflows/workflow-refs.yml: changed by pull request 8" 'fix: x (#8)'
   expect not-a-merge 1 "refs/pull/9/merge is not a merge commit" 'fix: x (#9)'
   expect merge-ref-missing 1 "cannot fetch refs/pull/10/merge" 'fix: x (#10)'
+  head_env_cases
   expect python-bin-word 2 "PYTHON_BIN must be a command name" 'fix: x (#7)' 'PYTHON_BIN=python3 -c 1'
   local bad
   for bad in 0 10000 05 abc; do

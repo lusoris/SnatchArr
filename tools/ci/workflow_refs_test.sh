@@ -89,11 +89,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Supply a fixed placeholder token and clean endpoint environment so no caller value reaches a stub.
+# Every input workflow_refs.sh reads is fixed (GH_TOKEN) or cleared here except PYTHON_BIN,
+# passed through on purpose so callers can supply the PyYAML interpreter.
 export GH_TOKEN=stub-token
 rest_url_var="GITHUB_API"
 rest_url_var+="_URL"
-unset GITHUB_TOKEN GITHUB_GRAPHQL_URL "$rest_url_var"
+unset GITHUB_TOKEN GITHUB_GRAPHQL_URL "$rest_url_var" WORKFLOW_REFS_DEADLINE_SECONDS CURL_BIN
 
 # Commit-pinned actions from ci.yml used in fixture workflows.
 CHECKOUT=actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

@@ -13,7 +13,8 @@ directory DIR and labels every changed guard item:
   count; scalar text, plain or quoted, tags, anchors, key order and duplicate keys do;
 - the validator files: every tools/ci path the run steps of job workflow-refs name, then every
   tools/ci path, $HERE/<name> path or Python import those files name, by mode and object id;
-- this check itself and the module it imports (SELF), by mode and object id;
+- this check, the modules it imports and the landing helper that runs it (SELF), by mode and
+  object id;
 - what lefthook.yml holds of this check: its commit-msg command, every other key of the
   commit-msg hook (skip, only, files, piped, jobs and the rest; another command may change), and
   every top-level key that is not another git hook (settings and custom hooks); a top-level
@@ -50,6 +51,7 @@ JOB = "workflow-refs"
 SELF = (
     "tools/ci/guard_definition_check.sh",
     "tools/ci/guard_definition_check.py",
+    "tools/ci/squash_merge.sh",
     "tools/ci/workflow_yaml.py",
 )
 HOOK_FILE = "lefthook.yml"

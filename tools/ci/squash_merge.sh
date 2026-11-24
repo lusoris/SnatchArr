@@ -18,8 +18,9 @@
 #   rc 6  merged, but the commit on main does not carry the trailer
 #   rc 7  merge failed and the pull request is not confirmed MERGED
 #   rc 8  merged, but the main commit read-back failed
-#   rc 9  tools/ci/guard_definition_check.sh refuses the squash message: the pull request changes
-#         the workflow-refs guard without GUARD_DEFINITION_ACK, or the check could not run
+#   rc 9  origin is missing or is not github.com/<REPO>, or tools/ci/guard_definition_check.sh
+#         refuses the squash message: guard changed without GUARD_DEFINITION_ACK,
+#         refs/pull/<pr>/merge merges a head other than <head-sha>, or the check could not run
 #
 # The guard check runs here as well as from lefthook commit-msg: the squash commit is built on
 # the forge, so no local commit-msg hook sees its message. GUARD_DEFINITION_ACK passes through.
@@ -36,6 +37,25 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 usage() {
   echo "usage: ${0##*/} <pr> <head-sha> <subject> <body-file> [--dry-run]" >&2
   exit 2
+}
+
+# check_origin: exit 9 unless the origin remote of ROOT names REPO on github.com.
+check_origin() {
+  if ! origin="$(git -C "$ROOT" remote get-url origin 2>/dev/null)" || [ -z "$origin" ]; then
+    echo "refusing: no origin remote; the guard check would have no github.com/$REPO remote to read" >&2
+    exit 9
+  fi
+  origin_lc="$(printf '%s' "$origin" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
+  repo_lc="$(printf '%s' "$REPO" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
+  case "$origin_lc" in
+    "https://github.com/$repo_lc" | "https://github.com/$repo_lc.git" | \
+      "git@github.com:$repo_lc" | "git@github.com:$repo_lc.git" | \
+      "ssh://git@github.com/$repo_lc" | "ssh://git@github.com/$repo_lc.git") ;;
+    *)
+      echo "refusing: origin '$origin' is not github.com/$REPO; the guard check would read another repository" >&2
+      exit 9
+      ;;
+  esac
 }
 
 [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || usage
@@ -77,7 +97,8 @@ case "$subject" in
 esac
 { printf '%s\n\n' "$subject"; cat "$body"; } >"$work/msg"
 sh "$ROOT/.config/hooks/commit-msg.sh" "$work/msg" || exit 4
-(cd "$ROOT" && bash tools/ci/guard_definition_check.sh "$work/msg") || exit 9
+check_origin
+(cd "$ROOT" && GUARD_DEFINITION_HEAD="$sha" bash tools/ci/guard_definition_check.sh "$work/msg") || exit 9
 
 view="$("$GH" pr view "$pr" -R "$REPO" --json mergeStateStatus,headRefOid \
   --jq '[.mergeStateStatus, .headRefOid] | @tsv')" || {
