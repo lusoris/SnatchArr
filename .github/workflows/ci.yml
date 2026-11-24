@@ -100,7 +100,7 @@ jobs:
       # reads as its staged UTF-8 blob.
       - name: Image digest pins use one digest per tag and carry Renovate release-age coverage, after their planted cases
         run: bash tools/ci/image_pin_check_test.sh && python3 -I tools/ci/image_pin_check.py && python3 -I tools/ci/image_pin_check.py --index && bash tools/ci/image_release_age_check_test.sh && python3 -I tools/ci/image_release_age_check.py && python3 -I tools/ci/image_release_age_check.py --index
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       - name: Renovate presets reachable from renovate.json keep Docker release-age coverage, after their planted cases
         env:
           GH_TOKEN: ${{ github.token }}
@@ -120,13 +120,21 @@ jobs:
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases
         run: bash tools/ci/ruff_check_test.sh && sh tools/ci/ruff_check.sh "$RUNNER_TEMP/ruff"
+      - name: PyYAML for the workflow parser (pinned by hash)
+        run: bash tools/ci/pyyaml_venv.sh "$RUNNER_TEMP/pyyaml"
       - name: The workflow check refuses its planted cases
         env:
           GH_TOKEN: ${{ github.token }}
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
         run: bash tools/ci/workflow-check_test.sh
+      - name: The merge-time guard check refuses its planted cases
+        env:
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
+        run: bash tools/ci/guard_definition_check_test.sh
       - name: Lint workflows and check action pins
         env:
           GH_TOKEN: ${{ github.token }}
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
         run: bash tools/ci/workflow-check.sh
 
   # The three scanners run on every change, with no filter: a secret or a vulnerable lockfile can
@@ -161,7 +169,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: The Opengrep ratchet refuses its recorded regressions
         run: |
           sh tools/ci/codacy_opengrep_scan_test.sh
@@ -462,7 +470,7 @@ jobs:
           ${{ !cancelled() && hashFiles('api/tmp/gosec.sarif') != ''
           && (github.event_name != 'pull_request'
           || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: api/tmp/gosec.sarif
           category: gosec/api
@@ -486,8 +494,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+          node-version: '26'
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false
@@ -548,7 +556,7 @@ jobs:
         run: cargo test --workspace --locked
       # Prebuilt, checksum-verified binaries from GitHub releases. cargo-deny-action built a
       # container from Docker Hub on every run and failed on its anonymous pull limit (429).
-      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
+      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
         with:
           tool: cargo-audit,cargo-deny,cargo-llvm-cov@0.9.1
           fallback: none
@@ -776,12 +784,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-go
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: web/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Install Playwright browsers
         run: cd web && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
       # The repository's own web checks of make web-verify, which the shared sveltesentio
@@ -831,7 +839,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: bufbuild/buf-action@85aebf73123b5c15fd5528aaecbf9129cddf7fa7 # v1.6.0
+      - uses: bufbuild/buf-action@37ac33d8960807670a6e9719080e885197b09cc6 # v1.7.0
         with:
           input: proto
           lint: true
@@ -856,7 +864,7 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
         # Without a version the action asks the GitHub API for the newest release and, when that
         # call fails, installs its built-in 3.18.4 (main 6a83713996). Renovate moves this pin.
         with:
@@ -897,7 +905,7 @@ jobs:
       # kubeconform checks schemas only. The API server also validates semantics, such as an
       # ipBlock `except` having to lie inside its `cidr`, which shipped broken in 0.1.0. kind
       # runs here on the disposable runner only; locally it runs inside an incus VM (#61).
-      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+      - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
         with:
           cluster_name: chart-check
           # Same image kind v0.33.0 pins, from mirror.gcr.io: Docker Hub's anonymous pull limit
@@ -1005,7 +1013,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false
@@ -1018,12 +1026,12 @@ jobs:
           go install "github.com/cordanaLLM/praetor/cmd/standardsctl@${PRAETOR_REF}"
           ln -s "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: web/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Install web dependencies
         run: cd web && pnpm install --frozen-lockfile
       - name: Clone gate

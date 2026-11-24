@@ -441,6 +441,7 @@ web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	cd web
 	pnpm install --frozen-lockfile
 	sh ../tools/ci/clones_check_test.sh
+	bash ../tools/ci/install_pnpm_test.sh
 	PRAETORCTL='$(PRAETORCTL)' python3 ../tools/ci/clones_check.py
 	pnpm gen:api
 	git diff --exit-code -- src/lib/api/schema.d.ts
@@ -728,6 +729,8 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/image_release_age_check.py
 	python3 -I tools/ci/image_release_age_check.py --index
 	bash tools/ci/renovate_presets_test.sh
+	bash tools/ci/workflow_refs_test.sh
+	bash tools/ci/guard_definition_check_test.sh
 	bash tools/ci/release_body_check_test.sh
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test

@@ -7,7 +7,6 @@ package adult
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/lusoris/SnatchArr/api/internal/modules"
@@ -35,22 +34,6 @@ func resolveThumbnailDir(cfg adultSettings) string {
 		return *cfg.ThumbnailCacheDir
 	}
 	return modules.DefaultAdultThumbnailCacheDir()
-}
-
-func isCleanSubdir(baseDir, targetPath string) bool {
-	cleanBase := filepath.Clean(baseDir)
-	cleanTarget := filepath.Clean(targetPath)
-	if cleanTarget == cleanBase {
-		return false
-	}
-	rel, err := filepath.Rel(cleanBase, cleanTarget)
-	if err != nil {
-		return false
-	}
-	if strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-		return false
-	}
-	return true
 }
 
 func isAcceptedImageExt(ext string) bool {

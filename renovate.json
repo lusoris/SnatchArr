@@ -454,6 +454,16 @@
       "allowedVersions": "<7"
     },
     {
+      "description": "praetorctl dedupe runs the foreign clone scan only when jscpd reports the exact version the engine pins (engine internal/dedupe JscpdVersion), so a Renovate jscpd bump fails tools/ci/clones_check.py (PR 1229, jscpd 5.4.3); web/package.json moves jscpd by hand in the engine pin update that changes JscpdVersion; revisit when the engine accepts a version range or ships its own jscpd",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "jscpd"
+      ],
+      "enabled": false
+    },
+    {
       "description": "The upgrade test moves a database from the previous Postgres major to the current one (storetest.PreviousMajorImage, #252): that pin takes digest and minor updates but stays on major 17. Move it with the current major when Postgres 19 is adopted",
       "matchFileNames": [
         "api/internal/store/storetest/storetest.go"
@@ -627,6 +637,16 @@
         "ghcr.io/lusoris/snatcharr-worker"
       ],
       "minimumReleaseAge": null
+    },
+    {
+      "description": "plurano/horistes reusable workflows get their own update PR outside the batch groups above, so a consumer takes a horistes change without a hand repin. Keep this rule last: a later package rule overrides an earlier one, and groupName null turns grouping off.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "plurano/horistes"
+      ],
+      "groupName": null
     }
   ],
   "platformCommit": "enabled",

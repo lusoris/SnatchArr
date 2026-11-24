@@ -1,16 +1,19 @@
 {
   "name": "lusoris/SnatchArr",
-  "image": "mcr.microsoft.com/devcontainers/base:bookworm@sha256:85a349062e4ccc4755304f1264183e604391697608765e72765340b7cb7e2438",
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm@sha256:06701e75787b0b948709e803f95b42cabf37607b1c308c57471d6f0252149d87",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {},
     "ghcr.io/devcontainers/features/go:1": { "version": "1.27" },
     "ghcr.io/devcontainers/features/rust:1": { "version": "stable", "profile": "default" },
-    "ghcr.io/devcontainers/features/node:2": { "version": "24" },
+    "ghcr.io/devcontainers/features/node:2": { "version": "26", "pnpmVersion": "none" },
     "ghcr.io/devcontainers/features/docker-in-docker:4": {},
     "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": { "version": "1.37.2", "helm": "4.3.2", "minikube": "none" }
   },
   "containerEnv": {
     "GOFLAGS": "-buildvcs=false"
+  },
+  "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
   },
   "customizations": {
     "vscode": {
