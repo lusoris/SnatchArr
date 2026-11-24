@@ -120,13 +120,21 @@ jobs:
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases
         run: bash tools/ci/ruff_check_test.sh && sh tools/ci/ruff_check.sh "$RUNNER_TEMP/ruff"
+      - name: PyYAML for the workflow parser (pinned by hash)
+        run: bash tools/ci/pyyaml_venv.sh "$RUNNER_TEMP/pyyaml"
       - name: The workflow check refuses its planted cases
         env:
           GH_TOKEN: ${{ github.token }}
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
         run: bash tools/ci/workflow-check_test.sh
+      - name: The merge-time guard check refuses its planted cases
+        env:
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
+        run: bash tools/ci/guard_definition_check_test.sh
       - name: Lint workflows and check action pins
         env:
           GH_TOKEN: ${{ github.token }}
+          PYTHON_BIN: ${{ runner.temp }}/pyyaml/bin/python
         run: bash tools/ci/workflow-check.sh
 
   # The three scanners run on every change, with no filter: a secret or a vulnerable lockfile can
