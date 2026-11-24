@@ -17,6 +17,7 @@ import (
 	gerr "github.com/golusoris/golusoris/core/errors"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/pathsafe"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 )
 
@@ -62,7 +63,7 @@ func (s *Service) checkImageSetContainment(ctx context.Context, filePath string)
 		return "", fmt.Errorf("adult: image_set_dir not configured: %w", domain.ErrInvalid)
 	}
 	cleanBase := filepath.Clean(*cfg.ImageSetDir)
-	if !isCleanSubdir(cleanBase, filePath) {
+	if !pathsafe.StrictlyWithin(cleanBase, filePath) {
 		return "", fmt.Errorf("adult: file path escapes image set dir: %w", domain.ErrInvalid)
 	}
 	return cleanBase, nil
