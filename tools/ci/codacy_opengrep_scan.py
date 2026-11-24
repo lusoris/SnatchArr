@@ -19,8 +19,8 @@ the normalised source text of the finding, so a line shift keeps its key: whites
 string literals collapse to one space, whitespace inside a literal stays as written. Its count is
 how many findings share that key; one more is a new finding.
 
-The live mode first asks the pinned CLI (`info --output-format json`) which Opengrep version its
-plugin wants and refuses a mismatch with tools/ci/tool-versions.env before downloading anything:
+The live mode reads the wanted Opengrep version from the pinned CLI's installed adapter registry
+and refuses a mismatch with tools/ci/tool-versions.env before downloading anything:
 when those versions differ, the CLI sees the verified binary under CODACY_GLOBAL_DIR as outdated,
 downloads its own unverified release over it, and drops the --taint-intrafile wrapper.
 
@@ -81,6 +81,14 @@ FIXTURES = "tools/ci/codacy_opengrep/testdata"
 PACKAGE = "tools/ci/codacy_opengrep"
 TOOL_VERSIONS = "tools/ci/tool-versions.env"
 CLI_PACKAGE = "@codacy/analysis-cli"
+REGISTRY_PROGRAM = """
+const { builtinAdapterEntries } = require("@codacy/analysis-adapters");
+const tools = builtinAdapterEntries.map(({ descriptor }) => ({
+  id: descriptor.id,
+  preferredVersion: descriptor.preferredVersion,
+}));
+process.stdout.write(JSON.stringify({ tools }));
+"""
 CANARY_FILE = "tools/ci/image_release_age_check.py"
 CANARY_FUNCTION = "judge_in_child"
 CANARY_RULE = "Semgrep_python.django.security.injection.command.subprocess-injection.subprocess-injection"
@@ -160,32 +168,6 @@ def run_capture(argv: list[str], cwd: Path, timeout: float, env: dict[str, str] 
     """
     try:
         return subprocess.run(argv, cwd=cwd, env=env, input=stdin, capture_output=True, text=True, timeout=timeout, check=False)  # nosec B603  # argument lists built in this file, no shell
-    except (OSError, subprocess.TimeoutExpired) as err:
-        raise ScanError(f"{Path(argv[0]).name} did not complete: {err}") from err
-
-
-def run_to_file(
-    argv: list[str], cwd: Path, timeout: float, env: dict[str, str], directory: Path
-) -> subprocess.CompletedProcess[str]:
-    """Run an argument list under a deadline and read its UTF-8 stdout file after exit."""
-    try:
-        with tempfile.TemporaryFile(
-            mode="w+", encoding="utf-8", dir=directory
-        ) as output:
-            result = subprocess.run(  # nosec B603  # argument lists built in this file, no shell
-                argv,
-                cwd=cwd,
-                env=env,
-                stdout=output,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=timeout,
-                check=False,
-            )
-            output.seek(0)
-            return subprocess.CompletedProcess(
-                result.args, result.returncode, output.read(), result.stderr
-            )
     except (OSError, subprocess.TimeoutExpired) as err:
         raise ScanError(f"{Path(argv[0]).name} did not complete: {err}") from err
 
@@ -659,33 +641,33 @@ def cli_env(environ: Mapping[str, str], home: Path) -> dict[str, str]:
 
 
 def semgrep_tool(info: object) -> dict[str, object]:
-    """Return the single Semgrep entry from CLI INFO, else raise ScanError."""
+    """Return the single Semgrep entry from the adapter registry, else raise ScanError."""
     if not isinstance(info, dict):
-        raise ScanError("CLI info: top level is not a JSON object")
+        raise ScanError("adapter registry: top level is not a JSON object")
     tools = info.get("tools")
     if not isinstance(tools, list):
-        raise ScanError("CLI info: tools missing or not a list")
+        raise ScanError("adapter registry: tools missing or not a list")
     semgrep = [
         item for item in tools if isinstance(item, dict) and item.get("id") == "Semgrep"
     ]
     if not semgrep:
-        raise ScanError("CLI info: no Semgrep entry")
+        raise ScanError("adapter registry: no Semgrep entry")
     if len(semgrep) > 1:
-        raise ScanError(f"CLI info: {len(semgrep)} Semgrep entries, want 1")
+        raise ScanError(f"adapter registry: {len(semgrep)} Semgrep entries, want 1")
     return semgrep[0]
 
 
 def info_opengrep_version(info: object) -> str:
-    """Return the Semgrep preferredVersion in CLI INFO, else raise ScanError."""
+    """Return the Semgrep preferredVersion in the adapter registry, else raise ScanError."""
     entry = semgrep_tool(info)
     if "preferredVersion" not in entry:
-        raise ScanError("CLI info: Semgrep preferredVersion missing")
+        raise ScanError("adapter registry: Semgrep preferredVersion missing")
     preferred = entry["preferredVersion"]
     if not isinstance(preferred, str):
-        raise ScanError("CLI info: Semgrep preferredVersion is not a string")
+        raise ScanError("adapter registry: Semgrep preferredVersion is not a string")
     if VERSION_RE.fullmatch(preferred) is None:
         raise ScanError(
-            f"CLI info: Semgrep preferredVersion {preferred!r} is not x.y.z"
+            f"adapter registry: Semgrep preferredVersion {preferred!r} is not x.y.z"
         )
     return preferred
 
@@ -700,26 +682,35 @@ def pin_problem(wanted: str, pinned: str) -> str | None:
     )
 
 
-def check_cli_opengrep(root: Path, pinned: str) -> None:
-    """Refuse a CLI whose wanted Opengrep version differs from PINNED.
-
-    The CLI exits right after writing, so stdout goes to a file (a pipe can drop the tail, measured 2026-11-24).
-    """
-    cli = cli_path(root)
-    command = [str(cli), "info", "--output-format", "json", "--no-update-notifier"]
-    with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-info-") as temporary:
-        directory = Path(temporary)
-        env = cli_env(os.environ, directory)
-        result = run_to_file(command, root, INFO_TIMEOUT_SECONDS, env, directory)
+def registry_version(package_dir: Path, env: dict[str, str]) -> str:
+    """Read the installed adapter descriptors and return the Semgrep preferred version."""
+    result = run_capture(
+        ["node", "-e", REGISTRY_PROGRAM], package_dir, INFO_TIMEOUT_SECONDS, env
+    )
     if result.returncode != 0:
         lines = result.stderr.strip().splitlines()
         tail = lines[-1] if lines else ""
-        raise ScanError(f"Codacy CLI info failed (exit {result.returncode}): {tail}")
+        raise ScanError(
+            f"Codacy adapter registry failed (exit {result.returncode}): {tail}"
+        )
     try:
         info = json.loads(result.stdout)
     except json.JSONDecodeError as err:
-        raise ScanError(f"Codacy CLI info did not print JSON: {err}") from err
-    problem = pin_problem(info_opengrep_version(info), pinned)
+        raise ScanError(f"Codacy adapter registry did not print JSON: {err}") from err
+    return info_opengrep_version(info)
+
+
+def check_cli_opengrep(root: Path, pinned: str) -> None:
+    """Refuse a pin mismatch using the adapter descriptors the CLI info command reports.
+
+    Node reads the descriptors in-process because the CLI drops stdout past the pipe buffer at exit.
+    """
+    cli_path(root)
+    with tempfile.TemporaryDirectory(
+        prefix="snatcharr-opengrep-registry-"
+    ) as temporary:
+        wanted = registry_version(root / PACKAGE, cli_env(os.environ, Path(temporary)))
+    problem = pin_problem(wanted, pinned)
     if problem is not None:
         raise ScanError(problem)
 
@@ -1433,42 +1424,57 @@ def info_cases(root: Path, pinned: str) -> list[tuple[str, bool]]:
     return cases
 
 
-def info_read_cases(scratch: Path) -> list[tuple[str, bool]]:
-    """Exercise the CLI info transport with large JSON, a failed child and empty stdout."""
-    python = [sys.executable, "-I", "-c"]
-    write_json = """import json, os, stat, sys
-if not stat.S_ISREG(os.fstat(1).st_mode):
-    sys.exit(3)
-print(json.dumps({"payload": "x" * 70_000}))
-"""
-    large = run_to_file(
-        [*python, write_json], scratch, INFO_TIMEOUT_SECONDS, {}, scratch
-    )
-    failed = run_to_file(
-        [*python, 'import sys; sys.stderr.write("oops"); sys.exit(4)'],
-        scratch,
-        INFO_TIMEOUT_SECONDS,
-        {},
-        scratch,
-    )
-    empty = run_to_file([*python, "pass"], scratch, INFO_TIMEOUT_SECONDS, {}, scratch)
+def registry_fixture(package_dir: Path, *tools: tuple[str, str]) -> tuple[str, str]:
+    """Read a scratch adapter package and return the version or the scanner diagnostic."""
+    package_dir.mkdir()
+    if tools:
+        adapter = package_dir / "node_modules/@codacy/analysis-adapters"
+        adapter.mkdir(parents=True)
+        (adapter / "package.json").write_text(
+            '{"name": "@codacy/analysis-adapters", "main": "index.js"}',
+            encoding="utf-8",
+        )
+        entries = [
+            {"descriptor": {"id": tool_id, "preferredVersion": version}}
+            for tool_id, version in tools
+        ]
+        (adapter / "index.js").write_text(
+            f"exports.builtinAdapterEntries = {json.dumps(entries)};", encoding="utf-8"
+        )
     try:
-        complete = large.returncode == 0 and json.loads(large.stdout) == {
-            "payload": "x" * 70_000
-        }
-    except json.JSONDecodeError:
-        complete = False
-    return [
-        ("CLI info read preserves large JSON on regular stdout", complete),
+        return registry_version(
+            package_dir, {"PATH": os.environ.get("PATH", os.defpath)}
+        ), ""
+    except ScanError as err:
+        return "", str(err)
+
+
+def adapter_registry_cases(scratch: Path) -> list[tuple[str, bool]]:
+    """Exercise the registry reader and pin comparison against independent scratch packages."""
+    semgrep = ("Semgrep", "1.33.1")
+    wanted, _ = registry_fixture(scratch / "matching", ("Other", "2.0.0"), semgrep)
+    older, _ = registry_fixture(scratch / "mismatch", ("Semgrep", "1.30.0"))
+    mismatch = pin_problem(older, "1.33.1") or ""
+    _, missing = registry_fixture(scratch / "missing")
+    _, duplicate = registry_fixture(scratch / "duplicate", semgrep, semgrep)
+    cases = [
+        ("adapter registry reads the Semgrep preferred version", wanted == "1.33.1"),
         (
-            "CLI info read preserves exit status and stderr",
-            failed.returncode == 4 and "oops" in failed.stderr,
+            "adapter registry pin mismatch names both versions",
+            "1.30.0" in mismatch and "1.33.1" in mismatch,
         ),
         (
-            "CLI info read accepts empty stdout",
-            empty.returncode == 0 and empty.stdout == "",
+            "adapter registry missing package refused",
+            "Codacy adapter registry failed (exit " in missing,
+        ),
+        (
+            "adapter registry duplicate Semgrep entries refused",
+            "2 Semgrep entries, want 1" in duplicate,
         ),
     ]
+    if shutil.which("node") is None:
+        return [(f"{name} (node is missing from PATH)", False) for name, _ in cases]
+    return cases
 
 
 def run_self_test(root: Path, today: date) -> int:
@@ -1480,7 +1486,7 @@ def run_self_test(root: Path, today: date) -> int:
         scratch = Path(temporary)
         cases = report_cases(root, baseline_counts(entries), version) + fingerprint_cases() + guard_cases(scratch) + download_cases(scratch) + request_cases(scratch)
         cases += spec_cases(root, scratch) + redirect_cases()
-        cases += info_read_cases(scratch)
+        cases += adapter_registry_cases(scratch)
     cases += entry_cases(sample, set(config_ids(root))) + shrink_cases(entries, sample) + live_cases(config_ids(root)) + info_cases(root, version)
     cases.append(("empty baseline: the shrink cases still run", all(held for _name, held in shrink_cases({}, sample))))
     failed = [name for name, held in cases if not held]
