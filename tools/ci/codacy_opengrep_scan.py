@@ -164,6 +164,32 @@ def run_capture(argv: list[str], cwd: Path, timeout: float, env: dict[str, str] 
         raise ScanError(f"{Path(argv[0]).name} did not complete: {err}") from err
 
 
+def run_to_file(
+    argv: list[str], cwd: Path, timeout: float, env: dict[str, str], directory: Path
+) -> subprocess.CompletedProcess[str]:
+    """Run an argument list under a deadline and read its UTF-8 stdout file after exit."""
+    try:
+        with tempfile.TemporaryFile(
+            mode="w+", encoding="utf-8", dir=directory
+        ) as output:
+            result = subprocess.run(  # nosec B603  # argument lists built in this file, no shell
+                argv,
+                cwd=cwd,
+                env=env,
+                stdout=output,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+            output.seek(0)
+            return subprocess.CompletedProcess(
+                result.args, result.returncode, output.read(), result.stderr
+            )
+    except (OSError, subprocess.TimeoutExpired) as err:
+        raise ScanError(f"{Path(argv[0]).name} did not complete: {err}") from err
+
+
 def git_env(environ: dict[str, str]) -> dict[str, str]:
     """Return ENVIRON without GIT_* variables: GIT_DIR, GIT_INDEX_FILE and the like would point git elsewhere."""
     return {key: value for key, value in environ.items() if not key.startswith("GIT_")}
@@ -675,12 +701,16 @@ def pin_problem(wanted: str, pinned: str) -> str | None:
 
 
 def check_cli_opengrep(root: Path, pinned: str) -> None:
-    """Refuse a CLI whose wanted Opengrep version differs from PINNED."""
+    """Refuse a CLI whose wanted Opengrep version differs from PINNED.
+
+    The CLI exits right after writing, so stdout goes to a file (a pipe can drop the tail, measured 2026-11-24).
+    """
     cli = cli_path(root)
     command = [str(cli), "info", "--output-format", "json", "--no-update-notifier"]
     with tempfile.TemporaryDirectory(prefix="snatcharr-opengrep-info-") as temporary:
-        env = cli_env(os.environ, Path(temporary))
-        result = run_capture(command, root, INFO_TIMEOUT_SECONDS, env)
+        directory = Path(temporary)
+        env = cli_env(os.environ, directory)
+        result = run_to_file(command, root, INFO_TIMEOUT_SECONDS, env, directory)
     if result.returncode != 0:
         lines = result.stderr.strip().splitlines()
         tail = lines[-1] if lines else ""
@@ -1403,6 +1433,44 @@ def info_cases(root: Path, pinned: str) -> list[tuple[str, bool]]:
     return cases
 
 
+def info_read_cases(scratch: Path) -> list[tuple[str, bool]]:
+    """Exercise the CLI info transport with large JSON, a failed child and empty stdout."""
+    python = [sys.executable, "-I", "-c"]
+    write_json = """import json, os, stat, sys
+if not stat.S_ISREG(os.fstat(1).st_mode):
+    sys.exit(3)
+print(json.dumps({"payload": "x" * 70_000}))
+"""
+    large = run_to_file(
+        [*python, write_json], scratch, INFO_TIMEOUT_SECONDS, {}, scratch
+    )
+    failed = run_to_file(
+        [*python, 'import sys; sys.stderr.write("oops"); sys.exit(4)'],
+        scratch,
+        INFO_TIMEOUT_SECONDS,
+        {},
+        scratch,
+    )
+    empty = run_to_file([*python, "pass"], scratch, INFO_TIMEOUT_SECONDS, {}, scratch)
+    try:
+        complete = large.returncode == 0 and json.loads(large.stdout) == {
+            "payload": "x" * 70_000
+        }
+    except json.JSONDecodeError:
+        complete = False
+    return [
+        ("CLI info read preserves large JSON on regular stdout", complete),
+        (
+            "CLI info read preserves exit status and stderr",
+            failed.returncode == 4 and "oops" in failed.stderr,
+        ),
+        (
+            "CLI info read accepts empty stdout",
+            empty.returncode == 0 and empty.stdout == "",
+        ),
+    ]
+
+
 def run_self_test(root: Path, today: date) -> int:
     """Replay recorded reports and planted baseline cases; return 1 when any case does not hold."""
     version = tool_versions(root)["OPENGREP_VERSION"]
@@ -1412,6 +1480,7 @@ def run_self_test(root: Path, today: date) -> int:
         scratch = Path(temporary)
         cases = report_cases(root, baseline_counts(entries), version) + fingerprint_cases() + guard_cases(scratch) + download_cases(scratch) + request_cases(scratch)
         cases += spec_cases(root, scratch) + redirect_cases()
+        cases += info_read_cases(scratch)
     cases += entry_cases(sample, set(config_ids(root))) + shrink_cases(entries, sample) + live_cases(config_ids(root)) + info_cases(root, version)
     cases.append(("empty baseline: the shrink cases still run", all(held for _name, held in shrink_cases({}, sample))))
     failed = [name for name, held in cases if not held]
