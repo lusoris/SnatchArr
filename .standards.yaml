@@ -61,17 +61,19 @@ overrides:
     require_extra_approval_for_unattributed_changes: true
 # Dated exceptions; praetorctl audit fails on an expired entry.
 exceptions:
-  # category C, entered 2026-11-17 (entry + 10 days): the in-tree audit ignore in web/pnpm-workspace.yaml.
+  # category C, renewed 2026-11-24 (entry + 10 days; first entered 2026-11-17): the in-tree audit ignore
+  # in web/pnpm-workspace.yaml.
   - rule: "backlog.caps.forge_alerts"
     tool: "backlog"
     fingerprint: "GHSA-fc5q-39xc-vjpf"
     reason: >-
-      category C, entered 2026-11-17 (entry + 10 days): picomatch 4.0.7 GHSA-fc5q-39xc-vjpf (high, ReDoS
-      through repeated extglobs, vulnerable <=4.0.7, no patched release; 4.0.7 is the newest) through vite,
-      vitest, tinyglobby, fdir, unplugin and svelte-check, build and test time only; web/pnpm-workspace.yaml
+      category C, renewed 2026-11-24 (entry + 10 days; first entered 2026-11-17): picomatch 4.0.7
+      GHSA-fc5q-39xc-vjpf (high, ReDoS through repeated extglobs, vulnerable <=4.0.7, no patched release;
+      4.0.7 is the newest as of 2026-11-24, advisory first_patched_version null) through vite, vitest,
+      tinyglobby, fdir, unplugin and svelte-check, build and test time only; web/pnpm-workspace.yaml
       auditConfig.ignoreGhsas lists this one advisory so pnpm audit --audit-level=high passes; tracked in
       #1215; ends when a patched picomatch is released and locked; no --ignore-unfixable, no alert dismissal
-    expires: "2026-11-27"
+    expires: "2026-12-04"
 register:
   sources:
     expected: 13
