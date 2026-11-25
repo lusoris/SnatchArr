@@ -190,6 +190,45 @@ if [ -e "$1" ]; then
 else
 	ok 'staging directories removed'
 fi
+	stub_fail="$work/stub-fail"
+	mkdir -p "$stub_fail"
+	cat > "$stub_fail/tar" <<'EOF'
+#!/bin/sh
+set -eu
+"$REAL_TAR" "$@"
+exit 1
+EOF
+	chmod 700 "$stub_fail/tar"
+	cp "$final" "$work/before"
+	rc=0
+	(
+		cd "$repo"
+		env -i PATH="$stub_fail:$PATH" HOME="$work/home" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+			REAL_TAR="$real_tar" sh tools/ci/gitleaks_scan.sh "$fixture_cache"
+	) > "$work/fail.out" 2> "$work/fail.err" || rc=$?
+	if [ "$rc" -eq 2 ]; then
+		ok 'failed extraction exits 2'
+	else
+		bad 'failed extraction exits 2'
+	fi
+	if grep -F 'secret-scan: scanner setup failed' "$work/fail.err" > /dev/null; then
+		ok 'failed extraction reports setup failure'
+	else
+		bad 'failed extraction reports setup failure'
+	fi
+	set -- "$fixture_cache"/extract.*
+	if [ -e "$1" ]; then
+		bad 'failed extraction removes staging directory'
+	else
+		ok 'failed extraction removes staging directory'
+	fi
+	rc=0
+	reported_version="$("$final" version 2>&1)" || rc=$?
+	if cmp -s "$final" "$work/before" && [ "$rc" -eq 0 ] && [ "$reported_version" = "$version" ]; then
+		ok 'installed scanner unchanged after failed extraction'
+	else
+		bad 'installed scanner unchanged after failed extraction'
+	fi
 
 if [ "$failed" -ne 0 ]; then
 	exit 1
