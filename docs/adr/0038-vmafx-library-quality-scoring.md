@@ -8,6 +8,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ADR-0038: VMAFx Perceptual Video Quality Scoring and Unified Video Hashing Across Media Libraries
 
 - **Status:** Accepted (operator answers recorded 2026-10-26, ledger ids `snatcharr-oq-0038-1` to `snatcharr-oq-0038-9`)
+- **Partially superseded by** [ADR-0050](0050-media-execution-in-torcul.md) (2026-11-24, answer to `OQ-0050-1`): torcul runs the shared hasher (`oshash`, DCT `phash`, duration and frame-rate probe) and VMAFx scoring of library copies as jobs, so SnatchArr builds no `worker/crates/snatch-vhash` crate (`OQ-0038-1`) and deploys no VMAFx scoring container (`OQ-0038-2`). SnatchArr triggers those jobs, stores the reported hashes and scores and keeps importing hashes from a linked Stash; the rest of this record still binds.
 - **Date:** 2026-10-26
 - **Deciders:** lusoris
 
@@ -183,6 +184,7 @@ CREATE TABLE library_quality_scores (
 
 - **`RuleNotAnUpgrade` (`api/internal/queue/sweep.go:639-644`, `api/internal/queue/rules.go:35`)**:
   - When a queued download completes to a readable staging path (before `*arr` overwrites the incumbent library file) and quality scoring is enabled, SnatchArr verifies that the candidate's pooled VMAFx score (using `vmaf_harmonic_mean` or `vmaf_perc10`, see `OQ-0038-5`) does not regress against the incumbent copy and clears the policy minimum.
+  - Best effort since [ADR-0050](0050-media-execution-in-torcul.md): torcul runs this check as a score job that races the `*arr` import, the timing risk that `OQ-0038-3` answer a names. A candidate that `*arr` imports before the verdict arrives, or whose score job fails, gets no queue action, and act mode removes no item without a verdict (ADR-0050 section 2, staged candidates).
   - On Lidarr and Whisparr v2/v3 — where `GoenvoyProber` currently returns `errNoFileScore` (`api/internal/arrclient/queue.go:230-307`) — VMAFx provides the first objective upgrade guard.
   - Consistent with [ADR-0012](0012-queue-management-replaces-cleanuparr-link.md), quality-based strikes start in `observe` mode by default, emitting an audit event before any operator opts into automatic queue removal.
 - **`RuleDuplicate` (`api/internal/queue/sweep.go:51-99`) and Library Deduplication ([ADR-0033](0033-adult-identity-and-model.md), [ADR-0034](0034-matching-engine-and-model-connection.md))**:
