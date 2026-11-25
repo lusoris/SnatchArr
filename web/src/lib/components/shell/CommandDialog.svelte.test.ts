@@ -205,6 +205,22 @@ describe('CommandDialog', () => {
 		const labels = screen.getAllByRole('option').map((option) => option.textContent?.trim() ?? '');
 
 		expect(labels.length).toBeGreaterThan(navItems.length);
-		expect(labels.filter((label) => /^(.+) — \1$/u.test(label))).toEqual([]);
+		expect(labels.filter((label) => /^(.+) — \1$/iu.test(label))).toEqual([]);
+	});
+
+	it.each([
+		['negative: identical instance name and kind', 'sonarr', 'sonarr'],
+		['boundary: instance name differs by case and whitespace', ' Sonarr ', 'Sonarr'],
+		['positive: distinct instance name and kind', 'Sonarr 4K', 'Sonarr 4K — sonarr']
+	])('%s', async (_case, name, expected) => {
+		stubGet({ '/instances': [{ ...mockInstance, name }] });
+		renderWithQuery(CommandDialog, { navItems, open: true });
+
+		await vi.waitFor(() => {
+			const labels = screen
+				.getAllByRole('option')
+				.map((option) => option.textContent?.trim() ?? '');
+			expect(labels.find((label) => label.includes(name.trim()))).toBe(expected);
+		});
 	});
 });
