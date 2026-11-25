@@ -629,18 +629,18 @@ func requireHolder(run domain.Run, workerID string) error {
 }
 
 // completeAndPersist closes the run and saves its progress in one transaction: runs.CompleteWithProgress
-// checks the holder and locks the run row before persistRunProgress writes, so the lease cannot pass to
-// another worker between that check and the writes, and a failed write leaves the run leased. It returns
-// the Seerr request ids to mark once the transaction has committed.
+// checks the holder and locks the run row before persistRunProgress writes under the completion deadline,
+// so the lease cannot pass to another worker between that check and the writes, and a failed write leaves
+// the run leased. It returns the Seerr request ids to mark once the transaction has committed.
 func (s *Server) completeAndPersist(ctx context.Context, run domain.Run, policy domain.Policy, req *snatcharrv1.CompleteRunRequest, searched []*snatcharrv1.SearchedItem) ([]int64, error) {
 	completion := snatch.Completion{
 		RunID: run.ID, WorkerID: req.GetWorkerId(), Status: outcome(req.GetOutcome()),
 		Searched: len(searched), Error: req.GetError(), Eligible: req.EligibleItems,
 	}
 	var requested []int64
-	_, err := s.runs.CompleteWithProgress(ctx, completion, func(q *sqlcgen.Queries) error {
+	_, err := s.runs.CompleteWithProgress(ctx, completion, func(txCtx context.Context, q *sqlcgen.Queries) error {
 		var persistErr error
-		requested, persistErr = s.persistRunProgress(ctx, q, run, policy, req, searched)
+		requested, persistErr = s.persistRunProgress(txCtx, q, run, policy, req, searched)
 		return persistErr
 	})
 	if err != nil {

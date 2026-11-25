@@ -73,7 +73,7 @@ func TestCompleteWithProgressHoldsLease(t *testing.T) {
 	defer cancel()
 	runID := leasedByWorker(ctx, t, f)
 	var leaseErr error
-	run, err := f.srv.runs.CompleteWithProgress(ctx, completionBy(runID, "worker"), func(q *sqlcgen.Queries) error {
+	run, err := f.srv.runs.CompleteWithProgress(ctx, completionBy(runID, "worker"), func(ctx context.Context, q *sqlcgen.Queries) error {
 		f.clk.Advance(snatch.LeaseTTL + time.Second)
 		_, leaseErr = f.srv.runs.Lease(ctx, "worker-2")
 		return f.srv.policies.SaveCursorIn(ctx, q, f.instanceID, domain.SnatchMissing, "c-after")
@@ -102,7 +102,7 @@ func TestCompleteWithProgressRollsBack(t *testing.T) {
 	defer cancel()
 	runID := leasedByWorker(ctx, t, f)
 	planted := errors.New("planted persist failure")
-	_, err := f.srv.runs.CompleteWithProgress(ctx, completionBy(runID, "worker"), func(q *sqlcgen.Queries) error {
+	_, err := f.srv.runs.CompleteWithProgress(ctx, completionBy(runID, "worker"), func(ctx context.Context, q *sqlcgen.Queries) error {
 		if saveErr := f.srv.policies.SaveCursorIn(ctx, q, f.instanceID, domain.SnatchMissing, "c-after"); saveErr != nil {
 			return saveErr
 		}
@@ -130,7 +130,7 @@ func TestCompleteWithProgressRefusesNonHolder(t *testing.T) {
 		t.Fatalf("parse run id: %v", err)
 	}
 	persisted := false
-	_, err = f.srv.runs.CompleteWithProgress(ctx, completionBy(runID, "worker"), func(q *sqlcgen.Queries) error {
+	_, err = f.srv.runs.CompleteWithProgress(ctx, completionBy(runID, "worker"), func(ctx context.Context, q *sqlcgen.Queries) error {
 		persisted = true
 		return f.srv.policies.SaveCursorIn(ctx, q, f.instanceID, domain.SnatchMissing, "c-after")
 	})

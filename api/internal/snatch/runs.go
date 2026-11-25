@@ -25,6 +25,9 @@ import (
 // LeaseTTL is how long a worker may go silent before its run is handed to another.
 const LeaseTTL = 90 * time.Second
 
+// completeTimeout bounds the completion transaction (HISS-02) so it releases the run row lock well inside LeaseTTL even if a progress write waits on a lock.
+const completeTimeout = 10 * time.Second
+
 // MaxLeases is how often one run is leased before an expired lease ends it as failed: a
 // run that crashes every worker would otherwise be handed out forever (#17).
 const MaxLeases = 3
@@ -40,14 +43,15 @@ var ErrNoRun = errors.New("snatch: no run available")
 
 // Runs owns the snatch_runs lifecycle.
 type Runs struct {
-	st  *store.Store
-	clk clock.Clock
-	ids id.Generator
+	st        *store.Store
+	clk       clock.Clock
+	ids       id.Generator
+	txTimeout time.Duration
 }
 
 // NewRuns wires the run service.
 func NewRuns(st *store.Store, clk clock.Clock, ids id.Generator) *Runs {
-	return &Runs{st: st, clk: clk, ids: ids}
+	return &Runs{st: st, clk: clk, ids: ids, txTimeout: completeTimeout}
 }
 
 // EnqueueOptions configures a newly queued run.
@@ -242,29 +246,35 @@ func (r *Runs) Complete(ctx context.Context, runID uuid.UUID, workerID string, s
 // CompleteWithProgress closes a leased run, then runs persist with the queries of the same transaction.
 // The closing UPDATE checks the holder and takes the run's row lock first, and LeaseRun skips locked
 // rows, so the lease cannot pass to another worker while persist writes; an error from persist rolls
-// the run back to leased. A nil persist only closes the run.
-func (r *Runs) CompleteWithProgress(ctx context.Context, c Completion, persist func(q *sqlcgen.Queries) error) (domain.Run, error) {
+// the run back to leased. The callback must run every statement with the context it receives.
+// A nil persist only closes the run.
+func (r *Runs) CompleteWithProgress(ctx context.Context, c Completion, persist func(ctx context.Context, q *sqlcgen.Queries) error) (domain.Run, error) {
 	params, err := r.completeParams(c)
 	if err != nil {
 		return domain.Run{}, err
 	}
 	var row sqlcgen.SnatchRun
-	err = r.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+	txCtx, cancel := context.WithTimeout(ctx, r.txTimeout)
+	defer cancel()
+	err = r.st.Tx(txCtx, func(q *sqlcgen.Queries) error {
 		var txErr error
-		row, txErr = q.CompleteRun(ctx, params)
+		row, txErr = q.CompleteRun(txCtx, params)
 		if errors.Is(txErr, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: run %s is not leased by %s", domain.ErrConflict, c.RunID, c.WorkerID)
 		}
 		if txErr != nil {
-			return fmt.Errorf("snatch: complete: %w", store.MapError(txErr))
+			return store.MapError(txErr)
 		}
 		if persist == nil {
 			return nil
 		}
-		return persist(q)
+		return persist(txCtx, q)
 	})
 	if err != nil {
-		return domain.Run{}, err
+		if errors.Is(txCtx.Err(), context.DeadlineExceeded) && !errors.Is(err, context.DeadlineExceeded) {
+			err = errors.Join(context.DeadlineExceeded, err)
+		}
+		return domain.Run{}, fmt.Errorf("snatch: complete: %w", err)
 	}
 	return runFromRow(row), nil
 }
