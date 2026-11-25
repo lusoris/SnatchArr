@@ -5,6 +5,7 @@
 package snatch
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -12,20 +13,30 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/id"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
 func newRunsFixture(t *testing.T) (*Runs, *clockwork.FakeClock, uuid.UUID) {
 	t.Helper()
+	runs, clk, instanceID, _ := newRunsStoreFixture(t)
+	return runs, clk, instanceID
+}
+
+func newRunsStoreFixture(t *testing.T) (*Runs, *clockwork.FakeClock, uuid.UUID, *store.Store) {
+	t.Helper()
 	st := storetest.New(t)
 	clk := clock.NewFake()
-	return NewRuns(st, clk, id.New()), clk, storetest.Instance(t, st, clk.Now())
+	return NewRuns(st, clk, id.New()), clk, storetest.Instance(t, st, clk.Now()), st
 }
 
 func enqueueRun(t *testing.T, runs *Runs, instanceID uuid.UUID) domain.Run {
@@ -42,6 +53,109 @@ func mustLease(t *testing.T, runs *Runs, worker string, want uuid.UUID) {
 	got, err := runs.Lease(t.Context(), worker)
 	if err != nil || got.ID != want {
 		t.Fatalf("Lease(%s) = %v, %v; want run %s", worker, got.ID, err, want)
+	}
+}
+
+func TestCompleteWithProgressDeadline(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		lockRow bool
+		persist func(context.Context, *sqlcgen.Queries) error
+		wantErr error
+		status  domain.RunStatus
+	}{
+		{name: "persist waits past the deadline", persist: waitForPersistDeadline, wantErr: context.DeadlineExceeded, status: domain.RunLeased},
+		{name: "closing update waits on a row lock", lockRow: true, wantErr: context.DeadlineExceeded, status: domain.RunLeased},
+		{name: "persist inside the deadline", persist: func(context.Context, *sqlcgen.Queries) error { return nil }, status: domain.RunDone},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			runs, _, instanceID, st := newRunsStoreFixture(t)
+			queued := enqueueRun(t, runs, instanceID)
+			leased, err := runs.Lease(ctx, "worker")
+			if err != nil || leased.ID != queued.ID {
+				t.Fatalf("Lease() = %v, %v; want run %s", leased.ID, err, queued.ID)
+			}
+			runs.txTimeout = 200 * time.Millisecond
+			if tc.lockRow {
+				defer lockCompletionRow(ctx, t, st, leased.ID)()
+				runs.st = storeWithAcquireDeadline(ctx, t, st, runs.txTimeout)
+			}
+			c := Completion{RunID: leased.ID, WorkerID: leased.LeasedBy, Status: domain.RunDone}
+			start := time.Now()
+			_, err = runs.CompleteWithProgress(ctx, c, tc.persist)
+			if elapsed := time.Since(start); elapsed >= 2*time.Second {
+				t.Errorf("CompleteWithProgress() took %v; want under 2s", elapsed)
+			}
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("CompleteWithProgress() error = %v; want %v", err, tc.wantErr)
+			}
+			assertCompletionState(ctx, t, st, leased, tc.status)
+		})
+	}
+}
+
+func waitForPersistDeadline(ctx context.Context, _ *sqlcgen.Queries) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(5 * time.Second):
+		return errors.New("persist context has no deadline")
+	}
+}
+
+func lockCompletionRow(ctx context.Context, t *testing.T, st *store.Store, runID uuid.UUID) func() {
+	t.Helper()
+	tx, err := st.Pool().Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin row lock: %v", err)
+	}
+	unlock := func() {
+		if err := tx.Rollback(ctx); err != nil {
+			t.Errorf("release row lock: %v", err)
+		}
+	}
+	if _, err := tx.Exec(ctx, "SELECT 1 FROM snatch_runs WHERE id = $1 FOR UPDATE", runID); err != nil {
+		unlock()
+		t.Fatalf("lock run %s: %v", runID, err)
+	}
+	return unlock
+}
+
+// Check acquisition separately because a deadline on the UPDATE alone also interrupts its lock wait.
+func storeWithAcquireDeadline(ctx context.Context, t *testing.T, st *store.Store, timeout time.Duration) *store.Store {
+	t.Helper()
+	cfg := st.Pool().Config()
+	cfg.PrepareConn = func(acquireCtx context.Context, _ *pgx.Conn) (bool, error) {
+		if deadline, ok := acquireCtx.Deadline(); !ok || time.Until(deadline) > timeout {
+			t.Errorf("completion transaction acquired connection with deadline %v; want within %v", deadline, timeout)
+		}
+		return true, nil
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatalf("open completion pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return store.New(pool)
+}
+
+func assertCompletionState(ctx context.Context, t *testing.T, st *store.Store, leased domain.Run, want domain.RunStatus) {
+	t.Helper()
+	row, err := st.Q().GetRun(ctx, leased.ID)
+	if err != nil {
+		t.Fatalf("read completed run: %v", err)
+	}
+	got := runFromRow(row)
+	if got.Status != want {
+		t.Errorf("status = %s; want %s", got.Status, want)
+	}
+	if want == domain.RunLeased && (got.LeasedBy != leased.LeasedBy || got.LeaseExpiresAt == nil ||
+		leased.LeaseExpiresAt == nil || !got.LeaseExpiresAt.Equal(*leased.LeaseExpiresAt)) {
+		t.Errorf("lease = %q until %v; want %q until %v", got.LeasedBy, got.LeaseExpiresAt, leased.LeasedBy, leased.LeaseExpiresAt)
 	}
 }
 
