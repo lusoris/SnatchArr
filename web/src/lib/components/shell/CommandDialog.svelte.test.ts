@@ -151,7 +151,7 @@ describe('CommandDialog', () => {
 	}
 
 	it('positive: selecting a nav entry executes goto with resolved route', async () => {
-		await searchAndSelect(m.nav_overview(), new RegExp(`^${m.nav_overview()} — `, 'i'));
+		await searchAndSelect(m.nav_overview(), new RegExp(`^${m.nav_overview()}$`, 'i'));
 		expect(navMocks.goto).toHaveBeenCalledWith('/');
 	});
 
@@ -196,5 +196,31 @@ describe('CommandDialog', () => {
 		await fireEvent.input(input, { target: { value: 'nonexistent-route-xyz' } });
 
 		expect(await screen.findByText(/no commands found/i)).toBeTruthy();
+	});
+
+	it('negative: no entry repeats its title as subtitle', async () => {
+		renderWithQuery(CommandDialog, { navItems, open: true });
+
+		await screen.findByText(/Sonarr 4K/i);
+		const labels = screen.getAllByRole('option').map((option) => option.textContent?.trim() ?? '');
+
+		expect(labels.length).toBeGreaterThan(navItems.length);
+		expect(labels.filter((label) => /^(.+) — \1$/iu.test(label))).toEqual([]);
+	});
+
+	it.each([
+		['negative: identical instance name and kind', 'sonarr', 'sonarr'],
+		['boundary: instance name differs by case and whitespace', ' Sonarr ', 'Sonarr'],
+		['positive: distinct instance name and kind', 'Sonarr 4K', 'Sonarr 4K — sonarr']
+	])('%s', async (_case, name, expected) => {
+		stubGet({ '/instances': [{ ...mockInstance, name }] });
+		renderWithQuery(CommandDialog, { navItems, open: true });
+
+		await vi.waitFor(() => {
+			const labels = screen
+				.getAllByRole('option')
+				.map((option) => option.textContent?.trim() ?? '');
+			expect(labels.find((label) => label.includes(name.trim()))).toBe(expected);
+		});
 	});
 });
