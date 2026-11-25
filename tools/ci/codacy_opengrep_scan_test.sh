@@ -199,12 +199,15 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 for wired in "Makefile:python3 -I tools/ci/codacy_opengrep_scan.py --self-test" \
   "Makefile:python3 -I tools/ci/codacy_opengrep_scan.py --base-ref" \
   "Makefile:python3 -I tools/ci/codacy_opengrep_scan.py$" \
-  "Makefile:npm ci --ignore-scripts" \
+  "Makefile:sh tools/ci/codacy_opengrep_install_test.sh" \
+  "Makefile:sh tools/ci/codacy_opengrep_install.sh" \
   "Makefile:^tools-verify:.* tools-opengrep" \
   "lefthook.yml:make tools-opengrep" \
   ".github/workflows/ci.yml:python3 -I tools/ci/codacy_opengrep_scan.py --self-test" \
   ".github/workflows/ci.yml:python3 -I tools/ci/codacy_opengrep_scan.py --base-ref" \
   ".github/workflows/ci.yml:python3 -I tools/ci/codacy_opengrep_scan.py$" \
+  ".github/workflows/ci.yml:sh tools/ci/codacy_opengrep_install_test.sh" \
+  ".github/workflows/ci.yml:sh tools/ci/codacy_opengrep_install.sh" \
   ".github/workflows/ci.yml:CODACY_PROJECT_TOKEN: [\$][{][{] secrets.CODACY_PROJECT_TOKEN [}][}]$" \
   ".github/workflows/ci.yml:git fetch --no-tags --quiet origin \"[\$]BEFORE_SHA\""; do
   pattern="${wired#*:}"
