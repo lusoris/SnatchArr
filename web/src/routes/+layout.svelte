@@ -25,6 +25,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { m } from '#lib/paraglide/messages.js';
 	import { api, PUBLIC_ROUTES } from '#lib/api/client.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { systemModulesQuery } from '#lib/queries/system.js';
 	import { keys, queryClient } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
@@ -42,14 +43,7 @@ SPDX-License-Identifier: EUPL-1.2
 	let cmdOpen = $state(false);
 	let menuButtonEl = $state<HTMLButtonElement | null>(null);
 
-	const modulesQuery = createSentioQuery(() => ({
-		queryKey: keys.modules,
-		enabled: session.state === 'authenticated',
-		queryFn: async () => {
-			const res = await api.GET('/system/modules');
-			return res.data ?? [];
-		}
-	}));
+	const modulesQuery = systemModulesQuery();
 
 	const settingsQuery = createSentioQuery(() => ({
 		queryKey: keys.settings,
