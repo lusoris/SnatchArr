@@ -154,6 +154,9 @@ jobs:
         # Findings excepted by fingerprint or path and rule, each with a reason and an expiry:
         # .gitleaksignore. The gitleaks pin lives in the script, which `make secret-scan` runs too.
         run: sh tools/ci/gitleaks_scan.sh "$RUNNER_TEMP/gitleaks"
+      # Issue 1323: replay the concurrent scanner setup regression.
+      - name: Replay the parallel-setup planted case
+        run: sh tools/ci/gitleaks_scan_test.sh "$RUNNER_TEMP/gitleaks"
 
   semgrep:
     name: Semgrep (own rules, .semgrep.yml)

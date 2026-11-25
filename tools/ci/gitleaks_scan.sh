@@ -28,7 +28,19 @@ if [ "$platform" != "Linux/x86_64" ]; then
 fi
 
 # Setup failures must never be mistaken for a completed scan with findings.
-trap 'if [ "$?" -ne 0 ]; then echo "secret-scan: scanner setup failed" >&2; exit 2; fi' 0
+stage=""
+# cleanup_setup ARGS: remove staged extraction and fail when scanner setup fails.
+cleanup_setup() {
+	status=$?
+	if [ -n "$stage" ]; then
+		rm -rf "$stage"
+	fi
+	if [ "$status" -ne 0 ]; then
+		echo "secret-scan: scanner setup failed" >&2
+		exit 2
+	fi
+}
+trap cleanup_setup 0
 mkdir -p "$cache"
 archive="$cache/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
 if [ ! -f "$archive" ]; then
@@ -42,13 +54,19 @@ fi
 echo "$GITLEAKS_SHA256  $archive" | sha256sum --check --quiet
 bindir="$cache/gitleaks-$GITLEAKS_VERSION"
 mkdir -p "$bindir"
-tar -xzf "$archive" -C "$bindir" gitleaks
-gitleaks="$bindir/gitleaks"
-version="$("$gitleaks" version)"
+# Stage extraction before atomically replacing the scanner another process can execute.
+# Issue 1323: concurrent extractions otherwise expose a gitleaks inode while it is written.
+stage="$(mktemp -d "$cache/extract.XXXXXX")"
+tar -xzf "$archive" -C "$stage" gitleaks
+version="$("$stage/gitleaks" version)"
 if [ "$version" != "$GITLEAKS_VERSION" ]; then
 	echo "secret-scan: gitleaks reports version $version, want $GITLEAKS_VERSION" >&2
 	exit 1
 fi
+mv -f "$stage/gitleaks" "$bindir/gitleaks"
+rmdir "$stage"
+stage=""
+gitleaks="$bindir/gitleaks"
 
 python3 -I "$HERE/secret_scan.py" --gitleaks "$gitleaks" --self-test
 trap - 0
