@@ -111,6 +111,11 @@ def changed_lines(diff: str) -> tuple[dict[str, set[int]], dict[str, set[int]]]:
     return touched, gaps
 
 
+def shfmt_env() -> dict[str, str]:
+    """Disable Go workspace mode so the pinned shfmt modfile works in either caller environment."""
+    return {**os.environ, "GOWORK": "off"}
+
+
 def build_shfmt() -> None:
     """Build the pinned shfmt tool from this checker's repository once per run."""
     root = Path(__file__).resolve().parents[2]
@@ -124,6 +129,7 @@ def build_shfmt() -> None:
                 "--version",
             ],
             cwd=root,
+            env=shfmt_env(),
             capture_output=True,
             text=True,  # nosec B603  # pinned go tool argv, no shell
             timeout=SHFMT_RESOLVE_TIMEOUT_SECONDS,
@@ -153,6 +159,7 @@ def parse_shell(path: str, source: str) -> dict:
                 path,
             ],
             cwd=root,
+            env=shfmt_env(),
             input=source,
             capture_output=True,
             text=True,  # nosec B603  # pinned go tool argv, no shell
@@ -183,15 +190,35 @@ def shell_line(node: dict, key: str, path: str) -> int:
     return line
 
 
+def shell_heredoc_end(stmt: dict, path: str) -> int:
+    """Include heredoc delimiters in a statement's span with a bounded syntax walk."""
+    end = shell_line(stmt, "End", path)
+    stack = [stmt]
+    visited = 0
+    while stack:
+        visited += 1
+        if visited > MAX_SHELL_NODES:
+            raise CheckError(f"{path}: shfmt syntax tree exceeds {MAX_SHELL_NODES} nodes")
+        node = stack.pop()
+        if isinstance(node, list):
+            stack.extend(node)
+        elif isinstance(node, dict):
+            hdoc = node.get("Hdoc")
+            if isinstance(hdoc, dict):
+                end = max(end, shell_line(hdoc, "End", path))
+            stack.extend(node.values())
+    return end
+
+
 def shell_func_end(cmd: dict, start: int, path: str) -> int:
-    """Return the end line of a FuncDecl body before any chained BinaryCmd."""
+    """Return the body and heredoc end before any chained BinaryCmd right operand."""
     stmt = cmd.get("Body")
     for _ in range(MAX_SHELL_NODES):
         if not isinstance(stmt, dict):
             raise CheckError(f"{path}:{start}: shfmt FuncDecl Body missing")
         inner = stmt.get("Cmd")
         if not isinstance(inner, dict) or inner.get("Type") != "BinaryCmd":
-            return shell_line(stmt, "End", path)
+            return shell_heredoc_end(stmt, path)
         stmt = inner.get("X")
     raise CheckError(f"{path}: shfmt syntax tree exceeds {MAX_SHELL_NODES} nodes")
 
@@ -233,9 +260,32 @@ def shell_functions(tree: dict, path: str) -> list[tuple[str, int, int, list[dic
     return found
 
 
-def shell_header_ok(comments: list[dict], first: int) -> bool:
-    """Check attached comments immediately above a function, skipping shellcheck directives."""
-    by_line = {comment["Hash"]["Line"]: comment.get("Text", "") for comment in comments}
+def shell_standalone_line(comment: dict, lines: list[str], path: str) -> int | None:
+    """Return a standalone comment's line using shfmt's byte coordinates, or None."""
+    line = shell_line(comment, "Hash", path)
+    pos = comment.get("Hash")
+    col = pos.get("Col") if isinstance(pos, dict) else None
+    if not isinstance(col, int) or col < 1:
+        raise CheckError(f"{path}: shfmt position Hash.Col missing or overflowed")
+    if line > len(lines):
+        raise CheckError(f"{path}: shfmt position Hash.Line exceeds source")
+    raw = lines[line - 1].encode("utf-8")
+    if col > len(raw) or raw[col - 1 : col] != b"#":
+        raise CheckError(f"{path}:{line}: shfmt comment position outside source")
+    if raw[: col - 1].strip(b" \t"):
+        return None
+    return line
+
+
+def shell_header_ok(
+    comments: list[dict], first: int, lines: list[str], path: str
+) -> bool:
+    """Accept standalone attached headers above a function, skipping shellcheck directives."""
+    by_line = {}
+    for comment in comments:
+        line = shell_standalone_line(comment, lines, path)
+        if line is not None:
+            by_line[line] = comment.get("Text", "")
     line = first - 1
     for _ in range(len(comments) + 1):
         text = by_line.get(line)
@@ -253,11 +303,12 @@ def shell_findings(
 ) -> list[str]:
     """List touched shell functions in path that lack an attached header comment."""
     found = []
+    lines = source.split("\n")  # shfmt increments line positions on newline bytes only.
     for name, start, end, comments in shell_functions(parse_shell(path, source), path):
         is_touched = bool(touched.intersection(range(start, end + 1))) or any(
             start <= s < end for s in gaps
         )
-        if is_touched and not shell_header_ok(comments, start):
+        if is_touched and not shell_header_ok(comments, start, lines, path):
             found.append(f"{path}:{start}: shell function {name} has no header comment")
     return found
 

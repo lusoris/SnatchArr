@@ -27,15 +27,18 @@ seed_repo() {
     git -C "$dir" commit -q -m base
 }
 
-# expect NAME WANT_STATUS WANT_TEXT EDIT [BASE] [TOOL_PATH] [MORE_TEXT] [RUN_DIR]: the function EDIT
-# changes the repository in $repo, then the check runs (from RUN_DIR when non-empty).
+# expect NAME WANT_STATUS WANT_TEXT EDIT [BASE] [TOOL_PATH] [MORE_TEXT] [RUN_DIR] [WORKSPACE]:
+# EDIT changes $repo; WORKSPACE sets GOWORK to its fixture file for this check only.
 expect() {
-    local name=$1 want=$2 text=$3 edit=$4 base=${5:-main} tool_path=${6:-} more_text=${7:-} run_dir=${8:-} out status
+    local name=$1 want=$2 text=$3 edit=$4 base=${5:-main} tool_path=${6:-} more_text=${7:-} run_dir=${8:-} workspace=${9:-} out status
     repo="$work/$(printf '%s' "$name" | tr -c 'a-z0-9' '-')"
     seed_repo "$repo"
     (cd "$repo" && "$edit")
     set +e
     out=$(
+        if [ -n "$workspace" ]; then
+            export GOWORK="$repo/go.work"
+        fi
         if [ -n "$run_dir" ]; then
             cd "$run_dir" 2>&1 || exit 2
         fi
@@ -686,6 +689,141 @@ edit_96() {
         'left_fn() { :; } &&' '    right_fn() { :; }' >chain-two.sh
 }
 
+# edit_97: a payload-only edit touches a bare function's trailing quoted heredoc.
+edit_97() {
+    printf '%s\n' '#!/usr/bin/env bash' '' "f() { cat; } <<'EOF' >/dev/null" \
+        'payload' 'EOF' >heredoc.sh
+    git add heredoc.sh && git commit -q -m heredoc
+    sed -i 's/payload/changed/' heredoc.sh
+}
+
+# edit_98: a header permits an edit to a trailing quoted heredoc payload.
+edit_98() {
+    printf '%s\n' '#!/usr/bin/env bash' '# f is documented.' \
+        "f() { cat; } <<'EOF' >/dev/null" 'payload' 'EOF' >heredoc.sh
+    git add heredoc.sh && git commit -q -m heredoc
+    sed -i 's/payload/changed/' heredoc.sh
+}
+
+# edit_99: a payload-only edit touches a heredoc inside a one-line block.
+edit_99() {
+    printf '%s\n' '#!/usr/bin/env bash' '' 'f() { cat <<A; }' \
+        'payload' 'A' >heredoc.sh
+    git add heredoc.sh && git commit -q -m heredoc
+    sed -i 's/payload/changed/' heredoc.sh
+}
+
+# edit_100: the right operand's heredoc payload does not touch the left function.
+edit_100() {
+    printf '%s\n' '#!/usr/bin/env bash' '' 'g() { :; } <<A && h <<B' \
+        'left payload' 'A' 'right payload' 'B' >chain-heredoc.sh
+    git add chain-heredoc.sh && git commit -q -m chain-heredoc
+    sed -i 's/right payload/right changed/' chain-heredoc.sh
+}
+
+# edit_101: the left operand's heredoc payload touches its bare function.
+edit_101() {
+    printf '%s\n' '#!/usr/bin/env bash' '' 'g() { :; } <<A && h <<B' \
+        'left payload' 'A' 'right payload' 'B' >chain-heredoc.sh
+    git add chain-heredoc.sh && git commit -q -m chain-heredoc
+    sed -i 's/left payload/left changed/' chain-heredoc.sh
+}
+
+# edit_102: an inline block comment cannot document the nested function.
+edit_102() {
+    printf '%s\n' '#!/usr/bin/env bash' '# Set up the environment.' \
+        'outer() { # This comment describes the outer block.' \
+        '    inner() { :; }' '}' >nested-comment.sh
+    git add nested-comment.sh && git commit -q -m nested-comment
+    sed -i 's/inner() { :; }/inner() { true; }/' nested-comment.sh
+}
+
+# edit_103: a standalone space-indented header documents the inner function.
+edit_103() {
+    printf '%s\n' '#!/usr/bin/env bash' '# outer is documented.' \
+        'outer() {' '    # inner is documented.' '    inner() { :; }' \
+        '}' >nested-comment.sh
+    git add nested-comment.sh && git commit -q -m nested-comment
+    sed -i 's/inner() { :; }/inner() { true; }/' nested-comment.sh
+}
+
+# edit_104: a standalone tab-indented header documents the inner function.
+edit_104() {
+    printf '%s\n' '#!/usr/bin/env bash' '# outer is documented.' \
+        'outer() {' $'\t# inner is documented.' $'\tinner() { :; }' \
+        '}' >nested-comment.sh
+    git add nested-comment.sh && git commit -q -m nested-comment
+    sed -i 's/inner() { :; }/inner() { true; }/' nested-comment.sh
+}
+
+# edit_105: boundary case where the assignment owns its trailing comment.
+edit_105() {
+    printf '%s\n' '#!/usr/bin/env bash' 'x=1 # note' \
+        'f() { :; }' >inline-comment.sh
+    git add inline-comment.sh && git commit -q -m inline-comment
+    sed -i 's/f() { :; }/f() { true; }/' inline-comment.sh
+}
+
+# edit_106: boundary case where the preceding command owns its trailing comment.
+edit_106() {
+    printf '%s\n' '#!/usr/bin/env bash' ': "ä" # note' \
+        'f() { :; }' >inline-comment.sh
+    git add inline-comment.sh && git commit -q -m inline-comment
+    sed -i 's/f() { :; }/f() { true; }/' inline-comment.sh
+}
+
+# edit_107: an inherited Go workspace permits a documented shell edit.
+edit_107() {
+    printf '%s\n' 'go 1.27.2' '' 'use ./tools/go' >go.work
+    printf '%s\n' '# f is documented.' 'f() { :; }' >>lib.sh
+}
+
+# edit_108: an inherited Go workspace still reports a bare shell edit.
+edit_108() {
+    printf '%s\n' 'go 1.27.2' '' 'use ./tools/go' >go.work
+    printf '%s\n' 'f() { :; }' >>lib.sh
+}
+
+# edit_109: an if-condition comment cannot document its nested function.
+edit_109() {
+    printf '%s\n' '#!/usr/bin/env bash' 'if true; then # note' \
+        '    f() { :; }' 'fi' >inline-comment.sh
+    git add inline-comment.sh && git commit -q -m inline-comment
+    sed -i 's/f() { :; }/f() { true; }/' inline-comment.sh
+}
+
+# edit_110: a multibyte if-condition comment cannot document its nested function.
+edit_110() {
+    printf '%s\n' '#!/usr/bin/env bash' 'if [ "ä" ]; then # note' \
+        '    f() { :; }' 'fi' >inline-comment.sh
+    git add inline-comment.sh && git commit -q -m inline-comment
+    sed -i 's/f() { :; }/f() { true; }/' inline-comment.sh
+}
+
+# edit_111: a case-pattern comment cannot document its nested function.
+edit_111() {
+    printf '%s\n' '#!/usr/bin/env bash' 'case x in' 'a) # note' \
+        '    f() { :; } ;;' 'esac' >inline-comment.sh
+    git add inline-comment.sh && git commit -q -m inline-comment
+    sed -i 's/f() { :; }/f() { true; }/' inline-comment.sh
+}
+
+# edit_112: a form feed inside a quoted value does not change shfmt line coordinates.
+edit_112() {
+    printf '%s\n' '#!/usr/bin/env bash' "x='$(printf '\f')'" \
+        '# f is documented.' 'f() { :; }' >line-coordinate.sh
+    git add line-coordinate.sh && git commit -q -m line-coordinate
+    sed -i 's/f() { :; }/f() { true; }/' line-coordinate.sh
+}
+
+# edit_113: a Unicode line separator does not change shfmt line coordinates.
+edit_113() {
+    printf '%s\n' '#!/usr/bin/env bash' "x='$(printf '\342\200\250')'" \
+        '# f is documented.' 'f() { :; }' >line-coordinate.sh
+    git add line-coordinate.sh && git commit -q -m line-coordinate
+    sed -i 's/f() { :; }/f() { true; }/' line-coordinate.sh
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -789,6 +927,23 @@ expect "command after a pipe does not touch the chained function" 0 "ok (" edit_
 expect "body edit in a chained function is refused" 1 "shell function chain_body has no header comment" edit_94
 expect "deletion after the closing brace does not touch the chained function" 0 "ok (" edit_95
 expect "function in the right operand is still checked" 1 "shell function right_fn has no header comment" edit_96
+expect "trailing quoted heredoc payload touches bare function" 1 "shell function f has no header comment" edit_97
+expect "trailing quoted heredoc payload with header passes" 0 "ok (" edit_98
+expect "one-line block heredoc payload touches bare function" 1 "shell function f has no header comment" edit_99
+expect "right heredoc payload does not touch left function" 0 "ok (" edit_100
+expect "left heredoc payload touches bare function" 1 "shell function g has no header comment" edit_101
+expect "inline block comment does not document inner function" 1 "shell function inner has no header comment" edit_102
+expect "space-indented inner header passes" 0 "ok (" edit_103
+expect "tab-indented inner header passes" 0 "ok (" edit_104
+expect "assignment inline comment is not a header" 1 "shell function f has no header comment" edit_105
+expect "multibyte inline comment is not a header" 1 "shell function f has no header comment" edit_106
+expect "Go workspace permits documented shell edit" 0 "ok (" edit_107 main "" "" "" workspace
+expect "Go workspace still finds bare shell edit" 1 "shell function f has no header comment" edit_108 main "" "" "" workspace
+expect "if-condition inline comment is not a header" 1 "shell function f has no header comment" edit_109
+expect "multibyte if-condition inline comment is not a header" 1 "shell function f has no header comment" edit_110
+expect "case-pattern inline comment is not a header" 1 "shell function f has no header comment" edit_111
+expect "form feed keeps shfmt line coordinates" 0 "ok (" edit_112
+expect "Unicode line separator keeps shfmt line coordinates" 0 "ok (" edit_113
 
 if [ "$failed" -ne 0 ]; then
     exit 1
