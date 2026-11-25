@@ -129,15 +129,22 @@ SPDX-License-Identifier: EUPL-1.2
 		{/if}
 	{/snippet}
 	{#snippet extraActions(link)}
-		<button type="button" class="btn" disabled={sync.isPending} onclick={() => sync.mutate(link.id)}
-			>{m.seerr_sync()}</button
+		<button
+			type="button"
+			class="btn"
+			disabled={sync.isPending}
+			onclick={() => sync.mutate(link.id)}
 		>
+			{m.seerr_sync()}
+		</button>
 		<button
 			type="button"
 			class="btn"
 			disabled={importInstances.isPending}
-			onclick={() => importInstances.mutate(link.id)}>{m.seerr_import()}</button
+			onclick={() => importInstances.mutate(link.id)}
 		>
+			{m.seerr_import()}
+		</button>
 	{/snippet}
 	{#snippet aside()}
 		<AdminFormSlot {editor} {save} probe={probeInput}>
@@ -178,21 +185,22 @@ SPDX-License-Identifier: EUPL-1.2
 						<td>{r.requestedByUsername || r.requested_by}</td>
 						<td>
 							{#if r.instance_id}
-								<a href={entityHref('instance', r.instance_id)} class="hover:underline"
-									>{r.instance_name ?? r.instance_id}</a
-								>
+								<a href={entityHref('instance', r.instance_id)} class="hover:underline">
+									{r.instance_name ?? r.instance_id}
+								</a>
 							{:else if r.instance_name}
 								{r.instance_name}
 							{:else}
-								<span aria-hidden="true">–</span><span class="sr-only">{m.seerr_no_instance()}</span
-								>
+								<span aria-hidden="true">–</span><span class="sr-only">
+									{m.seerr_no_instance()}
+								</span>
 							{/if}
 						</td>
 						<td>
 							{#if r.resolved}
-								<span aria-hidden="true">✓</span><span class="sr-only"
-									>{m.seerr_resolved_status()}</span
-								>
+								<span aria-hidden="true">✓</span><span class="sr-only">
+									{m.seerr_resolved_status()}
+								</span>
 							{:else}
 								{r.unresolved_reason ?? m.seerr_unresolved()}
 							{/if}
@@ -206,8 +214,9 @@ SPDX-License-Identifier: EUPL-1.2
 									disabled={!r.resolved || snatch.isPending}
 									onclick={() =>
 										snatch.mutate({ linkId: r.link_id, requestId: r.request_id, title: r.title })}
-									>{m.seerr_snatch_now()}</button
 								>
+									{m.seerr_snatch_now()}
+								</button>
 							</td>
 						{/if}
 					</tr>

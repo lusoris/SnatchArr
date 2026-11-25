@@ -160,8 +160,10 @@ SPDX-License-Identifier: EUPL-1.2
 					<button
 						type="submit"
 						class="btn btn-primary"
-						disabled={discover.isPending || !discoverFrom}>{m.dlclients_discover()}</button
+						disabled={discover.isPending || !discoverFrom}
 					>
+						{m.dlclients_discover()}
+					</button>
 				</form>
 			{/if}
 
@@ -213,22 +215,24 @@ SPDX-License-Identifier: EUPL-1.2
 											{/if}
 										</div>
 									</td>
-									<td class="text-sm text-subtle" data-label={m.dlclients_kind()}
-										>{downloadClientName(c.kind)} · {c.protocol}</td
-									>
-									<td class="text-sm text-subtle" data-label={m.instance_url()}
-										><UrlText
+									<td class="text-sm text-subtle" data-label={m.dlclients_kind()}>
+										{downloadClientName(c.kind)} · {c.protocol}
+									</td>
+									<td class="text-sm text-subtle" data-label={m.instance_url()}>
+										<UrlText
 											url={c.base_url}
 											title={c.base_url}
 											class="block md:max-w-24 md:truncate"
-										/></td
-									>
-									<td class="text-sm text-subtle" data-label={m.dlclients_instance()}
-										>{#if c.instance_id}<a
+										/>
+									</td>
+									<td class="text-sm text-subtle" data-label={m.dlclients_instance()}>
+										{#if c.instance_id}<a
 												href={entityHref('instance', c.instance_id)}
-												class="hover:underline">{instanceName(c.instance_id)}</a
-											>{:else}{instanceName(c.instance_id)}{/if}</td
-									>
+												class="hover:underline"
+											>
+												{instanceName(c.instance_id)}
+											</a>{:else}{instanceName(c.instance_id)}{/if}
+									</td>
 									<td data-label={m.instance_last_check()}>
 										{#if st}
 											<div class="min-w-0 text-sm" role="status">
@@ -262,14 +266,18 @@ SPDX-License-Identifier: EUPL-1.2
 													type="button"
 													class="btn target-link"
 													disabled={c.source === 'configarr'}
-													onclick={() => edit(c)}>{m.action_edit()}</button
+													onclick={() => edit(c)}
 												>
+													{m.action_edit()}
+												</button>
 												<button
 													type="button"
 													class="btn"
 													disabled={probe.isPending}
-													onclick={() => probe.mutate(c)}>{m.action_test()}</button
+													onclick={() => probe.mutate(c)}
 												>
+													{m.action_test()}
+												</button>
 												<ConfirmDelete
 													name={c.name}
 													disabled={remove.isPending || c.source === 'configarr'}

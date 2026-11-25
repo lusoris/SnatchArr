@@ -150,8 +150,9 @@ SPDX-License-Identifier: EUPL-1.2
 	<a
 		href="#main"
 		class="btn sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
-		>{m.skip_to_content()}</a
 	>
+		{m.skip_to_content()}
+	</a>
 
 	{#if isPublic}
 		<main id="main" class="flex min-h-screen items-center justify-center p-4" tabindex="-1">

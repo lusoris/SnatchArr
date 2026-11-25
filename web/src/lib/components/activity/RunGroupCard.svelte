@@ -93,8 +93,10 @@ SPDX-License-Identifier: EUPL-1.2
 			<button
 				type="button"
 				class="text-brand text-xs hover:underline"
-				onclick={() => (runOpen = true)}>{m.entity_details()}</button
+				onclick={() => (runOpen = true)}
 			>
+				{m.entity_details()}
+			</button>
 		{/if}
 	</div>
 
@@ -125,8 +127,10 @@ SPDX-License-Identifier: EUPL-1.2
 						onclick={() => {
 							selectedEvent = evt;
 							eventOpen = true;
-						}}>{m.entity_details()}</button
+						}}
 					>
+						{m.entity_details()}
+					</button>
 					{#if expandedEvtKey === evtKey}
 						<pre
 							class="max-w-full overflow-x-auto rounded bg-surface p-2 font-mono text-xs">{JSON.stringify(

@@ -1,15 +1,15 @@
 {
   "capability": {
-    "checkedAt": "2026-11-12T20:16:25.528Z",
+    "checkedAt": "2026-11-21T18:52:00.126Z",
     "ready": [
       {
         "configSource": "codacy",
         "displayName": "Opengrep",
-        "filesRouted": 45,
+        "filesRouted": 50,
         "installation": "codacy",
         "runner": "local",
         "toolId": "Semgrep",
-        "version": "1.30.0"
+        "version": "1.33.1"
       }
     ],
     "unavailable": []
@@ -518,18 +518,18 @@
     }
   ],
   "metadata": {
-    "completedAt": "2026-11-12T20:16:39.539Z",
-    "durationMs": 15159,
+    "completedAt": "2026-11-21T18:52:14.179Z",
+    "durationMs": 15601,
     "executionMode": "strict",
     "phaseTimings": {
-      "availabilityMs": 1128,
-      "fileDiscoveryMs": 6,
+      "availabilityMs": 1519,
+      "fileDiscoveryMs": 10,
       "fileRoutingMs": 3,
       "installMs": 0,
-      "toolExecutionMs": 13998,
-      "toolUpdateMs": 1
+      "toolExecutionMs": 14038,
+      "toolUpdateMs": 0
     },
-    "startedAt": "2026-11-12T20:16:24.380Z"
+    "startedAt": "2026-11-21T18:51:58.578Z"
   },
   "patternSummary": {
     "groups": [
@@ -594,9 +594,9 @@
   },
   "toolResults": [
     {
-      "durationMs": 13996,
+      "durationMs": 14037,
       "errorCount": 0,
-      "filesAnalyzed": 45,
+      "filesAnalyzed": 50,
       "issueCount": 26,
       "status": "success",
       "toolId": "Semgrep"

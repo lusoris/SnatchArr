@@ -20,7 +20,8 @@ SPDX-License-Identifier: EUPL-1.2
 	data-url
 	title={title ?? (url || undefined)}
 	class={className ? `${className} [overflow-wrap:break-word]` : '[overflow-wrap:break-word]'}
-	>{#each segments as segment, i (i)}{#if i > 0}<wbr />{/if}<span class="whitespace-nowrap"
-			>{segment}</span
-		>{/each}</span
 >
+	{#each segments as segment, i (i)}{#if i > 0}<wbr />{/if}<span class="whitespace-nowrap">
+			{segment}
+		</span>{/each}
+</span>

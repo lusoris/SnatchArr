@@ -95,8 +95,10 @@ SPDX-License-Identifier: EUPL-1.2
 							target="_blank"
 							rel="noopener noreferrer"
 							aria-label={m.about_brand_vulva_aria()}
-							class="text-brand underline hover:opacity-80">{m.about_brand_vulva_file()}</a
-						>{m.about_brand_vulva_author()}
+							class="text-brand underline hover:opacity-80"
+						>
+							{m.about_brand_vulva_file()}
+						</a>{m.about_brand_vulva_author()}
 					</li>
 					<li>
 						{m.about_brand_hand_text()}<a
@@ -104,8 +106,10 @@ SPDX-License-Identifier: EUPL-1.2
 							target="_blank"
 							rel="noopener noreferrer"
 							aria-label={m.about_brand_hand_aria()}
-							class="text-brand underline hover:opacity-80">{m.about_brand_hand_file()}</a
-						>{m.about_brand_hand_author()}
+							class="text-brand underline hover:opacity-80"
+						>
+							{m.about_brand_hand_file()}
+						</a>{m.about_brand_hand_author()}
 					</li>
 				</ul>
 			</section>
