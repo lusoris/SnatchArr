@@ -71,10 +71,11 @@ func TestCompleteWithProgressDeadline(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
 			runs, _, instanceID, st := newRunsStoreFixture(t)
 			queued := enqueueRun(t, runs, instanceID)
+			// Start the deadline after the store fixture so slow database setup under load cannot consume it.
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
 			leased, err := runs.Lease(ctx, "worker")
 			if err != nil || leased.ID != queued.ID {
 				t.Fatalf("Lease() = %v, %v; want run %s", leased.ID, err, queued.ID)
