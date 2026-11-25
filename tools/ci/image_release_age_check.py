@@ -13,6 +13,7 @@ Pure evaluation runs in `renovate_rules.py`, `renovate_managers.py` and `renovat
 enabled built-in or custom manager pattern may read them).
 
 Exit 0 = ok, 1 = input error, 3 = refused.
+Transient changes between the two tracked-file reads are retried with fresh snapshots.
 """
 
 from __future__ import annotations
@@ -23,8 +24,9 @@ import binascii
 import json
 import subprocess  # nosec B404  # runs child --judge under REGEX_DEADLINE and catches git SubprocessError
 import sys
+import time
 from collections import defaultdict
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,6 +51,9 @@ MAX_JUDGE_INPUT_BYTES = (
     + (2 << 20)
 )
 REGEX_DEADLINE = 20
+# Issue 1324: concurrent Go generation may briefly rewrite tracked files in the working tree.
+SNAPSHOT_ATTEMPTS = 3
+SNAPSHOT_RETRY_S = 2.0
 RENOVATE_FILE = "renovate.json"
 CONFIG_FILES = frozenset({RENOVATE_FILE})
 ADVICE = (
@@ -56,6 +61,7 @@ ADVICE = (
     "overridePackageName to a Docker Hub twin, or timestamp-optional with the measurement) "
     "for each image above"
 )
+ContentReader = Callable[..., Iterator[image_pin_check.Content]]
 
 
 @dataclass(frozen=True)
@@ -120,13 +126,14 @@ def read_wanted_files(
     pass1_snapshot: set[renovate_managers.SnapshotEntry],
     *,
     index: bool = False,
+    reader: ContentReader = image_pin_check.read_contents,
 ) -> dict[str, bytes]:
     """Read exact `customManagers` paths in pass 2 and verify the tree snapshot stayed identical."""
     pass2_snapshot: set[renovate_managers.SnapshotEntry] = set()
     kept: dict[str, bytes] = {}
     unreadable: list[str] = []
     total_bytes = 0
-    for rel, raw in image_pin_check.read_contents(root, index=index):
+    for rel, raw in reader(root, index=index):
         pass2_snapshot.add(renovate_managers.snapshot_entry(rel, raw))
         if ascii_lower(rel) not in wanted:
             continue
@@ -312,26 +319,62 @@ def format_locations(
     return ", ".join(dict.fromkeys(locs))
 
 
-def check(root: Path, *, index: bool = False) -> int:
-    """Refuse any live pin, judged record pin or Docker capture without release-age coverage."""
+def read_snapshot(
+    root: Path, index: bool, reader: ContentReader
+) -> tuple[JudgeRequest, dict[str, list[str]], dict[str, list[str]]]:
+    """Read both tracked-file passes into a request only when their snapshots match."""
     configs: dict[str, bytes | None] = {}
     pass1_snapshot: set[renovate_managers.SnapshotEntry] = set()
     live_pins, record_pins, records = collect_live_pins(
-        keep_configs(image_pin_check.read_contents(root, index=index), configs, pass1_snapshot)
+        keep_configs(reader(root, index=index), configs, pass1_snapshot)
     )
     config_text = decode_config(configs.get(RENOVATE_FILE), RENOVATE_FILE)
     wanted = renovate_managers.wanted_manager_paths(config_text)
-    files = read_wanted_files(root, wanted, pass1_snapshot, index=index) if wanted else {}
-    result = judge_in_child(
-        JudgeRequest(
-            config=config_text,
-            names=sorted(live_pins),
-            records=sorted(records),
-            record_names=sorted(record_pins),
-            searched=sorted(wanted),
-            files=files,
-        )
+    files = (
+        read_wanted_files(root, wanted, pass1_snapshot, index=index, reader=reader)
+        if wanted
+        else {}
     )
+    request = JudgeRequest(
+        config=config_text,
+        names=sorted(live_pins),
+        records=sorted(records),
+        record_names=sorted(record_pins),
+        searched=sorted(wanted),
+        files=files,
+    )
+    return request, live_pins, record_pins
+
+
+def read_stable_tree(
+    root: Path,
+    index: bool,
+    reader: ContentReader = image_pin_check.read_contents,
+    sleep: Callable[[float], None] = time.sleep,
+) -> tuple[JudgeRequest, dict[str, list[str]], dict[str, list[str]]]:
+    """Retry a changed two-pass snapshot at most SNAPSHOT_ATTEMPTS times."""
+    for attempt in range(1, SNAPSHOT_ATTEMPTS + 1):
+        try:
+            return read_snapshot(root, index, reader)
+        except renovate_managers.SnapshotChangedError as exc:
+            if attempt == SNAPSHOT_ATTEMPTS:
+                raise RefusedError(
+                    f"tree changed during check ({SNAPSHOT_ATTEMPTS} attempts)"
+                ) from exc
+            print(
+                "image_release_age_check: tree changed during check, "
+                f"attempt {attempt} of {SNAPSHOT_ATTEMPTS}, reading again in "
+                f"{SNAPSHOT_RETRY_S:g} s",
+                file=sys.stderr,
+            )
+            sleep(SNAPSHOT_RETRY_S)
+    raise AssertionError("snapshot retry loop exhausted")
+
+
+def check(root: Path, *, index: bool = False) -> int:
+    """Refuse any live pin, judged record pin or Docker capture without release-age coverage."""
+    request, live_pins, record_pins = read_stable_tree(root, index)
+    result = judge_in_child(request)
     if result.uncovered:
         for name in result.uncovered:
             where = format_locations(name, live_pins, record_pins, result)
