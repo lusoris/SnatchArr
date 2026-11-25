@@ -89,16 +89,18 @@ SPDX-License-Identifier: EUPL-1.2
 								<AppLogo kind={inst.kind} size={18} />
 								<a
 									class="target-link font-semibold underline"
-									href={entityHref('instance', inst.id)}>{inst.name}</a
+									href={entityHref('instance', inst.id)}
 								>
+									{inst.name}
+								</a>
 							</div>
 							<div class="flex flex-wrap items-center gap-1.5 text-xs text-subtle">
-								<span
-									><span class="sr-only">{m.instance_kind()}: </span>{instanceKindLabel(
+								<span>
+									<span class="sr-only">{m.instance_kind()}: </span>{instanceKindLabel(
 										inst.kind,
 										inst.last_seen_product
-									)}</span
-								>
+									)}
+								</span>
 								<span aria-hidden="true">·</span>
 								<span><span class="sr-only">{m.instance_source()}: </span>{inst.source}</span>
 							</div>
@@ -150,9 +152,9 @@ SPDX-License-Identifier: EUPL-1.2
 						<td>
 							<div class="flex items-center gap-2">
 								<AppLogo kind={inst.kind} size={18} />
-								<a class="target-link underline" href={entityHref('instance', inst.id)}
-									>{inst.name}</a
-								>
+								<a class="target-link underline" href={entityHref('instance', inst.id)}>
+									{inst.name}
+								</a>
 							</div>
 						</td>
 						<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
@@ -227,11 +229,13 @@ SPDX-License-Identifier: EUPL-1.2
 						type="button"
 						class="btn"
 						onclick={() => probe.mutate()}
-						disabled={probe.isPending}>{m.instance_test()}</button
+						disabled={probe.isPending}
 					>
-					<button type="submit" class="btn btn-primary" disabled={create.isPending}
-						>{m.instance_save()}</button
-					>
+						{m.instance_test()}
+					</button>
+					<button type="submit" class="btn btn-primary" disabled={create.isPending}>
+						{m.instance_save()}
+					</button>
 				</div>
 			</form>
 		</section>

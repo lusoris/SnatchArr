@@ -11,7 +11,7 @@ minimumReleaseAgeExclude:
   - '@sveltesentio/*'
 # GHSA-g3hv-75wg-m249: replace vulnerable minimatch versions with the patched release.
 overrides:
-  'minimatch@<11.0.1': 11.0.3
+  'minimatch@<11.0.1': 11.0.9
 # Redocly calls the old CommonJS default; minimatch 11 requires its named export.
 # Remove patch and minimatch override when @redocly/openapi-core supports minimatch >=10.
 patchedDependencies:

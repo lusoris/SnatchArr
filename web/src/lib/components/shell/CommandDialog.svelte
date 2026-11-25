@@ -64,6 +64,14 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const visibleSettingsPages = $derived(filterByModule(settingsPages, activeModules));
 
+	/** The palette renders title — subtitle, so omit subtitles that repeat the title. */
+	function omitRepeatedSubtitle(command: Command): Command {
+		const { subtitle, ...withoutSubtitle } = command;
+		return subtitle?.trim().toLocaleLowerCase() === command.title.trim().toLocaleLowerCase()
+			? withoutSubtitle
+			: command;
+	}
+
 	const registry = $derived.by(() => {
 		const cmds: Command[] = [];
 
@@ -71,7 +79,6 @@ SPDX-License-Identifier: EUPL-1.2
 			cmds.push({
 				id: `nav-${item.href}`,
 				title: item.label,
-				subtitle: item.label,
 				group: m.nav_overview(),
 				keywords: [item.href.replace('/', ''), item.label.toLowerCase()],
 				run: async () => {
@@ -108,7 +115,6 @@ SPDX-License-Identifier: EUPL-1.2
 		cmds.push({
 			id: 'nav-/account',
 			title: m.nav_account(),
-			subtitle: m.nav_account(),
 			group: m.nav_account(),
 			run: async () => {
 				await goto(pageHref('/account'));
@@ -142,7 +148,7 @@ SPDX-License-Identifier: EUPL-1.2
 			});
 		}
 
-		return new CommandRegistry().register(...cmds);
+		return new CommandRegistry().register(...cmds.map(omitRepeatedSubtitle));
 	});
 
 	$effect.pre(() => {

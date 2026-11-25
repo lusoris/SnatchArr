@@ -57,13 +57,18 @@ const PurgeGrace = 90 * 24 * time.Hour
 // Mark records ids as searched: the first snatch rests `base`, every further snatch of the
 // same item doubles the rest up to `maxRest` (exponential afterglow).
 func (m *Memory) Mark(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind, entityType string, ids []int64, base, maxRest time.Duration) error {
+	return m.MarkIn(ctx, m.st.Q(), instanceID, kind, entityType, ids, base, maxRest)
+}
+
+// MarkIn is Mark through q, such as the queries of the transaction that closes the run.
+func (m *Memory) MarkIn(ctx context.Context, q *sqlcgen.Queries, instanceID uuid.UUID, kind domain.SnatchKind, entityType string, ids []int64, base, maxRest time.Duration) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	if maxRest < base {
 		maxRest = base
 	}
-	err := m.st.Q().MarkProcessed(ctx, sqlcgen.MarkProcessedParams{
+	err := q.MarkProcessed(ctx, sqlcgen.MarkProcessedParams{
 		InstanceID: instanceID, Kind: string(kind), EntityType: entityType,
 		Now: m.clk.Now(), BaseS: int64(base / time.Second), MaxS: int64(maxRest / time.Second), EntityIds: ids,
 	})

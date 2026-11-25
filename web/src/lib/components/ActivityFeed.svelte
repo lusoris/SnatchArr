@@ -299,8 +299,10 @@ SPDX-License-Identifier: EUPL-1.2
 					'events'
 						? 'bg-surface font-semibold shadow-xs'
 						: 'text-subtle hover:text-fg'}"
-					onclick={() => selectSource('events')}>{m.activity_source_events()}</button
+					onclick={() => selectSource('events')}
 				>
+					{m.activity_source_events()}
+				</button>
 				{#if session.isAdmin}
 					<button
 						type="button"
@@ -311,8 +313,10 @@ SPDX-License-Identifier: EUPL-1.2
 						'log'
 							? 'bg-surface font-semibold shadow-xs'
 							: 'text-subtle hover:text-fg'}"
-						onclick={() => selectSource('log')}>{m.activity_source_log()}</button
+						onclick={() => selectSource('log')}
 					>
+						{m.activity_source_log()}
+					</button>
 				{/if}
 			</div>
 			<button
@@ -419,8 +423,10 @@ SPDX-License-Identifier: EUPL-1.2
 												<li class="flex items-center justify-between text-xs">
 													<a
 														href={entityHref('instance', inst.id)}
-														class="font-medium hover:underline">{inst.name}</a
+														class="font-medium hover:underline"
 													>
+														{inst.name}
+													</a>
 													<span class="text-subtle">{scheduleStatusText(inst.id)}</span>
 												</li>
 											{/each}

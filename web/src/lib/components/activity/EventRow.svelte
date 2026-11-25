@@ -87,8 +87,10 @@ SPDX-License-Identifier: EUPL-1.2
 		<button
 			type="button"
 			class="text-brand text-xs hover:underline"
-			onclick={() => (detailsOpen = true)}>{m.entity_details()}</button
+			onclick={() => (detailsOpen = true)}
 		>
+			{m.entity_details()}
+		</button>
 	</div>
 	{#if isExpanded}
 		<div class="mt-1 border-t border-line pt-1 text-xs">

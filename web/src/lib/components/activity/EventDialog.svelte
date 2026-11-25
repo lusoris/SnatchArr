@@ -61,9 +61,9 @@ SPDX-License-Identifier: EUPL-1.2
 		{#if event.run_id}
 			<dt>{m.run_detail_id()}</dt>
 			<dd>
-				<button type="button" class="break-all hover:underline" onclick={() => (runOpen = true)}
-					>{event.run_id}</button
-				>
+				<button type="button" class="break-all hover:underline" onclick={() => (runOpen = true)}>
+					{event.run_id}
+				</button>
 			</dd>
 		{/if}
 	</dl>

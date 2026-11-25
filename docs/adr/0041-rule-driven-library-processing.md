@@ -7,6 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ADR-0041: Rule-driven library processing (remux and re-encode by rules)
 
 - **Status:** Accepted (open questions OQ-0041-1 to OQ-0041-22 answered 2026-10-26, ledger ids snatcharr-oq-0041-1 to snatcharr-oq-0041-22)
+- **Partially superseded by** [ADR-0050](0050-media-execution-in-torcul.md) (2026-11-23): every step that reads or writes a media file (probe, header edit, remux, audio transcode, video encode, staging, verification, apply, rollback, execution pools and playback yield) moves to torcul, and SnatchArr calls no VMAFx encode surface. SnatchArr triggers torcul jobs and shows their state. Rules, scoping, the module switch, the UI, the `*arr` and media server refresh, the Custom Format guard and the planner integration below still bind; ADR-0050 section 3 lists the superseded parts.
 - **Date:** 2026-10-26
 - **Related:** [ADR-0001](0001-go-control-plane-rust-snatch-worker.md), [ADR-0002](0002-lease-pull-work-distribution.md), [ADR-0006](0006-download-client-backpressure.md), [ADR-0010](0010-keep-api-worker-split.md), [ADR-0012](0012-queue-management-replaces-cleanuparr-link.md), [ADR-0025](0025-module-switches.md), [ADR-0028](0028-jellyfin-plugin.md), [ADR-0035](0035-jellyfin-integration.md), ADR-0038 (VMAFx library quality scoring, pull request #746), ADR-0040 (Audiobookshelf integration, pull request #749)
 

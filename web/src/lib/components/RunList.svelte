@@ -98,15 +98,17 @@ SPDX-License-Identifier: EUPL-1.2
 									onclick={() => {
 										selectedRunId = run.id;
 										runOpen = true;
-									}}>{runStatusLabel(run.status)}{run.error ? ` · ${run.error}` : ''}</button
+									}}
 								>
+									{runStatusLabel(run.status)}{run.error ? ` · ${run.error}` : ''}
+								</button>
 							</td>
 							<td data-label={m.run_started()}>
 								{formatWhen(run.started_at ?? run.queued_at, getLocale())}
 							</td>
-							<td data-label={m.run_finished()}
-								>{formatWhen(run.finished_at, getLocale()) || '–'}</td
-							>
+							<td data-label={m.run_finished()}>
+								{formatWhen(run.finished_at, getLocale()) || '–'}
+							</td>
 							<td data-label={m.run_searched()}>{run.searched_count}</td>
 							<td data-label="">
 								{#if cancellable(run)}

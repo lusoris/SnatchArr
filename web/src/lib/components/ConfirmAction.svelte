@@ -60,11 +60,13 @@ SPDX-License-Identifier: EUPL-1.2
 				onclick={() => {
 					asking = false;
 					onconfirm();
-				}}>{confirmLabel ?? m.confirm_yes()}</button
+				}}
 			>
-			<button type="button" class="btn" bind:this={back} onclick={() => (asking = false)}
-				>{backLabel ?? m.confirm_back()}</button
-			>
+				{confirmLabel ?? m.confirm_yes()}
+			</button>
+			<button type="button" class="btn" bind:this={back} onclick={() => (asking = false)}>
+				{backLabel ?? m.confirm_back()}
+			</button>
 		</div>
 	</div>
 {:else}
@@ -73,6 +75,8 @@ SPDX-License-Identifier: EUPL-1.2
 		class="btn"
 		bind:this={trigger}
 		disabled={pending}
-		onclick={() => (asking = true)}>{label}</button
+		onclick={() => (asking = true)}
 	>
+		{label}
+	</button>
 {/if}
