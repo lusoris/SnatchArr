@@ -18,6 +18,10 @@ replay and scanned-file check; CI keeps the pinned image. A hand-run
 `semgrep scan` on a directory skips `*_test.go` files without saying so (PR 1244
 round r16), so lane briefs name this mode (.config/lane-brief.yaml).
 
+`--docker` is the fixed name `docker` on PATH or an absolute path to an
+executable file named docker, `--root` must be an existing directory, and both
+are checked before any process starts.
+
 Copied from tekmora/discord-bot tools/ci/semgrep_scan.py (EUPL-1.2, same author)
 at commit 70642249adc9d99375b707cebe0eb756970905cc. Changed here: this paragraph,
 the `--semgrep` mode and the untracked-file targets.
@@ -56,6 +60,7 @@ GIT_STDERR_EXCERPT_BYTES = 4096
 READ_CHUNK_BYTES = 8 * 1024
 MAX_MESSAGE_CHARS = 300
 TRUNCATED_MARKER = "... [truncated]"
+ALLOWED_DOCKER = ("docker",)
 IMAGE_RE = re.compile(r"^[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$")
 RULE_ID_RE = re.compile(r"^  - id: ([a-z0-9-]+)$", re.MULTILINE)
 ANNOTATION_RE = re.compile(r"//\s*(ruleid|ok):\s*([a-z0-9-]+)\s*$", re.MULTILINE)
@@ -72,16 +77,67 @@ class ScanError(Exception):
     """A scan that cannot be trusted or that found a violation."""
 
 
-# Keep this call byte-identical: the Opengrep baseline hashes its source text.
-# fmt: off
-def run(command, root):
-    """Run command in root with a bound; a start failure or timeout is a ScanError."""
+def resolve_docker(value) -> str:
+    """Resolve --docker on PATH when allowed by name, else require an executable '/.../docker' file."""
+    if value in ALLOWED_DOCKER:
+        found = shutil.which(value)
+        if found is None:
+            raise ScanError(f"--docker {value!r} not found on PATH")
+        return found
+    if (
+        os.path.isabs(value)
+        and os.path.basename(value) in ALLOWED_DOCKER
+        and pathlib.Path(value).is_file()
+        and os.access(value, os.X_OK)
+    ):
+        return value
+    raise ScanError(
+        f"--docker {value!r} must be 'docker' on PATH or an executable '/.../docker' file"
+    )
+
+
+def checked_root(value) -> pathlib.Path:
+    """Resolve --root and require an existing directory."""
     try:
-        return subprocess.run(command, cwd=root, capture_output=True, text=True,
-                              timeout=TIMEOUT_SECONDS, check=False)
+        resolved = pathlib.Path(value).resolve()
+        is_dir = resolved.is_dir()
+    except OSError as err:
+        raise ScanError(f"--root '{value}' is not a directory: {err}") from err
+    if not is_dir:
+        raise ScanError(f"--root '{value}' is not a directory")
+    return resolved
+
+
+def run_docker(docker, args, root):
+    """Run docker at its resolved path in root with a bound, raising ScanError on failure."""
+    try:
+        return subprocess.run(
+            ["docker", *args],
+            executable=docker,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+            check=False,
+        )
     except (OSError, subprocess.TimeoutExpired) as err:
-        raise ScanError(f"{command[0]} did not complete: {err}") from err
-# fmt: on
+        raise ScanError(f"{docker} did not complete: {err}") from err
+
+
+def run_semgrep(binary, args, root):
+    """Run semgrep at its resolved path in root with a bound, raising ScanError on failure."""
+    try:
+        return subprocess.run(
+            ["semgrep", *args],
+            executable=binary,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as err:
+        raise ScanError(f"{binary} did not complete: {err}") from err
 
 
 def image_runner(docker, image, root):
@@ -89,8 +145,7 @@ def image_runner(docker, image, root):
 
     def call(args):
         """Run Semgrep with args in a fresh container without network."""
-        command = [
-            docker,
+        docker_args = [
             "run",
             "--rm",
             "--network",
@@ -104,7 +159,7 @@ def image_runner(docker, image, root):
             image,
             *args,
         ]
-        return run(command, root)
+        return run_docker(docker, docker_args, root)
 
     return call
 
@@ -125,7 +180,7 @@ def native_runner(binary, root, state):
         previous = {key: os.environ.get(key) for key in state_env}
         try:
             os.environ.update(state_env)
-            return run([binary, *args], root)
+            return run_semgrep(binary, args, root)
         finally:
             for key, value in previous.items():
                 if value is None:
@@ -607,14 +662,15 @@ def checked_inputs(root):
 
 
 def image_scan(docker, image, root):
-    """Check the image pin, then replay the fixtures and scan inside the pinned image."""
+    """Check the image pin and docker binary, then replay the fixtures and scan inside the pinned image."""
     if not IMAGE_RE.match(image):
         raise ScanError(f"image '{image}' is not pinned as NAME:TAG@sha256:DIGEST")
+    resolved_docker = resolve_docker(docker)
     ids, names = checked_inputs(root)
 
     def runner_factory(scan_root):
         """Create the pinned image runner for scan_root."""
-        return image_runner(docker, image, scan_root)
+        return image_runner(resolved_docker, image, scan_root)
 
     self_test(runner_factory(root), names, ids)
     scan(runner_factory, root)
@@ -676,8 +732,8 @@ def main():
     parser.add_argument("--docker", default="docker")
     parser.add_argument("--root", default=".")
     args = parser.parse_args()
-    root = pathlib.Path(args.root).resolve()
     try:
+        root = checked_root(args.root)
         if args.image is not None:
             image_scan(args.docker, args.image, root)
         else:

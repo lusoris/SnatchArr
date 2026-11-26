@@ -5,9 +5,10 @@
 # Planted cases for semgrep_scan.py: a minimal repository with one rule, one fixture and one
 # Go file, unchanged and with one defect planted at a time. A stub stands in for docker, so no
 # image is pulled; it logs every call, and a defect in the rules, the fixtures or the image
-# reference must be refused before the stub runs. The same stub stands in for a local Semgrep
-# binary (--semgrep). Last: the pinned image comes from tools/ci/tool-versions.env and the scan
-# is wired into Makefile, lefthook, CI, Renovate and the lane brief requirements.
+# reference must be refused before the stub runs. Invalid --docker and --root values are refused
+# before the stub runs too. The same stub stands in for a local Semgrep binary (--semgrep). Last:
+# the pinned image comes from tools/ci/tool-versions.env and the scan is wired into Makefile,
+# lefthook, CI, Renovate and the lane brief requirements.
 #
 #   tools/ci/semgrep_scan_test.sh
 #
@@ -21,6 +22,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/ci/test_lib.sh
 # shellcheck disable=SC1091 # shellcheck without -x does not follow this local helper.
 . "$HERE/test_lib.sh"
+PY3="$(command -v python3 2>/dev/null)" || PY3=""
+if [ -z "$PY3" ]; then
+  printf 'semgrep_scan_test: python3 not on PATH\n' >&2
+  exit 1
+fi
 ensure_pyyaml_python
 SCAN="$HERE/semgrep_scan.py"
 ROOT="${SEMGREP_WIRING_ROOT:-$(cd "$HERE/../.." && pwd)}"
@@ -220,19 +226,22 @@ assert_scanned_set() {
 # expect WANT NAME MODE CALLED NEEDLE [SH EDIT]: after EDIT runs in a fresh repository, the scan
 # must exit WANT, print NEEDLE, and call the stub (CALLED yes) or never call it (CALLED no).
 expect() {
-  want="$1" name="$2" mode="$3" called="$4" needle="$5" edit="${6:-:}" image="${IMAGE_OVERRIDE:-$IMAGE}"
+  want="$1" name="$2" mode="$3" called="$4" needle="$5" edit="${6:-:}"
+  image="${IMAGE_OVERRIDE:-$IMAGE}" docker_arg="${DOCKER_OVERRIDE-$STUB}"
   root="$WORK/root"
+  scan_root="${ROOT_OVERRIDE:-$root}"
   fresh "$root"
   (cd "$root" && sh -c "$edit")
   : > "$WORK/calls"
   got=0
   if [ -n "${NATIVE:-}" ]; then
     out="$(cd "${NATIVE_CWD:-$PWD}" && STUB_MODE="$mode" STUB_LOG="$WORK/calls" STUB_LIVE_ROOT="$root" \
-      timeout 30 python3 -I "$SCAN" --root "$root" --semgrep "$NATIVE" 2>&1)" || got=$?
+      timeout 30 env PATH="${EXPECT_PATH:-$PATH}" "$PY3" -I "$SCAN" --root "$scan_root" \
+      --semgrep "$NATIVE" 2>&1)" || got=$?
   else
     out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" STUB_LIVE_ROOT="$root" \
-      timeout 30 python3 -I "$SCAN" --root "$root" --docker "$STUB" \
-      --image "$image" 2>&1)" || got=$?
+      timeout 30 env PATH="${EXPECT_PATH:-$PATH}" "$PY3" -I "$SCAN" --root "$scan_root" \
+      --docker "$docker_arg" --image "$image" 2>&1)" || got=$?
   fi
   check_case "$name" "$want" "$got" "$needle" "$out" "output lacks"
   if [ "$called" = no ] && [ -s "$WORK/calls" ]; then
@@ -432,6 +441,28 @@ assert_scanned_set "clean repository" main.go
 IMAGE_OVERRIDE="${IMAGE%@*}" expect 1 "image pinned by tag only" clean no "is not pinned"
 IMAGE_OVERRIDE="${IMAGE%%:*}@${IMAGE#*@}" \
   expect 1 "image pinned by digest without a tag" clean no "is not pinned"
+cp "$STUB" "$WORK/evil"
+DOCKER_OVERRIDE="$WORK/evil" expect 1 "docker with another basename" clean no "--docker"
+DOCKER_OVERRIDE=bin/docker expect 1 "relative docker path" clean no "--docker"
+mkdir -p "$WORK/dir/docker"
+DOCKER_OVERRIDE="$WORK/dir/docker" expect 1 "directory named docker" clean no "--docker"
+mkdir -p "$WORK/noexec"
+cp "$STUB" "$WORK/noexec/docker"
+chmod 644 "$WORK/noexec/docker"
+DOCKER_OVERRIDE="$WORK/noexec/docker" \
+  expect 1 "docker without the executable bit" clean no "--docker"
+DOCKER_OVERRIDE="" expect 1 "empty docker" clean no "--docker"
+mkdir -p "$WORK/empty"
+DOCKER_OVERRIDE=docker EXPECT_PATH="$WORK/empty" \
+  expect 1 "bare docker not on PATH" clean no "not found on PATH"
+mkdir -p "$WORK/bin"
+cp "$STUB" "$WORK/bin/docker"
+DOCKER_OVERRIDE=docker EXPECT_PATH="$WORK/bin:$PATH" \
+  expect 0 "bare docker on PATH" clean yes "Semgrep: 1 files scanned (snapshot sha256:"
+ROOT_OVERRIDE="$WORK/root/main.go" expect 1 "root is a file" clean no "is not a directory"
+ROOT_OVERRIDE="$WORK/no-such-root" expect 1 "root does not exist" clean no "is not a directory"
+NATIVE="$STUB" ROOT_OVERRIDE="$WORK/no-such-root" \
+  expect 1 "native binary, root does not exist" clean no "is not a directory"
 expect 1 "no rule declared" clean no "declares no rule" 'printf "rules: []\n" > .semgrep.yml'
 expect 1 "rule id declared twice" clean no "declares a rule id twice" \
   'printf "  - id: demo-rule\n    pattern: x\n" >> .semgrep.yml'

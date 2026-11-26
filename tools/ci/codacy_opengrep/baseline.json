@@ -179,28 +179,6 @@
     },
     {
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
-      "filePath": "tools/ci/semgrep_scan.py",
-      "contentSha256": "0c05ca152c5dba6193320fd3a96ee80fae3116bfe0cb27951b468c275adc87ee",
-      "count": "1",
-      "category": "A",
-      "entered": "2026-11-12",
-      "expires": "2026-11-30",
-      "issue": "1100",
-      "reason": "--docker and --root reach the argv unchecked; #1100 refuses unchecked values before this entry expires."
-    },
-    {
-      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
-      "filePath": "tools/ci/semgrep_scan.py",
-      "contentSha256": "8a46119d5d3b204ce2724c3b160d2ac558b50b00ec60669144fa3fef6892155f",
-      "count": "1",
-      "category": "A",
-      "entered": "2026-11-12",
-      "expires": "2026-11-30",
-      "issue": "1100",
-      "reason": "Same call as the audit entry: --docker and --root reach the argv unchecked; #1100 refuses unchecked values before this entry expires."
-    },
-    {
-      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
       "filePath": "tools/ci/trivy_scan.py",
       "contentSha256": "49938af7a35c673c38ddbf3cd0f361c1c282b7d912957ea1acd49c8afed9aa2f",
       "count": "1",

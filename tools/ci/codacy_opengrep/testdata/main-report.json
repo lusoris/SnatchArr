@@ -308,35 +308,6 @@
       "category": "Security",
       "column": 16,
       "endColumn": 68,
-      "endLine": 43,
-      "filePath": "tools/ci/semgrep_scan.py",
-      "line": 42,
-      "lineContent": "        return subprocess.run(command, cwd=root, capture_output=True, text=True,",
-      "message": "Detected subprocess function 'run' without a static string.",
-      "multilineContent": [
-        "        return subprocess.run(command, cwd=root, capture_output=True, text=True,",
-        "                              timeout=TIMEOUT_SECONDS, check=False)"
-      ],
-      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
-      "severity": "Error",
-      "toolId": "Semgrep"
-    },
-    {
-      "category": "Security",
-      "column": 31,
-      "endColumn": 38,
-      "filePath": "tools/ci/semgrep_scan.py",
-      "line": 42,
-      "lineContent": "        return subprocess.run(command, cwd=root, capture_output=True, text=True,",
-      "message": "Detected subprocess function 'run' with user controlled data.",
-      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
-      "severity": "Error",
-      "toolId": "Semgrep"
-    },
-    {
-      "category": "Security",
-      "column": 16,
-      "endColumn": 68,
       "endLine": 52,
       "filePath": "tools/ci/trivy_scan.py",
       "line": 51,
@@ -539,8 +510,8 @@
         "patterns": [
           {
             "category": "Security",
-            "fileCount": 18,
-            "issueCount": 19,
+            "fileCount": 17,
+            "issueCount": 18,
             "noisy": false,
             "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
             "severity": "Error",
@@ -550,8 +521,8 @@
           },
           {
             "category": "Security",
-            "fileCount": 4,
-            "issueCount": 4,
+            "fileCount": 3,
+            "issueCount": 3,
             "noisy": false,
             "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
             "severity": "Error",
