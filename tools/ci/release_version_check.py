@@ -233,7 +233,7 @@ def evaluate(root: Path) -> tuple[int, str]:
     return 0, f"release {version}, checked lines: {', '.join(counts)}"
 
 
-type Case = tuple[str, dict[str, str], int, str]
+Case = tuple[str, dict[str, str], int, str]
 
 
 def stale_line(name: str, text: str, prefix: str, version: str, old: str) -> Case:
