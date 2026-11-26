@@ -186,3 +186,126 @@ func awaitInCleanup(t *testing.T) {
 		await.Await(t, done, "cleanup completion")
 	})
 }
+
+// parentFatalfInRun fails the parent from the child goroutine.
+func parentFatalfInRun(t *testing.T) {
+	t.Run("c", func(_ *testing.T) {
+		// ruleid: test-fatal-helper-in-goroutine
+		t.Fatalf("parent")
+	})
+}
+
+// parentAwaitInRun passes the parent to a fatal-capable helper.
+func parentAwaitInRun(t *testing.T, done <-chan struct{}) {
+	t.Run("c", func(st *testing.T) {
+		// ruleid: test-fatal-helper-in-goroutine
+		await.Await(t, done, "parent")
+	})
+}
+
+// parentListenerInGoArgument evaluates the listener on the subtest goroutine.
+func parentListenerInGoArgument(t *testing.T, consume func(string)) {
+	t.Run("c", func(st *testing.T) {
+		// ruleid: test-fatal-helper-in-goroutine
+		go consume(refuse.Listener(t))
+	})
+}
+
+// parentSkipInBenchmarkRun skips the enclosing benchmark from its child.
+func parentSkipInBenchmarkRun(bm *testing.B) {
+	bm.Run("c", func(_ *testing.B) {
+		// ruleid: test-fatal-helper-in-goroutine
+		bm.SkipNow()
+	})
+}
+
+// parentFatalInNestedRun fails the parent of a nested subtest.
+func parentFatalInNestedRun(t *testing.T) {
+	t.Run("a", func(st *testing.T) {
+		st.Run("b", func(_ *testing.T) {
+			// ruleid: test-fatal-helper-in-goroutine
+			st.Fatal("parent")
+		})
+	})
+}
+
+// parentFatalInTableRun fails the enclosing subtest from a table case.
+func parentFatalInTableRun(t *testing.T, names []string) {
+	t.Run("a", func(st *testing.T) {
+		for _, name := range names {
+			st.Run(name, func(_ *testing.T) {
+				// ruleid: test-fatal-helper-in-goroutine
+				st.Fatal("parent")
+			})
+		}
+	})
+}
+
+// shadowedReceiverInRun fails the child whose parameter shadows the parent.
+func shadowedReceiverInRun(t *testing.T) {
+	t.Run("c", func(t *testing.T) {
+		// ok: test-fatal-helper-in-goroutine
+		t.Fatal("own")
+	})
+}
+
+// ownReceiverInRun fails the current subtest.
+func ownReceiverInRun(t *testing.T) {
+	t.Run("c", func(st *testing.T) {
+		// ok: test-fatal-helper-in-goroutine
+		st.Fatal("own")
+	})
+}
+
+// nonfatalParentInRun reports to the parent without stopping its goroutine.
+func nonfatalParentInRun(t *testing.T) {
+	t.Run("c", func(_ *testing.T) {
+		// ok: test-fatal-helper-in-goroutine
+		t.Errorf("parent")
+		// ok: test-fatal-helper-in-goroutine
+		t.Log("x")
+	})
+}
+
+// ownReceiverInNestedRun fails only the innermost subtest.
+func ownReceiverInNestedRun(t *testing.T) {
+	t.Run("a", func(st *testing.T) {
+		st.Run("b", func(st2 *testing.T) {
+			// ok: test-fatal-helper-in-goroutine
+			st2.Fatal("own")
+		})
+	})
+}
+
+// ownReceiverInTableRun fails only the current table case.
+func ownReceiverInTableRun(t *testing.T, names []string) {
+	t.Run("a", func(st *testing.T) {
+		for _, name := range names {
+			st.Run(name, func(st2 *testing.T) {
+				// ok: test-fatal-helper-in-goroutine
+				st2.Fatal("own")
+			})
+		}
+	})
+}
+
+// ownReceiverInBenchmarkRun fails the current sub-benchmark.
+func ownReceiverInBenchmarkRun(bm *testing.B) {
+	bm.Run("c", func(sb *testing.B) {
+		// ok: test-fatal-helper-in-goroutine
+		sb.Fatal("own")
+	})
+}
+
+// mixedRunOwnership evaluates the subtest name in the benchmark, then runs the callback on the subtest.
+func mixedRunOwnership(t *testing.T, b *testing.B) {
+	b.Run("child", func(sb *testing.B) {
+		// ruleid: test-fatal-helper-in-goroutine
+		if !t.Run(refuse.Listener(b), func(st *testing.T) {
+			// ok: test-fatal-helper-in-goroutine
+			st.Fatal("own")
+		}) {
+			sb.Log("subtest failed")
+		}
+	})
+}

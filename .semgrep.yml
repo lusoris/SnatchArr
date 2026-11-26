@@ -93,7 +93,7 @@ rules:
       and return, or signal a channel that the test goroutine awaits.
     pattern-either:
       - patterns:
-          - pattern-either:
+          - pattern-either: &fatal_calls
               - pattern: await.Await($TB, ...)
               - pattern: refuse.Listener($TB, ...)
               - pattern: Listener($TB)
@@ -168,6 +168,26 @@ rules:
                 - pattern: $TB.Skipf(...)
                 - pattern: $TB.SkipNow()
           - focus-metavariable: $BAD
+      - patterns:
+          - pattern-either: *fatal_calls
+          - pattern-inside:
+              patterns:
+                - pattern-either:
+                    - pattern: $R.Run($NAME, func($ST *testing.T) { $...BODY })
+                    - pattern: $R.Run($NAME, func($ST *testing.B) { $...BODY })
+                - focus-metavariable: $...BODY
+          # A nested Run owns calls on its parameter inside its body. Its name
+          # argument still runs in the enclosing callback.
+          - pattern-not-inside:
+              patterns:
+                - pattern-inside: $R.Run($NAME, func($ST $TYPE) { ... })
+                - pattern-either:
+                    - pattern: $INNER.Run($INNER_NAME, func($TB *testing.T) { $...CHILD })
+                    - pattern: $INNER.Run($INNER_NAME, func($TB *testing.B) { $...CHILD })
+                - focus-metavariable: $...CHILD
+          - metavariable-comparison:
+              metavariable: $TB
+              comparison: str($TB) != str($ST)
       - pattern: go await.Await(...)
       - pattern: go refuse.Listener(...)
       - pattern: go Listener($TB)
