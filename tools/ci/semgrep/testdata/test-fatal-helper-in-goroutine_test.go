@@ -309,3 +309,194 @@ func mixedRunOwnership(t *testing.T, b *testing.B) {
 		}
 	})
 }
+
+// parentFatalInParentCleanup registers a parent fatal call on the parent's Cleanup.
+func parentFatalInParentCleanup(t *testing.T) {
+	t.Run("c", func(st *testing.T) {
+		t.Cleanup(func() {
+			// ok: test-fatal-helper-in-goroutine
+			t.Fatal("parent cleanup")
+		})
+	})
+}
+
+// parentFatalInChildCleanup fails the parent from the child's Cleanup callback.
+func parentFatalInChildCleanup(t *testing.T) {
+	t.Run("c", func(st *testing.T) {
+		st.Cleanup(func() {
+			// ruleid: test-fatal-helper-in-goroutine
+			t.Fatal("parent from child cleanup")
+		})
+	})
+}
+
+// aliasedReceiverInRun fails the current subtest through a local alias.
+func aliasedReceiverInRun(t *testing.T) {
+	t.Run("c", func(st *testing.T) {
+		tt := st
+		// ok: test-fatal-helper-in-goroutine
+		tt.Fatal("alias")
+	})
+}
+
+type syncRunner struct{}
+
+// Run invokes f synchronously on a non-testing receiver.
+func (syncRunner) Run(name string, f func(*testing.T)) {
+	_ = name
+	_ = f
+}
+
+// parentFatalInCustomRunner calls Fatal inside a synchronous non-testing Run method.
+func parentFatalInCustomRunner(t *testing.T) {
+	var r syncRunner
+	r.Run("c", func(st *testing.T) {
+		// ok: test-fatal-helper-in-goroutine
+		t.Fatal("sync wrapper")
+	})
+}
+
+// reboundParameterInRun re-binds the callback parameter name to the parent receiver.
+func reboundParameterInRun(t *testing.T) {
+	t.Run("c", func(st *testing.T) {
+		{
+			st := t
+			// ruleid: test-fatal-helper-in-goroutine
+			st.Fatal("shadow")
+		}
+	})
+}
+
+// enclosingFatalInNamedNestedRun fails the enclosing subtest from a named nested callback.
+func enclosingFatalInNamedNestedRun(t *testing.T) {
+	t.Run("a", func(st *testing.T) {
+		st.Run("b", func(u *testing.T) {
+			// ruleid: test-fatal-helper-in-goroutine
+			st.Fatal("enclosing")
+		})
+	})
+}
+
+// parentFatalInStoredRunCallback fails the parent from a stored callback passed to Run.
+func parentFatalInStoredRunCallback(t *testing.T) {
+	f := func(st *testing.T) {
+		// ruleid: test-fatal-helper-in-goroutine
+		t.Fatal("stored parent")
+	}
+	t.Run("c", f)
+}
+
+// ownReceiverInStoredRunCallback fails the subtest's own parameter in a stored callback.
+func ownReceiverInStoredRunCallback(t *testing.T) {
+	f := func(st *testing.T) {
+		// ok: test-fatal-helper-in-goroutine
+		st.Fatal("stored own")
+	}
+	t.Run("c", f)
+}
+
+// parentFatalInUnnamedTestRun fails the parent from a Run callback with an unnamed *testing.T parameter.
+func parentFatalInUnnamedTestRun(t *testing.T) {
+	t.Run("c", func(*testing.T) {
+		// ruleid: test-fatal-helper-in-goroutine
+		t.Fatal("unnamed")
+	})
+}
+
+// parentFatalInUnnamedBenchmarkRun fails the parent from a Run callback with an unnamed *testing.B parameter.
+func parentFatalInUnnamedBenchmarkRun(b *testing.B) {
+	b.Run("c", func(*testing.B) {
+		// ruleid: test-fatal-helper-in-goroutine
+		b.Fatal("unnamed")
+	})
+}
+
+// parentFatalInNestedCustomRunner fails the parent from a synchronous Run inside a subtest.
+func parentFatalInNestedCustomRunner(t *testing.T) {
+	var r syncRunner
+	t.Run("a", func(st *testing.T) {
+		r.Run("b", func(u *testing.T) {
+			// ruleid: test-fatal-helper-in-goroutine
+			t.Fatal("nested sync wrapper")
+		})
+	})
+}
+
+// ownReceiverInStoredNestedRun fails the nested subtest and sub-benchmark through stored callbacks.
+func ownReceiverInStoredNestedRun(t *testing.T, b *testing.B) {
+	t.Run("a", func(st *testing.T) {
+		g := func(u *testing.T) {
+			// ok: test-fatal-helper-in-goroutine
+			u.Fatal("stored nested own")
+		}
+		st.Run("b", g)
+	})
+	b.Run("a", func(sb *testing.B) {
+		h := func(ub *testing.B) {
+			// ok: test-fatal-helper-in-goroutine
+			ub.Fatal("stored nested benchmark own")
+		}
+		sb.Run("b", h)
+	})
+}
+
+// parentFatalInUnnamedCustomRunner calls Fatal inside an unnamed callback on a synchronous Run method.
+func parentFatalInUnnamedCustomRunner(t *testing.T) {
+	var r syncRunner
+	r.Run("c", func(*testing.T) {
+		// ok: test-fatal-helper-in-goroutine
+		t.Fatal("unnamed sync wrapper")
+	})
+}
+
+// nestedRunOwnershipInUnnamedRun checks inline, stored, and custom nested Run callbacks inside unnamed callbacks.
+func nestedRunOwnershipInUnnamedRun(t *testing.T, b *testing.B) {
+	var r syncRunner
+	t.Run("c", func(*testing.T) {
+		t.Run("d", func(u *testing.T) {
+			// ok: test-fatal-helper-in-goroutine
+			u.Fatal("inline nested own")
+		})
+		g := func(u *testing.T) {
+			// ok: test-fatal-helper-in-goroutine
+			u.Fatal("stored nested own")
+		}
+		t.Run("e", g)
+		r.Run("f", func(u *testing.T) {
+			// ruleid: test-fatal-helper-in-goroutine
+			t.Fatal("nested sync wrapper in unnamed")
+		})
+	})
+	b.Run("c", func(*testing.B) {
+		b.Run("d", func(ub *testing.B) {
+			// ok: test-fatal-helper-in-goroutine
+			ub.Fatal("inline nested benchmark own")
+		})
+		h := func(ub *testing.B) {
+			// ok: test-fatal-helper-in-goroutine
+			ub.Fatal("stored nested benchmark own")
+		}
+		b.Run("e", h)
+	})
+}
+
+// parentFatalInCleanupUnderUnnamedRun registers a parent fatal call on the parent's Cleanup inside an unnamed callback.
+func parentFatalInCleanupUnderUnnamedRun(t *testing.T) {
+	t.Run("c", func(*testing.T) {
+		t.Cleanup(func() {
+			// ok: test-fatal-helper-in-goroutine
+			t.Fatal("parent cleanup in unnamed")
+		})
+	})
+}
+
+// aliasedInnerWithOuterParameterName aliases the nested subtest parameter under the outer parameter's name.
+func aliasedInnerWithOuterParameterName(t *testing.T) {
+	t.Run("a", func(st *testing.T) {
+		st.Run("b", func(u *testing.T) {
+			st := u
+			// ok: test-fatal-helper-in-goroutine
+			st.Fatal("inner alias with outer name")
+		})
+	})
+}

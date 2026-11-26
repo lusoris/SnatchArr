@@ -168,26 +168,140 @@ rules:
                 - pattern: $TB.Skipf(...)
                 - pattern: $TB.SkipNow()
           - focus-metavariable: $BAD
+      # Fatal-capable call inside a *testing.T or *testing.B Run callback
+      # (inline function literal or stored in a local variable passed to Run)
+      # whose receiver is not the callback's own parameter.
+      - patterns:
+          - pattern-either: *fatal_calls
+          - pattern-inside: &named_run_callback
+              patterns:
+                - pattern-either:
+                    - pattern: $R.Run($NAME, func($ST *testing.T) { $...BODY })
+                    - pattern: $R.Run($NAME, func($ST *testing.B) { $...BODY })
+                    # Callback stored in a local variable and later passed to Run.
+                    - pattern: |
+                        $F := func($ST *testing.T) { $...BODY }
+                        ...
+                        <... $R.Run($NAME, $F) ...>
+                    - pattern: |
+                        $F := func($ST *testing.B) { $...BODY }
+                        ...
+                        <... $R.Run($NAME, $F) ...>
+                    - pattern: |
+                        $F = func($ST *testing.T) { $...BODY }
+                        ...
+                        <... $R.Run($NAME, $F) ...>
+                    - pattern: |
+                        $F = func($ST *testing.B) { $...BODY }
+                        ...
+                        <... $R.Run($NAME, $F) ...>
+                - metavariable-type:
+                    metavariable: $R
+                    types: ["*testing.T", "*testing.B"]
+                - focus-metavariable: $...BODY
+          # A nested *testing.T or *testing.B Run checks its own callback body;
+          # its name argument still runs in the enclosing callback.
+          - pattern-not-inside: &nested_run_body
+              patterns:
+                - pattern-inside: func($ST $TYPE) { ... }
+                - pattern-either:
+                    - pattern: $INNER.Run($INNER_NAME, func($CHILD_ST *testing.T) { $...CHILD })
+                    - pattern: $INNER.Run($INNER_NAME, func($CHILD_ST *testing.B) { $...CHILD })
+                    - pattern: |
+                        $INNER_F := func($CHILD_ST *testing.T) { $...CHILD }
+                        ...
+                        <... $INNER.Run($INNER_NAME, $INNER_F) ...>
+                    - pattern: |
+                        $INNER_F := func($CHILD_ST *testing.B) { $...CHILD }
+                        ...
+                        <... $INNER.Run($INNER_NAME, $INNER_F) ...>
+                - metavariable-type:
+                    metavariable: $INNER
+                    types: ["*testing.T", "*testing.B"]
+                - focus-metavariable: $...CHILD
+          # A Cleanup closure runs on the goroutine of the receiver Cleanup is
+          # registered on, after its subtests finish.
+          - pattern-not-inside: &own_cleanup_body
+              patterns:
+                - pattern-inside: func($ST $TYPE) { ... }
+                - pattern: $TB.Cleanup(func() { $...CLEANUP })
+                - focus-metavariable: $...CLEANUP
+          # Local alias of the innermost callback parameter bound before the call.
+          - pattern-not-inside:
+              patterns:
+                - pattern-inside: func($ST $TYPE) { ... }
+                - pattern-either:
+                    - pattern: |
+                        $TB := $ST
+                        ...
+                    - pattern: |
+                        $TB = $ST
+                        ...
+          - metavariable-comparison:
+              metavariable: $TB
+              comparison: str($TB) != str($ST)
+      # Named Run callback whose body re-binds the parameter name to a
+      # non-parameter value before the fatal-capable call.
+      - patterns:
+          - pattern-either: *fatal_calls
+          - pattern-inside: *named_run_callback
+          - pattern-not-inside: *nested_run_body
+          - pattern-not-inside: *own_cleanup_body
+          - pattern-inside:
+              patterns:
+                - pattern-inside: func($ST $TYPE) { ... }
+                - pattern-either:
+                    - pattern: |
+                        $TB := $RHS
+                        ...
+                    - pattern: |
+                        $TB = $RHS
+                        ...
+                    - pattern: |
+                        if ... {
+                          ...
+                          $TB = $RHS
+                          ...
+                        }
+                        ...
+          - metavariable-comparison:
+              comparison: str($TB) == str($ST) and str($RHS) != str($ST)
+      # Run callback with an unnamed *testing.T or *testing.B parameter: no own
+      # parameter exists, so only nested Run callbacks and own Cleanup own calls.
       - patterns:
           - pattern-either: *fatal_calls
           - pattern-inside:
               patterns:
                 - pattern-either:
-                    - pattern: $R.Run($NAME, func($ST *testing.T) { $...BODY })
-                    - pattern: $R.Run($NAME, func($ST *testing.B) { $...BODY })
+                    - pattern: $R.Run($NAME, func(*testing.T) { $...BODY })
+                    - pattern: $R.Run($NAME, func(*testing.B) { $...BODY })
+                - metavariable-type:
+                    metavariable: $R
+                    types: ["*testing.T", "*testing.B"]
                 - focus-metavariable: $...BODY
-          # A nested Run owns calls on its parameter inside its body. Its name
-          # argument still runs in the enclosing callback.
           - pattern-not-inside:
               patterns:
-                - pattern-inside: $R.Run($NAME, func($ST $TYPE) { ... })
+                - pattern-inside: $R.Run($NAME, func($TYPE) { ... })
                 - pattern-either:
-                    - pattern: $INNER.Run($INNER_NAME, func($TB *testing.T) { $...CHILD })
-                    - pattern: $INNER.Run($INNER_NAME, func($TB *testing.B) { $...CHILD })
+                    - pattern: $INNER.Run($INNER_NAME, func($CHILD_ST *testing.T) { $...CHILD })
+                    - pattern: $INNER.Run($INNER_NAME, func($CHILD_ST *testing.B) { $...CHILD })
+                    - pattern: |
+                        $INNER_F := func($CHILD_ST *testing.T) { $...CHILD }
+                        ...
+                        <... $INNER.Run($INNER_NAME, $INNER_F) ...>
+                    - pattern: |
+                        $INNER_F := func($CHILD_ST *testing.B) { $...CHILD }
+                        ...
+                        <... $INNER.Run($INNER_NAME, $INNER_F) ...>
+                - metavariable-type:
+                    metavariable: $INNER
+                    types: ["*testing.T", "*testing.B"]
                 - focus-metavariable: $...CHILD
-          - metavariable-comparison:
-              metavariable: $TB
-              comparison: str($TB) != str($ST)
+          - pattern-not-inside:
+              patterns:
+                - pattern-inside: $R.Run($NAME, func($TYPE) { ... })
+                - pattern: $TB.Cleanup(func() { $...CLEANUP })
+                - focus-metavariable: $...CLEANUP
       - pattern: go await.Await(...)
       - pattern: go refuse.Listener(...)
       - pattern: go Listener($TB)
