@@ -315,17 +315,15 @@ SPDX-License-Identifier: EUPL-1.2
 														selectedRunId = lastRun.id;
 														runOpen = true;
 													}}
-													>{formatWhen(
-														lastRun.started_at ?? lastRun.queued_at,
-														getLocale()
-													)}</button
 												>
+													{formatWhen(lastRun.started_at ?? lastRun.queued_at, getLocale())}
+												</button>
 											{:else}—{/if}
 										</td>
 										<td class="text-xs text-subtle" data-label={m.overview_next_window()}>
-											{#if nextSchedule}<a href={pageHref('/automation')} class="hover:underline"
-													>{formatScheduleWindow(nextSchedule)}</a
-												>{:else}—{/if}
+											{#if nextSchedule}<a href={pageHref('/automation')} class="hover:underline">
+													{formatScheduleWindow(nextSchedule)}
+												</a>{:else}—{/if}
 										</td>
 										<td data-label="">
 											<div
@@ -468,8 +466,10 @@ SPDX-License-Identifier: EUPL-1.2
 									<div class="flex min-w-0 flex-col">
 										<a
 											href={pageHref('/automation')}
-											class="truncate font-medium text-fg hover:underline">{s.name}</a
+											class="truncate font-medium text-fg hover:underline"
 										>
+											{s.name}
+										</a>
 										<span class="text-subtle">{s.start}–{s.end} {s.tz}</span>
 									</div>
 									{#if pauseText}
@@ -533,9 +533,9 @@ SPDX-License-Identifier: EUPL-1.2
 										class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
 										data-label-value
 									>
-										<a href={pageHref('/connections/prowlarr')} class="font-medium hover:underline"
-											>{link.name}</a
-										>
+										<a href={pageHref('/connections/prowlarr')} class="font-medium hover:underline">
+											{link.name}
+										</a>
 										<span class="text-subtle">
 											{m.prowlarr_headroom_count({ count: headroom, total })} · {m.prowlarr_exhausted_count(
 												{ count: exhausted }

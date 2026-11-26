@@ -16,8 +16,8 @@ SPDX-License-Identifier: EUPL-1.2
 	const parts = $derived(splitTextUrls(text));
 </script>
 
-<span class={className}
-	>{#each parts as part, i (i)}{#if part.url}<UrlText
+<span class={className}>
+	{#each parts as part, i (i)}{#if part.url}<UrlText
 				url={part.text}
-			/>{:else}{part.text}{/if}{/each}</span
->
+			/>{:else}{part.text}{/if}{/each}
+</span>

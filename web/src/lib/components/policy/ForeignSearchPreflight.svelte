@@ -73,10 +73,9 @@ SPDX-License-Identifier: EUPL-1.2
 						{#each preflight.data.profiles as profile (profile.id)}
 							<tr>
 								<th scope="row">{profile.name}</th>
-								<td
-									>{profile.profile_language?.name ??
-										m.foreign_search_profile_language_missing()}</td
-								>
+								<td>
+									{profile.profile_language?.name ?? m.foreign_search_profile_language_missing()}
+								</td>
 								{#each preflight.data.languages as language (language)}
 									{@const result = profile.verdicts.find((v) => v.language === language)}
 									<td>

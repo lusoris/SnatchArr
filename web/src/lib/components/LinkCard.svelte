@@ -68,9 +68,9 @@ SPDX-License-Identifier: EUPL-1.2
 			class="compact-actions mt-3 flex flex-wrap items-center gap-2 border-t border-line/40 pt-2"
 		>
 			<button type="button" class="btn target-link" onclick={onedit}>{m.action_edit()}</button>
-			<button type="button" class="btn" disabled={testPending} onclick={ontest}
-				>{m.action_test()}</button
-			>
+			<button type="button" class="btn" disabled={testPending} onclick={ontest}>
+				{m.action_test()}
+			</button>
 			{@render extraActions?.()}
 			<ConfirmDelete name={link.name} disabled={deletePending} onconfirm={ondelete} />
 		</div>

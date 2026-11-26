@@ -91,17 +91,17 @@ SPDX-License-Identifier: EUPL-1.2
 				/>
 			</Field>
 		{/if}
-		<label class="flex items-center gap-2"
-			><input type="checkbox" bind:checked={enabled} />
-			{m.instance_enabled()}</label
-		>
+		<label class="flex items-center gap-2">
+			<input type="checkbox" bind:checked={enabled} />
+			{m.instance_enabled()}
+		</label>
 	</fieldset>
 	<ProblemNote error={save.error} />
 	{#if !readonly}
 		<div>
-			<button type="submit" class="btn btn-primary" disabled={save.isPending}
-				>{m.instance_save()}</button
-			>
+			<button type="submit" class="btn btn-primary" disabled={save.isPending}>
+				{m.instance_save()}
+			</button>
 		</div>
 	{/if}
 </form>

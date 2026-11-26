@@ -162,11 +162,11 @@ SPDX-License-Identifier: EUPL-1.2
 			{#if identity}
 				<span>{m.linked_sign_in_status_linked()}</span>
 				<span>·</span>
-				<span
-					>{m.linked_sign_in_linked_at({
+				<span>
+					{m.linked_sign_in_linked_at({
 						when: formatWhen(identity.linked_at, getLocale())
-					})}</span
-				>
+					})}
+				</span>
 			{:else}
 				<span>{m.linked_sign_in_status_unlinked()}</span>
 			{/if}

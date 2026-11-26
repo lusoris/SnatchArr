@@ -18,20 +18,14 @@ SPDX-License-Identifier: EUPL-1.2
 	import SeasonGatePanel from '#lib/components/SeasonGatePanel.svelte';
 	import Tabs, { type Tab } from '#lib/components/Tabs.svelte';
 	import { m } from '#lib/paraglide/messages.js';
+	import { systemModulesQuery } from '#lib/queries/system.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
 	type Schedule = components['schemas']['Schedule'];
 	type AutomationTabKey = 'schedules' | 'caps' | 'season-gate';
 
-	const modulesQuery = createSentioQuery(() => ({
-		queryKey: keys.modules,
-		enabled: session.state === 'authenticated',
-		queryFn: async () => {
-			const res = await api.GET('/system/modules');
-			return res.data ?? [];
-		}
-	}));
+	const modulesQuery = systemModulesQuery();
 
 	const isWatchAwareEnabled = $derived.by(() => {
 		const list = modulesQuery.data;

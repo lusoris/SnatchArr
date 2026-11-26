@@ -32,6 +32,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
 
 // Bounds (HISS-02).
@@ -287,21 +288,24 @@ func (s *Server) pace(ctx context.Context, run domain.Run, pol *snatcharrv1.Poli
 	}
 }
 
-// Heartbeat extends a lease and tells a worker when its run was cancelled.
+// Heartbeat extends a lease and tells a worker when its run was cancelled. A named worker
+// whose expired lease another worker took also receives CANCEL so two workers never run it at
+// once.
 func (s *Server) Heartbeat(ctx context.Context, req *snatcharrv1.HeartbeatRequest) (*snatcharrv1.HeartbeatResponse, error) {
 	runID, err := parseRun(req.GetRunId())
 	if err != nil {
 		return nil, err
 	}
-	if req.GetWorkerId() != "" {
-		s.touch(ctx, req.GetWorkerId())
+	workerID := req.GetWorkerId()
+	if workerID != "" {
+		s.touch(ctx, workerID)
 	}
-	run, err := s.runs.Heartbeat(ctx, runID, req.GetWorkerId())
+	run, err := s.runs.Heartbeat(ctx, runID, workerID)
 	if err != nil {
 		return nil, toStatus(err)
 	}
 	directive := snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CONTINUE
-	if run.Status != domain.RunLeased {
+	if run.Status != domain.RunLeased || (workerID != "" && run.LeasedBy != workerID) {
 		directive = snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CANCEL
 	}
 	var expires int64
@@ -577,10 +581,14 @@ func (s *Server) recordProto(ctx context.Context, ev *snatcharrv1.SnatchEvent) (
 	return run, nil
 }
 
-// CompleteRun closes the run, records searched items into memory and saves the cursor.
+// CompleteRun closes the run and, in the same transaction, records searched items into memory and saves
+// the cursor; Seerr requests are marked after that transaction commits.
 func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRequest) (*snatcharrv1.CompleteRunResponse, error) {
 	run, err := s.leasedRun(ctx, req.GetRunId())
 	if err != nil {
+		return nil, err
+	}
+	if err = requireHolder(run, req.GetWorkerId()); err != nil {
 		return nil, err
 	}
 	policy, err := s.policies.Get(ctx, run.InstanceID)
@@ -591,13 +599,12 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	if len(searched) > maxSearchedPerRun {
 		searched = searched[:maxSearchedPerRun]
 	}
-	if err := s.persistRunProgress(ctx, run, policy, req, searched); err != nil {
-		return nil, toStatus(err)
-	}
-	if _, err := s.runs.Complete(ctx, run.ID, req.GetWorkerId(), outcome(req.GetOutcome()), len(searched), req.GetError(), req.EligibleItems); err != nil {
+	requested, err := s.completeAndPersist(ctx, run, policy, req, searched)
+	if err != nil {
 		return nil, toStatus(err)
 	}
 	if !run.DryRun {
+		s.markSeerr(ctx, run, requested)
 		s.m.RunFinished(string(outcome(req.GetOutcome())))
 	}
 	if outcome(req.GetOutcome()) == domain.RunFailed {
@@ -612,17 +619,61 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	})
 }
 
-func (s *Server) persistRunProgress(ctx context.Context, run domain.Run, policy domain.Policy, req *snatcharrv1.CompleteRunRequest, searched []*snatcharrv1.SearchedItem) error {
-	if run.DryRun {
-		return nil
-	}
-	if err := s.remember(ctx, run, policy, searched); err != nil {
-		return err
-	}
-	if req.GetCursor() != "" {
-		return s.policies.SaveCursor(ctx, run.InstanceID, run.Kind, req.GetCursor())
+// requireHolder refuses a CompleteRun from any worker but the lease holder before the policy read and
+// the transaction; runs.CompleteWithProgress checks the same holder again inside that transaction.
+func requireHolder(run domain.Run, workerID string) error {
+	if workerID == "" || run.LeasedBy != workerID {
+		return toStatus(fmt.Errorf("%w: run %s is not leased by %s", domain.ErrConflict, run.ID, workerID))
 	}
 	return nil
+}
+
+// completeAndPersist closes the run and saves its progress in one transaction: runs.CompleteWithProgress
+// checks the holder and locks the run row before persistRunProgress writes under the completion deadline,
+// so the lease cannot pass to another worker between that check and the writes, and a failed write leaves
+// the run leased. It returns the Seerr request ids to mark once the transaction has committed.
+func (s *Server) completeAndPersist(ctx context.Context, run domain.Run, policy domain.Policy, req *snatcharrv1.CompleteRunRequest, searched []*snatcharrv1.SearchedItem) ([]int64, error) {
+	completion := snatch.Completion{
+		RunID: run.ID, WorkerID: req.GetWorkerId(), Status: outcome(req.GetOutcome()),
+		Searched: len(searched), Error: req.GetError(), Eligible: req.EligibleItems,
+	}
+	var requested []int64
+	_, err := s.runs.CompleteWithProgress(ctx, completion, func(txCtx context.Context, q *sqlcgen.Queries) error {
+		var persistErr error
+		requested, persistErr = s.persistRunProgress(txCtx, q, run, policy, req, searched)
+		return persistErr
+	})
+	if err != nil {
+		return nil, err
+	}
+	return requested, nil
+}
+
+// persistRunProgress records the searched items into memory and saves the cursor through q, the queries
+// of the transaction that closes the run, and returns the Seerr request ids behind those items. A dry
+// run saves nothing.
+func (s *Server) persistRunProgress(ctx context.Context, q *sqlcgen.Queries, run domain.Run, policy domain.Policy, req *snatcharrv1.CompleteRunRequest, searched []*snatcharrv1.SearchedItem) ([]int64, error) {
+	if run.DryRun {
+		return nil, nil
+	}
+	requested, err := s.remember(ctx, q, run, policy, searched)
+	if err != nil {
+		return nil, err
+	}
+	if req.GetCursor() != "" {
+		if err = s.policies.SaveCursorIn(ctx, q, run.InstanceID, run.Kind, req.GetCursor()); err != nil {
+			return nil, err
+		}
+	}
+	return requested, nil
+}
+
+// markSeerr marks the Seerr requests behind requested as snatched once the run's progress has
+// committed. Seerr is best effort: a failure is logged and never fails the run.
+func (s *Server) markSeerr(ctx context.Context, run domain.Run, requested []int64) {
+	if err := s.seerr.MarkSnatched(ctx, run.InstanceID, requested); err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: mark seerr requests", slog.String("error", err.Error()))
+	}
 }
 
 func runOutcomeLevel(status domain.RunStatus) string {
@@ -698,7 +749,9 @@ func (s *Server) recordBackoff(ctx context.Context, run domain.Run, policy domai
 	}
 }
 
-func (s *Server) remember(ctx context.Context, run domain.Run, policy domain.Policy, searched []*snatcharrv1.SearchedItem) error {
+// remember records the searched items into processed memory through q and returns the Seerr request ids
+// behind them: the movie for a movie, else the item's group (such as its series).
+func (s *Server) remember(ctx context.Context, q *sqlcgen.Queries, run domain.Run, policy domain.Policy, searched []*snatcharrv1.SearchedItem) ([]int64, error) {
 	byType := map[string][]int64{}
 	requested := make([]int64, 0, len(searched))
 	for _, item := range searched {
@@ -711,14 +764,11 @@ func (s *Server) remember(ctx context.Context, run domain.Run, policy domain.Pol
 		}
 	}
 	for entityType, ids := range byType {
-		if err := s.memory.Mark(ctx, run.InstanceID, run.Kind, entityType, ids, policy.ProcessedTTL, policy.AfterglowMax); err != nil {
-			return err
+		if err := s.memory.MarkIn(ctx, q, run.InstanceID, run.Kind, entityType, ids, policy.ProcessedTTL, policy.AfterglowMax); err != nil {
+			return nil, err
 		}
 	}
-	if err := s.seerr.MarkSnatched(ctx, run.InstanceID, requested); err != nil {
-		s.logger.WarnContext(ctx, "workergrpc: mark seerr requests", slog.String("error", err.Error()))
-	}
-	return nil
+	return requested, nil
 }
 
 func (s *Server) leasedRun(ctx context.Context, rawID string) (domain.Run, error) {
