@@ -105,16 +105,18 @@ SPDX-License-Identifier: EUPL-1.2
 						aria-label={m.settings_priority_move_up({ kind: kindLabel(row.kind) })}
 						disabled={disabled || index === 0}
 						onclick={() => commit(movePriorityKind(rows, row.kind, -1), row.kind)}
-						>{m.settings_priority_up()}</button
 					>
+						{m.settings_priority_up()}
+					</button>
 					<button
 						type="button"
 						class="btn btn-sm px-1"
 						aria-label={m.settings_priority_move_down({ kind: kindLabel(row.kind) })}
 						disabled={disabled || index === rows.length - 1}
 						onclick={() => commit(movePriorityKind(rows, row.kind, 1), row.kind)}
-						>{m.settings_priority_down()}</button
 					>
+						{m.settings_priority_down()}
+					</button>
 					<label class="flex items-center gap-1 text-xs">
 						<input
 							type="checkbox"

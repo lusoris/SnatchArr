@@ -1,6 +1,6 @@
 {
   "capability": {
-    "checkedAt": "2026-11-12T17:00:38.314Z",
+    "checkedAt": "2026-11-21T18:51:49.670Z",
     "ready": [
       {
         "configSource": "codacy",
@@ -9,7 +9,7 @@
         "installation": "codacy",
         "runner": "local",
         "toolId": "Semgrep",
-        "version": "1.30.0"
+        "version": "1.33.1"
       }
     ],
     "unavailable": []
@@ -86,18 +86,18 @@
     }
   ],
   "metadata": {
-    "completedAt": "2026-11-12T17:00:42.578Z",
-    "durationMs": 5107,
+    "completedAt": "2026-11-21T18:51:58.220Z",
+    "durationMs": 10151,
     "executionMode": "strict",
     "phaseTimings": {
-      "availabilityMs": 828,
-      "fileDiscoveryMs": 7,
-      "fileRoutingMs": 2,
+      "availabilityMs": 1570,
+      "fileDiscoveryMs": 8,
+      "fileRoutingMs": 4,
       "installMs": 0,
-      "toolExecutionMs": 4254,
-      "toolUpdateMs": 0
+      "toolExecutionMs": 8535,
+      "toolUpdateMs": 1
     },
-    "startedAt": "2026-11-12T17:00:37.471Z"
+    "startedAt": "2026-11-21T18:51:48.069Z"
   },
   "patternSummary": {
     "groups": [
@@ -152,7 +152,7 @@
   },
   "toolResults": [
     {
-      "durationMs": 4252,
+      "durationMs": 8535,
       "errorCount": 0,
       "filesAnalyzed": 2,
       "issueCount": 4,

@@ -3,22 +3,16 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { createSentioQuery } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
-	import type { components } from '#lib/api/schema.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
 	import { m } from '#lib/paraglide/messages.js';
+	import { systemModulesQuery, type ModuleState } from '#lib/queries/system.js';
 	import { keys, queryClient } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
-	type ModuleState = components['schemas']['ModuleState'];
-
-	const modulesQuery = createSentioQuery<ModuleState[]>({
-		queryKey: keys.modules,
-		queryFn: async () => (await api.GET('/system/modules')).data ?? []
-	});
+	const modulesQuery = systemModulesQuery({ requireSession: false });
 
 	let togglingId = $state<string | null>(null);
 	let toggleError = $state<unknown>(null);

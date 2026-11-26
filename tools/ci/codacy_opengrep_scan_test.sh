@@ -46,7 +46,7 @@ make_root() {
   mkdir -p "$1/tools/ci/codacy_opengrep/testdata"
   cp "$SCAN" "$HERE/tool-versions.env" "$1/tools/ci/"
   cp "$HERE/codacy_opengrep/baseline.json" "$HERE/codacy_opengrep/opengrep-python.config.json" "$1/tools/ci/codacy_opengrep/"
-  cp "$FIXTURES/main-report.json" "$FIXTURES/planted-report.json" "$FIXTURES/codacy-api-paths.txt" "$1/tools/ci/codacy_opengrep/testdata/"
+  cp "$FIXTURES/main-report.json" "$FIXTURES/planted-report.json" "$FIXTURES/codacy-api-paths.txt" "$FIXTURES/cli-info.json" "$1/tools/ci/codacy_opengrep/testdata/"
 }
 
 # mutate DIR FROM TO: copy a root into DIR whose scanner has the literal line part FROM replaced by

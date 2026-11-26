@@ -72,15 +72,15 @@ SPDX-License-Identifier: EUPL-1.2
 				aria-describedby="selection-hint"
 				bind:value={policy.selection}
 			>
-				<option value="random"
-					>{m.policy_selection_random()} - {m.policy_selection_random_hint()}</option
-				>
-				<option value="sequential"
-					>{m.policy_selection_sequential()} - {m.policy_selection_sequential_hint()}</option
-				>
-				<option value="recent"
-					>{m.policy_selection_recent()} - {m.policy_selection_recent_hint()}</option
-				>
+				<option value="random">
+					{m.policy_selection_random()} - {m.policy_selection_random_hint()}
+				</option>
+				<option value="sequential">
+					{m.policy_selection_sequential()} - {m.policy_selection_sequential_hint()}
+				</option>
+				<option value="recent">
+					{m.policy_selection_recent()} - {m.policy_selection_recent_hint()}
+				</option>
 			</select>
 		</Field>
 	</div>

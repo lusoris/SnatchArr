@@ -81,8 +81,9 @@ SPDX-License-Identifier: EUPL-1.2
 								<a
 									href={entityHref('instance', s.instance_id)}
 									class="text-xs text-subtle hover:underline"
-									>{instanceName(s.instance_id) ?? s.instance_id}</a
 								>
+									{instanceName(s.instance_id) ?? s.instance_id}
+								</a>
 							{/if}
 						</div>
 					</td>

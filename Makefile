@@ -263,7 +263,7 @@ worker-cover: ## cargo-llvm-cov line coverage gate for the Rust workspace
 # ── end-to-end smoke (#19) ────────────────────────────────────────────────────
 E2E_BIN := api/tmp/e2e
 # The Postgres the integration tests pin (storetest), through the Docker Hub mirror.
-E2E_POSTGRES ?= mirror.gcr.io/library/postgres:18-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
+E2E_POSTGRES ?= mirror.gcr.io/library/postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
 E2E_API_IMAGE ?= snatcharr-api:e2e
 E2E_WORKER_IMAGE ?= snatcharr-worker:e2e
 e2e-smoke: ## Postgres + api + two workers + fakearr end to end (needs Docker unless SMOKE_DSN is set)
@@ -729,6 +729,8 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/image_release_age_check.py
 	python3 -I tools/ci/image_release_age_check.py --index
 	bash tools/ci/renovate_presets_test.sh
+	bash tools/ci/workflow_refs_test.sh
+	bash tools/ci/guard_definition_check_test.sh
 	bash tools/ci/release_body_check_test.sh
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test

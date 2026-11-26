@@ -5,7 +5,7 @@
 import { fireEvent, screen } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { toast } from 'svelte-sonner';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
@@ -31,6 +31,14 @@ const sampleModuleDetail: Module = {
 
 describe('ModulesTab', () => {
 	useAdminSession();
+
+	beforeEach(() => {
+		session.state = 'authenticated';
+	});
+
+	afterEach(() => {
+		session.state = 'unknown';
+	});
 
 	it('renders module list with status and toggle buttons for admin', async () => {
 		stubGet({
@@ -149,5 +157,23 @@ describe('ModulesTab', () => {
 		const alert = await screen.findByRole('alert');
 		expect(alert.textContent).toContain('Admin privilege required');
 		expect(toastErrorSpy).toHaveBeenCalled();
+	});
+
+	it('shows the API problem, not the loading skeleton, without an authenticated session', async () => {
+		session.state = 'anonymous';
+		stubGet({
+			'/system/modules': new ProblemError({
+				type: 'about:blank',
+				title: 'Unauthorized',
+				status: 401,
+				detail: 'Session required'
+			})
+		});
+
+		renderWithQuery(ModulesTab);
+
+		const alert = await screen.findByRole('alert');
+		expect(alert.textContent).toContain('Session required');
+		expect(screen.queryByTestId('skeleton')).toBeNull();
 	});
 });
