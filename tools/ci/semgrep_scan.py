@@ -6,9 +6,10 @@ Every fixture starts with the `//go:build semgrep_fixture` constraint, so no Go
 build, vet or gosec run ever loads the code the rules are meant to report.
 Semgrep's test mode replays every fixture; only when all pass is the scan of
 the Go files trusted: every tracked file still present plus every untracked file
-Git does not ignore, so a new file in a working tree is scanned too. The scan
-fails on any finding, on any Semgrep error, and when the report does not list
-exactly the files that were passed.
+Git does not ignore, so a new file in a working tree is scanned too. A clean
+result covers the rules and file bytes in the snapshot taken at scan start.
+After the scan, the snapshot contents and target set are re-checked against
+the live tree. Any finding, Semgrep error, or scanned-file mismatch fails.
 
 `--semgrep PATH` runs a Semgrep binary directly instead of the image, for hosts
 without docker such as a lane sandbox. It prints the binary's version, keeps
@@ -38,6 +39,7 @@ import sys
 import tempfile
 import threading
 import time
+from functools import partial
 
 RULES = ".semgrep.yml"
 FIXTURES = "tools/ci/semgrep/testdata"
@@ -47,8 +49,10 @@ MAX_TARGETS = 4096
 TIMEOUT_SECONDS = 600
 MAX_CONFIG_BYTES = 64 * 1024
 MAX_TARGET_BYTES = 8 * 1024 * 1024
-MAX_LISTED_PATHS = MAX_TARGETS + MAX_FIXTURES
-MAX_LISTED_BYTES = MAX_LISTED_PATHS * 1024
+MAX_LISTED_RECORDS = 4 * (MAX_TARGETS + MAX_FIXTURES)
+MAX_LISTED_BYTES = MAX_LISTED_RECORDS * 1024
+MAX_GIT_STDERR_BYTES = 2 * 1024 * 1024
+GIT_STDERR_EXCERPT_BYTES = 4096
 READ_CHUNK_BYTES = 8 * 1024
 MAX_MESSAGE_CHARS = 300
 TRUNCATED_MARKER = "... [truncated]"
@@ -195,11 +199,13 @@ class BoundedReadError(OSError):
     """Raised when a bounded regular-file read is refused."""
 
 
-def _read_regular_fd(fd, path, limit):
+def _read_regular_fd(fd, path, limit, before):
     """Verify fd is a regular file within limit and read at most limit + 1 bytes."""
     info = os.fstat(fd)
     if not stat.S_ISREG(info.st_mode):
         raise BoundedReadError(f"{path}: not a regular file")
+    if before is not None and not os.path.samestat(before, info):
+        raise BoundedReadError(f"{path}: file changed before open")
     if info.st_size > limit:
         raise BoundedReadError(f"{path}: size {info.st_size} exceeds {limit} bytes")
     chunks = []
@@ -216,21 +222,27 @@ def _read_regular_fd(fd, path, limit):
 
 
 def read_bounded_bytes(path, limit):
-    """Open path without following symlinks and read at most limit regular-file bytes."""
+    """Refuse symlinks and read at most limit bytes from a verified regular file."""
     if limit < 0:
         raise BoundedReadError(f"{path}: negative byte limit {limit}")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+    before = None
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
-    except OSError as err:
-        raise BoundedReadError(f"{path}: {err}") from err
-    try:
-        data = _read_regular_fd(fd, path, limit)
+        if hasattr(os, "O_NONBLOCK") and hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NONBLOCK | os.O_NOFOLLOW
+        else:
+            before = os.lstat(path)
+            if not stat.S_ISREG(before.st_mode):
+                raise BoundedReadError(f"{path}: not a regular file")
+        fd = os.open(path, flags)
+        try:
+            data = _read_regular_fd(fd, path, limit, before)
+        finally:
+            os.close(fd)
     except BoundedReadError:
         raise
     except OSError as err:
         raise BoundedReadError(f"{path}: {err}") from err
-    finally:
-        os.close(fd)
     if len(data) > limit:
         raise BoundedReadError(f"{path}: content exceeds {limit} bytes")
     return data
@@ -244,18 +256,7 @@ def read_bounded_text(path, limit):
         raise BoundedReadError(f"{path}: {err}") from err
 
 
-def stop_process(proc):
-    """Kill proc if still running, close its pipes, and reap it."""
-    if proc.poll() is None:
-        proc.kill()
-    if proc.stdout is not None:
-        proc.stdout.close()
-    if proc.stderr is not None:
-        proc.stderr.close()
-    proc.wait()
-
-
-def collect_nul_names(carry, names, cap):
+def collect_nul_names(carry, names):
     """Extract NUL-terminated UTF-8 names from carry into names, refusing above cap."""
     pos = 0
     for _ in range(len(carry) + 1):
@@ -264,12 +265,9 @@ def collect_nul_names(carry, names, cap):
             break
         raw = carry[pos:nul]
         pos = nul + 1
-        if not raw:
-            continue
-        if len(names) >= cap:
+        if len(names) >= MAX_LISTED_RECORDS:
             raise ScanError(
-                f"git ls-files listed more than {cap} Go files "
-                f"(cap {MAX_TARGETS} targets + {MAX_FIXTURES} fixtures)"
+                f"git ls-files exceeded the raw listing bound of {MAX_LISTED_RECORDS} records"
             )
         try:
             names.append(raw.decode("utf-8"))
@@ -301,46 +299,93 @@ def start_git_ls_files(root):
         raise ScanError(f"git did not complete: {err}") from err
 
 
+def read_git_stdout(stream):
+    """Read Git's NUL-terminated paths with raw byte and record bounds."""
+    names = []
+    carry = b""
+    total_bytes = 0
+    for _ in range(MAX_LISTED_BYTES + 2):
+        chunk = stream.read(READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total_bytes += len(chunk)
+        if total_bytes > MAX_LISTED_BYTES:
+            raise ScanError(
+                f"git ls-files exceeded the raw listing bound of {MAX_LISTED_BYTES} bytes"
+            )
+        carry = collect_nul_names(carry + chunk, names)
+    if carry:
+        raise ScanError("git ls-files output was not NUL-terminated")
+    return names
+
+
+def drain_git_stderr(proc, excerpt, failures):
+    """Drain stderr in one reader, retaining only an excerpt and killing Git past the cap."""
+    total_bytes = 0
+    try:
+        with proc.stderr as stream:
+            for _ in range(MAX_GIT_STDERR_BYTES + 2):
+                chunk = stream.read(READ_CHUNK_BYTES)
+                if not chunk:
+                    return
+                total_bytes += len(chunk)
+                if total_bytes > MAX_GIT_STDERR_BYTES:
+                    raise ScanError(f"stderr exceeds {MAX_GIT_STDERR_BYTES} bytes")
+                excerpt.extend(chunk[: GIT_STDERR_EXCERPT_BYTES - len(excerpt)])
+    except (OSError, ScanError) as err:
+        failures.append(err)
+        proc.kill()
+
+
+def finish_git_listing(proc, reader, deadline):
+    """Stop Git and join its stderr reader within the original deadline."""
+    if proc.poll() is None:
+        proc.kill()
+    proc.stdout.close()
+    reader.join(max(0.0, deadline - time.monotonic()))
+    proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+    if reader.is_alive():
+        raise ScanError(f"git ls-files timed out after {TIMEOUT_SECONDS}s")
+
+
 def list_git_targets(root):
-    """Stream NUL-terminated Go paths from git ls-files under time, byte and count bounds."""
+    """Read both Git pipes under one deadline, refusing incomplete discovery."""
     deadline = time.monotonic() + TIMEOUT_SECONDS
     timed_out = threading.Event()
     proc = start_git_ls_files(root)
 
     def on_timeout():
-        """Mark timeout and kill git when TIMEOUT_SECONDS elapses."""
+        """Mark timeout and kill Git to unblock the pipe readers."""
         timed_out.set()
         proc.kill()
 
-    timer = threading.Timer(TIMEOUT_SECONDS, on_timeout)
+    timer = threading.Timer(max(0.0, deadline - time.monotonic()), on_timeout)
+    excerpt = bytearray()
+    failures = []
+    reader = threading.Thread(
+        target=drain_git_stderr, args=(proc, excerpt, failures), daemon=True
+    )
     timer.start()
-    names = []
-    carry = b""
-    total_bytes = 0
+    reader.start()
     try:
-        for _ in range(MAX_LISTED_BYTES + 2):
-            chunk = proc.stdout.read(READ_CHUNK_BYTES)
-            if not chunk:
-                break
-            total_bytes += len(chunk)
-            if total_bytes > MAX_LISTED_BYTES:
-                raise ScanError(f"git ls-files output exceeds {MAX_LISTED_BYTES} bytes")
-            carry = collect_nul_names(carry + chunk, names, MAX_LISTED_PATHS)
-        err_text = proc.stderr.read(4096).decode("utf-8", errors="replace").strip()
-        proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+        try:
+            names = read_git_stdout(proc.stdout)
+            proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+        finally:
+            finish_git_listing(proc, reader, deadline)
     except subprocess.TimeoutExpired as err:
         raise ScanError(f"git ls-files timed out after {TIMEOUT_SECONDS}s") from err
     except OSError as err:
         raise ScanError(f"git ls-files failed: {err}") from err
     finally:
         timer.cancel()
-        stop_process(proc)
     if timed_out.is_set():
         raise ScanError(f"git ls-files timed out after {TIMEOUT_SECONDS}s")
-    if proc.returncode != 0:
-        raise ScanError(f"git ls-files failed: {err_text}")
-    if carry:
-        raise ScanError("git ls-files output was not NUL-terminated")
+    if failures:
+        raise ScanError(f"git ls-files failed: {failures[0]}") from failures[0]
+    if proc.returncode != 0 or excerpt:
+        message = format_message(excerpt.decode("utf-8", errors="replace"))
+        raise ScanError(f"git ls-files failed (exit {proc.returncode}): {message}")
     return names
 
 
@@ -411,30 +456,50 @@ def targets(root, allow_empty=False):
     return names
 
 
-def target_digests(root, names):
-    """Return a map of each target path in names to the sha256 digest of its bytes."""
+def read_scan_input(root, name):
+    """Read a rule configuration or Go target using its byte limit."""
+    limit = MAX_CONFIG_BYTES if name == RULES else MAX_TARGET_BYTES
+    return read_bounded_bytes(root / name, limit)
+
+
+def write_snapshot(root, snapshot, names):
+    """Copy scan inputs and return the SHA-256 digest of each copy."""
     digests = {}
-    for name in names:
+    for name in (RULES, *names):
         try:
-            raw = read_bounded_bytes(root / name, MAX_TARGET_BYTES)
+            raw = read_scan_input(root, name)
         except BoundedReadError as err:
             raise ScanError(f"cannot read target {name}: {err}") from err
+        path = snapshot / name
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+        except OSError as err:
+            raise ScanError(f"cannot snapshot {name}: {err}") from err
         digests[name] = hashlib.sha256(raw).digest()
     return digests
 
 
 def changed_targets(root, before):
-    """Return sorted target paths whose bytes changed or vanished since before was recorded."""
+    """Return sorted snapshot input paths whose live bytes changed or vanished."""
     changed = []
     for name, digest in before.items():
         try:
-            raw = read_bounded_bytes(root / name, MAX_TARGET_BYTES)
+            raw = read_scan_input(root, name)
         except BoundedReadError:
             changed.append(name)
             continue
         if hashlib.sha256(raw).digest() != digest:
             changed.append(name)
     return sorted(changed)
+
+
+def snapshot_fingerprint(digests):
+    """Hash sorted UTF-8 paths, each followed by NUL and its fixed-width digest."""
+    fingerprint = hashlib.sha256()
+    for name, digest in sorted(digests.items()):
+        fingerprint.update(name.encode("utf-8") + b"\0" + digest)
+    return fingerprint.hexdigest()[:12]
 
 
 def format_message(message):
@@ -468,23 +533,8 @@ def report_findings(report):
         raise ScanError(f"{len(results)} finding(s), {len(errors)} error(s)")
 
 
-def scan(semgrep, root):
-    """Scan every target and fail unless the report is clean and every target stayed unchanged."""
-    names = targets(root)
-    before = target_digests(root, names)
-    result = semgrep(
-        [
-            "scan",
-            "--config",
-            RULES,
-            "--error",
-            "--strict",
-            "--json",
-            *SEMGREP_FLAGS,
-            "--",
-            *names,
-        ]
-    )
+def check_scan_report(result, names):
+    """Require a clean JSON report covering every snapshot target."""
     try:
         report = json.loads(result.stdout)
     except json.JSONDecodeError as err:
@@ -499,21 +549,53 @@ def scan(semgrep, root):
         )
     if result.returncode != 0:
         raise ScanError(f"semgrep exited {result.returncode} with a clean report")
+
+
+def check_target_set(root, names):
+    """Require the live target set to match the set selected for the snapshot."""
     current = set(targets(root, allow_empty=True))
-    added = sorted(current - set(names))
-    removed = sorted(set(names) - current)
+    expected = set(names)
+    added = sorted(current - expected)
+    removed = sorted(expected - current)
     if added or removed:
         paths = (added + removed)[:10]
         raise ScanError(
             f"target set changed during the scan: {len(added)} added, "
             f"{len(removed)} removed: {paths}"
         )
+
+
+def scan(runner_factory, root):
+    """Scan a private snapshot and compare its contents and paths to the live tree."""
+    names = targets(root)
+    with tempfile.TemporaryDirectory(prefix="semgrep-snapshot-") as directory:
+        snapshot = pathlib.Path(directory)
+        before = write_snapshot(root, snapshot, names)
+        semgrep = runner_factory(snapshot)
+        result = semgrep(
+            [
+                "scan",
+                "--config",
+                RULES,
+                "--error",
+                "--strict",
+                "--json",
+                *SEMGREP_FLAGS,
+                "--",
+                *names,
+            ]
+        )
+        check_scan_report(result, names)
+    fingerprint = snapshot_fingerprint(before)
     changed = changed_targets(root, before)
     if changed:
         raise ScanError(
             f"target contents changed during the scan ({len(changed)}): {changed[:10]}"
         )
-    print(f"Semgrep: {len(names)} files scanned, 0 findings")
+    check_target_set(root, names)
+    print(
+        f"Semgrep: {len(names)} files scanned (snapshot sha256:{fingerprint}), 0 findings"
+    )
 
 
 def checked_inputs(root):
@@ -529,9 +611,13 @@ def image_scan(docker, image, root):
     if not IMAGE_RE.match(image):
         raise ScanError(f"image '{image}' is not pinned as NAME:TAG@sha256:DIGEST")
     ids, names = checked_inputs(root)
-    semgrep = image_runner(docker, image, root)
-    self_test(semgrep, names, ids)
-    scan(semgrep, root)
+
+    def runner_factory(scan_root):
+        """Create the pinned image runner for scan_root."""
+        return image_runner(docker, image, scan_root)
+
+    self_test(runner_factory(root), names, ids)
+    scan(runner_factory, root)
 
 
 def native_scan(name, root):
@@ -542,7 +628,8 @@ def native_scan(name, root):
     binary = os.path.abspath(binary)
     ids, names = checked_inputs(root)
     with tempfile.TemporaryDirectory(prefix="semgrep-state-") as state:
-        semgrep = native_runner(binary, root, state)
+        runner_factory = partial(native_runner, binary, state=state)
+        semgrep = runner_factory(root)
         version = native_version(semgrep)
         print(f"Semgrep native: {binary} version {version}; CI runs the pinned image")
         pin = ci_pin(root)
@@ -555,7 +642,7 @@ def native_scan(name, root):
                 file=sys.stderr,
             )
         self_test(semgrep, names, ids)
-        scan(semgrep, root)
+        scan(runner_factory, root)
 
 
 def ci_pin(root):

@@ -121,11 +121,24 @@ shift
 case "$STUB_MODE" in
   clean) jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@" ;;
   adds-file)
-    printf 'package main\n' > added.go
+    printf 'package main\n' > "$STUB_LIVE_ROOT/added.go"
     jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"
     ;;
   rewrites-file)
-    printf 'package main\n\nfunc main() { println("mutated") }\n' > main.go
+    printf 'package main\n\nfunc main() { println("mutated") }\n' > "$STUB_LIVE_ROOT/main.go"
+    jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"
+    ;;
+  swap-restore)
+    original="$STUB_LOG.original"
+    cp "$STUB_LIVE_ROOT/main.go" "$original"
+    printf 'package main\n\nfunc main() { println("mutated") }\n' > "$STUB_LIVE_ROOT/main.go"
+    same=0
+    cmp -s main.go "$original" || same=$?
+    cp "$original" "$STUB_LIVE_ROOT/main.go"
+    if [ "$same" -ne 0 ]; then
+      echo 'scan saw the temporary live rewrite' >&2
+      exit 3
+    fi
     jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"
     ;;
   finding) jq -n '{results: [{path: "main.go", start: {line: 1}, check_id: "demo-rule",
@@ -214,10 +227,11 @@ expect() {
   : > "$WORK/calls"
   got=0
   if [ -n "${NATIVE:-}" ]; then
-    out="$(cd "${NATIVE_CWD:-$PWD}" && STUB_MODE="$mode" STUB_LOG="$WORK/calls" \
+    out="$(cd "${NATIVE_CWD:-$PWD}" && STUB_MODE="$mode" STUB_LOG="$WORK/calls" STUB_LIVE_ROOT="$root" \
       timeout 30 python3 -I "$SCAN" --root "$root" --semgrep "$NATIVE" 2>&1)" || got=$?
   else
-    out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" timeout 30 python3 -I "$SCAN" --root "$root" --docker "$STUB" \
+    out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" STUB_LIVE_ROOT="$root" \
+      timeout 30 python3 -I "$SCAN" --root "$root" --docker "$STUB" \
       --image "$image" 2>&1)" || got=$?
   fi
   check_case "$name" "$want" "$got" "$needle" "$out" "output lacks"
@@ -235,7 +249,183 @@ expect() {
 
 FX=tools/ci/semgrep/testdata
 
-expect 0 "clean repository" clean yes "Semgrep: 1 files scanned, 0 findings"
+regression_failed=0
+# Report every planted regression even when replayed against the old scanner.
+check_regression() {
+  if (check_case "$@"); then
+    if [ "$2" -eq 0 ]; then accepted=$((accepted + 1)); else refused=$((refused + 1)); fi
+    echo "ok   $1"
+  else
+    regression_failed=1
+  fi
+}
+
+root="$WORK/regressions"
+fresh "$root"
+fingerprint="$(python3 -I - "$root" <<'PY'
+import hashlib
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+manifest = b"".join(
+    name.encode() + b"\0" + hashlib.sha256((root / name).read_bytes()).digest()  # Binary manifest.
+    for name in (".semgrep.yml", "main.go")
+)
+print(hashlib.sha256(manifest).hexdigest()[:12])
+PY
+)"
+got=0
+out="$(STUB_MODE=swap-restore STUB_LOG="$WORK/swap" STUB_LIVE_ROOT="$root" \
+  timeout 30 python3 -I "$SCAN" --root "$root" --semgrep "$STUB" 2>&1)" || got=$?
+check_regression "snapshot survives a temporary rewrite of the live target" 0 "$got" \
+  "Semgrep: 1 files scanned (snapshot sha256:$fingerprint), 0 findings" "$out"
+
+got=0
+out="$(STUB_MODE=clean STUB_LOG="$WORK/late" timeout 30 python3 -I - "$SCAN" "$root" "$STUB" 2>&1 <<'PY'
+from pathlib import Path
+import runpy
+import sys
+
+scanner, root, stub = sys.argv[1:]
+module = runpy.run_path(scanner)
+original = module["changed_targets"]
+
+def add_target(root, before):
+    (Path(root) / "late.go").write_text("package main\n", encoding="utf-8")
+    return original(root, before)
+
+original.__globals__["changed_targets"] = add_target
+sys.argv = [scanner, "--root", root, "--semgrep", stub]
+sys.exit(module["main"]())
+PY
+)" || got=$?
+check_regression "target added during the final content check" 1 "$got" \
+  "target set changed during the scan: 1 added, 0 removed: ['late.go']" "$out"
+
+ln -s main.go "$root/symlink"
+mkfifo "$root/fifo"
+got=0
+out="$(timeout 30 python3 -I - "$SCAN" "$root" 2>&1 <<'PY'
+import os
+from pathlib import Path
+import runpy
+import sys
+from unittest.mock import patch
+
+module = runpy.run_path(sys.argv[1])
+root = Path(sys.argv[2])
+del os.O_NONBLOCK, os.O_NOFOLLOW
+read_bytes = module["read_bounded_bytes"]
+if read_bytes(root / "main.go", 1024) != (root / "main.go").read_bytes():
+    raise AssertionError("regular file bytes differ")
+for name in ("symlink", "fifo", "tools"):
+    try:
+        read_bytes(root / name, 1024)
+    except module["BoundedReadError"] as err:
+        if "not a regular file" not in str(err):
+            raise
+    else:
+        raise AssertionError(f"{name} was accepted")
+
+original_open = os.open
+replacement = root / "replacement"
+replacement.write_bytes(b"replacement")
+
+def replace_then_open(path, flags):
+    replacement.replace(path)
+    return original_open(path, flags)
+
+with patch.object(os, "open", replace_then_open):
+    try:
+        read_bytes(root / "main.go", 1024)
+    except module["BoundedReadError"] as err:
+        if "file changed before open" not in str(err):
+            raise
+    else:
+        raise AssertionError("a swapped file was accepted")
+print("regular file read; symlink, FIFO, directory and replacement refused")
+PY
+)" || got=$?
+check_regression "bounded open without O_NONBLOCK and O_NOFOLLOW" 0 "$got" \
+  "regular file read; symlink, FIFO, directory and replacement refused" "$out"
+
+mkdir "$WORK/git-stub"
+cat > "$WORK/git-stub/git" <<'EOF'
+#!/bin/sh
+exec python3 -I - <<'PY'
+import os
+import sys
+
+mode = os.environ["GIT_STUB_MODE"]
+if mode == "raw-records":
+    sys.stdout.buffer.write(b"main.go\0" * 16641)
+else:
+    warning = {
+        "warning": b"warning: unreadable directory\x1b[31m\n",
+        "loud": b"warning: large stderr " + b"x" * (1024 * 1024 - 22),
+        "stderr-cap": b"x" * (2 * 1024 * 1024 + 1),
+    }
+    sys.stderr.buffer.write(warning[mode]); sys.stderr.buffer.flush()  # Flush before stdout.
+    sys.stdout.buffer.write(b"main.go\0")
+PY
+EOF
+chmod +x "$WORK/git-stub/git"
+for git_mode in warning loud stderr-cap raw-records; do
+  got=0
+  out="$(PATH="$WORK/git-stub:$PATH" GIT_STUB_MODE="$git_mode" STUB_MODE=clean STUB_LOG="$WORK/git-calls" \
+    timeout 30 python3 -I "$SCAN" --root "$root" --semgrep "$STUB" 2>&1)" || got=$?
+  case "$git_mode" in
+    warning)
+      check_regression "Git warning with exit zero" 1 "$got" \
+        'git ls-files failed (exit 0): warning: unreadable directory\x1b[31m\n' "$out" ;;
+    loud)
+      check_regression "Git writes 1 MiB to stderr before stdout" 1 "$got" \
+        "git ls-files failed (exit 0): warning: large stderr " "$out"
+      check_regression "Git stderr excerpt truncated" 1 "$got" '... [truncated]' "$out" ;;
+    stderr-cap)
+      check_regression "Git stderr above the byte cap" 1 "$got" \
+        'git ls-files failed: stderr exceeds 2097152 bytes' "$out" ;;
+    raw-records)
+      check_regression "Git listing above the raw record bound" 1 "$got" \
+        'git ls-files exceeded the raw listing bound of 16640 records' "$out" ;;
+  esac
+done
+
+# Print the live Go target count or report a discovery error.
+list_target_count() {
+  timeout 30 python3 -I - "$SCAN" "$1" <<'PY'
+from pathlib import Path
+import runpy
+import sys
+
+module = runpy.run_path(sys.argv[1])
+try:
+    print(len(module["targets"](Path(sys.argv[2]))), "live Go targets")
+except module["ScanError"] as err:
+    sys.exit(str(err))
+PY
+}
+
+root="$WORK/target-boundary"
+fresh "$root"
+mkdir "$root/deleted"
+for i in $(seq 1 64); do printf 'package main\n' > "$root/deleted/$i.go"; done
+git -C "$root" add -- deleted
+rm -rf "$root/deleted"
+for i in $(seq 1 4095); do printf 'package main\n' > "$root/u-$i.go"; done
+got=0
+out="$(list_target_count "$root" 2>&1)" || got=$?
+check_regression "4096 live Go files despite 64 deleted indexed paths and a fixture" 0 "$got" \
+  '4096 live Go targets' "$out"
+printf 'package main\n' > "$root/over.go"
+got=0
+out="$(list_target_count "$root" 2>&1)" || got=$?
+check_regression "4097 live Go files refused at the target cap" 1 "$got" \
+  '4097 Go files to scan, expected 1 to 4096' "$out"
+[ "$regression_failed" -eq 0 ] || exit 1
+
+expect 0 "clean repository" clean yes "Semgrep: 1 files scanned (snapshot sha256:"
 assert_scanned_set "clean repository" main.go
 
 # Defects refused before any docker call.
@@ -268,19 +458,6 @@ printf 'package outside\n' > "$WORK/outside.go"
 expect 1 "untracked symlink outside repository root" clean no \
   "refused 1 symlink or outside-root target(s): ['link.go']" 'ln -s ../outside.go link.go'
 
-# MAX_TARGETS = 4096 and MAX_FIXTURES = 64. fresh() tracks 1 non-fixture Go file (main.go) plus
-# 1 excluded fixture (tools/ci/semgrep/testdata/demo-rule.go):
-# - 4096 - 1 = 4095 untracked Go files -> 1 + 4095 = 4096 == MAX_TARGETS (accepted at boundary);
-# - 4097 untracked Go files -> 1 + 4097 = 4098 > 4096 (refused with MAX_TARGETS in diagnostic);
-# - 4159 untracked Go files -> 1 + 1 + 4159 = 4161 > 4160 = MAX_TARGETS + MAX_FIXTURES (streaming cap).
-expect 0 "4096 Go files at MAX_TARGETS boundary" clean yes "Semgrep: 4096 files scanned, 0 findings" \
-  "i=0; while [ \$i -lt 4095 ]; do printf 'package main\n' > u-\$i.go; i=\$((i + 1)); done"
-expect 1 "4097 untracked Go files above MAX_TARGETS" clean no "4098 Go files to scan, expected 1 to 4096" \
-  "i=0; while [ \$i -lt 4097 ]; do printf 'package main\n' > u-\$i.go; i=\$((i + 1)); done"
-expect 1 "listed Go paths above MAX_TARGETS + MAX_FIXTURES" clean no \
-  "git ls-files listed more than 4160 Go files" \
-  "i=0; while [ \$i -lt 4159 ]; do printf 'package main\n' > u-\$i.go; i=\$((i + 1)); done"
-
 # Defects only Semgrep's own answer reveals.
 expect 1 "fixture replay fails" fixture-fails yes "fixture tools/ci/semgrep/testdata/demo-rule.go did not pass (exit 1)"
 expect 1 "scan reports a finding" finding yes "1 finding(s), 0 error(s)"
@@ -299,13 +476,13 @@ expect 1 "scan prints no report" no-json yes "no JSON report"
 expect 1 "clean report, failing exit" exit-2 yes "semgrep exited 2 with a clean report"
 
 # Targets: what a working tree holds, not only what the index lists.
-expect 0 "untracked Go file is scanned" clean yes "Semgrep: 2 files scanned, 0 findings" \
+expect 0 "untracked Go file is scanned" clean yes "Semgrep: 2 files scanned (snapshot sha256:" \
   'printf "package main\n" > extra.go'
 assert_scanned_set "untracked Go file is scanned" extra.go main.go
-expect 0 "ignored Go file is left out" clean yes "Semgrep: 1 files scanned, 0 findings" \
+expect 0 "ignored Go file is left out" clean yes "Semgrep: 1 files scanned (snapshot sha256:" \
   'printf "ignored.go\n" > .gitignore && printf "package main\n" > ignored.go'
 assert_scanned_set "ignored Go file is left out" main.go
-expect 0 "deleted tracked file is left out" clean yes "Semgrep: 1 files scanned, 0 findings" \
+expect 0 "deleted tracked file is left out" clean yes "Semgrep: 1 files scanned (snapshot sha256:" \
   'printf "package main\n" > gone.go && git add gone.go && rm gone.go'
 assert_scanned_set "deleted tracked file is left out" main.go
 expect 1 "target added during scan" adds-file yes \
@@ -326,7 +503,7 @@ NATIVE=./docker NATIVE_CWD="$WORK" expect 0 "relative native binary with separat
 mkdir -p "$WORK/xdg/git"
 printf 'ignored.go\n' > "$WORK/xdg/git/ignore"
 XDG_CONFIG_HOME="$WORK/xdg" NATIVE="$STUB" expect 0 \
-  "native preserves caller Git excludes" clean yes "Semgrep: 1 files scanned, 0 findings" \
+  "native preserves caller Git excludes" clean yes "Semgrep: 1 files scanned (snapshot sha256:" \
   'printf "package main\n" > ignored.go'
 if grep -q 'ignored.go' "$WORK/calls"; then
   echo 'FAIL native preserves caller Git excludes: ignored.go reached stub' >&2
@@ -388,7 +565,22 @@ WIRING="$HERE/lane_brief_wiring.py"
 wiring_rc=0
 wiring_out="$("$PYTHON_BIN" -I "$WIRING" "$ROOT/.config/lane-brief.yaml" 2>&1)" || wiring_rc=$?
 check_case "lane brief impl and fix wiring" 0 "$wiring_rc" "" "$wiring_out"
-"$PYTHON_BIN" -I - "$ROOT/.config/lane-brief.yaml" "$WORK" <<'PY'
+reordered_brief="$WORK/preceding-command.yaml"
+"$PYTHON_BIN" -I - "$ROOT/.config/lane-brief.yaml" "$reordered_brief" <<'PY'
+import pathlib
+import sys
+
+import yaml
+
+source = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+for stage in ("impl", "fix"):
+    source["required_by_stage"][stage].insert(0, "ruff check tools/ci")
+pathlib.Path(sys.argv[2]).write_text(yaml.safe_dump(source), encoding="utf-8")
+PY
+wiring_rc=0
+wiring_out="$("$PYTHON_BIN" -I "$WIRING" "$reordered_brief" 2>&1)" || wiring_rc=$?
+check_case "lane brief with a preceding command in impl and fix" 0 "$wiring_rc" "" "$wiring_out"
+"$PYTHON_BIN" -I - "$reordered_brief" "$WORK" <<'PY'
 import pathlib
 import sys
 
@@ -396,9 +588,13 @@ import yaml
 
 source = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 destination = pathlib.Path(sys.argv[2])
-line = source["required_by_stage"]["impl"][0]
-if not isinstance(line, str) or not line.endswith(" semgrep"):
-    raise AssertionError(f"expected ' semgrep' suffix, got {line!r}")
+line = next(
+    (entry for entry in source["required_by_stage"]["impl"]
+     if isinstance(entry, str) and entry.endswith(" semgrep")),
+    None,
+)
+if line is None:
+    raise AssertionError("impl has no command with the ' semgrep' suffix")
 prefix = line.removesuffix(" semgrep")
 review_only = {"required_by_stage": {"impl": [], "fix": [], "review": [line]}}
 missing_fix = {"required_by_stage": {"impl": [line], "fix": []}}
@@ -418,6 +614,7 @@ for case_name in review-only missing-fix prefix-only; do
   check_case "lane brief $case_name" 1 "$wiring_rc" "missing $missing_stage:" "$wiring_out"
   echo "ok   lane brief $case_name"
 done
+echo "ok   lane brief with a preceding command in impl and fix generates three negative briefs"
 mkfifo "$WORK/fifo-brief.yaml"
 wiring_rc=0
 wiring_out="$(timeout 30 "$PYTHON_BIN" -I "$WIRING" "$WORK/fifo-brief.yaml" 2>&1)" || wiring_rc=$?
