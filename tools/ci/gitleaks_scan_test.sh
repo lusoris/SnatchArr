@@ -142,6 +142,10 @@ while [ -e "$HOLD" ] && [ "$checks" -lt 600 ]; do
 	sleep 0.1
 	checks=$((checks + 1))
 done
+if [ -e "$HOLD" ]; then
+	echo 'stub tar: hold expired before release' >&2
+	exit 1
+fi
 exec 3>&-
 EOF
 chmod 700 "$stub/tar"
