@@ -725,12 +725,22 @@ func TestLanguageCodeCoversEveryRule(t *testing.T) {
 
 func TestOversizeBodyIsUnavailable(t *testing.T) {
 	t.Parallel()
+	type writeResult struct {
+		n   int
+		err error
+	}
+	var mu sync.Mutex
+	var writes []writeResult
 	big := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/login" {
 			_, _ = w.Write([]byte(`{"data":{"token":"stub-token"}}`))
 			return
 		}
-		_, _ = w.Write(bytes.Repeat([]byte("a"), maxBodyBytes+10))
+		// Keep the body valid JSON so decoding alone cannot make the lookup fail.
+		n, err := fmt.Fprintf(w, `{"status":"success","data":{"id":1,"name":%q,"aliases":[],"language":"deu"}}`, strings.Repeat("a", maxBodyBytes+(64<<10)))
+		mu.Lock()
+		writes = append(writes, writeResult{n: n, err: err})
+		mu.Unlock()
 	}))
 	t.Cleanup(big.Close)
 	p, err := New(plantedKey, "", testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler), WithBaseURL(big.URL), WithRate(rate.Inf, 1))
@@ -739,6 +749,16 @@ func TestOversizeBodyIsUnavailable(t *testing.T) {
 	}
 	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("error = %v, want ErrUnavailable", err)
+	}
+	big.Close()
+	if len(writes) == 0 {
+		t.Fatal("no oversize response writes recorded")
+	}
+	// A truncated response can also return ErrUnavailable, so verify each write reached the cap.
+	for _, write := range writes {
+		if write.err != nil && write.n <= maxBodyBytes {
+			t.Fatalf("oversize response write: n=%d, maxBodyBytes=%d, err=%v", write.n, maxBodyBytes, write.err)
+		}
 	}
 }
 
