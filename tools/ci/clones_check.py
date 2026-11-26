@@ -4,7 +4,8 @@
 
 Scans the repository with praetorctl dedupe scan --json, verifying that neither
 native Go duplicates nor foreign (jscpd) duplicates overlap with files declared
-in tools/ci/clone-free.txt.
+in tools/ci/clone-free.txt. Resolves PRAETORCTL (default praetorctl) either by
+fixed allowed name on PATH or as an executable absolute path with that basename.
 """
 
 import argparse
@@ -16,6 +17,7 @@ import subprocess
 import sys
 
 TIMEOUT_SECONDS = 60
+ALLOWED_NAMES = ("praetorctl", "standardsctl")
 
 
 class CheckError(Exception):
@@ -83,14 +85,34 @@ def fetch_report_from_file(report_file: str) -> str:
         ) from err
 
 
+def resolve_praetorctl() -> str:
+    """Resolve PRAETORCTL to an allowed executable path or raise CheckError."""
+    value = os.environ.get("PRAETORCTL", "praetorctl")
+    if value in ALLOWED_NAMES:
+        resolved = shutil.which(value)
+        if not resolved:
+            raise CheckError(
+                f"clones_check: praetorctl binary not found on PATH: {value}",
+                exit_code=2,
+            )
+        return resolved
+    candidate = pathlib.Path(value)
+    if (
+        os.path.isabs(value)
+        and os.path.basename(value) in ALLOWED_NAMES
+        and candidate.is_file()
+        and os.access(candidate, os.X_OK)
+    ):
+        return value
+    raise CheckError(
+        f"clones_check: invalid PRAETORCTL={value!r}: not an allowed executable",
+        exit_code=2,
+    )
+
+
 def run_scan_report(root: pathlib.Path) -> str:
     """Execute praetorctl dedupe scan --json and return raw output."""
-    praetorctl_cmd = os.environ.get("PRAETORCTL", "praetorctl")
-    if not shutil.which(praetorctl_cmd) and not pathlib.Path(praetorctl_cmd).is_file():
-        raise CheckError(
-            f"clones_check: praetorctl binary not found: {praetorctl_cmd}",
-            exit_code=2,
-        )
+    resolved = resolve_praetorctl()
 
     jscpd_bin = root / "web" / "node_modules" / ".bin" / "jscpd"
     if not jscpd_bin.is_file() or not os.access(jscpd_bin, os.X_OK):
@@ -99,12 +121,12 @@ def run_scan_report(root: pathlib.Path) -> str:
             exit_code=2,
         )
 
-    cmd = [praetorctl_cmd, "dedupe", "scan", "--json", str(root)]
     env = os.environ.copy()
     env["PRAETOR_JSCPD_BIN"] = str(jscpd_bin)
     try:
         proc = subprocess.run(
-            cmd,
+            ["praetorctl", "dedupe", "scan", "--json", str(root)],
+            executable=resolved,
             cwd=str(root),
             env=env,
             capture_output=True,
@@ -175,7 +197,9 @@ def is_clone_free(path: str, clone_free_paths: list[str]) -> bool:
 def check_clones(report: dict, clone_free_paths: list[str]) -> int:
     """Verify that no duplicate group touches any clone-free path."""
     matching_clones: list[dict] = []
-    duplicate_groups = report.get("duplicates", []) + report.get("foreign_duplicates", [])
+    duplicate_groups = report.get("duplicates", []) + report.get(
+        "foreign_duplicates", []
+    )
 
     for group in duplicate_groups:
         locs = group.get("locations", [])
