@@ -88,6 +88,7 @@ jobs:
           fi
       - name: The release publish order check refuses its planted cases
         run: python3 -I tools/ci/release_publish_order_check.py --self-test && python3 -I tools/ci/release_publish_order_check.py
+      # Linux only (HISS-21): the check reads repository text files with the Python standard library, so its verdict does not depend on the runner OS.
       - name: The release version matches in every file release-please writes, after its planted cases
         run: python3 -I tools/ci/release_version_check.py --self-test && python3 -I tools/ci/release_version_check.py
       # A dependency-only change must still run deploy (Helm).

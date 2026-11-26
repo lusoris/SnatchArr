@@ -8,6 +8,8 @@ Exit 0 = versions agree, 1 = release refused, 2 = unreadable or malformed input.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import re
 import sys
@@ -25,10 +27,13 @@ CORE = r"[0-9]+\.[0-9]+\.[0-9]+"
 VERSION = re.compile(rf"(?<!\w)v?({CORE}(?:[-+][0-9A-Za-z.+-]+)?)(?!\w|\.[0-9])")
 # Match the version field of each supported line without checking the image digest.
 VALUE_LINE = re.compile(
-    rf"(?:version|appVersion):\s+{CORE}(?=\s)"
+    rf"(?:version|appVersion):\s+{CORE}(?=\s|$)"
     rf"|image:\s+[^\s@]+:{CORE}(?=@|\s|$)"
     rf"|\[!\[Release\]\(\S*?[?&]message=v{CORE}(?=[&)])"
 )
+HEADING = re.compile(r"^ {0,3}##(?:[ \t]+|$)")
+HEADING_LINK = re.compile(r"^\[([^\]]+)\]\(([^)]*)\)")
+COMPARE_LINK = re.compile(rf"^(.+)/compare/v({CORE})\.\.\.v({CORE})$")
 BLOCK_METADATA = re.compile(r"artifacthub\.io/images: \||- name: \S+")
 SINGLE = "x-release-please-version"
 START = "x-release-please-start-version"
@@ -108,14 +113,37 @@ def release_files(root: Path) -> tuple[list[str], str]:
         raise ValueError(f"{CONFIG}:1: expected 1..{MAX_FILES} extra-files")
     names = []
     for entry in extra:
-        if (
+        if isinstance(entry, str):
+            names.append(string_extra_file(entry))
+        elif (
             not isinstance(entry, dict)
             or entry.keys() != {"type", "path"}
             or entry["type"] != "generic"
         ):
             raise ValueError(f"{CONFIG}:1: expected a generic updater with a path")
-        names.append(relative_name(entry["path"]))
+        else:
+            names.append(relative_name(entry["path"]))
     return names, relative_name(package.get("changelog-path", "CHANGELOG.md"))
+
+
+def string_extra_file(entry: str) -> str:
+    """Accept Generic-only string paths and reject composite updater suffixes."""
+    path = relative_name(entry)
+    formats = {
+        ".json": "JSON",
+        ".yaml": "YAML",
+        ".yml": "YAML",
+        ".toml": "TOML",
+        ".xml": "XML",
+    }
+    suffix = next((item for item in formats if path.endswith(item)), "")
+    if suffix:
+        raise ValueError(
+            f"{CONFIG}:1: {path}: a string path ending {suffix} also runs "
+            f"release-please's {formats[suffix]} updater, which rewrites the file "
+            'and drops the markers; use {"type": "generic", "path": ...}'
+        )
+    return path
 
 
 def lines(text: str, name: str) -> list[str]:
@@ -182,9 +210,21 @@ def check_marked(text: str, name: str, version: str, findings: list[str]) -> int
             count += compare_line(line, where, version, findings)
         elif kind:
             findings.append(f"{where}: invalid or unmatched release marker")
+        elif unmarked_value(line):
+            findings.append(
+                f"{where}: release version field without a release-please marker"
+            )
     if not count:
         findings.append(f"{name}:1: no marked line with a version")
     return count
+
+
+def unmarked_value(line: str) -> bool:
+    """Identify an unmarked release field, excluding indented YAML child keys."""
+    text = line.strip()
+    if not VALUE_LINE.match(text):
+        return False
+    return not (line[:1].isspace() and text.startswith(("version:", "appVersion:")))
 
 
 def compare_line(line: str, where: str, version: str, findings: list[str]) -> int:
@@ -202,24 +242,103 @@ def compare_line(line: str, where: str, version: str, findings: list[str]) -> in
 
 
 def check_changelog(text: str, name: str, version: str) -> list[str]:
-    """Require the first level-two heading to link the manifest version."""
-    for number, line in enumerate(lines(text, name), 1):
-        if line.startswith("## "):
-            if line.startswith(f"## [{version}]("):
-                return []
-            match = re.match(r"## \[([^\]]+)\]\(", line)
-            if match:
-                return [f"{name}:{number}: {match[1]} != {version}"]
-            return [f"{name}:{number}: expected heading starting with ## [{version}]("]
-    return [f"{name}:1: no level-two heading"]
+    """Require a CommonMark level-two release heading linked to its predecessor."""
+    headings = changelog_headings(text, name)
+    if not headings:
+        return [f"{name}:1: no level-two heading"]
+    number, first = headings[0]
+    link = HEADING_LINK.match(first)
+    if not link:
+        return [f"{name}:{number}: expected heading starting with ## [{version}]("]
+    if link[1] != version:
+        return [f"{name}:{number}: {link[1]} != {version}"]
+    if len(headings) == 1:
+        return []
+    previous_number, previous_heading = headings[1]
+    previous = heading_version(previous_heading)
+    if not previous:
+        return [
+            (
+                f"{name}:{previous_number}: expected ## [P](...) or ## P (YYYY-MM-DD) "
+                "for the previous release"
+            )
+        ]
+    return compare_changelog_link(
+        number, first, previous_heading, version, previous, name
+    )
 
 
-def evaluate(root: Path) -> tuple[int, str]:
+def changelog_headings(text: str, name: str) -> list[tuple[int, str]]:
+    """Return CommonMark level-two ATX headings without their prefix."""
+    return [
+        (number, line[match.end() :].rstrip())
+        for number, line in enumerate(lines(text, name), 1)
+        if (match := HEADING.match(line))
+    ]
+
+
+def heading_version(text: str) -> str:
+    """Extract a release number from a linked or bare second changelog heading."""
+    match = HEADING_LINK.match(text)
+    if match:
+        return match[1]
+    match = re.match(rf"({CORE}) \(", text)
+    return match[1] if match else ""
+
+
+def compare_changelog_link(
+    number: int, first: str, second: str, version: str, previous: str, name: str
+) -> list[str]:
+    """Compare the first changelog link with the preceding release's link base."""
+    link = HEADING_LINK.match(first)
+    second_link = HEADING_LINK.match(second)
+    first_parts = COMPARE_LINK.match(link[2]) if link else None
+    if not first_parts or first_parts[3] != version:
+        return [f"{name}:{number}: {expected_message('<base>', previous, version)}"]
+    if first_parts[2] != previous:
+        return [f"{name}:{number}: compare link from v{first_parts[2]} != v{previous}"]
+    if not matches_expected_heading(first, first_parts[1], previous, version):
+        return [
+            f"{name}:{number}: {expected_message(first_parts[1], previous, version)}"
+        ]
+    if second_link and "/compare/" in second_link[2]:
+        second_base = second_link[2].split("/compare/", 1)[0]
+        if first_parts[1] != second_base:
+            return [
+                f"{name}:{number}: compare link base {first_parts[1]} != {second_base}"
+            ]
+    return []
+
+
+def expected_heading(base: str, previous: str, version: str) -> str:
+    """Build the exact release-please changelog heading grammar."""
+    return f"[{version}]({base}/compare/v{previous}...v{version}) (YYYY-MM-DD)"
+
+
+def matches_expected_heading(
+    first: str, base: str, previous: str, version: str
+) -> bool:
+    """Match the exact release heading grammar while allowing a calendar date."""
+    link = f"{base}/compare/v{previous}...v{version}"
+    pattern = (
+        rf"\[{re.escape(version)}\]\({re.escape(link)}\) \(\d{{4}}-\d{{2}}-\d{{2}}\)"
+    )
+    return re.fullmatch(pattern, first) is not None
+
+
+def expected_message(base: str, previous: str, version: str) -> str:
+    """Describe the exact heading expected for the manifest release version."""
+    return f"expected ## {expected_heading(base, previous, version)}"
+
+
+def evaluate(root: Path, tag_version: str | None = None) -> tuple[int, str]:
     """Return the CLI status and diagnostics for a release tree."""
     try:
         version = release_version(root)
         names, changelog = release_files(root)
         findings: list[str] = []
+        if tag_version is not None and version != tag_version:
+            findings.append(f"{MANIFEST}:1: manifest {version} != tag {tag_version}")
         counts = []
         for name in names:
             count = check_marked(read(root, name), name, version, findings)
@@ -233,7 +352,18 @@ def evaluate(root: Path) -> tuple[int, str]:
     return 0, f"release {version}, checked lines: {', '.join(counts)}"
 
 
-Case = tuple[str, dict[str, str], int, str]
+Case = tuple[str, dict[str, str], int, str, tuple[str, ...]]
+
+
+def case(
+    label: str,
+    changes: dict[str, str],
+    expected: int,
+    substring: str,
+    arguments: tuple[str, ...] = (),
+) -> Case:
+    """Create one self-test case with optional extra CLI arguments."""
+    return label, changes, expected, substring, arguments
 
 
 def stale_line(name: str, text: str, prefix: str, version: str, old: str) -> Case:
@@ -244,11 +374,8 @@ def stale_line(name: str, text: str, prefix: str, version: str, old: str) -> Cas
         raise ValueError(f"{name}: fixture lacks {needle!r}")
     line = (before + prefix).count("\n") + 1
     expected = f"{name}:{line}: {old} != {version}"
-    return (
-        f"{name} {prefix.strip()}",
-        {name: before + prefix + old + after},
-        1,
-        expected,
+    return case(
+        f"{name} {prefix.strip()}", {name: before + prefix + old + after}, 1, expected
     )
 
 
@@ -259,10 +386,13 @@ def planted_cases(
     chart = next(name for name in names if "appVersion: " in files[name])
     badge = next(name for name in names if "&message=v" in files[name])
     history = files[changelog]
-    previous = re.findall(rf"^## \[({CORE})\]\(", history, re.MULTILINE)
-    old = next((item for item in previous if item != version), version + "0")
+    headings = changelog_headings(history, changelog)
+    first_link = HEADING_LINK.match(headings[0][1])
+    previous = heading_version(headings[1][1])
+    old = previous if previous != version else version + "0"
+    base = COMPARE_LINK.match(first_link[2])[1] if first_link else ""
     cases = [
-        ("real copy", {}, 0, f"release {version},"),
+        case("real copy", {}, 0, f"release {version},"),
         stale_line(chart, files[chart], "\nversion: ", version, old),
         stale_line(chart, files[chart], "\nappVersion: ", version, old),
         stale_line(chart, files[chart], "snatcharr-api:", version, old),
@@ -272,7 +402,7 @@ def planted_cases(
     return (
         cases
         + marker_cases(files, chart, badge, version, old)
-        + input_cases(files, changelog, version)
+        + input_cases(files, names, changelog, version, previous, base)
     )
 
 
@@ -287,26 +417,26 @@ def marker_cases(
         f"message=v{version}&", f"message=unknown&other=v{version}&", 1
     )
     return [
-        (
+        case(
             "malformed badge",
             {badge: malformed},
             1,
             "expected a chart version, image tag or release badge",
         ),
-        ("two versions", {badge: two_versions}, 1, f"{old} != {version}"),
-        (
+        case("two versions", {badge: two_versions}, 1, f"{old} != {version}"),
+        case(
             "README marker removed",
             {badge: files[badge].replace(SINGLE, "")},
             1,
             "no marked line",
         ),
-        (
+        case(
             "unclosed block",
             {chart: files[chart].replace(END, "")},
             1,
             "unterminated version block",
         ),
-        (
+        case(
             "nested block",
             {chart: files[chart].replace(START, f"{START}\n  # {START}")},
             1,
@@ -315,31 +445,216 @@ def marker_cases(
     ]
 
 
-def input_cases(files: dict[str, str], changelog: str, version: str) -> list[Case]:
+def input_cases(
+    files: dict[str, str],
+    names: list[str],
+    changelog: str,
+    version: str,
+    previous: str,
+    base: str,
+) -> list[Case]:
     """Exercise configuration, manifest, changelog and multi-digit boundaries."""
-    boundary = "10.20.30"
     config = json.loads(files[CONFIG])
     config["packages"]["."]["extra-files"].append(
         {"type": "generic", "path": "missing-extra-file"}
     )
     no_headings = re.sub(r"^## ", "### ", files[changelog], flags=re.MULTILINE)
+    chart = next(name for name in names if "appVersion: " in files[name])
+    badge = next(name for name in names if "&message=v" in files[name])
     return [
-        (
+        *base_input_cases(files, changelog, version, no_headings, config),
+        *tag_cases(version),
+        *unmarked_value_cases(files, chart, version),
+        *changelog_cases(files[changelog], changelog, version, previous, base),
+        *extra_file_cases(files, chart, badge, version),
+    ]
+
+
+def base_input_cases(
+    files: dict[str, str], changelog: str, version: str, no_headings: str, config: dict
+) -> list[Case]:
+    """Cover malformed release inputs and a multi-digit version boundary."""
+    boundary = "10.20.30"
+    return [
+        case(
             "CHANGELOG without heading",
             {changelog: no_headings},
             1,
             "no level-two heading",
         ),
-        ("duplicate key", {MANIFEST: '{".":"1.2.3",".":"1.2.3"}'}, 2, "duplicate key"),
-        ("invalid version", {MANIFEST: '{".":"0.9"}'}, 2, "major.minor.patch"),
-        ("missing extra file", {CONFIG: json.dumps(config)}, 2, "missing-extra-file"),
-        (
+        case(
+            "duplicate key", {MANIFEST: '{".":"1.2.3",".":"1.2.3"}'}, 2, "duplicate key"
+        ),
+        case("invalid version", {MANIFEST: '{".":"0.9"}'}, 2, "major.minor.patch"),
+        case(
+            "missing extra file", {CONFIG: json.dumps(config)}, 2, "missing-extra-file"
+        ),
+        case(
             "multi-digit version",
-            {k: v.replace(version, boundary) for k, v in files.items()},
+            {key: value.replace(version, boundary) for key, value in files.items()},
             0,
             f"release {boundary},",
         ),
     ]
+
+
+def tag_cases(version: str) -> list[Case]:
+    """Cover a release tag matching and differing from the manifest version."""
+    return [
+        case("tag matches", {}, 0, f"release {version},", ("--tag-version", version)),
+        case(
+            "tag differs",
+            {},
+            1,
+            f"manifest {version} != tag 9.9.9",
+            ("--tag-version", "9.9.9"),
+        ),
+    ]
+
+
+def unmarked_value_cases(files: dict[str, str], chart: str, version: str) -> list[Case]:
+    """Cover top-level marker removal and an exempt nested dependency version."""
+    removed = files[chart].replace(
+        f"version: {version} # {SINGLE}", f"version: {version}", 1
+    )
+    line = files[chart].partition(f"version: {version} # {SINGLE}")[0].count("\n") + 1
+    nested = files[chart] + "\ndependencies:\n  - name: x\n    version: 1.2.3\n"
+    return [
+        case(
+            "Chart.yaml version marker removed",
+            {chart: removed},
+            1,
+            f"{chart}:{line}: release version field without a release-please marker",
+        ),
+        case(
+            "unmarked nested dependency version",
+            {chart: nested},
+            0,
+            f"release {version},",
+        ),
+    ]
+
+
+def changelog_cases(
+    history: str, changelog: str, version: str, previous: str, base: str
+) -> list[Case]:
+    """Plant release link and CommonMark heading mutations from real changelog text."""
+    first = f"{base}/compare/v{previous}...v{version}"
+    second = changelog_headings(history, changelog)[1][1]
+    without_version = history.replace(f"## {second}", "## Unreleased", 1)
+    return [
+        *changelog_link_cases(history, changelog, version, previous, base, first),
+        case(
+            "second changelog heading without a version",
+            {changelog: without_version},
+            1,
+            "expected ## [P](...) or ## P (YYYY-MM-DD)",
+        ),
+        *changelog_indent_cases(history, changelog, version, previous, base),
+    ]
+
+
+def changelog_link_cases(
+    history: str, changelog: str, version: str, previous: str, base: str, first: str
+) -> list[Case]:
+    """Cover malformed and mismatched release-please compare links."""
+    second = f"## [{previous}]({base}/compare/"
+    return [
+        case(
+            "changelog link to the wrong release",
+            {
+                changelog: history.replace(
+                    first, f"{base}/compare/v{previous}...v9.9.9", 1
+                )
+            },
+            1,
+            "expected ## [",
+        ),
+        case(
+            "changelog link from the wrong release",
+            {
+                changelog: history.replace(
+                    first, f"{base}/compare/v9.9.9...v{version}", 1
+                )
+            },
+            1,
+            "compare link from",
+        ),
+        case(
+            "changelog link base differs",
+            {
+                changelog: history.replace(
+                    second, f"## [{previous}]({base}//compare/", 1
+                )
+            },
+            1,
+            "compare link base",
+        ),
+        case(
+            "changelog heading truncated",
+            {changelog: history.replace(first, f"{base}/compare/v{previous}", 1)},
+            1,
+            "expected ## [",
+        ),
+    ]
+
+
+def changelog_indent_cases(
+    history: str, changelog: str, version: str, previous: str, base: str
+) -> list[Case]:
+    """Cover CommonMark's three-space heading indentation boundary."""
+    return [
+        case(
+            "indented first changelog heading",
+            {
+                changelog: f"   ## [9.9.9]({base}/compare/v{version}...v9.9.9) (2026-01-01)\n{history}"
+            },
+            1,
+            f"9.9.9 != {version}",
+        ),
+        case(
+            "real first heading indented three spaces",
+            {changelog: history.replace("## [", "   ## [", 1)},
+            0,
+            f"release {version},",
+        ),
+        case(
+            "real first heading indented four spaces",
+            {changelog: history.replace("## [", "    ## [", 1)},
+            1,
+            f"{previous} != {version}",
+        ),
+    ]
+
+
+def extra_file_cases(
+    files: dict[str, str], chart: str, badge: str, version: str
+) -> list[Case]:
+    """Cover release-please string extra-file updater selection."""
+    return [
+        case(
+            "README as a string extra file",
+            {CONFIG: string_config(files[CONFIG], badge)},
+            0,
+            f"release {version},",
+        ),
+        case(
+            "Chart.yaml as a string extra file",
+            {CONFIG: string_config(files[CONFIG], chart)},
+            2,
+            "YAML updater",
+        ),
+    ]
+
+
+def string_config(text: str, path: str) -> str:
+    """Replace one generic updater object with its release-please string shorthand."""
+    config = json.loads(text)
+    extra = config["packages"]["."]["extra-files"]
+    config["packages"]["."]["extra-files"] = [
+        path if item["path"] == path else item for item in extra
+    ]
+    return json.dumps(config)
 
 
 def self_test(root: Path) -> tuple[int, str]:
@@ -355,34 +670,58 @@ def self_test(root: Path) -> tuple[int, str]:
         return 1, f"self-test exceeds {MAX_CASES} cases"
     failures = []
     with TemporaryDirectory() as tmp:
-        fixture = Path(tmp)
-        for label, changes, expected, substring in cases:
+        for index, (label, changes, expected, substring, arguments) in enumerate(cases):
+            fixture = Path(tmp) / str(index)
             for name, content in (files | changes).items():
                 path = fixture / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content, encoding="utf-8")
-            status, message = evaluate(fixture)
-            if status != expected or substring not in message:
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                status = run_check(
+                    parse_arguments(["--root", str(fixture), *arguments])
+                )
+            output = stdout.getvalue() if expected == 0 else stderr.getvalue()
+            if status != expected or substring not in output:
                 failures.append(
-                    f"{label.strip()} (expected {expected}, {substring!r}): got {status}, {message}"
+                    f"{label.strip()} (expected {expected}, {substring!r}): got {status}, {output}"
                 )
     if failures:
         return 1, "\n".join(failures)
     return 0, f"self-test ok {len(cases)} cases"
 
 
-def main() -> int:
-    """Check the requested release tree or run the planted cases."""
+def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
+    """Parse release-version checker command-line options."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=Path("."), help="repository root")
     parser.add_argument(
         "--self-test", action="store_true", help="run the planted cases"
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--tag-version", help="require this tag version to match the manifest"
+    )
+    return parser.parse_args(argv)
+
+
+def run_check(args: argparse.Namespace) -> int:
+    """Evaluate release inputs and stream diagnostics to their status channel."""
     try:
-        status, message = (
-            self_test(args.root) if args.self_test else evaluate(args.root)
-        )
+        status, message = evaluate(args.root, args.tag_version)
+    except (OSError, TypeError, ValueError) as exc:
+        status, message = 2, str(exc)
+    print(message, file=sys.stderr if status else sys.stdout)
+    return status
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the release checker or its isolated planted cases."""
+    args = parse_arguments(argv)
+    if not args.self_test:
+        return run_check(args)
+    try:
+        status, message = self_test(args.root)
     except (OSError, TypeError, ValueError) as exc:
         status, message = 2, str(exc)
     print(message, file=sys.stderr if status else sys.stdout)
