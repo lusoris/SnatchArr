@@ -183,6 +183,7 @@ jobs:
           . tools/ci/tool-versions.env
           docker pull --quiet "$SEMGREP_IMAGE"
           python3 -I tools/ci/semgrep_scan.py --image "$SEMGREP_IMAGE"
+      - uses: ./.github/actions/setup-go
       - name: Install the pinned Codacy analysis CLI
         run: |
           sh tools/ci/codacy_opengrep_install_test.sh
