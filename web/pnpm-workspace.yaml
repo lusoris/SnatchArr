@@ -16,13 +16,3 @@ overrides:
 # Remove patch and minimatch override when @redocly/openapi-core supports minimatch >=10.
 patchedDependencies:
   '@redocly/openapi-core@1.34.20': patches/@redocly__openapi-core@1.34.20.patch
-# One advisory is ignored by `pnpm audit`. Name each one here; never use
-# --ignore-unfixable, which would hide every future advisory without a fix.
-auditConfig:
-  ignoreGhsas:
-    # picomatch <=4.0.7 ReDoS through repeated extglobs (high), no patched
-    # release (4.0.7 is the newest, checked 2026-11-18). Build and test time
-    # only, through vite, vitest and unplugin, with patterns from repository
-    # config. Tracked in #1215 and the .standards.yaml exception that expires
-    # 2026-11-27. Ends when a patched picomatch is released and locked here.
-    - GHSA-fc5q-39xc-vjpf
