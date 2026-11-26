@@ -58,7 +58,7 @@ def check_file(path: Path) -> int:
 def self_test() -> int:
     """Replay both fixtures in-process; never accept an unexpected failure."""
     status = 0
-    for name, expected in (("good.yaml", 0), ("bad.yaml", 1)):
+    for name, expected, expected_cases in (("good.yaml", 0, 2), ("bad.yaml", 1, 4)):
         try:
             path = FIXTURES / name
             path.read_text(encoding="utf-8")
@@ -70,7 +70,42 @@ def self_test() -> int:
         print(f"self-test {name}: exit {result}, expected {expected}")
         if result != expected:
             status = 1
+        if _self_test_cases(path, expected_cases, expected):
+            status = 1
     return status
+
+
+def _self_test_cases(path: Path, expected_count: int, expected: int) -> bool:
+    """Check each fixture test independently; return true on any failure."""
+    try:
+        suite = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if not isinstance(suite, dict) or not isinstance(suite.get("tests"), list):
+            raise TypeError("expected a suite with a tests list")
+        tests = suite["tests"]
+        if len(tests) != expected_count:
+            raise ValueError(f"expected {expected_count} tests, got {len(tests)}")
+    except (OSError, UnicodeError, TypeError, ValueError, yaml.YAMLError) as error:
+        print(f"self-test {path.name}: {error}", file=sys.stderr)
+        return True
+    failed = False
+    for number, test in enumerate(tests, start=1):
+        case = test.get("it", "<unnamed>") if isinstance(test, dict) else "<unnamed>"
+        exception = False
+        try:
+            result = check_test(path, test)
+        except (TypeError, ValueError) as error:
+            print(
+                f"self-test {path.name} case {number} exception: {error}",
+                file=sys.stderr,
+            )
+            result = 1
+            exception = True
+        print(
+            f"self-test {path.name} case {number} '{case}': exit {result}, expected {expected}"
+        )
+        if exception or result != expected:
+            failed = True
+    return failed
 
 
 def main() -> int:

@@ -730,7 +730,8 @@ func TestOversizeBodyIsUnavailable(t *testing.T) {
 			_, _ = w.Write([]byte(`{"data":{"token":"stub-token"}}`))
 			return
 		}
-		_, _ = w.Write(bytes.Repeat([]byte("a"), maxBodyBytes+10))
+		// Keep the body valid JSON so decoding alone cannot make the lookup fail.
+		_, _ = fmt.Fprintf(w, `{"status":"success","data":{"id":1,"name":%q,"aliases":[],"language":"deu"}}`, strings.Repeat("a", maxBodyBytes+10))
 	}))
 	t.Cleanup(big.Close)
 	p, err := New(plantedKey, "", testPool(t), clock.NewFake(), slog.New(slog.DiscardHandler), WithBaseURL(big.URL), WithRate(rate.Inf, 1))
