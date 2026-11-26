@@ -8,7 +8,7 @@
 # error that ends the scan, a wrapper that drops --taint-intrafile, a canary
 # that stops wanting the intrafile finding, ignored live listing drift, a deleted or expired
 # baseline entry, and a baseline that grows, raises a count, extends an expiry
-# or rewrites a kept entry against an earlier commit. Then holds the Makefile,
+# or rewrites a kept entry against an earlier commit, or loses its forced UTF-8 locale. Then holds the Makefile,
 # lefthook and CI to the scanner runs.
 set -eu
 
@@ -147,6 +147,8 @@ mutate "$WORK/intrafile" 'exec {binary} scan --taint-intrafile "$@"' 'exec {bina
 expect 1 "mutant wrapper without --taint-intrafile" "FAIL wrapper adds --taint-intrafile" python3 -I "$WORK/intrafile/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
 mutate "$WORK/want" "(TAINT_RULE, INTRAFILE_FILE), (AUDIT_RULE" "(AUDIT_RULE"
 expect 1 "mutant canary no longer wanting the intrafile taint finding" "FAIL planted finding: exactly one new canary finding" python3 -I "$WORK/want/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
+mutate "$WORK/locale" '"CODACY_GLOBAL_DIR": str(home), "LC_ALL": "C.UTF-8"}' '"CODACY_GLOBAL_DIR": str(home)}'
+expect 1 "mutant without a forced UTF-8 CLI locale" "FAIL CLI environment sets LC_ALL=C.UTF-8" python3 -I "$WORK/locale/tools/ci/codacy_opengrep_scan.py" --self-test --today "$DAY"
 
 make_root "$WORK/deleted"
 edit_json "$WORK/deleted/$BASELINE" drop-first
