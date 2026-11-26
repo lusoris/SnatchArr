@@ -37,6 +37,7 @@ import os
 import pathlib
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -44,6 +45,10 @@ import tempfile
 import threading
 import time
 from functools import partial
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+import run_bounded
 
 RULES = ".semgrep.yml"
 FIXTURES = "tools/ci/semgrep/testdata"
@@ -83,7 +88,7 @@ def resolve_docker(value) -> str:
         found = shutil.which(value)
         if found is None:
             raise ScanError(f"--docker {value!r} not found on PATH")
-        return found
+        return os.path.abspath(found)
     if (
         os.path.isabs(value)
         and os.path.basename(value) in ALLOWED_DOCKER
@@ -140,8 +145,8 @@ def run_semgrep(binary, args, root):
         raise ScanError(f"{binary} did not complete: {err}") from err
 
 
-def image_runner(docker, image, root):
-    """Return a call that runs Semgrep in the pinned image, the tree mounted read-only."""
+def image_runner(docker, image, root, snapshot):
+    """Return a call that runs Semgrep in the pinned image, mounting snapshot read-only from root."""
 
     def call(args):
         """Run Semgrep with args in a fresh container without network."""
@@ -151,7 +156,7 @@ def image_runner(docker, image, root):
             "--network",
             "none",
             "--volume",
-            f"{root}:/src:ro",
+            f"{snapshot}:/src:ro",
             "--workdir",
             "/src",
             "--entrypoint",
@@ -203,7 +208,12 @@ def native_version(semgrep):
 
 
 def rule_ids(root):
-    ids = RULE_ID_RE.findall((root / RULES).read_text(encoding="utf-8"))
+    """Read RULES under root with a byte bound and return its unique rule ids."""
+    try:
+        text = read_bounded_text(root / RULES, MAX_CONFIG_BYTES)
+    except BoundedReadError as err:
+        raise ScanError(f"cannot read {RULES}: {err}") from err
+    ids = RULE_ID_RE.findall(text)
     if not ids:
         raise ScanError(f"{RULES} declares no rule")
     if len(ids) != len(set(ids)):
@@ -211,31 +221,44 @@ def rule_ids(root):
     return set(ids)
 
 
-def fixtures(root, ids):
-    """Return sorted root-relative POSIX fixture paths; raise ScanError on count outside 1..MAX_FIXTURES, missing leading build constraint, unknown rule, or missing ruleid/ok line."""
+def fixture_paths(root):
+    """Return sorted root-relative POSIX fixture paths; require 1..MAX_FIXTURES."""
     files = sorted((root / FIXTURES).glob("*.go"))
     if not files or len(files) > MAX_FIXTURES:
         raise ScanError(
             f"{FIXTURES}: {len(files)} fixtures, expected 1 to {MAX_FIXTURES}"
         )
+    return [path.relative_to(root).as_posix() for path in files]
+
+
+def read_fixture(root, name, ids, seen):
+    """Read one fixture with a byte bound and record its ruleid and ok annotations."""
+    path = root / name
+    try:
+        text = read_bounded_text(path, MAX_CONFIG_BYTES)
+    except BoundedReadError as err:
+        raise ScanError(f"cannot read fixture {name}: {err}") from err
+    if not text.startswith(FIXTURE_CONSTRAINT):
+        raise ScanError(
+            f"{path.name}: does not start with {FIXTURE_CONSTRAINT.strip()!r}"
+        )
+    for kind, rule in ANNOTATION_RE.findall(text):
+        if rule not in ids:
+            raise ScanError(f"{path.name}: annotation names unknown rule '{rule}'")
+        seen[kind].add(rule)
+
+
+def check_fixtures(root, names, ids):
+    """Verify every fixture's leading build constraint and two-way rule coverage."""
     seen = {"ruleid": set(), "ok": set()}
-    for path in files:
-        text = path.read_text(encoding="utf-8")
-        if not text.startswith(FIXTURE_CONSTRAINT):
-            raise ScanError(
-                f"{path.name}: does not start with {FIXTURE_CONSTRAINT.strip()!r}"
-            )
-        for kind, rule in ANNOTATION_RE.findall(text):
-            if rule not in ids:
-                raise ScanError(f"{path.name}: annotation names unknown rule '{rule}'")
-            seen[kind].add(rule)
+    for name in names:
+        read_fixture(root, name, ids, seen)
     for kind, covered in sorted(seen.items()):
         missing = sorted(ids - covered)
         if missing:
             raise ScanError(
                 f"no `{kind}:` fixture line for rule(s): {', '.join(missing)}"
             )
-    return [path.relative_to(root).as_posix() for path in files]
 
 
 def self_test(semgrep, names, ids):
@@ -349,6 +372,7 @@ def start_git_ls_files(root):
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            start_new_session=run_bounded.GROUP,
         )
     except OSError as err:
         raise ScanError(f"git did not complete: {err}") from err
@@ -389,13 +413,13 @@ def drain_git_stderr(proc, excerpt, failures):
                 excerpt.extend(chunk[: GIT_STDERR_EXCERPT_BYTES - len(excerpt)])
     except (OSError, ScanError) as err:
         failures.append(err)
-        proc.kill()
+        run_bounded.stop(proc, signal.SIGKILL)
 
 
 def finish_git_listing(proc, reader, deadline):
     """Stop Git and join its stderr reader within the original deadline."""
-    if proc.poll() is None:
-        proc.kill()
+    if proc.returncode is None:
+        run_bounded.stop(proc, signal.SIGKILL)
     proc.stdout.close()
     reader.join(max(0.0, deadline - time.monotonic()))
     proc.wait(timeout=max(0.0, deadline - time.monotonic()))
@@ -412,7 +436,7 @@ def list_git_targets(root):
     def on_timeout():
         """Mark timeout and kill Git to unblock the pipe readers."""
         timed_out.set()
-        proc.kill()
+        run_bounded.stop(proc, signal.SIGKILL)
 
     timer = threading.Timer(max(0.0, deadline - time.monotonic()), on_timeout)
     excerpt = bytearray()
@@ -511,9 +535,14 @@ def targets(root, allow_empty=False):
     return names
 
 
+def is_config_input(name):
+    """Report whether name is the rules file or a rule fixture."""
+    return name == RULES or name.startswith(FIXTURES + "/")
+
+
 def read_scan_input(root, name):
-    """Read a rule configuration or Go target using its byte limit."""
-    limit = MAX_CONFIG_BYTES if name == RULES else MAX_TARGET_BYTES
+    """Read a rule configuration, fixture, or Go target using its byte limit."""
+    limit = MAX_CONFIG_BYTES if is_config_input(name) else MAX_TARGET_BYTES
     return read_bounded_bytes(root / name, limit)
 
 
@@ -620,13 +649,25 @@ def check_target_set(root, names):
         )
 
 
-def scan(runner_factory, root):
-    """Scan a private snapshot and compare its contents and paths to the live tree."""
-    names = targets(root)
+def prepare_snapshot(root, snapshot):
+    """Copy rules, fixtures and targets into snapshot and validate rule coverage."""
+    fixture_names = fixture_paths(root)
+    target_names = targets(root)
+    before = write_snapshot(root, snapshot, [*fixture_names, *target_names])
+    ids = rule_ids(snapshot)
+    check_fixtures(snapshot, fixture_names, ids)
+    return ids, fixture_names, target_names, before
+
+
+def scan(runner_factory, root, on_ready=None):
+    """Replay fixtures and scan Go targets in one snapshot, then re-check the live tree."""
     with tempfile.TemporaryDirectory(prefix="semgrep-snapshot-") as directory:
         snapshot = pathlib.Path(directory)
-        before = write_snapshot(root, snapshot, names)
+        ids, fixture_names, target_names, before = prepare_snapshot(root, snapshot)
         semgrep = runner_factory(snapshot)
+        if on_ready is not None:
+            on_ready(semgrep)
+        self_test(semgrep, fixture_names, ids)
         result = semgrep(
             [
                 "scan",
@@ -637,28 +678,20 @@ def scan(runner_factory, root):
                 "--json",
                 *SEMGREP_FLAGS,
                 "--",
-                *names,
+                *target_names,
             ]
         )
-        check_scan_report(result, names)
+        check_scan_report(result, target_names)
     fingerprint = snapshot_fingerprint(before)
     changed = changed_targets(root, before)
     if changed:
         raise ScanError(
             f"target contents changed during the scan ({len(changed)}): {changed[:10]}"
         )
-    check_target_set(root, names)
+    check_target_set(root, target_names)
     print(
-        f"Semgrep: {len(names)} files scanned (snapshot sha256:{fingerprint}), 0 findings"
+        f"Semgrep: {len(target_names)} files scanned (snapshot sha256:{fingerprint}), 0 findings"
     )
-
-
-def checked_inputs(root):
-    """Rule ids, fixture paths and targets, refused before any Semgrep call."""
-    ids = rule_ids(root)
-    fixture_names = fixtures(root, ids)
-    targets(root)
-    return ids, fixture_names
 
 
 def image_scan(docker, image, root):
@@ -666,14 +699,27 @@ def image_scan(docker, image, root):
     if not IMAGE_RE.match(image):
         raise ScanError(f"image '{image}' is not pinned as NAME:TAG@sha256:DIGEST")
     resolved_docker = resolve_docker(docker)
-    ids, names = checked_inputs(root)
 
-    def runner_factory(scan_root):
-        """Create the pinned image runner for scan_root."""
-        return image_runner(resolved_docker, image, scan_root)
+    def runner_factory(snapshot):
+        """Create the pinned image runner mounting snapshot while running docker in root."""
+        return image_runner(resolved_docker, image, root, snapshot)
 
-    self_test(runner_factory(root), names, ids)
     scan(runner_factory, root)
+
+
+def report_native_version(binary, semgrep, root):
+    """Print the local Semgrep version and warn when it differs from the CI pin."""
+    version = native_version(semgrep)
+    print(f"Semgrep native: {binary} version {version}; CI runs the pinned image")
+    pin = ci_pin(root)
+    if pin is None:
+        print("CI pin unknown", file=sys.stderr)
+    elif version != pin:
+        print(
+            f"Semgrep native version {version} differs from the CI pin {pin}; "
+            "the CI scan decides",
+            file=sys.stderr,
+        )
 
 
 def native_scan(name, root):
@@ -682,23 +728,10 @@ def native_scan(name, root):
     if binary is None:
         raise ScanError(f"--semgrep '{name}' is not an executable file")
     binary = os.path.abspath(binary)
-    ids, names = checked_inputs(root)
     with tempfile.TemporaryDirectory(prefix="semgrep-state-") as state:
         runner_factory = partial(native_runner, binary, state=state)
-        semgrep = runner_factory(root)
-        version = native_version(semgrep)
-        print(f"Semgrep native: {binary} version {version}; CI runs the pinned image")
-        pin = ci_pin(root)
-        if pin is None:
-            print("CI pin unknown", file=sys.stderr)
-        elif version != pin:
-            print(
-                f"Semgrep native version {version} differs from the CI pin {pin}; "
-                "the CI scan decides",
-                file=sys.stderr,
-            )
-        self_test(semgrep, names, ids)
-        scan(runner_factory, root)
+        on_ready = partial(report_native_version, binary, root=root)
+        scan(runner_factory, root, on_ready=on_ready)
 
 
 def ci_pin(root):
@@ -706,13 +739,13 @@ def ci_pin(root):
     try:
         lines = read_bounded_text(
             root / "tools/ci/tool-versions.env", MAX_CONFIG_BYTES
-        ).splitlines(keepends=True)[:256]
+        ).splitlines()[:256]
     except OSError, UnicodeError:
         return None
     for line in lines:
         if line.startswith("SEMGREP_IMAGE="):
             match = re.fullmatch(
-                r"SEMGREP_IMAGE=[^\s:]+:([A-Za-z0-9._-]+)@sha256:[0-9a-f]{64}\n?", line
+                r"SEMGREP_IMAGE=[^\s:]+:([A-Za-z0-9._-]+)@sha256:[0-9a-f]{64}", line
             )
             return match.group(1) if match else None
     return None

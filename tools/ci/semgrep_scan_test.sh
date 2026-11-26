@@ -32,6 +32,9 @@ SCAN="$HERE/semgrep_scan.py"
 ROOT="${SEMGREP_WIRING_ROOT:-$(cd "$HERE/../.." && pwd)}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+: > "$WORK/gitconfig"
+mkdir -p "$WORK/xdg-empty"
+export GIT_CONFIG_GLOBAL="$WORK/gitconfig" GIT_CONFIG_NOSYSTEM=1 XDG_CONFIG_HOME="$WORK/xdg-empty"
 
 # read_semgrep_image FILE: print the SEMGREP_IMAGE value from FILE without sourcing shell text.
 read_semgrep_image() {
@@ -98,6 +101,9 @@ cat > "$STUB" <<'EOF'
 #!/bin/sh
 set -eu
 echo "$*" >> "$STUB_LOG"
+if [ -n "${STUB_PWD_LOG:-}" ]; then
+  pwd -P >> "$STUB_PWD_LOG"
+fi
 # Called as a native binary (no docker "run"): Semgrep state must sit in the scan's temporary
 # directory, as it would fail on a read-only home.
 if [ "$1" != run ]; then
@@ -116,7 +122,11 @@ fi
 if [ "$1" = --version ]; then echo "semgrep stub"; echo "9.9.9"; exit 0; fi
 for arg in "$@"; do
   if [ "$arg" = "--test" ]; then
-    if [ "$STUB_MODE" = fixture-fails ]; then echo "1 test failed"; exit 1; fi
+    case "$STUB_MODE" in
+      fixture-fails) echo "1 test failed"; exit 1 ;;
+      edits-rules-in-test) printf '# edited\n' >> "$STUB_LIVE_ROOT/.semgrep.yml" ;;
+      edits-fixture-in-test) printf '# edited\n' >> "$STUB_LIVE_ROOT/tools/ci/semgrep/testdata/demo-rule.go" ;;
+    esac
     echo "All tests passed"
     exit 0
   fi
@@ -125,7 +135,9 @@ done
 while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
 shift
 case "$STUB_MODE" in
-  clean) jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@" ;;
+  clean | edits-rules-in-test | edits-fixture-in-test)
+    jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"
+    ;;
   adds-file)
     printf 'package main\n' > "$STUB_LIVE_ROOT/added.go"
     jq -n '{results: [], errors: [], paths: {scanned: $ARGS.positional}}' --args "$@"
@@ -235,13 +247,15 @@ expect() {
   : > "$WORK/calls"
   got=0
   if [ -n "${NATIVE:-}" ]; then
-    out="$(cd "${NATIVE_CWD:-$PWD}" && STUB_MODE="$mode" STUB_LOG="$WORK/calls" STUB_LIVE_ROOT="$root" \
-      timeout 30 env PATH="${EXPECT_PATH:-$PATH}" "$PY3" -I "$SCAN" --root "$scan_root" \
-      --semgrep "$NATIVE" 2>&1)" || got=$?
+    out="$(cd "${NATIVE_CWD:-$PWD}" && run_bounded 30 env \
+      PATH="${EXPECT_PATH:-$PATH}" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+      STUB_MODE="$mode" STUB_LOG="$WORK/calls" STUB_LIVE_ROOT="$root" \
+      "$PY3" -I "$SCAN" --root "$scan_root" --semgrep "$NATIVE" 2>&1)" || got=$?
   else
-    out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" STUB_LIVE_ROOT="$root" \
-      timeout 30 env PATH="${EXPECT_PATH:-$PATH}" "$PY3" -I "$SCAN" --root "$scan_root" \
-      --docker "$docker_arg" --image "$image" 2>&1)" || got=$?
+    out="$(run_bounded 30 env \
+      PATH="${EXPECT_PATH:-$PATH}" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+      STUB_MODE="$mode" STUB_LOG="$WORK/calls" STUB_LIVE_ROOT="$root" \
+      "$PY3" -I "$SCAN" --root "$scan_root" --docker "$docker_arg" --image "$image" 2>&1)" || got=$?
   fi
   check_case "$name" "$want" "$got" "$needle" "$out" "output lacks"
   if [ "$called" = no ] && [ -s "$WORK/calls" ]; then
@@ -279,19 +293,19 @@ import sys
 root = Path(sys.argv[1])
 manifest = b"".join(
     name.encode() + b"\0" + hashlib.sha256((root / name).read_bytes()).digest()  # Binary manifest.
-    for name in (".semgrep.yml", "main.go")
+    for name in (".semgrep.yml", "main.go", "tools/ci/semgrep/testdata/demo-rule.go")
 )
 print(hashlib.sha256(manifest).hexdigest()[:12])
 PY
 )"
 got=0
-out="$(STUB_MODE=swap-restore STUB_LOG="$WORK/swap" STUB_LIVE_ROOT="$root" \
-  timeout 30 python3 -I "$SCAN" --root "$root" --semgrep "$STUB" 2>&1)" || got=$?
+out="$(run_bounded 30 env STUB_MODE=swap-restore STUB_LOG="$WORK/swap" STUB_LIVE_ROOT="$root" \
+  python3 -I "$SCAN" --root "$root" --semgrep "$STUB" 2>&1)" || got=$?
 check_regression "snapshot survives a temporary rewrite of the live target" 0 "$got" \
   "Semgrep: 1 files scanned (snapshot sha256:$fingerprint), 0 findings" "$out"
 
 got=0
-out="$(STUB_MODE=clean STUB_LOG="$WORK/late" timeout 30 python3 -I - "$SCAN" "$root" "$STUB" 2>&1 <<'PY'
+out="$(run_bounded 30 env STUB_MODE=clean STUB_LOG="$WORK/late" python3 -I - "$SCAN" "$root" "$STUB" 2>&1 <<'PY'
 from pathlib import Path
 import runpy
 import sys
@@ -315,7 +329,7 @@ check_regression "target added during the final content check" 1 "$got" \
 ln -s main.go "$root/symlink"
 mkfifo "$root/fifo"
 got=0
-out="$(timeout 30 python3 -I - "$SCAN" "$root" 2>&1 <<'PY'
+out="$(run_bounded 30 python3 -I - "$SCAN" "$root" 2>&1 <<'PY'
 import os
 from pathlib import Path
 import runpy
@@ -382,8 +396,9 @@ EOF
 chmod +x "$WORK/git-stub/git"
 for git_mode in warning loud stderr-cap raw-records; do
   got=0
-  out="$(PATH="$WORK/git-stub:$PATH" GIT_STUB_MODE="$git_mode" STUB_MODE=clean STUB_LOG="$WORK/git-calls" \
-    timeout 30 python3 -I "$SCAN" --root "$root" --semgrep "$STUB" 2>&1)" || got=$?
+  out="$(run_bounded 30 env PATH="$WORK/git-stub:$PATH" GIT_STUB_MODE="$git_mode" \
+    STUB_MODE=clean STUB_LOG="$WORK/git-calls" \
+    python3 -I "$SCAN" --root "$root" --semgrep "$STUB" 2>&1)" || got=$?
   case "$git_mode" in
     warning)
       check_regression "Git warning with exit zero" 1 "$got" \
@@ -401,9 +416,93 @@ for git_mode in warning loud stderr-cap raw-records; do
   esac
 done
 
+mkdir "$WORK/git-hang-stub"
+cat > "$WORK/git-hang-stub/git" <<'EOF'
+#!/bin/sh
+printf 'main.go\0'
+sleep 25 &
+exit 0
+EOF
+chmod +x "$WORK/git-hang-stub/git"
+got=0
+out="$(run_bounded 60 env PATH="$WORK/git-hang-stub:$PATH" python3 -I - "$SCAN" "$root" 2>&1 <<'PY'
+from pathlib import Path
+import runpy
+import sys
+import time
+
+scanner, root = sys.argv[1:]
+module = runpy.run_path(scanner)
+targets_fn = module["targets"]
+targets_fn.__globals__["TIMEOUT_SECONDS"] = 2
+started = time.monotonic()  # Measure wall-clock deadline.
+try:
+    targets_fn(Path(root))
+except module["ScanError"] as err:
+    elapsed = time.monotonic() - started
+    if elapsed >= 10:
+        print(f"targets took {elapsed:.2f}s, expected under 10s", file=sys.stderr)
+        sys.exit(3)
+    sys.exit(str(err))
+sys.exit(2)
+PY
+)" || got=$?
+check_regression "Git child holding stdout is killed at the deadline" 1 "$got" \
+  "timed out" "$out"
+
+checkout_root="$WORK/image-cwd-root"
+fresh "$checkout_root"
+checkout_pwd="$(cd "$checkout_root" && pwd -P)"
+mkdir -p "$WORK/rel-bin"
+cp "$STUB" "$WORK/rel-bin/docker"
+: > "$WORK/image-calls"
+: > "$WORK/image-pwds"
+got=0
+out="$(cd "$WORK" && run_bounded 30 env \
+  PATH="rel-bin:$PATH" STUB_MODE=clean STUB_LOG="$WORK/image-calls" \
+  STUB_PWD_LOG="$WORK/image-pwds" STUB_LIVE_ROOT="$checkout_root" \
+  "$PY3" -I "$SCAN" --root "$checkout_root" --docker docker --image "$IMAGE" 2>&1)" || got=$?
+verify_rc=0
+verify_out="$(run_bounded 30 python3 -I - "$checkout_pwd" "$WORK/image-calls" "$WORK/image-pwds" 2>&1 <<'PY'
+from pathlib import Path
+import sys
+
+checkout, calls_path, pwds_path = sys.argv[1:]
+calls = Path(calls_path).read_text(encoding="utf-8").splitlines()[:10]
+pwds = Path(pwds_path).read_text(encoding="utf-8").splitlines()[:10]
+if len(calls) != 2 or len(pwds) != 2:
+    sys.exit(f"expected 2 image calls and 2 pwds, got {len(calls)} and {len(pwds)}")
+if "--test" not in calls[0] or "--json" not in calls[1]:
+    sys.exit(f"unexpected call sequence: {calls}")
+if any(pwd != checkout for pwd in pwds):
+    sys.exit(f"image cwd mismatch: want {checkout}, got {pwds}")
+volumes = []
+for line in calls:
+    if "--volume " not in line or " --workdir " not in line:
+        sys.exit(f"missing volume or workdir in call: {line}")
+    spec = line.split("--volume ", 1)[1].split(" --workdir ", 1)[0]
+    source, sep, tail = spec.partition(":/src:ro")
+    if not sep or tail:
+        sys.exit(f"unexpected volume spec: {spec}")
+    if source == checkout or not Path(source).name.startswith("semgrep-snapshot-"):
+        sys.exit(f"bad volume source: {source}")
+    volumes.append(source)
+if len(set(volumes)) != 1:
+    sys.exit(f"replay and scan used different snapshots: {volumes}")
+print("image cwd and snapshot volume verified")
+PY
+)" || verify_rc=$?
+if [ "$got" -eq 0 ] && [ "$verify_rc" -ne 0 ]; then
+  got="$verify_rc"
+fi
+out="$out
+$verify_out"
+check_regression "image calls run in the checkout with the snapshot mounted" 0 "$got" \
+  "image cwd and snapshot volume verified" "$out"
+
 # Print the live Go target count or report a discovery error.
 list_target_count() {
-  timeout 30 python3 -I - "$SCAN" "$1" <<'PY'
+  run_bounded 30 python3 -I - "$SCAN" "$1" <<'PY'
 from pathlib import Path
 import runpy
 import sys
@@ -488,6 +587,17 @@ expect 1 "no Go file to scan" clean no "0 Go files to scan, expected 1 to 4096" 
 printf 'package outside\n' > "$WORK/outside.go"
 expect 1 "untracked symlink outside repository root" clean no \
   "refused 1 symlink or outside-root target(s): ['link.go']" 'ln -s ../outside.go link.go'
+expect 1 "FIFO rules file" clean no "not a regular file" \
+  'rm .semgrep.yml && mkfifo .semgrep.yml'
+expect 1 "FIFO fixture" clean no "not a regular file" \
+  "rm $FX/demo-rule.go && mkfifo $FX/demo-rule.go"
+expect 0 "rules file at the 65536-byte limit" clean yes \
+  "Semgrep: 1 files scanned (snapshot sha256:" \
+  'python3 -I -c '\''from pathlib import Path; p = Path(".semgrep.yml"); b = p.read_bytes(); p.write_bytes(b + b"#" * (65536 - len(b) - 1) + b"\n")'\'''
+expect 1 "rules file above the 65536-byte limit" clean no "exceeds 65536 bytes" \
+  'python3 -I -c '\''from pathlib import Path; p = Path(".semgrep.yml"); b = p.read_bytes(); p.write_bytes(b + b"#" * (65537 - len(b) - 1) + b"\n")'\'''
+expect 1 "fixture above the 65536-byte limit" clean no "exceeds 65536 bytes" \
+  'python3 -I -c '\''from pathlib import Path; p = Path("tools/ci/semgrep/testdata/demo-rule.go"); b = p.read_bytes(); p.write_bytes(b + b"/" * (65537 - len(b) - 1) + b"\n")'\'''
 
 # Defects only Semgrep's own answer reveals.
 expect 1 "fixture replay fails" fixture-fails yes "fixture tools/ci/semgrep/testdata/demo-rule.go did not pass (exit 1)"
@@ -520,6 +630,10 @@ expect 1 "target added during scan" adds-file yes \
   "target set changed during the scan: 1 added, 0 removed: ['added.go']"
 expect 1 "target rewritten during scan" rewrites-file yes \
   "target contents changed during the scan (1): ['main.go']"
+expect 1 "live rules edited during the fixture replay" edits-rules-in-test yes \
+  "target contents changed during the scan (1): ['.semgrep.yml']"
+expect 1 "live fixture edited during the fixture replay" edits-fixture-in-test yes \
+  "target contents changed during the scan (1): ['tools/ci/semgrep/testdata/demo-rule.go']"
 
 # Native binary (--semgrep): same replay and scanned-file check, state outside the home directory.
 NATIVE="$STUB" expect 0 "native binary, clean repository" clean yes \
@@ -546,6 +660,12 @@ NATIVE="$STUB" expect 0 "native with missing CI tag" clean yes "CI pin unknown" 
   "sed -i 's/:[^:@]*@/@/' tools/ci/tool-versions.env"
 NATIVE="$STUB" expect 0 "native with FIFO tool-versions.env" clean yes "CI pin unknown" \
   'rm tools/ci/tool-versions.env && mkfifo tools/ci/tool-versions.env'
+NATIVE="$STUB" expect 0 "native version differs from a CRLF CI pin" clean yes \
+  "differs from the CI pin" \
+  "printf 'SEMGREP_IMAGE=%s\\r\\n' '$IMAGE' > tools/ci/tool-versions.env"
+NATIVE="$STUB" expect 1 "native binary, live rules edited during the fixture replay" \
+  edits-rules-in-test yes \
+  "target contents changed during the scan (1): ['.semgrep.yml']"
 NATIVE="$STUB" expect 1 "native binary, scan skips a file" skipped yes \
   "report scanned 0 of 1 files; not scanned: ['main.go']"
 NATIVE="$STUB" expect 1 "native binary, scan reports a finding" finding yes "1 finding(s), 0 error(s)"
@@ -648,11 +768,11 @@ done
 echo "ok   lane brief with a preceding command in impl and fix generates three negative briefs"
 mkfifo "$WORK/fifo-brief.yaml"
 wiring_rc=0
-wiring_out="$(timeout 30 "$PYTHON_BIN" -I "$WIRING" "$WORK/fifo-brief.yaml" 2>&1)" || wiring_rc=$?
+wiring_out="$(run_bounded 30 "$PYTHON_BIN" -I "$WIRING" "$WORK/fifo-brief.yaml" 2>&1)" || wiring_rc=$?
 check_case "lane brief FIFO" 1 "$wiring_rc" "lane brief unreadable" "$wiring_out"
 echo "ok   lane brief FIFO"
 wiring_rc=0
-wiring_out="$(timeout 30 python3 -I -S "$WIRING" "$ROOT/.config/lane-brief.yaml" 2>&1)" || wiring_rc=$?
+wiring_out="$(run_bounded 30 python3 -I -S "$WIRING" "$ROOT/.config/lane-brief.yaml" 2>&1)" || wiring_rc=$?
 check_case "lane brief without PyYAML" 2 "$wiring_rc" "PyYAML not importable" "$wiring_out"
 echo "ok   lane brief without PyYAML"
 echo "ok   Makefile (verify-all, semgrep-scan), lefthook pre-push, CI semgrep job, Renovate and lane briefs wire semgrep_scan.py and SEMGREP_IMAGE"
