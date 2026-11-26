@@ -24,6 +24,10 @@ On success, the manifest key and source_location are rewritten to web/pnpm-lock.
 so the dependency graph shows the repository path, the snapshot is written to --out,
 and package counts are printed.
 
+The Docker binary is resolved by fixed name on PATH or as an executable /.../docker
+file, and validated GitHub workflow metadata reaches the container through the Docker
+client's environment rather than command-line arguments.
+
 Usage:
     python3 -I tools/ci/dependency_snapshot.py --trivy IMAGE:TAG@sha256:DIGEST --out PATH
 """
@@ -34,16 +38,23 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
 import urllib.parse
 
+ALLOWED_DOCKER = ("docker",)
 IMAGE_RE = re.compile(r"^[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$")
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+REF_RE = re.compile(r"^refs/[A-Za-z0-9][A-Za-z0-9._/-]{0,239}$")
+RUN_ID_RE = re.compile(r"^[0-9]{1,20}$")
+JOB_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,99}$")
+WORKFLOW_RE = re.compile(r"^[A-Za-z0-9.][A-Za-z0-9 ._()/-]{0,127}$")
 TIMEOUT_SECONDS = 900
 MAX_REPORT_BYTES = 64 * 1024 * 1024
-UNPACK_AND_SCAN = "mkdir -p /scan && tar -xf - -C /scan && cd /scan && exec trivy \"$@\""
+UNPACK_AND_SCAN = 'mkdir -p /scan && tar -xf - -C /scan && cd /scan && exec trivy "$@"'
 BOOT_DOC_LOCKFILE = """lockfileVersion: '9.0'
 
 importers:
@@ -73,12 +84,40 @@ class CheckNotProvenError(ScanError):
 
 
 def parse_args():
+    """Parse command-line flags and environment defaults."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--trivy", help="Trivy image pinned by digest (NAME:TAG@sha256:DIGEST)")
+    parser.add_argument(
+        "--trivy", help="Trivy image pinned by digest (NAME:TAG@sha256:DIGEST)"
+    )
     parser.add_argument("--out", help="Output file path for the snapshot JSON")
-    parser.add_argument("--sha", default=os.environ.get("GITHUB_SHA"), help="Commit SHA (default: $GITHUB_SHA)")
-    parser.add_argument("--ref", default=os.environ.get("GITHUB_REF"), help="Git ref (default: $GITHUB_REF)")
-    parser.add_argument("--docker", default="docker", help="Docker binary (default: docker)")
+    parser.add_argument(
+        "--sha",
+        default=os.environ.get("GITHUB_SHA"),
+        help="Commit SHA (default: $GITHUB_SHA)",
+    )
+    parser.add_argument(
+        "--ref",
+        default=os.environ.get("GITHUB_REF"),
+        help="Git ref (default: $GITHUB_REF)",
+    )
+    parser.add_argument(
+        "--workflow",
+        default=os.environ.get("GITHUB_WORKFLOW"),
+        help="Workflow name or path (default: $GITHUB_WORKFLOW)",
+    )
+    parser.add_argument(
+        "--job",
+        default=os.environ.get("GITHUB_JOB"),
+        help="Job identifier (default: $GITHUB_JOB)",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=os.environ.get("GITHUB_RUN_ID"),
+        help="Workflow run ID (default: $GITHUB_RUN_ID)",
+    )
+    parser.add_argument(
+        "--docker", default="docker", help="Docker binary (default: docker)"
+    )
     parser.add_argument("--root", default=".", help="Repository root path (default: .)")
     parser.add_argument(
         "--check-fixture",
@@ -89,7 +128,60 @@ def parse_args():
     return parser.parse_args()
 
 
+def resolve_docker(value: str) -> str:
+    """Resolve --docker to an executable docker binary path or raise ScanError."""
+    if value in ALLOWED_DOCKER:
+        found = shutil.which(value)
+        if not found:
+            raise ScanError(f"--docker {value!r} not found on PATH")
+        return found
+    p = pathlib.Path(value)
+    if (
+        os.path.isabs(value)
+        and os.path.basename(value) in ALLOWED_DOCKER
+        and p.is_file()
+        and os.access(p, os.X_OK)
+    ):
+        return value
+    raise ScanError(
+        f"--docker {value!r} must be 'docker' on PATH or an executable '/.../docker' file"
+    )
+
+
+def checked_sha_and_ref(args) -> tuple[str, str]:
+    """Require and validate --sha and --ref values."""
+    sha = args.sha
+    if not sha:
+        raise ScanError("--sha or GITHUB_SHA environment variable is required")
+    if not SHA_RE.fullmatch(sha):
+        raise ScanError(f"invalid --sha value {sha!r}")
+    ref = args.ref
+    if not ref:
+        raise ScanError("--ref or GITHUB_REF environment variable is required")
+    if not REF_RE.fullmatch(ref):
+        raise ScanError(f"invalid --ref value {ref!r}")
+    return sha, ref
+
+
+def checked_job_vars(args) -> dict[str, str]:
+    """Validate optional workflow metadata flags and map set values to env names."""
+    specs = (
+        ("GITHUB_WORKFLOW", args.workflow, "--workflow", WORKFLOW_RE),
+        ("GITHUB_JOB", args.job, "--job", JOB_RE),
+        ("GITHUB_RUN_ID", args.run_id, "--run-id", RUN_ID_RE),
+    )
+    job_vars: dict[str, str] = {}
+    for env_name, val, flag, pattern in specs:
+        if not val:
+            continue
+        if not pattern.fullmatch(val):
+            raise ScanError(f"invalid {flag} value {val!r}")
+        job_vars[env_name] = val
+    return job_vars
+
+
 def tar_of_files(files_dict):
+    """Build an uncompressed tar byte archive from an arcname-to-path mapping."""
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w") as archive:
         for arcname, file_path in files_dict.items():
@@ -97,32 +189,33 @@ def tar_of_files(files_dict):
     return buffer.getvalue()
 
 
-def run_trivy(docker, trivy, tar_bytes, sha, ref, env_overrides=None):
-    env_args = [
-        "-e", f"GITHUB_SHA={sha}",
-        "-e", f"GITHUB_REF={ref}",
-    ]
-    env = env_overrides if env_overrides is not None else os.environ
-    for var in ("GITHUB_WORKFLOW", "GITHUB_JOB", "GITHUB_RUN_ID"):
-        val = env.get(var)
-        if val:
-            env_args.extend(["-e", f"{var}={val}"])
-
-    command = [
-        docker, "run", "--rm", "-i",
-        *env_args,
-        "--entrypoint", "sh", trivy, "-ec", UNPACK_AND_SCAN, "trivy",
-        "fs", "--format", "github", "--scanners", "license",
-        "--skip-version-check", "--disable-telemetry", "--include-dev-deps", ".",
-    ]
+def run_trivy(docker, trivy, tar_bytes, sha, ref, job_vars):
+    """Run Trivy inside Docker on tar_bytes and return the parsed JSON report."""
+    env = os.environ.copy()
+    for key in ("GITHUB_WORKFLOW", "GITHUB_JOB", "GITHUB_RUN_ID"):
+        env.pop(key, None)
+    env.update(job_vars)
+    env["GITHUB_SHA"] = sha
+    env["GITHUB_REF"] = ref
     try:
+        # fmt: off
         proc = subprocess.run(
-            command,
+            [
+                "docker", "run", "--rm", "-i",
+                "-e", "GITHUB_SHA", "-e", "GITHUB_REF",
+                "-e", "GITHUB_WORKFLOW", "-e", "GITHUB_JOB", "-e", "GITHUB_RUN_ID",
+                "--entrypoint", "sh", trivy, "-ec", UNPACK_AND_SCAN, "trivy",
+                "fs", "--format", "github", "--scanners", "license",
+                "--skip-version-check", "--disable-telemetry", "--include-dev-deps", ".",
+            ],
+            executable=docker,
+            env=env,
             input=tar_bytes,
             capture_output=True,
             timeout=TIMEOUT_SECONDS,
             check=False,
         )
+        # fmt: on
     except (OSError, subprocess.TimeoutExpired) as err:
         raise ScanError(f"{docker} did not complete: {err}") from err
 
@@ -132,7 +225,9 @@ def run_trivy(docker, trivy, tar_bytes, sha, ref, env_overrides=None):
         raise ScanError(f"trivy exited {proc.returncode}")
 
     if len(proc.stdout) > MAX_REPORT_BYTES:
-        raise ScanError(f"report length ({len(proc.stdout)}) exceeds {MAX_REPORT_BYTES} bytes")
+        raise ScanError(
+            f"report length ({len(proc.stdout)}) exceeds {MAX_REPORT_BYTES} bytes"
+        )
 
     stdout_text = proc.stdout.decode("utf-8", "replace").strip()
     idx = stdout_text.find("{")
@@ -150,6 +245,7 @@ def run_trivy(docker, trivy, tar_bytes, sha, ref, env_overrides=None):
 
 
 def check_snapshot(snapshot, package_json_data, manifest_key="pnpm-lock.yaml"):
+    """Verify every direct dependency and devDependency resolves in the snapshot."""
     manifests = snapshot.get("manifests")
     if not isinstance(manifests, dict) or manifest_key not in manifests:
         raise ScanError(f"snapshot missing manifest for {manifest_key}")
@@ -168,7 +264,7 @@ def check_snapshot(snapshot, package_json_data, manifest_key="pnpm-lock.yaml"):
             continue
         purl = item.get("package_url") or ""
         if purl.startswith("pkg:npm/"):
-            name_part, _, _ = purl[len("pkg:npm/"):].rpartition("@")
+            name_part, _, _ = purl[len("pkg:npm/") :].rpartition("@")
             resolved_names.add(urllib.parse.unquote(name_part))
 
     deps = package_json_data.get("dependencies") or {}
@@ -177,12 +273,17 @@ def check_snapshot(snapshot, package_json_data, manifest_key="pnpm-lock.yaml"):
 
     missing = sorted(direct_names - resolved_names)
     if missing:
-        raise ScanError(f"direct dependencies missing from resolved snapshot: {', '.join(missing)}")
+        raise ScanError(
+            f"direct dependencies missing from resolved snapshot: {', '.join(missing)}"
+        )
 
     return len(resolved), len(direct_names)
 
 
-def rewrite_manifest_location(snapshot, old_key="pnpm-lock.yaml", new_key="web/pnpm-lock.yaml"):
+def rewrite_manifest_location(
+    snapshot, old_key="pnpm-lock.yaml", new_key="web/pnpm-lock.yaml"
+):
+    """Rewrite the snapshot manifest key and source_location to the repo path."""
     manifests = snapshot.get("manifests", {})
     if old_key in manifests:
         manifest = manifests.pop(old_key)
@@ -191,17 +292,31 @@ def rewrite_manifest_location(snapshot, old_key="pnpm-lock.yaml", new_key="web/p
 
 
 def self_test_planted(docker, trivy):
+    """Verify check_snapshot refuses a synthetic boot-document-only lockfile."""
     with tempfile.TemporaryDirectory() as temp:
         temp_dir = pathlib.Path(temp)
         pkg_json = temp_dir / "package.json"
         lock_yaml = temp_dir / "pnpm-lock.yaml"
         pkg_json.write_text(
-            json.dumps({"name": "planted-boot-only", "dependencies": {"svelte": "^5.0.0"}}, indent=2) + "\n",
+            json.dumps(
+                {"name": "planted-boot-only", "dependencies": {"svelte": "^5.0.0"}},
+                indent=2,
+            )
+            + "\n",
             encoding="utf-8",
         )
         lock_yaml.write_text(BOOT_DOC_LOCKFILE, encoding="utf-8")
-        tar_bytes = tar_of_files({"package.json": pkg_json, "pnpm-lock.yaml": lock_yaml})
-        snapshot = run_trivy(docker, trivy, tar_bytes, sha="0" * 40, ref="refs/heads/main", env_overrides={})
+        tar_bytes = tar_of_files(
+            {"package.json": pkg_json, "pnpm-lock.yaml": lock_yaml}
+        )
+        snapshot = run_trivy(
+            docker,
+            trivy,
+            tar_bytes,
+            sha="0" * 40,
+            ref="refs/heads/main",
+            job_vars={},
+        )
         pkg_data = json.loads(pkg_json.read_text(encoding="utf-8"))
         try:
             check_snapshot(snapshot, pkg_data, manifest_key="pnpm-lock.yaml")
@@ -212,20 +327,24 @@ def self_test_planted(docker, trivy):
 
 
 def run_fixture_check(check_fixture_args):
+    """Run check_snapshot against fixture JSON files and return an exit status."""
     snap_path = pathlib.Path(check_fixture_args[0])
     pkg_path = pathlib.Path(check_fixture_args[1])
     try:
         snap_data = json.loads(snap_path.read_text(encoding="utf-8"))
         pkg_data = json.loads(pkg_path.read_text(encoding="utf-8"))
         resolved_count, direct_count = check_snapshot(snap_data, pkg_data)
-        print(f"Fixture check ok: {resolved_count} resolved packages, {direct_count} direct dependencies checked")
+        print(
+            f"Fixture check ok: {resolved_count} resolved packages, {direct_count} direct dependencies checked"
+        )
         return 0
     except ScanError as err:
         print(f"Fixture check refused: {err}", file=sys.stderr)
         return 1
 
 
-def scan_and_write(args, sha, ref):
+def scan_and_write(args, docker, sha, ref, job_vars):
+    """Run the planted check, scan web/ manifests, and write the snapshot JSON."""
     root = pathlib.Path(args.root).resolve()
     web_dir = root / "web"
     pkg_json_path = web_dir / "package.json"
@@ -233,24 +352,33 @@ def scan_and_write(args, sha, ref):
     if not pkg_json_path.is_file() or not lock_yaml_path.is_file():
         raise ScanError(f"missing web/package.json or web/pnpm-lock.yaml under {root}")
 
-    self_test_planted(args.docker, args.trivy)
+    self_test_planted(docker, args.trivy)
 
-    tar_bytes = tar_of_files({"package.json": pkg_json_path, "pnpm-lock.yaml": lock_yaml_path})
-    snapshot = run_trivy(args.docker, args.trivy, tar_bytes, sha, ref)
+    tar_bytes = tar_of_files(
+        {"package.json": pkg_json_path, "pnpm-lock.yaml": lock_yaml_path}
+    )
+    snapshot = run_trivy(docker, args.trivy, tar_bytes, sha, ref, job_vars)
     pkg_data = json.loads(pkg_json_path.read_text(encoding="utf-8"))
 
-    resolved_count, direct_count = check_snapshot(snapshot, pkg_data, manifest_key="pnpm-lock.yaml")
-    rewrite_manifest_location(snapshot, old_key="pnpm-lock.yaml", new_key="web/pnpm-lock.yaml")
+    resolved_count, direct_count = check_snapshot(
+        snapshot, pkg_data, manifest_key="pnpm-lock.yaml"
+    )
+    rewrite_manifest_location(
+        snapshot, old_key="pnpm-lock.yaml", new_key="web/pnpm-lock.yaml"
+    )
 
     out_path = pathlib.Path(args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")
 
-    print(f"Dependency snapshot: {resolved_count} resolved packages, {direct_count} direct dependencies checked")
+    print(
+        f"Dependency snapshot: {resolved_count} resolved packages, {direct_count} direct dependencies checked"
+    )
     return 0
 
 
 def main():
+    """Validate CLI inputs and dispatch fixture check or snapshot generation."""
     args = parse_args()
     if args.check_fixture:
         return run_fixture_check(args.check_fixture)
@@ -264,16 +392,15 @@ def main():
 
     try:
         if not IMAGE_RE.match(args.trivy):
-            raise ScanError(f"image '{args.trivy}' is not pinned as NAME:TAG@sha256:DIGEST")
+            raise ScanError(
+                f"image '{args.trivy}' is not pinned as NAME:TAG@sha256:DIGEST"
+            )
 
-        sha = args.sha
-        if not sha:
-            raise ScanError("--sha or GITHUB_SHA environment variable is required")
-        ref = args.ref
-        if not ref:
-            raise ScanError("--ref or GITHUB_REF environment variable is required")
+        docker = resolve_docker(args.docker)
+        sha, ref = checked_sha_and_ref(args)
+        job_vars = checked_job_vars(args)
 
-        return scan_and_write(args, sha, ref)
+        return scan_and_write(args, docker, sha, ref, job_vars)
     except CheckNotProvenError as err:
         print(f"{err}", file=sys.stderr)
         return 2
