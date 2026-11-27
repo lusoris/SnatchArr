@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Example configuration for snatcharr-metadata-proxy (ADR-0049).
+# Mount at /etc/snatcharr/metadata-proxy.yaml or point APP_METADATA_PROXY_CONFIG_FILE at this file.
+
+http:
+  addr: ":8080" # Admin listener serving /livez, /readyz, /startupz, and /metrics.
+
+metadata_proxy:
+  mode: log
+
+  # One dedicated CONNECT port per client application sets the bounded `app` metric label
+  # without requiring proxy credentials (docs/adr/0049-metadata-proxy.md:56).
+  # IMPORTANT: the standalone binary binds every CONNECT listener on all interfaces (`:port`)
+  # without client authentication, and `log` mode tunnels unlisted public hosts that pass
+  # `refuse_hosts`, `ports`, and the dial SSRF guard. Restrict inbound network access to the
+  # intended client applications (for example via Kubernetes NetworkPolicy, container network
+  # isolation, or host firewall rules) before starting the proxy; `enforce` mode restricts
+  # destination hosts only and is not a substitute for client access control.
+  listeners:
+    - app: sonarr
+      port: 8081
+    - app: radarr
+      port: 8082
+    - app: lidarr
+      port: 8083
+    - app: readarr
+      port: 8084
+    - app: whisparr
+      port: 8085
+    - app: seerr
+      port: 8086
+    - app: jellyfin
+      port: 8087
+    - app: stash
+      port: 8088
+    - app: bazarr
+      port: 8089
+
+  # Provider hosts literally named in docs/adr/0049-metadata-proxy.md.
+  # Providers named only by product in ADR-0049 (TMDb, OMDb, MusicBrainz, AudioDB, Fanart,
+  # dynamic Bazarr subtitle providers, Stash scrapers) are discovered during the log-mode
+  # measurement window (docs/adr/0049-metadata-proxy.md:110-115, 203).
+  # Retired upstream `api.bookinfo.club` (docs/adr/0049-metadata-proxy.md:166, 258) and excluded
+  # Prowlarr hosts `prowlarr.servarr.com` / `releases.servarr.com` (:169, :282) are omitted.
+  allow_hosts:
+    - skyhook.sonarr.tv   # docs/adr/0049-metadata-proxy.md:163 (Sonarr SkyHook TVDB routes; also :240)
+    - services.sonarr.tv  # docs/adr/0049-metadata-proxy.md:163 (Sonarr services; also :240)
+    - api.radarr.video    # docs/adr/0049-metadata-proxy.md:164 (Radarr metadata service; also :246)
+    - api.lidarr.audio    # docs/adr/0049-metadata-proxy.md:165 (Lidarr metadata service; also :252)
+    - api.bookinfo.pro    # docs/adr/0049-metadata-proxy.md:258 (Readarr replacement metadata server)
+    - api.whisparr.com    # docs/adr/0049-metadata-proxy.md:167 (Whisparr v2/v3 metadata service; also :168, :270, :276)
+    - stashdb.org         # docs/adr/0049-metadata-proxy.md:276 (Whisparr v3 StashDB GraphQL)
+    - api4.thetvdb.com    # docs/adr/0049-metadata-proxy.md:288 (Seerr TVDB v4 constant)
+
+  # Seed with indexer and download-client hosts so missing app bypass entries fail loudly (403).
+  refuse_hosts: []
+
+  ports:
+    - 443
+
+  # Extra CIDRs refused at dial in addition to loopback, RFC 1918, link-local, and CGNAT
+  # (for example, the Kubernetes Service CIDR).
+  denied_prefixes:
+    - 10.96.0.0/12
+
+  dial_timeout: 10s
+  idle_timeout: 2m
+  max_tunnel: 30m
+  max_tunnels: 256

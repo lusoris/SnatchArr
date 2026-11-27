@@ -26,6 +26,7 @@ api-lint api
 api-test api
 api-security api
 api-openapi api
+metadata-proxy metadata_proxy
 worker worker
 e2e api,worker,proto
 image-smoke api,worker,proto,web,deploy
