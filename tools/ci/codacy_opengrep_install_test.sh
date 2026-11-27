@@ -225,6 +225,31 @@ for P6_EXIT in 124 137; do
   printf 'ok   P6-EXIT preserves ordinary npm exit %s\n' "$P6_EXIT"
 done
 
+# Plant control results only after the inner command has written its marker.
+cat >"$P6/bin/timeout" <<'EOF'
+#!/bin/sh
+set -eu
+shift 2
+if [ "$STUB_TIMEOUT_RC" -ne 0 ]; then
+  "$@" || exit 99
+fi
+exit "$STUB_TIMEOUT_RC"
+EOF
+chmod +x "$P6/bin/timeout"
+for P6_CONTROL in 124 137; do
+  P6_RC=0
+  run_install "$P6" 17 STUB_TIMEOUT_RC="$P6_CONTROL" CODACY_OPENGREP_NPM_DEADLINE_S=1 \
+    >"$P6/out" 2>"$P6/err" || P6_RC=$?
+  [ "$P6_RC" -eq 124 ] || fail P6-CONTROL "control $P6_CONTROL with npm marker: got $P6_RC, want 124"
+  grep -Fq 'timed out after 1 s' "$P6/err" || fail P6-CONTROL "missing deadline diagnostic"
+done
+P6_RC=0
+run_install "$P6" 0 STUB_TIMEOUT_RC=0 >"$P6/out" 2>"$P6/err" || P6_RC=$?
+[ "$P6_RC" -eq 1 ] || fail P6-MARKER "missing marker: got $P6_RC, want 1"
+grep -Fq 'missing or invalid npm ci exit status' "$P6/err" || fail P6-MARKER "missing protocol diagnostic"
+rm "$P6/bin/timeout"
+printf 'ok   P6-CONTROL prioritizes timeout status and rejects a missing marker\n'
+
 P7_IDX=0
 for P7_BAD in 0 3601 abc ''; do
   P7_IDX=$((P7_IDX + 1))

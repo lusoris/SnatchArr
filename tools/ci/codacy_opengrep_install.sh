@@ -30,34 +30,47 @@ CACHE="$ROOT/.cache/codacy_opengrep"
 mkdir -p "$CACHE"
 cp "$SOURCE/package.json" "$SOURCE/package-lock.json" "$CACHE/"
 
-NPM_RC=0
+TIMEOUT_RC=0
 # Keep the wrapper alive through the KILL grace period, even if npm exits on TERM.
 # Report ordinary exits separately without capturing npm output or giving it fd 3.
 {
-# The quoted script is expanded by the inner sh, after its TERM trap can run.
+# The quoted script is expanded by the inner sh.
 # shellcheck disable=SC2016
 NPM_STATUS=$(
   CDPATH='' cd -- "$CACHE" &&
     timeout --kill-after=1s "$DEADLINE" sh -c '
-      expired=0
-      trap "expired=1" TERM
+      # Never return to the normal path after TERM. Ignore repeat deliveries
+      # before starting the bounded wait, so sleep inherits the ignore action.
+      trap "trap \"\" TERM; sleep 2; exit 124" TERM
       rc=0
       npm ci --ignore-scripts --no-audit 3>&- || rc=$?
-      if [ "$expired" -ne 0 ]; then
-        # Outlast the 1 s grace period without waiting indefinitely.
-        sleep 2
-      else
-        printf "%s\n" "$rc" >&3
-      fi
-      exit "$rc"
+      printf "%s\n" "$rc" >&3 || exit 1
+      exit 0
     ' 3>&1 >&4 4>&-
-) || NPM_RC=$?
+) || TIMEOUT_RC=$?
 } 4>&1
-if [ -z "$NPM_STATUS" ] && { [ "$NPM_RC" -eq 124 ] || [ "$NPM_RC" -eq 137 ]; }; then
-  printf 'codacy-opengrep install: npm ci timed out after %s s\n' "$DEADLINE" >&2
-  exit 124
+case "$TIMEOUT_RC" in
+  124 | 137)
+    printf 'codacy-opengrep install: npm ci timed out after %s s\n' "$DEADLINE" >&2
+    exit 124
+    ;;
+  0) ;;
+  *)
+    printf 'codacy-opengrep install: npm ci failed with exit %s\n' "$TIMEOUT_RC" >&2
+    exit "$TIMEOUT_RC"
+    ;;
+esac
+case "$NPM_STATUS" in
+  '' | *[!0-9]* | ????* | 0?*)
+    printf 'codacy-opengrep install: missing or invalid npm ci exit status\n' >&2
+    exit 1
+    ;;
+esac
+if [ "$NPM_STATUS" -gt 255 ]; then
+  printf 'codacy-opengrep install: missing or invalid npm ci exit status\n' >&2
+  exit 1
 fi
-if [ "$NPM_RC" -ne 0 ]; then
-  printf 'codacy-opengrep install: npm ci failed with exit %s\n' "$NPM_RC" >&2
-  exit "$NPM_RC"
+if [ "$NPM_STATUS" -ne 0 ]; then
+  printf 'codacy-opengrep install: npm ci failed with exit %s\n' "$NPM_STATUS" >&2
+  exit "$NPM_STATUS"
 fi
