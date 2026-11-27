@@ -1058,5 +1058,20 @@
 	"settings_named_preset_cancel": "Abbrechen",
 	"settings_named_preset_saved": "Prioritätsvorlage gespeichert",
 	"settings_named_preset_applied": "Prioritätsvorlage angewendet",
-	"settings_named_preset_deleted": "Prioritätsvorlage gelöscht"
+	"settings_named_preset_deleted": "Prioritätsvorlage gelöscht",
+	"modules_rules_title": "Regeln für die Bibliotheksverarbeitung",
+	"modules_rules_desc": "Importiere eine Regel aus YAML oder JSON oder exportiere eine gespeicherte Regel im gewählten Format.",
+	"modules_rules_format_legend": "Dokumentformat",
+	"modules_rules_select_label": "Gespeicherte Regel zum Exportieren",
+	"modules_rules_select_placeholder": "Regel auswählen",
+	"modules_rules_empty": "Noch keine gespeicherten Regeln.",
+	"modules_rules_retry": "Regeln erneut laden",
+	"modules_rules_document_label": "Regeldokument",
+	"modules_rules_document_empty": "Gib zuerst ein Regeldokument ein.",
+	"modules_rules_invalid": "Das Regeldokument ist ungültig: {reason}",
+	"modules_rules_import": "Regel importieren",
+	"modules_rules_importing": "Importiere …",
+	"modules_rules_import_success": "Regel importiert.",
+	"modules_rules_export": "Ausgewählte Regel exportieren",
+	"modules_rules_export_success": "Regel in den Editor exportiert."
 }

@@ -1058,5 +1058,20 @@
 	"settings_named_preset_cancel": "Cancel",
 	"settings_named_preset_saved": "Priority preset saved",
 	"settings_named_preset_applied": "Priority preset applied",
-	"settings_named_preset_deleted": "Priority preset deleted"
+	"settings_named_preset_deleted": "Priority preset deleted",
+	"modules_rules_title": "Library processing rules",
+	"modules_rules_desc": "Import one rule from YAML or JSON, or export a stored rule in the selected format.",
+	"modules_rules_format_legend": "Document format",
+	"modules_rules_select_label": "Stored rule to export",
+	"modules_rules_select_placeholder": "Select a rule",
+	"modules_rules_empty": "No stored rules yet.",
+	"modules_rules_retry": "Retry loading rules",
+	"modules_rules_document_label": "Rule document",
+	"modules_rules_document_empty": "Enter a rule document first.",
+	"modules_rules_invalid": "The rule document is invalid: {reason}",
+	"modules_rules_import": "Import rule",
+	"modules_rules_importing": "Importing…",
+	"modules_rules_import_success": "Rule imported.",
+	"modules_rules_export": "Export selected rule",
+	"modules_rules_export_success": "Rule exported to the editor."
 }
