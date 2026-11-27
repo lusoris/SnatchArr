@@ -1671,6 +1671,7 @@ echo "ok   index-only-configs"
 
 python3 -I "$HERE/renovate_regex.py" --self-test
 python3 -I "$HERE/renovate_managers.py" --self-test
+python3 -I "$HERE/image_release_age_snapshot_test.py"
 python3 -I "$HERE/renovate_rules.py" --self-test
 python3 -I "$HERE/re2_subset.py" --self-test
 

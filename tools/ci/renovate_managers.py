@@ -233,10 +233,14 @@ def snapshot_entry(path: str, raw: bytes | None) -> SnapshotEntry:
     return (path, None if raw is None else hashlib.sha256(raw).digest())
 
 
+class SnapshotChangedError(RefusedError):
+    """Report a tracked-file snapshot that changed between the two reads."""
+
+
 def check_same_snapshot(pass1: set[SnapshotEntry], pass2: set[SnapshotEntry]) -> None:
     """Refuse when pass 2 over `read_contents` yields a different `(path, sha256)` set than pass 1."""
     if pass1 != pass2:
-        raise RefusedError("tree changed during check")
+        raise SnapshotChangedError("tree changed during check")
 
 
 def is_non_docker_manager(mgr: dict[str, object], named_groups: set[str]) -> bool:
