@@ -22,21 +22,24 @@ CONFIG = "release-please-config.json"
 MAX_BYTES = 4 * 1024 * 1024
 MAX_LINES = 50_000
 MAX_FILES = 64
-MAX_CASES = 40
+MAX_CASES = 56
 CORE = r"[0-9]+\.[0-9]+\.[0-9]+"
 VERSION = re.compile(rf"(?<!\w)v?({CORE}(?:[-+][0-9A-Za-z.+-]+)?)(?!\w|\.[0-9])")
-# Match the version field of each supported line without checking the image digest.
+# Match plain or quoted chart scalars. The optional image digest stays opaque
+# and, for a quoted image, must be inside the same quotes as the tag.
 VALUE_LINE = re.compile(
-    rf"(?:version|appVersion):\s+{CORE}(?=\s|$)"
-    rf"|image:\s+[^\s@]+:{CORE}(?=@|\s|$)"
+    rf"(?:(?:version|appVersion):[ \t]+(?P<field_quote>['\"]?){CORE}(?P=field_quote)"
+    rf"|image:[ \t]+(?P<image_quote>['\"]?)[^\s@'\"]+:{CORE}"
+    rf"(?:@[^\s'\"]+)?(?P=image_quote))(?=$|[ \t]+#)"
     rf"|\[!\[Release\]\(\S*?[?&]message=v{CORE}(?=[&)])"
-)
-QUOTED_VERSION_FIELD = re.compile(
-    rf"(?:version|appVersion):\s+(['\"]){CORE}\1(?=\s|$)"
 )
 HEADING = re.compile(r"^ {0,3}##(?:[ \t]+|(?=\r?$))", re.MULTILINE)
 HEADING_LINK = re.compile(r"^\[([^\]]+)\]\(([^)]*)\)")
 COMPARE_LINK = re.compile(rf"^(.+)/compare/v({CORE})\.\.\.v({CORE})$")
+RELEASE_NUMBER = re.compile(r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2}")
+HEADING_DATE = r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
+DATED_SUFFIX = re.compile(rf" \({HEADING_DATE}\)")
+BARE_HEADING = re.compile(rf"({CORE}){DATED_SUFFIX.pattern}")
 BLOCK_METADATA = re.compile(r"artifacthub\.io/images: \||- name: \S+")
 SINGLE = "x-release-please-version"
 START = "x-release-please-start-version"
@@ -225,7 +228,7 @@ def check_marked(text: str, name: str, version: str, findings: list[str]) -> int
 def unmarked_value(line: str) -> bool:
     """Identify an unmarked release field, excluding indented YAML child keys."""
     text = line.strip()
-    if not (VALUE_LINE.match(text) or QUOTED_VERSION_FIELD.match(text)):
+    if not VALUE_LINE.match(text):
         return False
     return not (line[:1].isspace() and text.startswith(("version:", "appVersion:")))
 
@@ -251,12 +254,11 @@ def check_changelog(text: str, name: str, version: str) -> list[str]:
         return [f"{name}:1: no level-two heading"]
     number, first = headings[0]
     if len(headings) == 1:
-        # With no predecessor, release-please emits a dated heading without a link.
-        found = heading_version(first)
-        if found and found != version:
-            return [f"{name}:{number}: {found} != {version}"]
-        if not re.fullmatch(rf"{re.escape(version)} \(\d{{4}}-\d{{2}}-\d{{2}}\)", first):
+        bare = BARE_HEADING.fullmatch(first)
+        if not bare or not RELEASE_NUMBER.fullmatch(bare[1]):
             return [f"{name}:{number}: expected ## {version} (YYYY-MM-DD)"]
+        if bare[1] != version:
+            return [f"{name}:{number}: {bare[1]} != {version}"]
         return []
     link = HEADING_LINK.match(first)
     if not link:
@@ -287,12 +289,20 @@ def changelog_headings(text: str, name: str) -> list[tuple[int, str]]:
 
 
 def heading_version(text: str) -> str:
-    """Extract a release number from a linked or bare second changelog heading."""
-    match = HEADING_LINK.match(text)
-    if match:
-        return match[1]
-    match = re.match(rf"({CORE}) \(", text)
-    return match[1] if match else ""
+    """Validate a dated predecessor heading and return its release number."""
+    bare = BARE_HEADING.fullmatch(text)
+    if bare:
+        return bare[1] if RELEASE_NUMBER.fullmatch(bare[1]) else ""
+    link = HEADING_LINK.match(text)
+    if not link or not DATED_SUFFIX.fullmatch(text, link.end()):
+        return ""
+    label, target = link.groups()
+    if not RELEASE_NUMBER.fullmatch(label) or re.search(r"\s", target):
+        return ""
+    compare = COMPARE_LINK.fullmatch(target)
+    if compare and compare[3] == label and RELEASE_NUMBER.fullmatch(compare[2]):
+        return label
+    return ""
 
 
 def compare_changelog_link(
@@ -329,9 +339,7 @@ def matches_expected_heading(
 ) -> bool:
     """Match the exact release heading grammar while allowing a calendar date."""
     link = f"{base}/compare/v{previous}...v{version}"
-    pattern = (
-        rf"\[{re.escape(version)}\]\({re.escape(link)}\) \(\d{{4}}-\d{{2}}-\d{{2}}\)"
-    )
+    pattern = rf"\[{re.escape(version)}\]\({re.escape(link)}\){DATED_SUFFIX.pattern}"
     return re.fullmatch(pattern, first) is not None
 
 
@@ -479,7 +487,9 @@ def input_cases(
         *base_input_cases(files, changelog, version, no_headings, config),
         *tag_cases(version),
         *unmarked_value_cases(files, chart, version),
+        *quoted_scalar_cases(files, chart, version),
         *changelog_cases(files[changelog], changelog, version, previous, base),
+        *predecessor_cases(changelog, version, base),
         *extra_file_cases(files, chart, badge, version),
     ]
 
@@ -558,6 +568,75 @@ def unmarked_value_cases(files: dict[str, str], chart: str, version: str) -> lis
             f"release {version},",
         ),
     ]
+
+
+def quoted_scalar_cases(files: dict[str, str], chart: str, version: str) -> list[Case]:
+    """Quote the real Chart.yaml fields and Artifact Hub image references."""
+    original = files[chart].splitlines(keepends=True)
+    fields = {
+        key: next(i for i, line in enumerate(original) if line.startswith(f"{key}: "))
+        for key in ("version", "appVersion")
+    }
+    images = [i for i, line in enumerate(original) if line.lstrip().startswith("image: ")]
+    if len(images) < 2:
+        raise ValueError(f"{chart}: expected both Artifact Hub image references")
+    malformed = "expected a chart version, image tag or release badge"
+    missing = "release version field without a release-please marker"
+    cases = []
+    for quote, other in (("'", '"'), ('"', "'")):
+        quoted = original.copy()
+        for i in fields.values():
+            quoted[i] = quoted[i].replace(f": {version}", f": {quote}{version}{quote}", 1)
+        for position, i in enumerate(images):
+            prefix, _, value = original[i].partition("image: ")
+            reference = value.rstrip()
+            if position == 1:
+                reference = reference.partition("@")[0]
+            quoted[i] = f"{prefix}image: {quote}{reference}{quote}\n"
+        cases.append(case(f"marked scalars quoted with {quote}", {chart: "".join(quoted)}, 0, f"release {version},"))
+        for i in (*fields.values(), images[0]):
+            mismatch = quoted.copy()
+            before, _, after = mismatch[i].rpartition(quote)
+            mismatch[i] = before + other + after
+            cases.append(case(f"mismatched {quote} at line {i + 1}", {chart: "".join(mismatch)}, 1, f"{chart}:{i + 1}: {malformed}"))
+        i = fields["appVersion"]
+        unmarked = quoted.copy()
+        unmarked[i] = unmarked[i].replace(f" # {SINGLE}", "", 1)
+        cases.append(case(f"unmarked appVersion quoted with {quote}", {chart: "".join(unmarked)}, 1, f"{chart}:{i + 1}: {missing}"))
+        image = quoted[images[0 if quote == "'" else 1]].lstrip()
+        cases.append(case(f"unmarked image quoted with {quote}", {chart: "".join(quoted).rstrip() + "\n" + image}, 1, f"{chart}:{len(quoted) + 1}: {missing}"))
+    return cases
+
+
+def predecessor_cases(changelog: str, version: str, base: str) -> list[Case]:
+    """Check predecessor syntax at its own line without relying on older history."""
+    previous = "0.1.0" if version != "0.1.0" else "0.0.1"
+    date = "2026-01-01"
+    tag = f"{base}/releases/tag/v{previous}"
+    compare = f"{base}/compare/v0.0.0...v{previous}"
+    cases = [
+        case(
+            "first release links to its tag",
+            {changelog: f"## [{version}]({base}/releases/tag/v{version}) ({date})\n"},
+            1,
+            f"{changelog}:1: expected ## {version} (YYYY-MM-DD)",
+        ),
+    ]
+    for label, predecessor, heading, status in (
+        ("bare historic first release", previous, f"{previous} ({date})", 0),
+        ("tag-linked historic first release", previous, f"[{previous}]({tag}) ({date})", 1),
+        ("invalid predecessor version", "00.1.0", f"00.1.0 ({date})", 1),
+        ("malformed bare predecessor date", previous, f"{previous} (2026-1-01)", 1),
+        ("malformed linked predecessor date", previous, f"[{previous}]({compare}) (2026-01)", 1),
+        ("predecessor compare ends at the wrong version", previous, f"[{previous}]({base}/compare/v0.0.0...v9.9.9) ({date})", 1),
+        ("predecessor compare has a malformed target", previous, f"[{previous}]({base}/compare/v0.0.0...not-a-tag) ({date})", 1),
+        ("dated compare-linked predecessor", previous, f"[{previous}]({compare}) ({date})", 0),
+    ):
+        first = f"[{version}]({base}/compare/v{predecessor}...v{version}) ({date})"
+        history = f"## {first}\n\nRelease notes.\n   ## {heading}\n"
+        expected = f"{changelog}:4: expected ## [P]" if status else f"release {version},"
+        cases.append(case(label, {changelog: history}, status, expected))
+    return cases
 
 
 def changelog_cases(
