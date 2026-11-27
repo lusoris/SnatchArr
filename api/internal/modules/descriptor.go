@@ -75,7 +75,7 @@ const (
 )
 
 func decodeStrictObject(raw json.RawMessage, name string, dst any) error {
-	trimmed := bytes.TrimSpace(raw)
+	trimmed := bytes.Trim(raw, " \t\r\n")
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] != '{' {
 		return fmt.Errorf("%w: config must be a JSON object", domain.ErrInvalid)
 	}
@@ -84,7 +84,7 @@ func decodeStrictObject(raw json.RawMessage, name string, dst any) error {
 	if err := dec.Decode(dst); err != nil {
 		return fmt.Errorf("%w: invalid %s config: %w", domain.ErrInvalid, name, err)
 	}
-	if dec.More() {
+	if len(bytes.Trim(trimmed[dec.InputOffset():], " \t\r\n")) != 0 {
 		return fmt.Errorf("%w: unexpected trailing data in %s config", domain.ErrInvalid, name)
 	}
 	return nil
@@ -273,6 +273,14 @@ func DefaultDescriptors() []Descriptor {
 			ID:             domain.ModuleLLM,
 			DefaultEnabled: false,
 			ValidateConfig: ValidateLLMConfig,
+		},
+		{
+			ID:             domain.ModuleLibraryProcessing,
+			DefaultEnabled: false,
+			ValidateConfig: func(raw json.RawMessage) error {
+				var cfg struct{}
+				return decodeStrictObject(raw, domain.ModuleLibraryProcessing, &cfg)
+			},
 		},
 		{
 			ID:             domain.ModuleWatchAware,

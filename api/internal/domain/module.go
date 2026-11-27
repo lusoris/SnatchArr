@@ -11,9 +11,10 @@ import (
 
 // Well-known optional module identifiers.
 const (
-	ModuleAdult      = "adult"
-	ModuleLLM        = "llm"
-	ModuleWatchAware = "watchaware"
+	ModuleAdult             = "adult"
+	ModuleLLM               = "llm"
+	ModuleWatchAware        = "watchaware"
+	ModuleLibraryProcessing = "library_processing"
 )
 
 // Module represents the persistent state and configuration of an optional module.
