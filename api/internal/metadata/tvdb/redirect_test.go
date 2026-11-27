@@ -41,6 +41,33 @@ func TestRedirectRefused(t *testing.T) {
 	}
 }
 
+// TestRefusedRedirectNotCached checks that a refused redirect leaves no cache entry: once TVDB
+// answers 200 again, the next lookup reaches it and succeeds instead of replaying the redirect.
+func TestRefusedRedirectNotCached(t *testing.T) {
+	t.Parallel()
+	s := newStub(t)
+	var seriesHits atomic.Int64
+	s.redirect = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path != "/series/81189" || seriesHits.Add(1) > 1 {
+			return false
+		}
+		w.Header().Set("Location", s.srv.URL+"/series/81189")
+		w.WriteHeader(http.StatusFound)
+		return true
+	}
+	p := s.provider(t, plantedKey, plantedPIN, nil)
+	if _, err := p.TitlesFor(t.Context(), sonarrRef(), "de"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("first TitlesFor() error = %v, want ErrUnavailable", err)
+	}
+	got, err := p.TitlesFor(t.Context(), sonarrRef(), "de")
+	if err != nil || len(got) == 0 {
+		t.Fatalf("second TitlesFor() = %v, %v, want titles", got, err)
+	}
+	if n := seriesHits.Load(); n != 2 {
+		t.Fatalf("series requests = %d, want 2", n)
+	}
+}
+
 func TestTLSStubProvider(t *testing.T) {
 	t.Parallel()
 	s := newTLSStub(t)

@@ -46,6 +46,8 @@ APP_SNATCHARR_JELLYFIN_TIMEOUT	snatcharr.jellyfin.timeout	runtime	restart	yes
 APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE	snatcharr.jellyfin.default_role	runtime	restart	yes
 APP_SNATCHARR_METADATA_TVDB_API_KEY	snatcharr.metadata.tvdb.api_key	secret	restart	yes
 APP_SNATCHARR_METADATA_TVDB_PIN	snatcharr.metadata.tvdb.pin	secret	restart	yes
+APP_SNATCHARR_METADATA_CACHE_L2	snatcharr.metadata.cache.l2	runtime	restart	yes
+APP_SNATCHARR_METADATA_CACHE_REDIS_PLAINTEXT	snatcharr.metadata.cache.redis_plaintext	runtime	restart	yes
 APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS	snatcharr.item_search.cooldown_seconds	runtime	restart	yes
 APP_SNATCHARR_DOWNLOAD_PRIORITY_INTERVAL_SECONDS	snatcharr.download_priority.interval_seconds	runtime	restart	yes
 APP_SNATCHARR_LOGS_RING_SIZE	snatcharr.logs.ring_size	bootstrap	restart	yes

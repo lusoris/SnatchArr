@@ -9,16 +9,74 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"go.uber.org/fx"
+
+	"github.com/golusoris/golusoris/cache/memory"
+	"github.com/golusoris/golusoris/core/clock"
+	gconfig "github.com/golusoris/golusoris/core/config"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
+	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/foreigntitle"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	tvdbprovider "github.com/lusoris/SnatchArr/api/internal/metadata/tvdb"
 )
+
+type testLifecycle struct{}
+
+func (testLifecycle) Append(fx.Hook) {}
+
+func TestNewProviderLoadsRedisOnlyWhenUsed(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(file, []byte("cache:\n  redis:\n    db: invalid\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	coreCfg, err := gconfig.New(gconfig.Options{Files: []string{file}, DisableEnv: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l1, err := memory.NewForTest(1024, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, key, l2 string
+		wantErr       bool
+	}{
+		{"TVDB off", "", config.MetadataCacheL2Redis, false},
+		{"L2 none", "planted-key", config.MetadataCacheL2None, false},
+		{"Redis used", "planted-key", config.MetadataCacheL2Redis, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			opts := config.Default()
+			opts.Metadata.TVDB.APIKey, opts.Metadata.Cache.L2 = tc.key, tc.l2
+			p, err := newProvider(testLifecycle{}, opts, coreCfg, l1, clock.NewFake(), slog.New(slog.DiscardHandler), nil)
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "cache.redis") {
+					t.Fatalf("newProvider() error = %v, want cache.redis unmarshal error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("newProvider() error = %v", err)
+			}
+			t.Cleanup(func() {
+				if err := p.Close(); err != nil {
+					t.Errorf("Close() error = %v", err)
+				}
+			})
+		})
+	}
+}
 
 type fakeInstances struct {
 	kind domain.AppKind
