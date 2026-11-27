@@ -36,6 +36,13 @@ precedence = "override"
 SPDX-FileCopyrightText = "2026 lusoris <lusoris@pm.me>"
 SPDX-License-Identifier = "EUPL-1.2"
 
+# JSON has no comment syntax for an inline SPDX header.
+[[annotations]]
+path = ["tools/ci/codacy_lizard/baseline.json"]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 lusoris <lusoris@pm.me>"
+SPDX-License-Identifier = "EUPL-1.2"
+
 # Brand mark component: embeds three brand marks (vulva, penis, hand).
 # Vulva mark derived from "Female vulva.svg" by T. Kebert (CC BY-SA 4.0).
 # Hand mark derived from "Hand reaching down Pinhead icon.svg" by Quincy Morgan (CC0 1.0).

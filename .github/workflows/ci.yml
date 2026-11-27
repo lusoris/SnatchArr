@@ -86,6 +86,22 @@ jobs:
             fi
             python3 -I tools/ci/codacy_opengrep_scan.py --base-ref "$BEFORE_SHA"
           fi
+      - name: The Lizard baseline only shrinks
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            sh tools/ci/codacy_lizard_check.sh "$RUNNER_TEMP/lizard" --base-ref "$BASE_SHA"
+          elif [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "Skipping the Lizard shrink check: $EVENT_NAME has no before commit ($BEFORE_SHA)"
+          else
+            if ! git rev-parse --verify -q "$BEFORE_SHA^{commit}" >/dev/null; then
+              timeout 120 git fetch --no-tags --quiet origin "$BEFORE_SHA"
+            fi
+            sh tools/ci/codacy_lizard_check.sh "$RUNNER_TEMP/lizard" --base-ref "$BEFORE_SHA"
+          fi
       - name: The release publish order check refuses its planted cases
         run: python3 -I tools/ci/release_publish_order_check.py --self-test && python3 -I tools/ci/release_publish_order_check.py
       # A dependency-only change must still run deploy (Helm).
@@ -174,6 +190,12 @@ jobs:
         run: |
           sh tools/ci/codacy_opengrep_scan_test.sh
           python3 -I tools/ci/codacy_opengrep_scan.py --self-test
+      - name: The Codacy Lizard limits refuse their planted cases and scan tracked source
+        run: |
+          bash tools/ci/codacy_lizard_check_test.sh
+          bash tools/ci/codacy_lizard_check_platform_test.sh
+          sh tools/ci/codacy_lizard_check.sh "$RUNNER_TEMP/lizard" --self-test
+          sh tools/ci/codacy_lizard_check.sh "$RUNNER_TEMP/lizard"
       - name: The scan script refuses its planted cases
         run: sh tools/ci/semgrep_scan_test.sh
       - name: Replay the rule fixtures, then scan the tracked Go files
