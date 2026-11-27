@@ -672,8 +672,9 @@ semgrep-scan: ## Own Semgrep rules (.semgrep.yml) in the pinned image, rule fixt
 	docker pull --quiet "$$SEMGREP_IMAGE"
 	python3 -I tools/ci/semgrep_scan.py --image "$$SEMGREP_IMAGE"
 
-secret-scan: ## gitleaks over every local ref, as CI job secret-scan (pinned release, cached in .cache/)
+secret-scan: ## gitleaks over every local ref, as CI job secret-scan (pinned release, cached in .cache/, parallel-setup planted case)
 	sh tools/ci/gitleaks_scan.sh .cache/gitleaks
+	sh tools/ci/gitleaks_scan_test.sh .cache/gitleaks
 
 py-lint: ## ruff over every tracked Python file, pinned, config shared with Codacy (ruff.toml), with planted cases
 	bash tools/ci/ruff_check_test.sh
