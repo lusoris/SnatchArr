@@ -5,11 +5,13 @@
 package modules_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"maps"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/golusoris/golusoris/core/clock"
 
@@ -177,4 +179,69 @@ func TestServiceUpdate(t *testing.T) {
 	if !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("Update(badCfg) error = %v, want ErrInvalid", err)
 	}
+}
+
+func assertLibraryProcessingState(ctx context.Context, t *testing.T, s *modules.Service, stage string, want bool) {
+	t.Helper()
+	const id = domain.ModuleLibraryProcessing
+	m, getErr := s.Get(ctx, id)
+	if getErr != nil {
+		t.Fatalf("%s: Get(%q) failed: %v", stage, id, getErr)
+	}
+	if m.Enabled != want {
+		t.Fatalf("%s: Enabled = %t, want %t", stage, m.Enabled, want)
+	}
+	var obj map[string]json.RawMessage
+	if decodeErr := json.Unmarshal(m.Config, &obj); decodeErr != nil || obj == nil || len(obj) != 0 {
+		t.Fatalf("%s: Config = %q, want empty config", stage, string(m.Config))
+	}
+	got, enabledErr := s.IsEnabled(ctx, id)
+	if enabledErr != nil {
+		t.Fatalf("%s: IsEnabled(%q) failed: %v", stage, id, enabledErr)
+	}
+	if got != want {
+		t.Fatalf("%s: IsEnabled(%q) = %t, want %t", stage, id, got, want)
+	}
+}
+
+func TestLibraryProcessingPersistsSelection(t *testing.T) {
+	t.Parallel()
+
+	const id = "library_processing"
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	store := storetest.New(t)
+	clk := clock.NewFake()
+
+	// serviceOnStore builds a fresh Registry and Service sharing the same store and clock.
+	serviceOnStore := func(label string) *modules.Service {
+		t.Helper()
+		reg, regErr := modules.DefaultRegistry()
+		if regErr != nil {
+			t.Fatalf("%s failed: %v", label, regErr)
+		}
+		return modules.New(store, clk, reg)
+	}
+
+	svc := serviceOnStore("DefaultRegistry()")
+	if ensureErr := svc.Ensure(ctx); ensureErr != nil {
+		t.Fatalf("initial Ensure() failed: %v", ensureErr)
+	}
+	assertLibraryProcessingState(ctx, t, svc, "after initial Ensure", false)
+
+	if setErr := svc.SetEnabled(ctx, id, true); setErr != nil {
+		t.Fatalf("SetEnabled(%q, true) failed: %v", id, setErr)
+	}
+	assertLibraryProcessingState(ctx, t, svc, "after enabling", true)
+
+	restarted := serviceOnStore("second DefaultRegistry()")
+	if restartErr := restarted.Ensure(ctx); restartErr != nil {
+		t.Fatalf("Ensure() after restart failed: %v", restartErr)
+	}
+	assertLibraryProcessingState(ctx, t, restarted, "after restart and Ensure", true)
+
+	if disableErr := restarted.SetEnabled(ctx, id, false); disableErr != nil {
+		t.Fatalf("SetEnabled(%q, false) failed: %v", id, disableErr)
+	}
+	assertLibraryProcessingState(ctx, t, restarted, "after disabling", false)
 }

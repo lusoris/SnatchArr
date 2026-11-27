@@ -258,3 +258,50 @@ func TestDefaultAdultThumbnailCacheDir(t *testing.T) {
 		t.Fatalf("DefaultAdultThumbnailCacheDir() = %q, want %q", got, want)
 	}
 }
+
+func TestLibraryProcessingRegistryDefault(t *testing.T) {
+	t.Parallel()
+
+	const id = "library_processing"
+	reg, err := modules.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry() failed: %v", err)
+	}
+	desc, ok := reg.Lookup(id)
+	if !ok {
+		t.Fatalf("default registry is missing module %q", id)
+	}
+	if desc.DefaultEnabled {
+		t.Errorf("module %q: DefaultEnabled = true, want false", id)
+	}
+	if err := desc.ValidateConfig(json.RawMessage(`{}`)); err != nil {
+		t.Errorf("module %q: ValidateConfig({}) failed: %v", id, err)
+	}
+
+	invalid := []struct {
+		name string
+		raw  json.RawMessage
+	}{
+		{"unknown key", json.RawMessage(`{"unknown":true}`)},
+		{"null", json.RawMessage(`null`)},
+		{"empty", json.RawMessage(``)},
+		{"array", json.RawMessage(`[]`)},
+		{"non-JSON trailing whitespace", json.RawMessage("{}\u00a0")},
+		{"trailing closing bracket", json.RawMessage(`{}]`)},
+		{"trailing closing brace", json.RawMessage(`{}}`)},
+		{"trailing object", json.RawMessage(`{}{}`)},
+	}
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := desc.ValidateConfig(tc.raw)
+			if err == nil {
+				t.Fatalf("ValidateConfig(%q) succeeded, want error", string(tc.raw))
+			}
+			if !errors.Is(err, domain.ErrInvalid) {
+				t.Errorf("ValidateConfig(%q) error = %v, want domain.ErrInvalid", string(tc.raw), err)
+			}
+		})
+	}
+}

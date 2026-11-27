@@ -81,29 +81,34 @@ func TestListModulesAsViewer(t *testing.T) {
 		t.Fatalf("unmarshal listModules: %v; body: %s", err, string(res.body))
 	}
 
-	foundAdult := false
-	foundLLM := false
-	foundWatchAware := false
+	required := []string{
+		domain.ModuleAdult,
+		domain.ModuleLLM,
+		domain.ModuleWatchAware,
+		domain.ModuleLibraryProcessing,
+	}
+	seen := make(map[string]struct{})
 	for _, item := range items {
-		id, _ := item["id"].(string)
-		enabled, _ := item["enabled"].(bool)
-		if enabled {
+		id, ok := item["id"].(string)
+		if !ok {
+			t.Errorf("listModules item id = %v, want string", item["id"])
+		} else {
+			seen[id] = struct{}{}
+		}
+		enabled, ok := item["enabled"].(bool)
+		if !ok {
+			t.Errorf("module %s enabled = %v, want bool", id, item["enabled"])
+		} else if enabled {
 			t.Errorf("module %s enabled = true, want false by default", id)
 		}
 		if _, hasConfig := item["config"]; hasConfig {
 			t.Errorf("module %s unexpectedly returned config field in listModules", id)
 		}
-		switch id {
-		case domain.ModuleAdult:
-			foundAdult = true
-		case domain.ModuleLLM:
-			foundLLM = true
-		case domain.ModuleWatchAware:
-			foundWatchAware = true
-		}
 	}
-	if !foundAdult || !foundLLM || !foundWatchAware {
-		t.Fatalf("listModules missing expected modules (adult=%v, llm=%v, watchaware=%v): %v", foundAdult, foundLLM, foundWatchAware, items)
+	for _, id := range required {
+		if _, ok := seen[id]; !ok {
+			t.Errorf("listModules missing expected module %s: %v", id, items)
+		}
 	}
 }
 

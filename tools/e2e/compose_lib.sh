@@ -18,8 +18,12 @@ port="${SMOKE_PORT:-18080}"
 project="snatcharr-${label:?set label before sourcing compose_lib.sh}-$$"
 api="http://127.0.0.1:$port"
 
+# shellcheck source=tools/e2e/pull_retry.sh
+. "$root/tools/e2e/pull_retry.sh"
+
+# dc runs one docker compose command for this homelab project, bounded by compose (DC_SECONDS).
 dc() {
-    docker compose -p "$project" --project-directory "$root/deploy/homelab" \
+    compose -p "$project" --project-directory "$root/deploy/homelab" \
         --env-file "$work/.env" "${files[@]}" "$@"
 }
 
