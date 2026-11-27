@@ -337,6 +337,7 @@ e2e-compose-app-upgrade: ## Homelab compose bundle: application upgrade from pre
 	  docker build -t $(E2E_WORKER_IMAGE) -f worker/Dockerfile . ; \
 	fi
 	bash tools/e2e/schema_check_test.sh
+	bash tools/e2e/compose_app_upgrade.sh --selftest-modules
 	SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
 	  bash tools/e2e/planted.sh UPGRADE_PLANT tools/e2e/compose_app_upgrade.sh \
 	  "drop-row:api read-back differs" \
