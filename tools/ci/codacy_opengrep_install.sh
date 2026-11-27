@@ -31,8 +31,24 @@ mkdir -p "$CACHE"
 cp "$SOURCE/package.json" "$SOURCE/package-lock.json" "$CACHE/"
 
 NPM_RC=0
-(CDPATH='' cd -- "$CACHE" && timeout "$DEADLINE" npm ci --ignore-scripts --no-audit) || NPM_RC=$?
-if [ "$NPM_RC" -eq 124 ]; then
+# Keep the wrapper waiting through TERM so timeout can KILL a resistant npm.
+# Report ordinary exits separately without capturing npm output or giving it fd 3.
+{
+# The quoted script is expanded by the inner sh, after its TERM trap can run.
+# shellcheck disable=SC2016
+NPM_STATUS=$(
+  CDPATH='' cd -- "$CACHE" &&
+    timeout --kill-after=1s "$DEADLINE" sh -c '
+      expired=0
+      trap "expired=1" TERM
+      rc=0
+      npm ci --ignore-scripts --no-audit 3>&- || rc=$?
+      if [ "$expired" -eq 0 ]; then printf "%s\n" "$rc" >&3; fi
+      exit "$rc"
+    ' 3>&1 >&4 4>&-
+) || NPM_RC=$?
+} 4>&1
+if [ -z "$NPM_STATUS" ] && { [ "$NPM_RC" -eq 124 ] || [ "$NPM_RC" -eq 137 ]; }; then
   printf 'codacy-opengrep install: npm ci timed out after %s s\n' "$DEADLINE" >&2
   exit 124
 fi

@@ -41,6 +41,7 @@ set -eu
 printf '%s\n' "$PWD" >"$STUB_PWD"
 printf '%s\n' "$@" >"$STUB_ARGS"
 if [ -n "${STUB_SLEEP:-}" ]; then
+  if [ "${STUB_IGNORE_TERM:-0}" -eq 1 ]; then trap '' TERM; fi
   exec sleep "$STUB_SLEEP"
 fi
 if [ "${STUB_EXIT:-0}" -ne 0 ]; then
@@ -175,6 +176,25 @@ P6_ELAPSED=$(( $(date +%s) - P6_START ))
 grep -Fq '1 s' "$P6/err" || fail P6 "stderr does not name the deadline in seconds: $(cat "$P6/err")"
 printf 'ok   P6 enforces the npm ci deadline and exits 124\n'
 
+P6_START=$(date +%s)
+P6_RC=0
+run_install "$P6" 0 STUB_IGNORE_TERM=1 STUB_SLEEP=8 CODACY_OPENGREP_NPM_DEADLINE_S=1 >"$P6/out" 2>"$P6/err" || P6_RC=$?
+[ "$P6_RC" -eq 124 ] || fail P6-KILL "exit $P6_RC, want 124"
+[ "$(( $(date +%s) - P6_START ))" -le 5 ] || fail P6-KILL "TERM-resistant npm was not stopped promptly"
+grep -Fq 'timed out after 1 s' "$P6/err" || fail P6-KILL "missing deadline diagnostic"
+printf 'ok   P6-KILL escalates when npm ignores TERM\n'
+
+for P6_EXIT in 124 137; do
+  P6_RC=0
+  run_install "$P6" "$P6_EXIT" >"$P6/out" 2>"$P6/err" || P6_RC=$?
+  [ "$P6_RC" -eq "$P6_EXIT" ] || fail P6-EXIT "exit $P6_RC, want $P6_EXIT"
+  grep -Fxq "codacy-opengrep install: npm ci failed with exit $P6_EXIT" "$P6/err" || fail P6-EXIT "missing ordinary exit diagnostic for $P6_EXIT"
+  if grep -Fq 'timed out' "$P6/err"; then
+    fail P6-EXIT "ordinary exit $P6_EXIT was reported as a timeout"
+  fi
+  printf 'ok   P6-EXIT preserves ordinary npm exit %s\n' "$P6_EXIT"
+done
+
 P7_IDX=0
 for P7_BAD in 0 3601 abc ''; do
   P7_IDX=$((P7_IDX + 1))
@@ -255,5 +275,73 @@ case "${NL}${P9_DIRS}${NL}" in
   *) fail P9 "pre-fix node_modules package $P9_PLANT missing from go list: $P9_DIRS" ;;
 esac
 printf 'ok   P9 Go ./tools/... walk lists a package planted at the pre-fix path\n'
+
+# P10: pause real npm ci at local tarball extraction until the Go walk finishes.
+command -v npm >/dev/null 2>&1 || fail P10 "npm not on PATH"
+P10="$WORK/p10"
+make_root "$P10"
+mkdir -p "$P10/package" "$P10/tools/ci/sentinel" "$P10/home"
+printf 'module example.com/overlap\n\ngo 1.21\n' >"$P10/go.mod"
+printf 'package sentinel\n' >"$P10/tools/ci/sentinel/s.go"
+printf '{"name":"plant","version":"1.0.0"}\n' >"$P10/package/package.json"
+printf 'package plant\n' >"$P10/package/p.go"
+tar -cf "$P10/plant.tar" -C "$P10" package
+# file:../../plant.tar resolves under tools from the old tools/ci install directory.
+cp "$P10/plant.tar" "$P10/tools/plant.tar"
+printf '{"name":"overlap","dependencies":{"plant":"file:../../plant.tar"}}\n' \
+  >"$P10/tools/ci/codacy_opengrep/package.json"
+printf '{"name":"overlap","lockfileVersion":3,"packages":{"":{"dependencies":{"plant":"file:../../plant.tar"}},"node_modules/plant":{"version":"1.0.0","resolved":"file:../../plant.tar"}}}\n' \
+  >"$P10/tools/ci/codacy_opengrep/package-lock.json"
+cat >"$P10/barrier.cjs" <<'EOF'
+const {execFileSync} = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const Module = require('node:module');
+const load = Module._load;
+const root = process.env.P10_ROOT;
+Module._load = function (id, ...args) {
+  const pkg = load.call(this, id, ...args);
+  if (id === 'pacote' && !pkg.extract.p10) {
+    const extract = pkg.extract;
+    pkg.extract = async function (spec, dest, ...opts) {
+      const tarball = 'file:../../plant.tar';
+      // Check the same relative tarball from npm's actual install directory.
+      fs.accessSync(path.resolve(process.cwd(), tarball.slice('file:'.length)), fs.constants.R_OK);
+      fs.writeFileSync(path.join(root, 'barrier'), dest + '\n');
+      fs.mkdirSync(dest, {recursive: true});
+      const planted = path.join(dest, 'p.go');
+      fs.copyFileSync(path.join(root, 'package/p.go'), planted, fs.constants.COPYFILE_EXCL);
+      let dirs;
+      try {
+        dirs = execFileSync('go', ['list', '-f', '{{.Dir}}', './tools/...'],
+          {cwd: root, encoding: 'utf8', timeout: 10000, killSignal: 'SIGKILL'});
+      } finally {
+        fs.unlinkSync(planted);
+      }
+      if (dirs !== path.join(root, 'tools/ci/sentinel') + '\n') {
+        throw new Error('unexpected Go walk: ' + dirs);
+      }
+      fs.writeFileSync(path.join(root, 'walk.ok'), dirs);
+      return extract.call(this, spec, dest, ...opts);
+    };
+    pkg.extract.p10 = true;
+  }
+  return pkg;
+};
+EOF
+: >"$P10/user.npmrc"
+: >"$P10/global.npmrc"
+if ! env -i PATH="$PATH" LC_ALL=C HOME="$P10/home" P10_ROOT="$P10" \
+  NODE_OPTIONS="--require=$P10/barrier.cjs" npm_config_offline=true \
+  npm_config_cache="$P10/npm-cache" npm_config_userconfig="$P10/user.npmrc" npm_config_globalconfig="$P10/global.npmrc" \
+  GOENV=off GOWORK=off GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOCACHE="$P10/go-cache" \
+  sh "$INSTALLER" "$P10" >"$P10/out" 2>"$P10/err"; then
+  fail P10 "concurrent install failed: $(cat "$P10/err")"
+fi
+P10_DEST="$P10/.cache/codacy_opengrep/node_modules/plant"
+[ -f "$P10/barrier" ] && [ "$(cat "$P10/barrier")" = "$P10_DEST" ] || fail P10 "extraction barrier missing or at the wrong destination"
+[ -s "$P10/walk.ok" ] || fail P10 "Go walk did not reach the sentinel"
+[ -f "$P10_DEST/p.go" ] || fail P10 "npm did not extract the planted package"
+printf 'ok   P10 Go ./tools/... walk completes while real npm ci is in progress\n'
 
 printf 'codacy-opengrep install: all planted cases passed\n'
