@@ -633,11 +633,12 @@ def remove_generated_config(cwd: Path) -> None:
 
 
 def cli_env(environ: Mapping[str, str], home: Path) -> dict[str, str]:
-    """Return ENVIRON without CODACY_* variables, plus CODACY_GLOBAL_DIR=HOME.
+    """Return ENVIRON without CODACY_* variables, plus CODACY_GLOBAL_DIR=HOME and LC_ALL=C.UTF-8.
 
     A token there would let the CLI reach Codacy; the scan uses the checked-in config only.
+    Bundled Opengrep reads generated rules in the locale encoding; PYTHONUTF8 has no effect.
     """
-    return {**{key: value for key, value in environ.items() if not key.startswith("CODACY_")}, "CODACY_GLOBAL_DIR": str(home)}
+    return {**{key: value for key, value in environ.items() if not key.startswith("CODACY_")}, "CODACY_GLOBAL_DIR": str(home), "LC_ALL": "C.UTF-8"}
 
 
 def semgrep_tool(info: object) -> dict[str, object]:
@@ -1281,7 +1282,8 @@ def live_cases(configured: list[str]) -> list[tuple[str, bool]]:
         ("token with a newline refused", raises(lambda: codacy_auth({"CODACY_API_TOKEN": token + "\nX-Injected: 1"}))),
         ("GitHub https and ssh origins accepted", all(parse_origin(url) == ("lusoris", "SnatchArr") for url in ("https://github.com/lusoris/SnatchArr.git", "git@github.com:lusoris/SnatchArr.git", "ssh://git@github.com/lusoris/SnatchArr"))),
         ("other origin hosts and dot segments refused", parse_origin("https://gitlab.com/lusoris/SnatchArr.git") is None and parse_origin("https://github.com/../x") is None),
-        ("CLI environment drops every CODACY_* variable", cli_env({"CODACY_PROJECT_TOKEN": token, "CODACY_API_BASE_URL": "x", "PATH": "/bin"}, Path("/h")) == {"PATH": "/bin", "CODACY_GLOBAL_DIR": "/h"}),
+        ("CLI environment drops every CODACY_* variable", cli_env({"CODACY_PROJECT_TOKEN": token, "CODACY_API_BASE_URL": "x", "PATH": "/bin"}, Path("/h")) == {"PATH": "/bin", "CODACY_GLOBAL_DIR": "/h", "LC_ALL": "C.UTF-8"}),
+        ("CLI environment sets LC_ALL=C.UTF-8 over a caller LC_ALL=C", cli_env({"LC_ALL": "C", "LANG": "C", "PATH": "/bin"}, Path("/h")) == {"LC_ALL": "C.UTF-8", "LANG": "C", "PATH": "/bin", "CODACY_GLOBAL_DIR": "/h"}),
         ("live listing error returned with its prefix", refused_with(live_drift(Path("/nonexistent"), {"CODACY_API_TOKEN": spaced}, codacy_open), "live listing: CODACY_API_TOKEN is malformed")),
     ]
 

@@ -3,7 +3,8 @@
 
 // Security tools for make gosec-install, CI (security.yml) and the devcontainer, and sqlc for
 // go generate (api/internal/store/generate.go) and make sqlc-install, buf for make proto-verify and
-// make proto-gen (go tool, no binary on PATH), pinned here instead of
+// make proto-gen (go tool, no binary on PATH), shfmt for tools/ci/func_headers_check.py (shell syntax
+// tree), pinned here instead of
 // @latest so every place resolves the same versions and Renovate moves them.
 // golang.org/x/tools must stay at v0.50.0 or newer: older releases cannot read the export data
 // Go 1.27.2 writes, and gosec then loads no package (make api-gosec refuses that scan).
@@ -19,6 +20,7 @@ tool (
 	github.com/securego/gosec/v2/cmd/gosec
 	github.com/sqlc-dev/sqlc/cmd/sqlc
 	golang.org/x/vuln/cmd/govulncheck
+	mvdan.cc/sh/v3/cmd/shfmt
 )
 
 require (
@@ -84,6 +86,7 @@ require (
 	github.com/google/go-containerregistry v0.22.1 // indirect
 	github.com/google/go-licenses/v2 v2.0.1 // indirect
 	github.com/google/licenseclassifier/v2 v2.0.0 // indirect
+	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/google/s2a-go v0.1.11 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.23 // indirect
@@ -125,6 +128,7 @@ require (
 	github.com/quic-go/quic-go v0.64.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/riza-io/grpc-go v0.2.0 // indirect
+	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
@@ -191,6 +195,8 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.90.1 // indirect
+	mvdan.cc/editorconfig v0.3.0 // indirect
+	mvdan.cc/sh/v3 v3.14.1 // indirect
 	mvdan.cc/xurls/v2 v2.6.0 // indirect
 	pluginrpc.com/pluginrpc v0.6.0 // indirect
 )
