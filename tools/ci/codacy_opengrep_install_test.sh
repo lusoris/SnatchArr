@@ -360,7 +360,7 @@ Module._load = function (id, ...args) {
     const extract = pkg.extract;
     pkg.extract = async function (spec, dest, ...opts) {
       const tarball = 'file:../../plant.tar';
-      // Check the same relative tarball from npm's actual install directory.
+      // Check the same relative tarball from the actual npm install directory.
       fs.accessSync(path.resolve(process.cwd(), tarball.slice('file:'.length)), fs.constants.R_OK);
       fs.writeFileSync(path.join(root, 'barrier'), dest + '\n');
       fs.mkdirSync(dest, {recursive: true});
