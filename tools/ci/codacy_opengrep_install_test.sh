@@ -40,6 +40,15 @@ make_stub() {
 set -eu
 printf '%s\n' "$PWD" >"$STUB_PWD"
 printf '%s\n' "$@" >"$STUB_ARGS"
+if [ -n "${STUB_CHILD_PID:-}" ]; then
+  (
+    trap '' TERM
+    : >"$STUB_CHILD_PID.ready"
+    exec sleep 30
+  ) &
+  printf '%s\n' "$!" >"$STUB_CHILD_PID"
+  exec sleep 30
+fi
 if [ -n "${STUB_SLEEP:-}" ]; then
   if [ "${STUB_IGNORE_TERM:-0}" -eq 1 ]; then trap '' TERM; fi
   exec sleep "$STUB_SLEEP"
@@ -183,6 +192,27 @@ run_install "$P6" 0 STUB_IGNORE_TERM=1 STUB_SLEEP=8 CODACY_OPENGREP_NPM_DEADLINE
 [ "$(( $(date +%s) - P6_START ))" -le 5 ] || fail P6-KILL "TERM-resistant npm was not stopped promptly"
 grep -Fq 'timed out after 1 s' "$P6/err" || fail P6-KILL "missing deadline diagnostic"
 printf 'ok   P6-KILL escalates when npm ignores TERM\n'
+
+P6_RC=0
+# The child sh expands the arguments and exit status.
+# shellcheck disable=SC2016
+run_install "$P6" 0 STUB_CHILD_PID="$P6/child.pid" CODACY_OPENGREP_NPM_DEADLINE_S=1 \
+  timeout --kill-after=1s 8s sh -c '"$@"; rc=$?; [ "$rc" -ne 124 ] || exit 42; exit "$rc"' sh \
+  >"$P6/out" 2>"$P6/err" || P6_RC=$?
+# The outer watchdog must not be mistaken for the installer's deadline.
+[ "$P6_RC" -eq 42 ] || fail P6-GROUP "expected installer exit 124 (mapped to 42), got $P6_RC"
+[ -f "$P6/child.pid.ready" ] || fail P6-GROUP "TERM-resistant child did not start"
+P6_CHILD=$(cat "$P6/child.pid")
+# A killed orphan may remain a zombie until its new parent reaps it.
+P6_STATE=$(ps -o stat= -p "$P6_CHILD") || P6_STATE=
+case "$P6_STATE" in
+  '' | Z*) ;;
+  *)
+    kill -KILL "$P6_CHILD" 2>/dev/null || fail P6-GROUP "cleanup failed: could not kill TERM-resistant child (PID $P6_CHILD)"
+    fail P6-GROUP "TERM-resistant child survived the deadline (state $P6_STATE)"
+    ;;
+esac
+printf 'ok   P6-GROUP kills a TERM-resistant child after npm exits\n'
 
 for P6_EXIT in 124 137; do
   P6_RC=0

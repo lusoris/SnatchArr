@@ -31,7 +31,7 @@ mkdir -p "$CACHE"
 cp "$SOURCE/package.json" "$SOURCE/package-lock.json" "$CACHE/"
 
 NPM_RC=0
-# Keep the wrapper waiting through TERM so timeout can KILL a resistant npm.
+# Keep the wrapper alive through the KILL grace period, even if npm exits on TERM.
 # Report ordinary exits separately without capturing npm output or giving it fd 3.
 {
 # The quoted script is expanded by the inner sh, after its TERM trap can run.
@@ -43,7 +43,12 @@ NPM_STATUS=$(
       trap "expired=1" TERM
       rc=0
       npm ci --ignore-scripts --no-audit 3>&- || rc=$?
-      if [ "$expired" -eq 0 ]; then printf "%s\n" "$rc" >&3; fi
+      if [ "$expired" -ne 0 ]; then
+        # Outlast the 1 s grace period without waiting indefinitely.
+        sleep 2
+      else
+        printf "%s\n" "$rc" >&3
+      fi
       exit "$rc"
     ' 3>&1 >&4 4>&-
 ) || NPM_RC=$?
