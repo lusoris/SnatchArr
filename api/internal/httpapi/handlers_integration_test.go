@@ -40,6 +40,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/foreigntitles"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/libraryprocessing"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
@@ -323,6 +324,7 @@ func populateHandlers(t *testing.T, h *Handlers, st *store.Store, clk clock.Cloc
 	}
 	h.watchaware = watchaware.NewService(st, enc, clk, ids, logger, h.modules, h.instances, nil, nil, nil)
 	h.adult = adult.NewService(st, enc, clk, ids, h.modules, logger)
+	h.libraryProcessing = libraryprocessing.NewService(st, clk, ids, h.modules)
 	h.requests = requests.NewService(requests.NewStore(st, clk))
 	h.build = buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h.clk = clk

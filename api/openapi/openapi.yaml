@@ -39,6 +39,8 @@ tags:
     description: Adult catalogue sources and favourite synchronization
   - name: requests
     description: Community requests and voting settings (ADR-0036)
+  - name: library-processing
+    description: Rule-driven library processing rules and scope resolution (ADR-0041, ADR-0050)
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -2815,6 +2817,154 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /library-processing/rules:
+    get:
+      tags: [library-processing]
+      operationId: listLibraryProcessingRules
+      x-module: library_processing
+      summary: List stored library processing rules
+      responses:
+        "200":
+          description: Stored library processing rules ordered by precedence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LibraryProcessingRule"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [library-processing]
+      operationId: createLibraryProcessingRule
+      x-module: library_processing
+      summary: Create a scoped library processing rule
+      description: Creates a library processing rule for one scope identity (admin only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryProcessingRuleInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryProcessingRule"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /library-processing/rules/{ruleId}:
+    parameters:
+      - $ref: "#/components/parameters/LibraryProcessingRuleId"
+    get:
+      tags: [library-processing]
+      operationId: getLibraryProcessingRule
+      x-module: library_processing
+      summary: Get a stored library processing rule
+      responses:
+        "200":
+          description: Stored library processing rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryProcessingRule"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [library-processing]
+      operationId: updateLibraryProcessingRule
+      x-module: library_processing
+      summary: Replace a stored library processing rule
+      description: Replaces the scope target and rule definition of a stored rule (admin only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryProcessingRuleInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryProcessingRule"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [library-processing]
+      operationId: deleteLibraryProcessingRule
+      x-module: library_processing
+      x-destructive: true
+      summary: Delete a stored library processing rule
+      description: Deletes a stored library processing rule (admin only).
+      responses:
+        "204":
+          description: Deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /library-processing/resolve:
+    get:
+      tags: [library-processing]
+      operationId: resolveLibraryProcessingRule
+      x-module: library_processing
+      summary: Resolve the effective library processing rule for a target
+      description: >-
+        Evaluates stored rules in ADR-0041 section 10 precedence order
+        (item_override, user_language, library, instance, media_type, global_default)
+        and returns the winning rule unchanged with its winning scope.
+      parameters:
+        - name: instance_id
+          in: query
+          required: false
+          description: Owning *arr or Stash instance UUID; required when item_id or root_path is set.
+          schema:
+            type: string
+            format: uuid
+        - name: item_id
+          in: query
+          required: false
+          description: Instance-scoped item identifier; requires instance_id.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+        - name: requester_language
+          in: query
+          required: false
+          description: ISO 639 language code of the requester preference.
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 3
+        - name: root_path
+          in: query
+          required: false
+          description: Clean POSIX absolute library root path reported by the instance; requires instance_id.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 4096
+        - name: media_type
+          in: query
+          required: false
+          description: Media type of the library item.
+          schema:
+            $ref: "#/components/schemas/LibraryProcessingMediaType"
+      responses:
+        "200":
+          description: Winning rule and scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryProcessingResolvedRule"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -2914,6 +3064,13 @@ components:
         format: uuid
     AdultSetId:
       name: setId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LibraryProcessingRuleId:
+      name: ruleId
       in: path
       required: true
       schema:
@@ -5780,5 +5937,138 @@ components:
         ignore_file_present:
           type: boolean
 
+    TrackRule:
+      description: Effective track-selection rule resolved by the caller.
+      type: object
+      additionalProperties: false
+      required:
+        - languages
+      properties:
+        languages:
+          description: ISO 639 language codes to keep; at least one.
+          type: array
+          items:
+            type: string
+          minItems: 1
+          uniqueItems: true
 
+    Rule:
+      description: Effective processing rule resolved by the caller for this library item.
+      type: object
+      additionalProperties: false
+      required:
+        - track
+      properties:
+        track:
+          description: Track-selection policy parameters.
+          $ref: "#/components/schemas/TrackRule"
+
+    LibraryProcessingScope:
+      description: Precedence scope of a library processing rule (ADR-0041 section 10).
+      type: string
+      enum:
+        - item_override
+        - user_language
+        - library
+        - instance
+        - media_type
+        - global_default
+
+    LibraryProcessingMediaType:
+      description: Media type target of a library processing rule (ADR-0041 section 10).
+      type: string
+      enum:
+        - movie
+        - episode
+        - anime
+        - music
+        - audiobook
+        - stash_scene
+
+    LibraryProcessingRuleInput:
+      description: Input payload for creating or replacing a library processing rule.
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - rule
+      properties:
+        scope:
+          $ref: "#/components/schemas/LibraryProcessingScope"
+        instance_id:
+          type: string
+          format: uuid
+          description: Required when scope is item_override, library or instance; forbidden otherwise.
+        item_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Required when scope is item_override; forbidden otherwise.
+        user_language:
+          type: string
+          minLength: 2
+          maxLength: 3
+          description: Required when scope is user_language (ISO 639 code); forbidden otherwise.
+        root_path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: Required when scope is library (clean POSIX absolute path); forbidden otherwise.
+        media_type:
+          $ref: "#/components/schemas/LibraryProcessingMediaType"
+        rule:
+          $ref: "#/components/schemas/Rule"
+
+    LibraryProcessingRule:
+      description: Stored library processing rule scoped to one target identity.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - scope
+        - rule
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        scope:
+          $ref: "#/components/schemas/LibraryProcessingScope"
+        instance_id:
+          type: string
+          format: uuid
+        item_id:
+          type: string
+        user_language:
+          type: string
+        root_path:
+          type: string
+        media_type:
+          $ref: "#/components/schemas/LibraryProcessingMediaType"
+        rule:
+          $ref: "#/components/schemas/Rule"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LibraryProcessingResolvedRule:
+      description: Effective rule selected for a library item and the scope that won.
+      type: object
+      additionalProperties: false
+      required:
+        - rule_id
+        - scope
+        - rule
+      properties:
+        rule_id:
+          type: string
+          format: uuid
+        scope:
+          $ref: "#/components/schemas/LibraryProcessingScope"
+        rule:
+          $ref: "#/components/schemas/Rule"
 

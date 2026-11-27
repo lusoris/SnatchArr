@@ -1902,6 +1902,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/library-processing/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List stored library processing rules */
+        get: operations["listLibraryProcessingRules"];
+        put?: never;
+        /**
+         * Create a scoped library processing rule
+         * @description Creates a library processing rule for one scope identity (admin only).
+         */
+        post: operations["createLibraryProcessingRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/library-processing/rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: components["parameters"]["LibraryProcessingRuleId"];
+            };
+            cookie?: never;
+        };
+        /** Get a stored library processing rule */
+        get: operations["getLibraryProcessingRule"];
+        /**
+         * Replace a stored library processing rule
+         * @description Replaces the scope target and rule definition of a stored rule (admin only).
+         */
+        put: operations["updateLibraryProcessingRule"];
+        post?: never;
+        /**
+         * Delete a stored library processing rule
+         * @description Deletes a stored library processing rule (admin only).
+         */
+        delete: operations["deleteLibraryProcessingRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/library-processing/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve the effective library processing rule for a target
+         * @description Evaluates stored rules in ADR-0041 section 10 precedence order (item_override, user_language, library, instance, media_type, global_default) and returns the winning rule unchanged with its winning scope.
+         */
+        get: operations["resolveLibraryProcessingRule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3302,6 +3370,67 @@ export interface components {
             items_found: number;
             ignore_file_present: boolean;
         };
+        /** @description Effective track-selection rule resolved by the caller. */
+        TrackRule: {
+            /** @description ISO 639 language codes to keep; at least one. */
+            languages: string[];
+        };
+        /** @description Effective processing rule resolved by the caller for this library item. */
+        Rule: {
+            /** @description Track-selection policy parameters. */
+            track: components["schemas"]["TrackRule"];
+        };
+        /**
+         * @description Precedence scope of a library processing rule (ADR-0041 section 10).
+         * @enum {string}
+         */
+        LibraryProcessingScope: "item_override" | "user_language" | "library" | "instance" | "media_type" | "global_default";
+        /**
+         * @description Media type target of a library processing rule (ADR-0041 section 10).
+         * @enum {string}
+         */
+        LibraryProcessingMediaType: "movie" | "episode" | "anime" | "music" | "audiobook" | "stash_scene";
+        /** @description Input payload for creating or replacing a library processing rule. */
+        LibraryProcessingRuleInput: {
+            scope: components["schemas"]["LibraryProcessingScope"];
+            /**
+             * Format: uuid
+             * @description Required when scope is item_override, library or instance; forbidden otherwise.
+             */
+            instance_id?: string;
+            /** @description Required when scope is item_override; forbidden otherwise. */
+            item_id?: string;
+            /** @description Required when scope is user_language (ISO 639 code); forbidden otherwise. */
+            user_language?: string;
+            /** @description Required when scope is library (clean POSIX absolute path); forbidden otherwise. */
+            root_path?: string;
+            media_type?: components["schemas"]["LibraryProcessingMediaType"];
+            rule: components["schemas"]["Rule"];
+        };
+        /** @description Stored library processing rule scoped to one target identity. */
+        LibraryProcessingRule: {
+            /** Format: uuid */
+            id: string;
+            scope: components["schemas"]["LibraryProcessingScope"];
+            /** Format: uuid */
+            instance_id?: string;
+            item_id?: string;
+            user_language?: string;
+            root_path?: string;
+            media_type?: components["schemas"]["LibraryProcessingMediaType"];
+            rule: components["schemas"]["Rule"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description Effective rule selected for a library item and the scope that won. */
+        LibraryProcessingResolvedRule: {
+            /** Format: uuid */
+            rule_id: string;
+            scope: components["schemas"]["LibraryProcessingScope"];
+            rule: components["schemas"]["Rule"];
+        };
     };
     responses: {
         /** @description No content */
@@ -3336,6 +3465,7 @@ export interface components {
         AdultPerformerId: string;
         AdultStudioId: string;
         AdultSetId: string;
+        LibraryProcessingRuleId: string;
     };
     requestBodies: never;
     headers: never;
@@ -6671,6 +6801,155 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdultScanSummary"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listLibraryProcessingRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stored library processing rules ordered by precedence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryProcessingRule"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createLibraryProcessingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryProcessingRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryProcessingRule"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getLibraryProcessingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: components["parameters"]["LibraryProcessingRuleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stored library processing rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryProcessingRule"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateLibraryProcessingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: components["parameters"]["LibraryProcessingRuleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryProcessingRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryProcessingRule"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteLibraryProcessingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: components["parameters"]["LibraryProcessingRuleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    resolveLibraryProcessingRule: {
+        parameters: {
+            query?: {
+                /** @description Owning *arr or Stash instance UUID; required when item_id or root_path is set. */
+                instance_id?: string;
+                /** @description Instance-scoped item identifier; requires instance_id. */
+                item_id?: string;
+                /** @description ISO 639 language code of the requester preference. */
+                requester_language?: string;
+                /** @description Clean POSIX absolute library root path reported by the instance; requires instance_id. */
+                root_path?: string;
+                /** @description Media type of the library item. */
+                media_type?: components["schemas"]["LibraryProcessingMediaType"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Winning rule and scope */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryProcessingResolvedRule"];
                 };
             };
             default: components["responses"]["Problem"];

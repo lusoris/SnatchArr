@@ -86,6 +86,15 @@ func (UnimplementedHandler) CreateInstance(ctx context.Context, req *InstanceInp
 	return r, ht.ErrNotImplemented
 }
 
+// CreateLibraryProcessingRule implements createLibraryProcessingRule operation.
+//
+// Creates a library processing rule for one scope identity (admin only).
+//
+// POST /library-processing/rules
+func (UnimplementedHandler) CreateLibraryProcessingRule(ctx context.Context, req *LibraryProcessingRuleInput) (r *LibraryProcessingRule, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateMyNotifyTarget implements createMyNotifyTarget operation.
 //
 // Create a notification target for current user.
@@ -201,6 +210,15 @@ func (UnimplementedHandler) DeleteInstance(ctx context.Context, params DeleteIns
 //
 // DELETE /instances/{instanceId}/events
 func (UnimplementedHandler) DeleteInstanceEvents(ctx context.Context, params DeleteInstanceEventsParams) error {
+	return ht.ErrNotImplemented
+}
+
+// DeleteLibraryProcessingRule implements deleteLibraryProcessingRule operation.
+//
+// Deletes a stored library processing rule (admin only).
+//
+// DELETE /library-processing/rules/{ruleId}
+func (UnimplementedHandler) DeleteLibraryProcessingRule(ctx context.Context, params DeleteLibraryProcessingRuleParams) error {
 	return ht.ErrNotImplemented
 }
 
@@ -420,6 +438,15 @@ func (UnimplementedHandler) GetInstance(ctx context.Context, params GetInstanceP
 //
 // GET /instances/{instanceId}/priority
 func (UnimplementedHandler) GetInstancePriority(ctx context.Context, params GetInstancePriorityParams) (r *InstancePriority, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetLibraryProcessingRule implements getLibraryProcessingRule operation.
+//
+// Get a stored library processing rule.
+//
+// GET /library-processing/rules/{ruleId}
+func (UnimplementedHandler) GetLibraryProcessingRule(ctx context.Context, params GetLibraryProcessingRuleParams) (r *LibraryProcessingRule, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -769,6 +796,15 @@ func (UnimplementedHandler) ListInstances(ctx context.Context) (r []Instance, _ 
 	return r, ht.ErrNotImplemented
 }
 
+// ListLibraryProcessingRules implements listLibraryProcessingRules operation.
+//
+// List stored library processing rules.
+//
+// GET /library-processing/rules
+func (UnimplementedHandler) ListLibraryProcessingRules(ctx context.Context) (r []LibraryProcessingRule, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListLogs implements listLogs operation.
 //
 // Records come from a fixed-size in-memory ring (snatcharr.logs.ring_size). Secret attributes,
@@ -949,6 +985,17 @@ func (UnimplementedHandler) ReleaseWatchawareGateSeries(ctx context.Context, par
 //
 // POST /state/reset
 func (UnimplementedHandler) ResetState(ctx context.Context, req OptStateReset) (r *StateResetResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ResolveLibraryProcessingRule implements resolveLibraryProcessingRule operation.
+//
+// Evaluates stored rules in ADR-0041 section 10 precedence order (item_override, user_language,
+// library, instance, media_type, global_default) and returns the winning rule unchanged with its
+// winning scope.
+//
+// GET /library-processing/resolve
+func (UnimplementedHandler) ResolveLibraryProcessingRule(ctx context.Context, params ResolveLibraryProcessingRuleParams) (r *LibraryProcessingResolvedRule, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -1165,6 +1212,15 @@ func (UnimplementedHandler) UpdateInstance(ctx context.Context, req *InstanceUpd
 //
 // PUT /instances/{instanceId}/priority
 func (UnimplementedHandler) UpdateInstancePriority(ctx context.Context, req *InstancePriorityInput, params UpdateInstancePriorityParams) (r *InstancePriority, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateLibraryProcessingRule implements updateLibraryProcessingRule operation.
+//
+// Replaces the scope target and rule definition of a stored rule (admin only).
+//
+// PUT /library-processing/rules/{ruleId}
+func (UnimplementedHandler) UpdateLibraryProcessingRule(ctx context.Context, req *LibraryProcessingRuleInput, params UpdateLibraryProcessingRuleParams) (r *LibraryProcessingRule, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

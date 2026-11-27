@@ -57,6 +57,12 @@ type Handler interface {
 	//
 	// POST /instances
 	CreateInstance(ctx context.Context, req *InstanceInput) (*Instance, error)
+	// CreateLibraryProcessingRule implements createLibraryProcessingRule operation.
+	//
+	// Creates a library processing rule for one scope identity (admin only).
+	//
+	// POST /library-processing/rules
+	CreateLibraryProcessingRule(ctx context.Context, req *LibraryProcessingRuleInput) (*LibraryProcessingRule, error)
 	// CreateMyNotifyTarget implements createMyNotifyTarget operation.
 	//
 	// Create a notification target for current user.
@@ -136,6 +142,12 @@ type Handler interface {
 	//
 	// DELETE /instances/{instanceId}/events
 	DeleteInstanceEvents(ctx context.Context, params DeleteInstanceEventsParams) error
+	// DeleteLibraryProcessingRule implements deleteLibraryProcessingRule operation.
+	//
+	// Deletes a stored library processing rule (admin only).
+	//
+	// DELETE /library-processing/rules/{ruleId}
+	DeleteLibraryProcessingRule(ctx context.Context, params DeleteLibraryProcessingRuleParams) error
 	// DeleteMyNotifyTarget implements deleteMyNotifyTarget operation.
 	//
 	// Delete a notification target for current user.
@@ -284,6 +296,12 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/priority
 	GetInstancePriority(ctx context.Context, params GetInstancePriorityParams) (*InstancePriority, error)
+	// GetLibraryProcessingRule implements getLibraryProcessingRule operation.
+	//
+	// Get a stored library processing rule.
+	//
+	// GET /library-processing/rules/{ruleId}
+	GetLibraryProcessingRule(ctx context.Context, params GetLibraryProcessingRuleParams) (*LibraryProcessingRule, error)
 	// GetModule implements getModule operation.
 	//
 	// Persistent configuration and enabled state for the specified module (admin only).
@@ -516,6 +534,12 @@ type Handler interface {
 	//
 	// GET /instances
 	ListInstances(ctx context.Context) ([]Instance, error)
+	// ListLibraryProcessingRules implements listLibraryProcessingRules operation.
+	//
+	// List stored library processing rules.
+	//
+	// GET /library-processing/rules
+	ListLibraryProcessingRules(ctx context.Context) ([]LibraryProcessingRule, error)
 	// ListLogs implements listLogs operation.
 	//
 	// Records come from a fixed-size in-memory ring (snatcharr.logs.ring_size). Secret attributes,
@@ -639,6 +663,14 @@ type Handler interface {
 	//
 	// POST /state/reset
 	ResetState(ctx context.Context, req OptStateReset) (*StateResetResult, error)
+	// ResolveLibraryProcessingRule implements resolveLibraryProcessingRule operation.
+	//
+	// Evaluates stored rules in ADR-0041 section 10 precedence order (item_override, user_language,
+	// library, instance, media_type, global_default) and returns the winning rule unchanged with its
+	// winning scope.
+	//
+	// GET /library-processing/resolve
+	ResolveLibraryProcessingRule(ctx context.Context, params ResolveLibraryProcessingRuleParams) (*LibraryProcessingResolvedRule, error)
 	// RevokeAPIKey implements revokeAPIKey operation.
 	//
 	// Revoke an API key. Allowed for admin or requester (own keys).
@@ -783,6 +815,12 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}/priority
 	UpdateInstancePriority(ctx context.Context, req *InstancePriorityInput, params UpdateInstancePriorityParams) (*InstancePriority, error)
+	// UpdateLibraryProcessingRule implements updateLibraryProcessingRule operation.
+	//
+	// Replaces the scope target and rule definition of a stored rule (admin only).
+	//
+	// PUT /library-processing/rules/{ruleId}
+	UpdateLibraryProcessingRule(ctx context.Context, req *LibraryProcessingRuleInput, params UpdateLibraryProcessingRuleParams) (*LibraryProcessingRule, error)
 	// UpdateModule implements updateModule operation.
 	//
 	// Updates the enabled state and optional configuration of the specified module (admin only).

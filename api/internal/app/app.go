@@ -38,6 +38,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
+	"github.com/lusoris/SnatchArr/api/internal/libraryprocessing"
 	"github.com/lusoris/SnatchArr/api/internal/llm"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
@@ -113,6 +114,7 @@ var Module = fx.Options(
 	llm.Module,
 	watchaware.Module,
 	adult.Module,
+	libraryprocessing.Module,
 	// After every module that registers a loop: the gate collects the leader_loops group.
 	gate.Module,
 	fx.Decorate(defaultLeaderName),

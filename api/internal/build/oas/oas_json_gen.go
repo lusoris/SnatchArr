@@ -8800,6 +8800,668 @@ func (s *JellyfinSessionRequest) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes LibraryProcessingMediaType as json.
+func (s LibraryProcessingMediaType) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes LibraryProcessingMediaType from json.
+func (s *LibraryProcessingMediaType) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode LibraryProcessingMediaType to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch LibraryProcessingMediaType(v) {
+	case LibraryProcessingMediaTypeMovie:
+		*s = LibraryProcessingMediaTypeMovie
+	case LibraryProcessingMediaTypeEpisode:
+		*s = LibraryProcessingMediaTypeEpisode
+	case LibraryProcessingMediaTypeAnime:
+		*s = LibraryProcessingMediaTypeAnime
+	case LibraryProcessingMediaTypeMusic:
+		*s = LibraryProcessingMediaTypeMusic
+	case LibraryProcessingMediaTypeAudiobook:
+		*s = LibraryProcessingMediaTypeAudiobook
+	case LibraryProcessingMediaTypeStashScene:
+		*s = LibraryProcessingMediaTypeStashScene
+	default:
+		*s = LibraryProcessingMediaType(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s LibraryProcessingMediaType) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *LibraryProcessingMediaType) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *LibraryProcessingResolvedRule) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *LibraryProcessingResolvedRule) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("rule_id")
+		json.EncodeUUID(e, s.RuleID)
+	}
+	{
+		e.FieldStart("scope")
+		s.Scope.Encode(e)
+	}
+	{
+		e.FieldStart("rule")
+		s.Rule.Encode(e)
+	}
+}
+
+var jsonFieldsNameOfLibraryProcessingResolvedRule = [3]string{
+	0: "rule_id",
+	1: "scope",
+	2: "rule",
+}
+
+// Decode decodes LibraryProcessingResolvedRule from json.
+func (s *LibraryProcessingResolvedRule) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode LibraryProcessingResolvedRule to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "rule_id":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := json.DecodeUUID(d)
+				s.RuleID = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"rule_id\"")
+			}
+		case "scope":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				if err := s.Scope.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"scope\"")
+			}
+		case "rule":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				if err := s.Rule.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"rule\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode LibraryProcessingResolvedRule")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfLibraryProcessingResolvedRule) {
+					name = jsonFieldsNameOfLibraryProcessingResolvedRule[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *LibraryProcessingResolvedRule) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *LibraryProcessingResolvedRule) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *LibraryProcessingRule) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *LibraryProcessingRule) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("id")
+		json.EncodeUUID(e, s.ID)
+	}
+	{
+		e.FieldStart("scope")
+		s.Scope.Encode(e)
+	}
+	{
+		if s.InstanceID.Set {
+			e.FieldStart("instance_id")
+			s.InstanceID.Encode(e)
+		}
+	}
+	{
+		if s.ItemID.Set {
+			e.FieldStart("item_id")
+			s.ItemID.Encode(e)
+		}
+	}
+	{
+		if s.UserLanguage.Set {
+			e.FieldStart("user_language")
+			s.UserLanguage.Encode(e)
+		}
+	}
+	{
+		if s.RootPath.Set {
+			e.FieldStart("root_path")
+			s.RootPath.Encode(e)
+		}
+	}
+	{
+		if s.MediaType.Set {
+			e.FieldStart("media_type")
+			s.MediaType.Encode(e)
+		}
+	}
+	{
+		e.FieldStart("rule")
+		s.Rule.Encode(e)
+	}
+	{
+		e.FieldStart("created_at")
+		json.EncodeDateTime(e, s.CreatedAt)
+	}
+	{
+		e.FieldStart("updated_at")
+		json.EncodeDateTime(e, s.UpdatedAt)
+	}
+}
+
+var jsonFieldsNameOfLibraryProcessingRule = [10]string{
+	0: "id",
+	1: "scope",
+	2: "instance_id",
+	3: "item_id",
+	4: "user_language",
+	5: "root_path",
+	6: "media_type",
+	7: "rule",
+	8: "created_at",
+	9: "updated_at",
+}
+
+// Decode decodes LibraryProcessingRule from json.
+func (s *LibraryProcessingRule) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode LibraryProcessingRule to nil")
+	}
+	var requiredBitSet [2]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "id":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := json.DecodeUUID(d)
+				s.ID = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"id\"")
+			}
+		case "scope":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				if err := s.Scope.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"scope\"")
+			}
+		case "instance_id":
+			if err := func() error {
+				s.InstanceID.Reset()
+				if err := s.InstanceID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"instance_id\"")
+			}
+		case "item_id":
+			if err := func() error {
+				s.ItemID.Reset()
+				if err := s.ItemID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"item_id\"")
+			}
+		case "user_language":
+			if err := func() error {
+				s.UserLanguage.Reset()
+				if err := s.UserLanguage.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"user_language\"")
+			}
+		case "root_path":
+			if err := func() error {
+				s.RootPath.Reset()
+				if err := s.RootPath.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"root_path\"")
+			}
+		case "media_type":
+			if err := func() error {
+				s.MediaType.Reset()
+				if err := s.MediaType.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"media_type\"")
+			}
+		case "rule":
+			requiredBitSet[0] |= 1 << 7
+			if err := func() error {
+				if err := s.Rule.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"rule\"")
+			}
+		case "created_at":
+			requiredBitSet[1] |= 1 << 0
+			if err := func() error {
+				v, err := json.DecodeDateTime(d)
+				s.CreatedAt = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"created_at\"")
+			}
+		case "updated_at":
+			requiredBitSet[1] |= 1 << 1
+			if err := func() error {
+				v, err := json.DecodeDateTime(d)
+				s.UpdatedAt = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"updated_at\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode LibraryProcessingRule")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [2]uint8{
+		0b10000011,
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfLibraryProcessingRule) {
+					name = jsonFieldsNameOfLibraryProcessingRule[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *LibraryProcessingRule) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *LibraryProcessingRule) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *LibraryProcessingRuleInput) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *LibraryProcessingRuleInput) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("scope")
+		s.Scope.Encode(e)
+	}
+	{
+		if s.InstanceID.Set {
+			e.FieldStart("instance_id")
+			s.InstanceID.Encode(e)
+		}
+	}
+	{
+		if s.ItemID.Set {
+			e.FieldStart("item_id")
+			s.ItemID.Encode(e)
+		}
+	}
+	{
+		if s.UserLanguage.Set {
+			e.FieldStart("user_language")
+			s.UserLanguage.Encode(e)
+		}
+	}
+	{
+		if s.RootPath.Set {
+			e.FieldStart("root_path")
+			s.RootPath.Encode(e)
+		}
+	}
+	{
+		if s.MediaType.Set {
+			e.FieldStart("media_type")
+			s.MediaType.Encode(e)
+		}
+	}
+	{
+		e.FieldStart("rule")
+		s.Rule.Encode(e)
+	}
+}
+
+var jsonFieldsNameOfLibraryProcessingRuleInput = [7]string{
+	0: "scope",
+	1: "instance_id",
+	2: "item_id",
+	3: "user_language",
+	4: "root_path",
+	5: "media_type",
+	6: "rule",
+}
+
+// Decode decodes LibraryProcessingRuleInput from json.
+func (s *LibraryProcessingRuleInput) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode LibraryProcessingRuleInput to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "scope":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				if err := s.Scope.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"scope\"")
+			}
+		case "instance_id":
+			if err := func() error {
+				s.InstanceID.Reset()
+				if err := s.InstanceID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"instance_id\"")
+			}
+		case "item_id":
+			if err := func() error {
+				s.ItemID.Reset()
+				if err := s.ItemID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"item_id\"")
+			}
+		case "user_language":
+			if err := func() error {
+				s.UserLanguage.Reset()
+				if err := s.UserLanguage.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"user_language\"")
+			}
+		case "root_path":
+			if err := func() error {
+				s.RootPath.Reset()
+				if err := s.RootPath.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"root_path\"")
+			}
+		case "media_type":
+			if err := func() error {
+				s.MediaType.Reset()
+				if err := s.MediaType.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"media_type\"")
+			}
+		case "rule":
+			requiredBitSet[0] |= 1 << 6
+			if err := func() error {
+				if err := s.Rule.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"rule\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode LibraryProcessingRuleInput")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b01000001,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfLibraryProcessingRuleInput) {
+					name = jsonFieldsNameOfLibraryProcessingRuleInput[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *LibraryProcessingRuleInput) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *LibraryProcessingRuleInput) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes LibraryProcessingScope as json.
+func (s LibraryProcessingScope) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes LibraryProcessingScope from json.
+func (s *LibraryProcessingScope) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode LibraryProcessingScope to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch LibraryProcessingScope(v) {
+	case LibraryProcessingScopeItemOverride:
+		*s = LibraryProcessingScopeItemOverride
+	case LibraryProcessingScopeUserLanguage:
+		*s = LibraryProcessingScopeUserLanguage
+	case LibraryProcessingScopeLibrary:
+		*s = LibraryProcessingScopeLibrary
+	case LibraryProcessingScopeInstance:
+		*s = LibraryProcessingScopeInstance
+	case LibraryProcessingScopeMediaType:
+		*s = LibraryProcessingScopeMediaType
+	case LibraryProcessingScopeGlobalDefault:
+		*s = LibraryProcessingScopeGlobalDefault
+	default:
+		*s = LibraryProcessingScope(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s LibraryProcessingScope) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *LibraryProcessingScope) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes ListAPIKeysOKApplicationJSON as json.
 func (s ListAPIKeysOKApplicationJSON) Encode(e *jx.Encoder) {
 	unwrapped := []ApiKey(s)
@@ -12094,6 +12756,39 @@ func (s OptInt64) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *OptInt64) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes LibraryProcessingMediaType as json.
+func (o OptLibraryProcessingMediaType) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes LibraryProcessingMediaType from json.
+func (o *OptLibraryProcessingMediaType) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptLibraryProcessingMediaType to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptLibraryProcessingMediaType) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptLibraryProcessingMediaType) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -16727,6 +17422,100 @@ func (s RequestsVotingMode) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *RequestsVotingMode) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *Rule) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *Rule) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("track")
+		s.Track.Encode(e)
+	}
+}
+
+var jsonFieldsNameOfRule = [1]string{
+	0: "track",
+}
+
+// Decode decodes Rule from json.
+func (s *Rule) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode Rule to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "track":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				if err := s.Track.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"track\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode Rule")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000001,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfRule) {
+					name = jsonFieldsNameOfRule[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *Rule) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *Rule) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -22107,6 +22896,114 @@ func (s SystemStatusProfile) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *SystemStatusProfile) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *TrackRule) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *TrackRule) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("languages")
+		e.ArrStart()
+		for _, elem := range s.Languages {
+			e.Str(elem)
+		}
+		e.ArrEnd()
+	}
+}
+
+var jsonFieldsNameOfTrackRule = [1]string{
+	0: "languages",
+}
+
+// Decode decodes TrackRule from json.
+func (s *TrackRule) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode TrackRule to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "languages":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				s.Languages = make([]string, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem string
+					v, err := d.Str()
+					elem = string(v)
+					if err != nil {
+						return err
+					}
+					s.Languages = append(s.Languages, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"languages\"")
+			}
+		default:
+			return errors.Errorf("unexpected field %q", k)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode TrackRule")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000001,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfTrackRule) {
+					name = jsonFieldsNameOfTrackRule[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *TrackRule) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *TrackRule) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

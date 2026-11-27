@@ -2115,6 +2115,9 @@ type DeleteInstanceNoContent struct{}
 
 func (*DeleteInstanceNoContent) deleteInstanceRes() {}
 
+// DeleteLibraryProcessingRuleNoContent is response for DeleteLibraryProcessingRule operation.
+type DeleteLibraryProcessingRuleNoContent struct{}
+
 // DeleteMyNotifyTargetNoContent is response for DeleteMyNotifyTarget operation.
 type DeleteMyNotifyTargetNoContent struct{}
 
@@ -4241,6 +4244,387 @@ func (s *JellyfinSessionRequest) SetPassword(val OptString) {
 // SetAccessToken sets the value of AccessToken.
 func (s *JellyfinSessionRequest) SetAccessToken(val OptString) {
 	s.AccessToken = val
+}
+
+// Media type target of a library processing rule (ADR-0041 section 10).
+// Ref: #/components/schemas/LibraryProcessingMediaType
+type LibraryProcessingMediaType string
+
+const (
+	LibraryProcessingMediaTypeMovie      LibraryProcessingMediaType = "movie"
+	LibraryProcessingMediaTypeEpisode    LibraryProcessingMediaType = "episode"
+	LibraryProcessingMediaTypeAnime      LibraryProcessingMediaType = "anime"
+	LibraryProcessingMediaTypeMusic      LibraryProcessingMediaType = "music"
+	LibraryProcessingMediaTypeAudiobook  LibraryProcessingMediaType = "audiobook"
+	LibraryProcessingMediaTypeStashScene LibraryProcessingMediaType = "stash_scene"
+)
+
+// AllValues returns all LibraryProcessingMediaType values.
+func (LibraryProcessingMediaType) AllValues() []LibraryProcessingMediaType {
+	return []LibraryProcessingMediaType{
+		LibraryProcessingMediaTypeMovie,
+		LibraryProcessingMediaTypeEpisode,
+		LibraryProcessingMediaTypeAnime,
+		LibraryProcessingMediaTypeMusic,
+		LibraryProcessingMediaTypeAudiobook,
+		LibraryProcessingMediaTypeStashScene,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s LibraryProcessingMediaType) MarshalText() ([]byte, error) {
+	switch s {
+	case LibraryProcessingMediaTypeMovie:
+		return []byte(s), nil
+	case LibraryProcessingMediaTypeEpisode:
+		return []byte(s), nil
+	case LibraryProcessingMediaTypeAnime:
+		return []byte(s), nil
+	case LibraryProcessingMediaTypeMusic:
+		return []byte(s), nil
+	case LibraryProcessingMediaTypeAudiobook:
+		return []byte(s), nil
+	case LibraryProcessingMediaTypeStashScene:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *LibraryProcessingMediaType) UnmarshalText(data []byte) error {
+	switch LibraryProcessingMediaType(data) {
+	case LibraryProcessingMediaTypeMovie:
+		*s = LibraryProcessingMediaTypeMovie
+		return nil
+	case LibraryProcessingMediaTypeEpisode:
+		*s = LibraryProcessingMediaTypeEpisode
+		return nil
+	case LibraryProcessingMediaTypeAnime:
+		*s = LibraryProcessingMediaTypeAnime
+		return nil
+	case LibraryProcessingMediaTypeMusic:
+		*s = LibraryProcessingMediaTypeMusic
+		return nil
+	case LibraryProcessingMediaTypeAudiobook:
+		*s = LibraryProcessingMediaTypeAudiobook
+		return nil
+	case LibraryProcessingMediaTypeStashScene:
+		*s = LibraryProcessingMediaTypeStashScene
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Effective rule selected for a library item and the scope that won.
+// Ref: #/components/schemas/LibraryProcessingResolvedRule
+type LibraryProcessingResolvedRule struct {
+	RuleID uuid.UUID              `json:"rule_id"`
+	Scope  LibraryProcessingScope `json:"scope"`
+	Rule   Rule                   `json:"rule"`
+}
+
+// GetRuleID returns the value of RuleID.
+func (s *LibraryProcessingResolvedRule) GetRuleID() uuid.UUID {
+	return s.RuleID
+}
+
+// GetScope returns the value of Scope.
+func (s *LibraryProcessingResolvedRule) GetScope() LibraryProcessingScope {
+	return s.Scope
+}
+
+// GetRule returns the value of Rule.
+func (s *LibraryProcessingResolvedRule) GetRule() Rule {
+	return s.Rule
+}
+
+// SetRuleID sets the value of RuleID.
+func (s *LibraryProcessingResolvedRule) SetRuleID(val uuid.UUID) {
+	s.RuleID = val
+}
+
+// SetScope sets the value of Scope.
+func (s *LibraryProcessingResolvedRule) SetScope(val LibraryProcessingScope) {
+	s.Scope = val
+}
+
+// SetRule sets the value of Rule.
+func (s *LibraryProcessingResolvedRule) SetRule(val Rule) {
+	s.Rule = val
+}
+
+// Stored library processing rule scoped to one target identity.
+// Ref: #/components/schemas/LibraryProcessingRule
+type LibraryProcessingRule struct {
+	ID           uuid.UUID                     `json:"id"`
+	Scope        LibraryProcessingScope        `json:"scope"`
+	InstanceID   OptUUID                       `json:"instance_id"`
+	ItemID       OptString                     `json:"item_id"`
+	UserLanguage OptString                     `json:"user_language"`
+	RootPath     OptString                     `json:"root_path"`
+	MediaType    OptLibraryProcessingMediaType `json:"media_type"`
+	Rule         Rule                          `json:"rule"`
+	CreatedAt    time.Time                     `json:"created_at"`
+	UpdatedAt    time.Time                     `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *LibraryProcessingRule) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetScope returns the value of Scope.
+func (s *LibraryProcessingRule) GetScope() LibraryProcessingScope {
+	return s.Scope
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *LibraryProcessingRule) GetInstanceID() OptUUID {
+	return s.InstanceID
+}
+
+// GetItemID returns the value of ItemID.
+func (s *LibraryProcessingRule) GetItemID() OptString {
+	return s.ItemID
+}
+
+// GetUserLanguage returns the value of UserLanguage.
+func (s *LibraryProcessingRule) GetUserLanguage() OptString {
+	return s.UserLanguage
+}
+
+// GetRootPath returns the value of RootPath.
+func (s *LibraryProcessingRule) GetRootPath() OptString {
+	return s.RootPath
+}
+
+// GetMediaType returns the value of MediaType.
+func (s *LibraryProcessingRule) GetMediaType() OptLibraryProcessingMediaType {
+	return s.MediaType
+}
+
+// GetRule returns the value of Rule.
+func (s *LibraryProcessingRule) GetRule() Rule {
+	return s.Rule
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *LibraryProcessingRule) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *LibraryProcessingRule) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *LibraryProcessingRule) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetScope sets the value of Scope.
+func (s *LibraryProcessingRule) SetScope(val LibraryProcessingScope) {
+	s.Scope = val
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *LibraryProcessingRule) SetInstanceID(val OptUUID) {
+	s.InstanceID = val
+}
+
+// SetItemID sets the value of ItemID.
+func (s *LibraryProcessingRule) SetItemID(val OptString) {
+	s.ItemID = val
+}
+
+// SetUserLanguage sets the value of UserLanguage.
+func (s *LibraryProcessingRule) SetUserLanguage(val OptString) {
+	s.UserLanguage = val
+}
+
+// SetRootPath sets the value of RootPath.
+func (s *LibraryProcessingRule) SetRootPath(val OptString) {
+	s.RootPath = val
+}
+
+// SetMediaType sets the value of MediaType.
+func (s *LibraryProcessingRule) SetMediaType(val OptLibraryProcessingMediaType) {
+	s.MediaType = val
+}
+
+// SetRule sets the value of Rule.
+func (s *LibraryProcessingRule) SetRule(val Rule) {
+	s.Rule = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *LibraryProcessingRule) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *LibraryProcessingRule) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Input payload for creating or replacing a library processing rule.
+// Ref: #/components/schemas/LibraryProcessingRuleInput
+type LibraryProcessingRuleInput struct {
+	Scope LibraryProcessingScope `json:"scope"`
+	// Required when scope is item_override, library or instance; forbidden otherwise.
+	InstanceID OptUUID `json:"instance_id"`
+	// Required when scope is item_override; forbidden otherwise.
+	ItemID OptString `json:"item_id"`
+	// Required when scope is user_language (ISO 639 code); forbidden otherwise.
+	UserLanguage OptString `json:"user_language"`
+	// Required when scope is library (clean POSIX absolute path); forbidden otherwise.
+	RootPath  OptString                     `json:"root_path"`
+	MediaType OptLibraryProcessingMediaType `json:"media_type"`
+	Rule      Rule                          `json:"rule"`
+}
+
+// GetScope returns the value of Scope.
+func (s *LibraryProcessingRuleInput) GetScope() LibraryProcessingScope {
+	return s.Scope
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *LibraryProcessingRuleInput) GetInstanceID() OptUUID {
+	return s.InstanceID
+}
+
+// GetItemID returns the value of ItemID.
+func (s *LibraryProcessingRuleInput) GetItemID() OptString {
+	return s.ItemID
+}
+
+// GetUserLanguage returns the value of UserLanguage.
+func (s *LibraryProcessingRuleInput) GetUserLanguage() OptString {
+	return s.UserLanguage
+}
+
+// GetRootPath returns the value of RootPath.
+func (s *LibraryProcessingRuleInput) GetRootPath() OptString {
+	return s.RootPath
+}
+
+// GetMediaType returns the value of MediaType.
+func (s *LibraryProcessingRuleInput) GetMediaType() OptLibraryProcessingMediaType {
+	return s.MediaType
+}
+
+// GetRule returns the value of Rule.
+func (s *LibraryProcessingRuleInput) GetRule() Rule {
+	return s.Rule
+}
+
+// SetScope sets the value of Scope.
+func (s *LibraryProcessingRuleInput) SetScope(val LibraryProcessingScope) {
+	s.Scope = val
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *LibraryProcessingRuleInput) SetInstanceID(val OptUUID) {
+	s.InstanceID = val
+}
+
+// SetItemID sets the value of ItemID.
+func (s *LibraryProcessingRuleInput) SetItemID(val OptString) {
+	s.ItemID = val
+}
+
+// SetUserLanguage sets the value of UserLanguage.
+func (s *LibraryProcessingRuleInput) SetUserLanguage(val OptString) {
+	s.UserLanguage = val
+}
+
+// SetRootPath sets the value of RootPath.
+func (s *LibraryProcessingRuleInput) SetRootPath(val OptString) {
+	s.RootPath = val
+}
+
+// SetMediaType sets the value of MediaType.
+func (s *LibraryProcessingRuleInput) SetMediaType(val OptLibraryProcessingMediaType) {
+	s.MediaType = val
+}
+
+// SetRule sets the value of Rule.
+func (s *LibraryProcessingRuleInput) SetRule(val Rule) {
+	s.Rule = val
+}
+
+// Precedence scope of a library processing rule (ADR-0041 section 10).
+// Ref: #/components/schemas/LibraryProcessingScope
+type LibraryProcessingScope string
+
+const (
+	LibraryProcessingScopeItemOverride  LibraryProcessingScope = "item_override"
+	LibraryProcessingScopeUserLanguage  LibraryProcessingScope = "user_language"
+	LibraryProcessingScopeLibrary       LibraryProcessingScope = "library"
+	LibraryProcessingScopeInstance      LibraryProcessingScope = "instance"
+	LibraryProcessingScopeMediaType     LibraryProcessingScope = "media_type"
+	LibraryProcessingScopeGlobalDefault LibraryProcessingScope = "global_default"
+)
+
+// AllValues returns all LibraryProcessingScope values.
+func (LibraryProcessingScope) AllValues() []LibraryProcessingScope {
+	return []LibraryProcessingScope{
+		LibraryProcessingScopeItemOverride,
+		LibraryProcessingScopeUserLanguage,
+		LibraryProcessingScopeLibrary,
+		LibraryProcessingScopeInstance,
+		LibraryProcessingScopeMediaType,
+		LibraryProcessingScopeGlobalDefault,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s LibraryProcessingScope) MarshalText() ([]byte, error) {
+	switch s {
+	case LibraryProcessingScopeItemOverride:
+		return []byte(s), nil
+	case LibraryProcessingScopeUserLanguage:
+		return []byte(s), nil
+	case LibraryProcessingScopeLibrary:
+		return []byte(s), nil
+	case LibraryProcessingScopeInstance:
+		return []byte(s), nil
+	case LibraryProcessingScopeMediaType:
+		return []byte(s), nil
+	case LibraryProcessingScopeGlobalDefault:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *LibraryProcessingScope) UnmarshalText(data []byte) error {
+	switch LibraryProcessingScope(data) {
+	case LibraryProcessingScopeItemOverride:
+		*s = LibraryProcessingScopeItemOverride
+		return nil
+	case LibraryProcessingScopeUserLanguage:
+		*s = LibraryProcessingScopeUserLanguage
+		return nil
+	case LibraryProcessingScopeLibrary:
+		*s = LibraryProcessingScopeLibrary
+		return nil
+	case LibraryProcessingScopeInstance:
+		*s = LibraryProcessingScopeInstance
+		return nil
+	case LibraryProcessingScopeMediaType:
+		*s = LibraryProcessingScopeMediaType
+		return nil
+	case LibraryProcessingScopeGlobalDefault:
+		*s = LibraryProcessingScopeGlobalDefault
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 type LinkJellyfinIdentityConflict ProblemStatusCode
@@ -6376,6 +6760,52 @@ func (o OptInt64) Get() (v int64, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptInt64) Or(d int64) int64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptLibraryProcessingMediaType returns new OptLibraryProcessingMediaType with value set to v.
+func NewOptLibraryProcessingMediaType(v LibraryProcessingMediaType) OptLibraryProcessingMediaType {
+	return OptLibraryProcessingMediaType{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptLibraryProcessingMediaType is optional LibraryProcessingMediaType.
+type OptLibraryProcessingMediaType struct {
+	Value LibraryProcessingMediaType
+	Set   bool
+}
+
+// IsSet returns true if OptLibraryProcessingMediaType was set.
+func (o OptLibraryProcessingMediaType) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptLibraryProcessingMediaType) Reset() {
+	var v LibraryProcessingMediaType
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptLibraryProcessingMediaType) SetTo(v LibraryProcessingMediaType) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptLibraryProcessingMediaType) Get() (v LibraryProcessingMediaType, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptLibraryProcessingMediaType) Or(d LibraryProcessingMediaType) LibraryProcessingMediaType {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -8992,6 +9422,23 @@ func (*RevokeAPIKeyNotFound) revokeAPIKeyRes() {}
 type RevokeAPIKeyUnauthorized ProblemStatusCode
 
 func (*RevokeAPIKeyUnauthorized) revokeAPIKeyRes() {}
+
+// Effective processing rule resolved by the caller for this library item.
+// Ref: #/components/schemas/Rule
+type Rule struct {
+	// Track-selection policy parameters.
+	Track TrackRule `json:"track"`
+}
+
+// GetTrack returns the value of Track.
+func (s *Rule) GetTrack() TrackRule {
+	return s.Track
+}
+
+// SetTrack sets the value of Track.
+func (s *Rule) SetTrack(val TrackRule) {
+	s.Track = val
+}
 
 // Ref: #/components/schemas/Run
 type Run struct {
@@ -11830,6 +12277,23 @@ func (s *SystemStatusProfile) UnmarshalText(data []byte) error {
 
 // TestNotificationChannelNoContent is response for TestNotificationChannel operation.
 type TestNotificationChannelNoContent struct{}
+
+// Effective track-selection rule resolved by the caller.
+// Ref: #/components/schemas/TrackRule
+type TrackRule struct {
+	// ISO 639 language codes to keep; at least one.
+	Languages []string `json:"languages"`
+}
+
+// GetLanguages returns the value of Languages.
+func (s *TrackRule) GetLanguages() []string {
+	return s.Languages
+}
+
+// SetLanguages sets the value of Languages.
+func (s *TrackRule) SetLanguages(val []string) {
+	s.Languages = val
+}
 
 type TriggerRunCreated Run
 
