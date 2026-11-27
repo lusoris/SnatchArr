@@ -71,15 +71,22 @@ MAX_MANAGER_RENAMES = 64
 MAX_STDERR_READS = 1 << 16
 
 IMAGE_RE = re.compile(r"^[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$")
+IMAGE_OVERRIDE_RE = re.compile(
+    r"^[a-z0-9][a-z0-9./-]*(?::[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}$"
+)
 
 EXPECTED_DEP_TYPE_EMITTERS: dict[str, frozenset[str]] = {
-    "github-runner": frozenset({
-        "modules/manager/github-actions/dep-types.js",
-        "modules/manager/github-actions/extract.js",
-    }),
-    "php2shell-runtime": frozenset({
-        "config/presets/internal/security.preset.js",
-    }),
+    "github-runner": frozenset(
+        {
+            "modules/manager/github-actions/dep-types.js",
+            "modules/manager/github-actions/extract.js",
+        }
+    ),
+    "php2shell-runtime": frozenset(
+        {
+            "config/presets/internal/security.preset.js",
+        }
+    ),
 }
 
 
@@ -99,9 +106,11 @@ def read_bounded_file(path: Path, cap: int, label: str) -> bytes:
 
 def read_renovate_image(tool_versions: Path) -> str:
     """Read and validate `RENOVATE_IMAGE` from `tools/ci/tool-versions.env`."""
-    lines = read_bounded_file(tool_versions, MAX_HTTP_BYTES, str(tool_versions)).decode(
-        "utf-8"
-    ).splitlines()
+    lines = (
+        read_bounded_file(tool_versions, MAX_HTTP_BYTES, str(tool_versions))
+        .decode("utf-8")
+        .splitlines()
+    )
     if len(lines) > MAX_ENV_LINES:
         raise ConfigError(f"{tool_versions}: exceeds {MAX_ENV_LINES} lines")
     image: str | None = None
@@ -116,6 +125,29 @@ def read_renovate_image(tool_versions: Path) -> str:
             f"{tool_versions}: RENOVATE_IMAGE={image!r} is not pinned by version and sha256 digest"
         )
     return image
+
+
+def resolve_renovate_image(tool_versions: Path, override: str | None = None) -> str:
+    """Resolve the Renovate image, accepting `--image` only when its digest matches `RENOVATE_IMAGE`."""
+    pinned = read_renovate_image(tool_versions)
+    if override is None:
+        return pinned
+    expected_digest = pinned.rsplit("@", 1)[1]
+    if IMAGE_OVERRIDE_RE.fullmatch(override) is None:
+        got_digest = (
+            override.rsplit("@", 1)[1] if "@" in override else "<missing digest>"
+        )
+        raise RefusedError(
+            f"--image {override!r} is not a valid @sha256-pinned reference matching "
+            f"{tool_versions} RENOVATE_IMAGE digest {expected_digest} (got {got_digest})"
+        )
+    override_prefix, got_digest = override.rsplit("@", 1)
+    if got_digest != expected_digest:
+        raise RefusedError(
+            f"--image digest {got_digest} does not match {tool_versions} "
+            f"RENOVATE_IMAGE digest {expected_digest}"
+        )
+    return f"{override_prefix}@{expected_digest}"
 
 
 def drain_process_stderr(
@@ -137,16 +169,30 @@ def drain_process_stderr(
     proc.kill()
 
 
-def run_docker_dump(image: str, dump_script: Path) -> bytes:
-    """Run `renovate_presets_dump.mjs` offline inside IMAGE with a 120 s / 32 MiB bound."""
+def build_docker_dump_cmd(image: str, dump_script: Path) -> list[str]:
+    """Build the offline `docker run` argv for executing `dump_script` inside `image`."""
     docker = shutil.which("docker")
     if docker is None or not dump_script.is_file():
         raise ConfigError(f"missing docker executable or dump script ({dump_script})")
-    cmd = [
-        docker, "run", "--rm", "--network", "none", "--read-only",
-        "-v", f"{dump_script.resolve()}:/probe/dump.mjs:ro",
-        "--entrypoint", "node", image, "/probe/dump.mjs",
+    return [
+        docker,
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "--read-only",
+        "-v",
+        f"{dump_script.resolve()}:/probe/dump.mjs:ro",
+        "--entrypoint",
+        "node",
+        image,
+        "/probe/dump.mjs",
     ]
+
+
+def run_docker_dump(image: str, dump_script: Path) -> bytes:
+    """Run `renovate_presets_dump.mjs` offline inside IMAGE with a 120 s / 32 MiB bound."""
+    cmd = build_docker_dump_cmd(image, dump_script)
     timed_out = threading.Event()
     stderr_overflow = threading.Event()
     err_chunks: list[bytes] = []
@@ -162,12 +208,12 @@ def run_docker_dump(image: str, dump_script: Path) -> bytes:
         timed_out.set()
         proc.kill()
 
-    def drain_stderr() -> None:
-        """Read bounded stderr so the child cannot block on pipe buffer space."""
-        drain_process_stderr(proc, err_chunks, stderr_overflow)
-
     timer = threading.Timer(DOCKER_TIMEOUT_SECONDS, on_timeout)
-    err_thread = threading.Thread(target=drain_stderr, daemon=True)
+    err_thread = threading.Thread(
+        target=drain_process_stderr,
+        args=(proc, err_chunks, stderr_overflow),
+        daemon=True,
+    )
     timer.start()
     err_thread.start()
     try:
@@ -203,7 +249,9 @@ def validate_emitters(raw_emitters: object) -> None:
     for dep_type, expected in sorted(EXPECTED_DEP_TYPE_EMITTERS.items()):
         got_raw = raw_emitters[dep_type]
         if not is_str_list(got_raw):
-            raise ConfigError(f"dump: depTypeEmitters[{dep_type!r}] must be a list of strings")
+            raise ConfigError(
+                f"dump: depTypeEmitters[{dep_type!r}] must be a list of strings"
+            )
         got = frozenset(got_raw)  # type: ignore[arg-type]
         if got != expected:
             raise RefusedError(
@@ -224,7 +272,9 @@ def parse_group_presets(
         if counter[0] > MAX_CONFIG_NODES:
             raise ConfigError("dump: preset count exceeds node cap")
         if not isinstance(preset_name, str) or not isinstance(body, dict):
-            raise ConfigError(f"dump: preset {group_name}:{preset_name} must be an object")
+            raise ConfigError(
+                f"dump: preset {group_name}:{preset_name} must be an object"
+            )
         group_dict[preset_name] = body
     return group_dict
 
@@ -245,7 +295,9 @@ def parse_groups_map(raw_groups: object) -> dict[str, dict[str, dict[str, object
 def parse_docker_managers(raw_mgrs: object, label: str) -> frozenset[str]:
     """Validate `dump.dockerManagers` and add custom manager names."""
     if not is_str_list(raw_mgrs) or not raw_mgrs:
-        raise ConfigError(f"{label}: dockerManagers must be a non-empty list of strings")
+        raise ConfigError(
+            f"{label}: dockerManagers must be a non-empty list of strings"
+        )
     lowered: set[str] = {"custom.regex", "custom.jsonata"}
     for mgr in raw_mgrs:  # type: ignore[union-attr]
         if not mgr:
@@ -439,7 +491,8 @@ def format_summary(horistes_sha: str, state: ClosureState) -> str:
     excluded_total = sum(state.excluded_reasons.values())
     if excluded_total:
         parts = ", ".join(
-            f"{reason}={count}" for reason, count in sorted(state.excluded_reasons.items())
+            f"{reason}={count}"
+            for reason, count in sorted(state.excluded_reasons.items())
         )
         excluded_str = f"{excluded_total} ({parts})"
     else:
@@ -476,10 +529,23 @@ def run_self_test() -> int:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI options for live mode, offline fixture mode and `--self-test`."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--dump", type=Path, default=None, help="offline dump JSON path")
-    parser.add_argument("--horistes", type=Path, default=None, help="offline horistes JSON path")
     parser.add_argument(
-        "--repo-root", type=Path, default=DEFAULT_REPO_ROOT, help="repository root to judge"
+        "--dump", type=Path, default=None, help="offline dump JSON path"
+    )
+    parser.add_argument(
+        "--horistes", type=Path, default=None, help="offline horistes JSON path"
+    )
+    parser.add_argument(
+        "--image",
+        type=str,
+        default=None,
+        help="override Renovate image reference (must match RENOVATE_IMAGE digest)",
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=DEFAULT_REPO_ROOT,
+        help="repository root to judge",
     )
     parser.add_argument(
         "--tool-versions",
@@ -498,6 +564,8 @@ def run_check(args: argparse.Namespace) -> int:
     if (args.dump is None) != (args.horistes is None):
         raise ConfigError("--dump and --horistes must be passed together")
     if args.dump is not None and args.horistes is not None:
+        if args.image is not None:
+            resolve_renovate_image(args.tool_versions, args.image)
         dump = parse_dump(
             read_bounded_file(args.dump, MAX_DUMP_BYTES, str(args.dump)), str(args.dump)
         )
@@ -507,7 +575,7 @@ def run_check(args: argparse.Namespace) -> int:
         )
         horistes_sha = "offline"
     else:
-        image = read_renovate_image(args.tool_versions)
+        image = resolve_renovate_image(args.tool_versions, args.image)
         dump = parse_dump(run_docker_dump(image, DUMP_SCRIPT), "docker dump")
         token = os.environ.get("GH_TOKEN") or None
         horistes_sha, horistes = fetch_horistes(token=token)

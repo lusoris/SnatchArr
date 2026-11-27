@@ -741,12 +741,16 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/release_closes_check.py --self-test
 	python3 -I tools/jellyfin/naming_census.py --self-test
 
-# Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
+# Not part of verify-all: needs Docker, cosign, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.
 workflows-lint: ## actionlint + pinned actions (zizmor) on every workflow file, with planted cases, and live Renovate preset-closure coverage
 	bash tools/ci/workflow-check_test.sh
 	bash tools/ci/workflow-check.sh
-	python3 -I tools/ci/renovate_presets.py
+	bash tools/ci/renovate_image_pull_test.sh
+	. tools/ci/tool-versions.env
+	export RENOVATE_IMAGE RENOVATE_SIGNED_REPO RENOVATE_SIGNER_ISSUER RENOVATE_SIGNER
+	ref="$$(bash tools/ci/renovate_image_pull.sh)"
+	python3 -I tools/ci/renovate_presets.py --image "$$ref"
 
 hooks: ## Install git hooks
 	lefthook install
