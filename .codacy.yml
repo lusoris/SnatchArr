@@ -16,8 +16,9 @@ engines:
   lizard:
     exclude_paths:
       - "tools/ci/codacy_opengrep/package-lock.json"
-  # TSQLLint checks SQL Server dialect; the migrations are PostgreSQL. SQLFluff and the other
-  # SQL tools keep reading them.
+  # TSQLLint checks SQL Server dialect; the migrations and sqlc queries are PostgreSQL (api/sqlc.yaml).
+  # SQLFluff and the other SQL tools keep reading them.
   tsqllint:
     exclude_paths:
       - "api/internal/store/migrations/postgres/**"
+      - "api/internal/store/queries/**"
