@@ -764,6 +764,6 @@ dev: ## Local stack: postgres (compose) + api (air) + worker (cargo watch) + web
 
 .PHONY: check-release-version
 check-release-version:
-	python3 -I tools/ci/test_release_version_check.py
+	python3 -I -m unittest discover -s tools/ci -p test_release_version_check.py
 	python3 -I tools/ci/release_version_check.py --self-test
 	python3 -I tools/ci/release_version_check.py

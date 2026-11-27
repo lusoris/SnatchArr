@@ -3,11 +3,13 @@
 """Regression tests for the release checker's --self-test entry point."""
 
 import json
-import subprocess
-import sys
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
+from release_version_check import main
 
 
 def _history_cases() -> tuple[tuple[str, str, int], ...]:
@@ -73,7 +75,6 @@ def _write_fixture(root: Path, quote: str, app_quote: str, history: str) -> None
 class ReleaseSelfTest(unittest.TestCase):
     def test_chart_quotes_and_changelog_history(self) -> None:
         """Run the bounded self-test against plain and mixed-quote fixtures."""
-        script = Path(__file__).resolve().with_name("release_version_check.py")
         histories = _history_cases()
         for quote, app_quote in (("", ""), ("'", '"'), ('"', "'")):
             for label, history, expected_cases in histories:
@@ -85,22 +86,13 @@ class ReleaseSelfTest(unittest.TestCase):
                 ):
                     root = Path(tmp)
                     _write_fixture(root, quote, app_quote, history)
-                    result = subprocess.run(
-                        [
-                            sys.executable,
-                            str(script),
-                            "--root",
-                            str(root),
-                            "--self-test",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                        timeout=10,
-                    )
-                    self.assertEqual(result.returncode, 0, result.stderr)
+                    stdout, stderr = StringIO(), StringIO()
+                    with redirect_stdout(stdout), redirect_stderr(stderr):
+                        status = main(["--root", str(root), "--self-test"])
+                    self.assertEqual(status, 0, stderr.getvalue())
                     self.assertEqual(
-                        result.stdout.strip(), f"self-test ok {expected_cases} cases"
+                        stdout.getvalue().strip(),
+                        f"self-test ok {expected_cases} cases",
                     )
 
 
