@@ -396,11 +396,32 @@ def stale_line(name: str, text: str, prefix: str, version: str, old: str) -> Cas
     )
 
 
+def chart_field(original: list[str], key: str) -> tuple[int, re.Match[str]]:
+    """Locate a top-level chart field and its complete scalar."""
+    for i, line in enumerate(original):
+        if line.startswith(f"{key}:") and (match := VALUE_LINE.match(line.rstrip())):
+            return i, match
+    raise ValueError(f"chart fixture lacks a {key} scalar")
+
+
+def stale_chart_fields(chart: str, text: str, version: str, old: str) -> list[Case]:
+    """Change the version token without changing its quotes or marker."""
+    original = text.splitlines(keepends=True)
+    cases = []
+    for key in ("version", "appVersion"):
+        i, field = chart_field(original, key)
+        start = field.end("field_quote")
+        stale = original.copy()
+        stale[i] = stale[i][:start] + old + stale[i][start + len(version) :]
+        cases.append(case(f"{chart} {key}", {chart: "".join(stale)}, 1, f"{chart}:{i + 1}: {old} != {version}"))
+    return cases
+
+
 def planted_cases(
     files: dict[str, str], names: list[str], changelog: str, version: str
 ) -> list[Case]:
     """Build independent mutations of the real release inputs."""
-    chart = next(name for name in names if "appVersion: " in files[name])
+    chart = next(name for name in names if re.search(r"^appVersion:[ \t]", files[name], re.MULTILINE))
     badge = next(name for name in names if "&message=v" in files[name])
     history = files[changelog]
     headings = changelog_headings(history, changelog)
@@ -410,13 +431,13 @@ def planted_cases(
     first_link = HEADING_LINK.match(first_heading)
     first_prefix = history.splitlines()[first_number - 1].partition(version)[0]
     previous = heading_version(headings[1][1]) if len(headings) > 1 else ""
-    old = previous if previous and previous != version else version + "0"
+    fallback = "0.0.0" if version != "0.0.0" else "0.0.1"
+    old = previous if previous and previous != version else fallback
     compare = COMPARE_LINK.match(first_link[2]) if first_link else None
     base = compare[1] if compare else "https://example.com/owner/repo"
     cases = [
         case("real copy", {}, 0, f"release {version},"),
-        stale_line(chart, files[chart], "\nversion: ", version, old),
-        stale_line(chart, files[chart], "\nappVersion: ", version, old),
+        *stale_chart_fields(chart, files[chart], version, old),
         stale_line(chart, files[chart], "snatcharr-api:", version, old),
         stale_line(badge, files[badge], "&message=v", version, old),
         stale_line(changelog, history, first_prefix, version, old),
@@ -424,7 +445,7 @@ def planted_cases(
     return (
         cases
         + marker_cases(files, chart, badge, version, old)
-        + input_cases(files, names, changelog, version, previous, base)
+        + input_cases(files, chart, badge, changelog, version, previous, base)
     )
 
 
@@ -469,7 +490,8 @@ def marker_cases(
 
 def input_cases(
     files: dict[str, str],
-    names: list[str],
+    chart: str,
+    badge: str,
     changelog: str,
     version: str,
     previous: str,
@@ -481,8 +503,6 @@ def input_cases(
         {"type": "generic", "path": "missing-extra-file"}
     )
     no_headings = HEADING.sub("### ", files[changelog])
-    chart = next(name for name in names if "appVersion: " in files[name])
-    badge = next(name for name in names if "&message=v" in files[name])
     return [
         *base_input_cases(files, changelog, version, no_headings, config),
         *tag_cases(version),
@@ -538,46 +558,31 @@ def tag_cases(version: str) -> list[Case]:
 
 def unmarked_value_cases(files: dict[str, str], chart: str, version: str) -> list[Case]:
     """Cover top-level marker removal and an exempt nested dependency version."""
-    removed = files[chart].replace(
-        f"version: {version} # {SINGLE}", f"version: {version}", 1
-    )
-    line = files[chart].partition(f"version: {version} # {SINGLE}")[0].count("\n") + 1
+    original = files[chart].splitlines(keepends=True)
     stale = "1.2.3" if version != "1.2.3" else "1.2.4"
-    missing = f"{chart}:{line}: release version field without a release-please marker"
+    cases = []
+    for key in ("version", "appVersion"):
+        i, field = chart_field(original, key)
+        removed = original.copy()
+        removed[i] = removed[i].replace(f"# {SINGLE}", "", 1)
+        missing = f"{chart}:{i + 1}: release version field without a release-please marker"
+        cases.append(case(f"Chart.yaml {key} marker removed", {chart: "".join(removed)}, 1, missing))
+        if key == "version":
+            start, end = field.start("field_quote"), field.end()
+            for quote in ('"', "'"):
+                quoted = removed.copy()
+                quoted[i] = removed[i][:start] + quote + stale + quote + removed[i][end:]
+                cases.append(case(f"unmarked Chart.yaml version quoted with {quote}", {chart: "".join(quoted)}, 1, missing))
     nested = files[chart] + '\ndependencies:\n  - name: x\n    version: "1.2.3"\n'
-    return [
-        case(
-            "Chart.yaml version marker removed",
-            {chart: removed},
-            1,
-            missing,
-        ),
-        *(
-            case(
-                f"unmarked Chart.yaml version quoted with {quote}",
-                {chart: removed.replace(f"version: {version}", f"version: {quote}{stale}{quote}", 1)},
-                1,
-                missing,
-            )
-            for quote in ('"', "'")
-        ),
-        case(
-            "unmarked quoted nested dependency version",
-            {chart: nested},
-            0,
-            f"release {version},",
-        ),
-    ]
+    cases.append(case("unmarked quoted nested dependency version", {chart: nested}, 0, f"release {version},"))
+    return cases
 
 
 def quoted_scalar_cases(files: dict[str, str], chart: str, version: str) -> list[Case]:
     """Quote the real Chart.yaml fields and Artifact Hub image references."""
     original = files[chart].splitlines(keepends=True)
-    fields = {
-        key: next(i for i, line in enumerate(original) if line.startswith(f"{key}: "))
-        for key in ("version", "appVersion")
-    }
-    images = [i for i, line in enumerate(original) if line.lstrip().startswith("image: ")]
+    fields = {key: chart_field(original, key) for key in ("version", "appVersion")}
+    images = [i for i, line in enumerate(original) if line.lstrip().startswith("image:")]
     if len(images) < 2:
         raise ValueError(f"{chart}: expected both Artifact Hub image references")
     malformed = "expected a chart version, image tag or release badge"
@@ -585,23 +590,33 @@ def quoted_scalar_cases(files: dict[str, str], chart: str, version: str) -> list
     cases = []
     for quote, other in (("'", '"'), ('"', "'")):
         quoted = original.copy()
-        for i in fields.values():
-            quoted[i] = quoted[i].replace(f": {version}", f": {quote}{version}{quote}", 1)
+        closing = {}
+        for i, field in fields.values():
+            start = field.start("field_quote")
+            quoted[i] = f"{original[i][:start]}{quote}{version}{quote}{original[i][field.end():]}"
+            closing[i] = start + len(version) + 1
         for position, i in enumerate(images):
-            prefix, _, value = original[i].partition("image: ")
-            reference = value.rstrip()
+            text = original[i].lstrip()
+            indent = len(original[i]) - len(text)
+            image = VALUE_LINE.match(text.rstrip())
+            if not image or image["image_quote"] is None:
+                raise ValueError(f"{chart}:{i + 1}: expected an image scalar")
+            start = indent + image.start("image_quote")
+            end = indent + image.end()
+            reference = text[image.end("image_quote") : image.end() - len(image["image_quote"])]
             if position == 1:
                 reference = reference.partition("@")[0]
-            quoted[i] = f"{prefix}image: {quote}{reference}{quote}\n"
+            quoted[i] = f"{original[i][:start]}{quote}{reference}{quote}{original[i][end:]}"
+            closing[i] = start + len(reference) + 1
         cases.append(case(f"marked scalars quoted with {quote}", {chart: "".join(quoted)}, 0, f"release {version},"))
-        for i in (*fields.values(), images[0]):
+        for i in (*(index for index, _ in fields.values()), images[0]):
             mismatch = quoted.copy()
-            before, _, after = mismatch[i].rpartition(quote)
-            mismatch[i] = before + other + after
+            end = closing[i]
+            mismatch[i] = mismatch[i][:end] + other + mismatch[i][end + 1 :]
             cases.append(case(f"mismatched {quote} at line {i + 1}", {chart: "".join(mismatch)}, 1, f"{chart}:{i + 1}: {malformed}"))
-        i = fields["appVersion"]
+        i, _ = fields["appVersion"]
         unmarked = quoted.copy()
-        unmarked[i] = unmarked[i].replace(f" # {SINGLE}", "", 1)
+        unmarked[i] = unmarked[i].replace(f"# {SINGLE}", "", 1)
         cases.append(case(f"unmarked appVersion quoted with {quote}", {chart: "".join(unmarked)}, 1, f"{chart}:{i + 1}: {missing}"))
         image = quoted[images[0 if quote == "'" else 1]].lstrip()
         cases.append(case(f"unmarked image quoted with {quote}", {chart: "".join(quoted).rstrip() + "\n" + image}, 1, f"{chart}:{len(quoted) + 1}: {missing}"))
@@ -634,7 +649,12 @@ def predecessor_cases(changelog: str, version: str, base: str) -> list[Case]:
     ):
         first = f"[{version}]({base}/compare/v{predecessor}...v{version}) ({date})"
         history = f"## {first}\n\nRelease notes.\n   ## {heading}\n"
-        expected = f"{changelog}:4: expected ## [P]" if status else f"release {version},"
+        expected = (
+            f"{changelog}:4: expected ## [P](...) or ## P (YYYY-MM-DD) "
+            "for the previous release"
+            if status
+            else f"release {version},"
+        )
         cases.append(case(label, {changelog: history}, status, expected))
     return cases
 
@@ -656,23 +676,20 @@ def changelog_cases(
             1,
             f"{changelog}:1: expected ## {version} (YYYY-MM-DD)",
         ),
-        case(
-            "first release with a bogus link",
-            {changelog: f"## [{version}](wrong) (2026-01-01)\n"},
-            1,
-            f"{changelog}:1: expected ## {version} (YYYY-MM-DD)",
-        ),
         *changelog_indent_cases(history, changelog, version, previous, base),
     ]
     if previous:
         first = f"{base}/compare/v{previous}...v{version}"
-        second = changelog_headings(history, changelog)[1][1]
-        without_version = history.replace(f"## {second}", "## Unreleased", 1)
+        second_number, second = changelog_headings(history, changelog)[1]
+        without_version = history.splitlines(keepends=True)
+        without_version[second_number - 1] = without_version[second_number - 1].replace(
+            second, "Unreleased", 1
+        )
         cases.extend(changelog_link_cases(history, changelog, version, previous, base, first))
         cases.append(
             case(
                 "second changelog heading without a version",
-                {changelog: without_version},
+                {changelog: "".join(without_version)},
                 1,
                 "expected ## [P](...) or ## P (YYYY-MM-DD)",
             )
@@ -684,7 +701,16 @@ def changelog_link_cases(
     history: str, changelog: str, version: str, previous: str, base: str, first: str
 ) -> list[Case]:
     """Cover malformed and mismatched release-please compare links."""
-    second = f"## [{previous}]({base}/compare/"
+    second_number, second = changelog_headings(history, changelog)[1]
+    different_base = history.splitlines(keepends=True)
+    i = second_number - 1
+    if BARE_HEADING.fullmatch(second):
+        # Give a bare historic release a valid comparison on the current base
+        # so that changing only the base actually exercises the base check.
+        date = second[len(previous) :]
+        linked = f"[{previous}]({base}/compare/v0.0.0...v{previous}){date}"
+        different_base[i] = different_base[i].replace(second, linked, 1)
+    different_base[i] = different_base[i].replace(f"({base}/compare/", f"({base}//compare/", 1)
     return [
         case(
             "changelog link to the wrong release",
@@ -708,11 +734,7 @@ def changelog_link_cases(
         ),
         case(
             "changelog link base differs",
-            {
-                changelog: history.replace(
-                    second, f"## [{previous}]({base}//compare/", 1
-                )
-            },
+            {changelog: "".join(different_base)},
             1,
             "compare link base",
         ),
@@ -729,6 +751,20 @@ def changelog_indent_cases(
     history: str, changelog: str, version: str, previous: str, base: str
 ) -> list[Case]:
     """Cover CommonMark's three-space heading indentation boundary."""
+    hidden_first = f"{changelog}:1: no level-two heading"
+    if previous:
+        headings = changelog_headings(history, changelog)
+        number, heading = headings[1]
+        if len(headings) == 2:
+            if BARE_HEADING.fullmatch(heading):
+                problem = f"{previous} != {version}"
+            else:
+                problem = f"expected ## {version} (YYYY-MM-DD)"
+        elif HEADING_LINK.match(heading):
+            problem = f"{previous} != {version}"
+        else:
+            problem = f"expected heading starting with ## [{version}]("
+        hidden_first = f"{changelog}:{number}: {problem}"
     return [
         case(
             "indented first changelog heading",
@@ -748,7 +784,7 @@ def changelog_indent_cases(
             "real first heading indented four spaces",
             {changelog: HEADING.sub("    ## ", history, count=1)},
             1,
-            f"{previous} != {version}" if previous else "no level-two heading",
+            hidden_first,
         ),
     ]
 

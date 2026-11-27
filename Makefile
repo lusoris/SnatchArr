@@ -732,8 +732,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	bash tools/ci/workflow_refs_test.sh
 	bash tools/ci/guard_definition_check_test.sh
 	bash tools/ci/release_body_check_test.sh
-	python3 -I tools/ci/release_version_check.py --self-test
-	python3 -I tools/ci/release_version_check.py
+	$(MAKE) check-release-version
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test
 	python3 -I tools/release/dogfood_pass.py --self-test
@@ -762,3 +761,9 @@ dev: ## Local stack: postgres (compose) + api (air) + worker (cargo watch) + web
 	echo "  cd api    && air -c ../tools/air.toml"
 	echo "  cargo watch -x 'run -p snatch-worker'"
 	echo "  cd web    && pnpm dev"
+
+.PHONY: check-release-version
+check-release-version:
+	python3 -I tools/ci/test_release_version_check.py
+	python3 -I tools/ci/release_version_check.py --self-test
+	python3 -I tools/ci/release_version_check.py
