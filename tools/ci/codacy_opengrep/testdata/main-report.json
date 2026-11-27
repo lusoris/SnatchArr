@@ -528,7 +528,7 @@
         ],
         "severity": "Error",
         "severityLabel": "CRITICAL",
-        "totalIssues": 23,
+        "totalIssues": 21,
         "totalPatterns": 2
       },
       {
@@ -555,7 +555,7 @@
     ],
     "noisyPatternCount": 0,
     "noisyThreshold": 500,
-    "totalIssues": 26,
+    "totalIssues": 24,
     "totalPatterns": 3
   },
   "toolResults": [
@@ -563,7 +563,7 @@
       "durationMs": 14037,
       "errorCount": 0,
       "filesAnalyzed": 50,
-      "issueCount": 26,
+      "issueCount": 24,
       "status": "success",
       "toolId": "Semgrep"
     }

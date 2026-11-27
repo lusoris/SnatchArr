@@ -43,7 +43,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import urllib.parse
+from collections.abc import Callable
 
 ALLOWED_DOCKER = ("docker",)
 IMAGE_RE = re.compile(r"^[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$")
@@ -51,8 +53,11 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REF_RE = re.compile(r"^refs/[A-Za-z0-9][A-Za-z0-9._/-]{0,239}$")
 RUN_ID_RE = re.compile(r"^[0-9]{1,20}$")
 JOB_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,99}$")
-WORKFLOW_RE = re.compile(r"^[A-Za-z0-9.][A-Za-z0-9 ._()/-]{0,127}$")
+# Workflow display names: Unicode letters/digits, space, and . _ ( ) / : - ; at most 128 characters.
+# Controls, shell metacharacters (; $ ` | & quotes etc.) and non-space whitespace are refused.
+WORKFLOW_RE = re.compile(r"^(?:[^\W_]|\.)[\w .:()/-]{0,127}$")
 TIMEOUT_SECONDS = 900
+DOCKER_LOOKUP_TIMEOUT_SECONDS = 5.0
 MAX_REPORT_BYTES = 64 * 1024 * 1024
 UNPACK_AND_SCAN = 'mkdir -p /scan && tar -xf - -C /scan && cd /scan && exec trivy "$@"'
 BOOT_DOC_LOCKFILE = """lockfileVersion: '9.0'
@@ -116,7 +121,12 @@ def parse_args():
         help="Workflow run ID (default: $GITHUB_RUN_ID)",
     )
     parser.add_argument(
-        "--docker", default="docker", help="Docker binary (default: docker)"
+        "--docker",
+        default="docker",
+        help=(
+            "Docker binary: 'docker' (PATH lookup) or an absolute path to an "
+            "executable named docker (default: docker)"
+        ),
     )
     parser.add_argument("--root", default=".", help="Repository root path (default: .)")
     parser.add_argument(
@@ -128,13 +138,10 @@ def parse_args():
     return parser.parse_args()
 
 
-def resolve_docker(value: str) -> str:
-    """Resolve --docker to an executable docker binary path or raise ScanError."""
+def lookup_docker(value: str) -> str | None:
+    """Read-only filesystem lookup for --docker: PATH search or absolute file check."""
     if value in ALLOWED_DOCKER:
-        found = shutil.which(value)
-        if not found:
-            raise ScanError(f"--docker {value!r} not found on PATH")
-        return found
+        return shutil.which(value) or None
     p = pathlib.Path(value)
     if (
         os.path.isabs(value)
@@ -143,6 +150,54 @@ def resolve_docker(value: str) -> str:
         and os.access(p, os.X_OK)
     ):
         return value
+    return None
+
+
+def run_docker_lookup(
+    lookup: Callable[[str], str | None],
+    value: str,
+    results: list[str | None],
+    errors: list[OSError | ValueError],
+) -> None:
+    """Worker: run LOOKUP(VALUE), recording its result or exception; touches nothing else."""
+    try:
+        results.append(lookup(value))
+    except (OSError, ValueError) as err:  # re-raised unchanged by the caller
+        errors.append(err)
+
+
+def resolve_docker(
+    value: str,
+    lookup: Callable[[str], str | None] = lookup_docker,
+    timeout: float = DOCKER_LOOKUP_TIMEOUT_SECONDS,
+) -> str:
+    """Resolve --docker to an executable docker binary path or raise ScanError.
+
+    The filesystem lookup runs in one daemon thread with a bounded join, so a
+    stalled lookup is refused after TIMEOUT seconds, before any Docker process starts.
+    """
+    results: list[str | None] = []
+    errors: list[OSError | ValueError] = []
+    worker = threading.Thread(
+        target=run_docker_lookup,
+        args=(lookup, value, results, errors),
+        daemon=True,
+    )
+    worker.start()
+    worker.join(timeout=timeout)
+    if worker.is_alive():
+        raise ScanError(f"--docker {value!r} lookup exceeded {timeout}s")
+    if errors:
+        raise errors[0]
+    if not results:
+        raise ScanError(
+            f"internal error: --docker {value!r} lookup ended without a result"
+        )
+    found = results[0]
+    if found:
+        return found
+    if value in ALLOWED_DOCKER:
+        raise ScanError(f"--docker {value!r} not found on PATH")
     raise ScanError(
         f"--docker {value!r} must be 'docker' on PATH or an executable '/.../docker' file"
     )
