@@ -22,7 +22,7 @@ CONFIG = "release-please-config.json"
 MAX_BYTES = 4 * 1024 * 1024
 MAX_LINES = 50_000
 MAX_FILES = 64
-MAX_CASES = 32
+MAX_CASES = 40
 CORE = r"[0-9]+\.[0-9]+\.[0-9]+"
 VERSION = re.compile(rf"(?<!\w)v?({CORE}(?:[-+][0-9A-Za-z.+-]+)?)(?!\w|\.[0-9])")
 # Match the version field of each supported line without checking the image digest.
@@ -31,7 +31,10 @@ VALUE_LINE = re.compile(
     rf"|image:\s+[^\s@]+:{CORE}(?=@|\s|$)"
     rf"|\[!\[Release\]\(\S*?[?&]message=v{CORE}(?=[&)])"
 )
-HEADING = re.compile(r"^ {0,3}##(?:[ \t]+|$)")
+QUOTED_VERSION_FIELD = re.compile(
+    rf"(?:version|appVersion):\s+(['\"]){CORE}\1(?=\s|$)"
+)
+HEADING = re.compile(r"^ {0,3}##(?:[ \t]+|(?=\r?$))", re.MULTILINE)
 HEADING_LINK = re.compile(r"^\[([^\]]+)\]\(([^)]*)\)")
 COMPARE_LINK = re.compile(rf"^(.+)/compare/v({CORE})\.\.\.v({CORE})$")
 BLOCK_METADATA = re.compile(r"artifacthub\.io/images: \||- name: \S+")
@@ -222,7 +225,7 @@ def check_marked(text: str, name: str, version: str, findings: list[str]) -> int
 def unmarked_value(line: str) -> bool:
     """Identify an unmarked release field, excluding indented YAML child keys."""
     text = line.strip()
-    if not VALUE_LINE.match(text):
+    if not (VALUE_LINE.match(text) or QUOTED_VERSION_FIELD.match(text)):
         return False
     return not (line[:1].isspace() and text.startswith(("version:", "appVersion:")))
 
@@ -242,18 +245,24 @@ def compare_line(line: str, where: str, version: str, findings: list[str]) -> in
 
 
 def check_changelog(text: str, name: str, version: str) -> list[str]:
-    """Require a CommonMark level-two release heading linked to its predecessor."""
+    """Check a bare first release or a release linked to its predecessor."""
     headings = changelog_headings(text, name)
     if not headings:
         return [f"{name}:1: no level-two heading"]
     number, first = headings[0]
+    if len(headings) == 1:
+        # With no predecessor, release-please emits a dated heading without a link.
+        found = heading_version(first)
+        if found and found != version:
+            return [f"{name}:{number}: {found} != {version}"]
+        if not re.fullmatch(rf"{re.escape(version)} \(\d{{4}}-\d{{2}}-\d{{2}}\)", first):
+            return [f"{name}:{number}: expected ## {version} (YYYY-MM-DD)"]
+        return []
     link = HEADING_LINK.match(first)
     if not link:
         return [f"{name}:{number}: expected heading starting with ## [{version}]("]
     if link[1] != version:
         return [f"{name}:{number}: {link[1]} != {version}"]
-    if len(headings) == 1:
-        return []
     previous_number, previous_heading = headings[1]
     previous = heading_version(previous_heading)
     if not previous:
@@ -387,17 +396,22 @@ def planted_cases(
     badge = next(name for name in names if "&message=v" in files[name])
     history = files[changelog]
     headings = changelog_headings(history, changelog)
-    first_link = HEADING_LINK.match(headings[0][1])
-    previous = heading_version(headings[1][1])
-    old = previous if previous != version else version + "0"
-    base = COMPARE_LINK.match(first_link[2])[1] if first_link else ""
+    if not headings:
+        raise ValueError(f"{changelog}: no level-two heading")
+    first_number, first_heading = headings[0]
+    first_link = HEADING_LINK.match(first_heading)
+    first_prefix = history.splitlines()[first_number - 1].partition(version)[0]
+    previous = heading_version(headings[1][1]) if len(headings) > 1 else ""
+    old = previous if previous and previous != version else version + "0"
+    compare = COMPARE_LINK.match(first_link[2]) if first_link else None
+    base = compare[1] if compare else "https://example.com/owner/repo"
     cases = [
         case("real copy", {}, 0, f"release {version},"),
         stale_line(chart, files[chart], "\nversion: ", version, old),
         stale_line(chart, files[chart], "\nappVersion: ", version, old),
         stale_line(chart, files[chart], "snatcharr-api:", version, old),
         stale_line(badge, files[badge], "&message=v", version, old),
-        stale_line(changelog, history, "## [", version, old),
+        stale_line(changelog, history, first_prefix, version, old),
     ]
     return (
         cases
@@ -458,7 +472,7 @@ def input_cases(
     config["packages"]["."]["extra-files"].append(
         {"type": "generic", "path": "missing-extra-file"}
     )
-    no_headings = re.sub(r"^## ", "### ", files[changelog], flags=re.MULTILINE)
+    no_headings = HEADING.sub("### ", files[changelog])
     chart = next(name for name in names if "appVersion: " in files[name])
     badge = next(name for name in names if "&message=v" in files[name])
     return [
@@ -518,16 +532,27 @@ def unmarked_value_cases(files: dict[str, str], chart: str, version: str) -> lis
         f"version: {version} # {SINGLE}", f"version: {version}", 1
     )
     line = files[chart].partition(f"version: {version} # {SINGLE}")[0].count("\n") + 1
-    nested = files[chart] + "\ndependencies:\n  - name: x\n    version: 1.2.3\n"
+    stale = "1.2.3" if version != "1.2.3" else "1.2.4"
+    missing = f"{chart}:{line}: release version field without a release-please marker"
+    nested = files[chart] + '\ndependencies:\n  - name: x\n    version: "1.2.3"\n'
     return [
         case(
             "Chart.yaml version marker removed",
             {chart: removed},
             1,
-            f"{chart}:{line}: release version field without a release-please marker",
+            missing,
+        ),
+        *(
+            case(
+                f"unmarked Chart.yaml version quoted with {quote}",
+                {chart: removed.replace(f"version: {version}", f"version: {quote}{stale}{quote}", 1)},
+                1,
+                missing,
+            )
+            for quote in ('"', "'")
         ),
         case(
-            "unmarked nested dependency version",
+            "unmarked quoted nested dependency version",
             {chart: nested},
             0,
             f"release {version},",
@@ -539,19 +564,41 @@ def changelog_cases(
     history: str, changelog: str, version: str, previous: str, base: str
 ) -> list[Case]:
     """Plant release link and CommonMark heading mutations from real changelog text."""
-    first = f"{base}/compare/v{previous}...v{version}"
-    second = changelog_headings(history, changelog)[1][1]
-    without_version = history.replace(f"## {second}", "## Unreleased", 1)
-    return [
-        *changelog_link_cases(history, changelog, version, previous, base, first),
+    cases = [
         case(
-            "second changelog heading without a version",
-            {changelog: without_version},
+            "first release without a predecessor",
+            {changelog: f"## {version} (2026-01-01)\n"},
+            0,
+            f"release {version},",
+        ),
+        case(
+            "first release without a date",
+            {changelog: f"## {version}\n"},
             1,
-            "expected ## [P](...) or ## P (YYYY-MM-DD)",
+            f"{changelog}:1: expected ## {version} (YYYY-MM-DD)",
+        ),
+        case(
+            "first release with a bogus link",
+            {changelog: f"## [{version}](wrong) (2026-01-01)\n"},
+            1,
+            f"{changelog}:1: expected ## {version} (YYYY-MM-DD)",
         ),
         *changelog_indent_cases(history, changelog, version, previous, base),
     ]
+    if previous:
+        first = f"{base}/compare/v{previous}...v{version}"
+        second = changelog_headings(history, changelog)[1][1]
+        without_version = history.replace(f"## {second}", "## Unreleased", 1)
+        cases.extend(changelog_link_cases(history, changelog, version, previous, base, first))
+        cases.append(
+            case(
+                "second changelog heading without a version",
+                {changelog: without_version},
+                1,
+                "expected ## [P](...) or ## P (YYYY-MM-DD)",
+            )
+        )
+    return cases
 
 
 def changelog_link_cases(
@@ -614,15 +661,15 @@ def changelog_indent_cases(
         ),
         case(
             "real first heading indented three spaces",
-            {changelog: history.replace("## [", "   ## [", 1)},
+            {changelog: HEADING.sub("   ## ", history, count=1)},
             0,
             f"release {version},",
         ),
         case(
             "real first heading indented four spaces",
-            {changelog: history.replace("## [", "    ## [", 1)},
+            {changelog: HEADING.sub("    ## ", history, count=1)},
             1,
-            f"{previous} != {version}",
+            f"{previous} != {version}" if previous else "no level-two heading",
         ),
     ]
 
@@ -631,16 +678,24 @@ def extra_file_cases(
     files: dict[str, str], chart: str, badge: str, version: str
 ) -> list[Case]:
     """Cover release-please string extra-file updater selection."""
+    mixed = string_config(files[CONFIG], badge)
+    converted = string_config(mixed, chart)
+    before = json.loads(mixed)["packages"]["."]["extra-files"]
+    after = json.loads(converted)["packages"]["."]["extra-files"]
+    expected = before.copy()
+    expected[expected.index({"type": "generic", "path": chart})] = chart
+    if badge not in before or after != expected:
+        raise ValueError("string_config must preserve existing entries and replace the chart object")
     return [
         case(
             "README as a string extra file",
-            {CONFIG: string_config(files[CONFIG], badge)},
+            {CONFIG: mixed},
             0,
             f"release {version},",
         ),
         case(
-            "Chart.yaml as a string extra file",
-            {CONFIG: string_config(files[CONFIG], chart)},
+            "Chart.yaml as a string extra file with an existing README string",
+            {CONFIG: converted},
             2,
             "YAML updater",
         ),
@@ -652,7 +707,8 @@ def string_config(text: str, path: str) -> str:
     config = json.loads(text)
     extra = config["packages"]["."]["extra-files"]
     config["packages"]["."]["extra-files"] = [
-        path if item["path"] == path else item for item in extra
+        path if isinstance(item, dict) and item.get("path") == path else item
+        for item in extra
     ]
     return json.dumps(config)
 
