@@ -290,7 +290,7 @@ expect_scan "129-char --workflow refused" 1 "--workflow" 0 --workflow "$wf_129"
 expect_scan "tab in --workflow refused" 1 "--workflow" 0 --workflow "$(printf 'Security\tScan')"
 expect_scan "newline in --workflow refused" 1 "--workflow" 0 --workflow "$(printf 'Security\nScan')"
 expect_scan "NUL-adjacent control in --workflow refused" 1 "--workflow" 0 --workflow "$(printf 'Security\001Scan')"
-expect_scan "command substitution in --workflow refused" 1 "--workflow" 0 --workflow 'Scan $(id)'
+expect_scan "command substitution in --workflow refused" 1 "--workflow" 0 --workflow "Scan \$()"
 expect_scan "leading colon in --workflow refused" 1 "--workflow" 0 --workflow ': Scan'
 
 # 14e. Negative: the relaxed workflow rule does not loosen --job or --run-id
