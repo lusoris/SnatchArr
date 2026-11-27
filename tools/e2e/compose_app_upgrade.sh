@@ -30,8 +30,8 @@
 #   queue-policy-extra-change change a queue-policy field migration 55 does not touch ("unallowed change in table queue_policies")
 # Needs docker compose, curl, jq and openssl.
 #
-# compose_app_upgrade.sh --selftest-modules runs the native /system/modules read-back regression
-# (jq only, no Docker); the Makefile gate e2e-compose-app-upgrade runs it.
+# compose_app_upgrade.sh --selftest-modules runs the native /system/modules read-back and psql_at
+# probe regressions (jq and timeout only, no Docker); the Makefile gate e2e-compose-app-upgrade runs it.
 set -euo pipefail
 
 label="compose-app-upgrade"
@@ -870,8 +870,72 @@ selftest_modules() {
     echo "ok   modules read-back self-test passed"
 }
 
+# write_psql_stub DIR writes a fake docker binary at DIR/bin/docker for selftest_psql_at.
+write_psql_stub() {
+    local dir=$1
+    mkdir -p "$dir/bin"
+    cat >"$dir/bin/docker" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" >"$PSQL_STUB_ARGS"
+[ "$#" -gt 0 ] && shift "$(($# - 1))"
+case "${1:-}" in
+    "SELECT 'ordinary'") printf 'ordinary-row\n' ;;
+    "SELECT 'nonzero'") echo "psql: simulated failure" >&2; exit 17 ;;
+    "SELECT 'hang'") exec sleep 12 ;;
+    *) echo "unexpected query: ${1:-}" >&2; exit 99 ;;
+esac
+EOF
+    chmod +x "$dir/bin/docker"
+}
+
+# selftest_psql_at checks psql_at compose arguments, SQL output, exit propagation and timeout bound.
+selftest_psql_at() {
+    local bad=0 out="" err_out="" rc=0 start=0 want_args="" got_args="" orig_path=$PATH
+    work=$(mktemp -d) || exit 1
+    : >"$work/.env"
+    : >"$work/override-candidate.yaml"
+    files=(-f "$compose" -f "$work/override-candidate.yaml")
+    write_psql_stub "$work"
+    PATH="$work/bin:$orig_path"
+    export PSQL_STUB_ARGS="$work/args.txt"
+
+    want_args=$(printf '%s\n' compose -p "$project" --project-directory "$root/deploy/homelab" \
+        --env-file "$work/.env" -f "$compose" -f "$work/override-candidate.yaml" \
+        exec -T postgres psql -U snatcharr -d snatcharr -v ON_ERROR_STOP=1 -Atc "SELECT 'ordinary'")
+
+    rc=0
+    out=$(DC_SECONDS=5 psql_at "SELECT 'ordinary'") || rc=$?
+    [ -f "$work/args.txt" ] && got_args=$(<"$work/args.txt")
+    if [ "$rc" -ne 0 ] || [ "$out" != "ordinary-row" ] || [ "$got_args" != "$want_args" ]; then
+        echo "FAIL psql_at ordinary query: rc=$rc out='$out' args='$got_args'" >&2
+        bad=1
+    fi
+
+    rc=0
+    err_out=$(DC_SECONDS=5 psql_at "SELECT 'nonzero'" 2>&1) || rc=$?
+    if [ "$rc" -ne 17 ] || [[ "$err_out" != *"psql: simulated failure"* ]]; then
+        echo "FAIL psql_at nonzero propagation: rc=$rc (want 17) out='$err_out'" >&2
+        bad=1
+    fi
+
+    start=$SECONDS
+    rc=0
+    DC_SECONDS=1 psql_at "SELECT 'hang'" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -ne 124 ] || [ $((SECONDS - start)) -ge 10 ]; then
+        echo "FAIL psql_at sleeping stub: rc=$rc after $((SECONDS - start))s, want 124 within 10s" >&2
+        bad=1
+    fi
+
+    PATH=$orig_path
+    unset PSQL_STUB_ARGS
+    rm -rf "$work"
+    [ "$bad" -eq 0 ] || exit 1
+    echo "ok   psql_at probe self-test passed"
+}
+
 if [ "${1:-}" = "--selftest-modules" ]; then
     selftest_modules
+    selftest_psql_at
     exit 0
 fi
 
