@@ -32,6 +32,7 @@
 	let format = $state<Format>('yaml');
 	let text = $state('');
 	let loadedRules = $state<StoredRule[]>([]);
+	let hasListSnapshot = $state(false);
 	let pinnedRule = $state<StoredRule | null>(null);
 	let nextCursor = $state<string | null>(null);
 	let hasMore = $state(false);
@@ -252,6 +253,7 @@
 			pinnedRule = selection.nextPinned;
 			selectedId = selection.nextSelectedId;
 			syncSavedRule(page.items, page.more, selection.missingId);
+			hasListSnapshot = true;
 		} catch (err) {
 			if (isCurrent(seq, signal)) loadError = err;
 		} finally {
@@ -351,6 +353,7 @@
 		const input = parseDocument();
 		if (!input) return;
 
+		const interruptedInitialLoad = loading && !hasListSnapshot;
 		importing = true;
 		const deadline = startWrite();
 		try {
@@ -374,6 +377,14 @@
 			await loadRules(res.data);
 		} catch (err) {
 			reportWriteFailure(err, deadline);
+			// Restore the interrupted list read when the timeout recovery action is absent.
+			if (
+				interruptedInitialLoad &&
+				!unmountController.signal.aborted &&
+				!isUnknownWriteOutcome(err, deadline)
+			) {
+				void loadRules();
+			}
 		} finally {
 			if (!unmountController.signal.aborted) importing = false;
 		}
@@ -499,7 +510,7 @@
 			{#if loadMoreError}
 				<ProblemNote error={loadMoreError} />
 			{/if}
-		{:else if !loadError}
+		{:else if hasListSnapshot && !loadError}
 			<p class="text-sm text-subtle">{m.modules_rules_empty()}</p>
 		{/if}
 		{#if !loading && loadError}

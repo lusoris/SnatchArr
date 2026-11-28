@@ -898,4 +898,69 @@ describe('library processing rules deadlines and saved state', () => {
 		).toBe(false);
 		expect(documentField().value).toBe(editedDocument);
 	});
+	it.each(['rejected', 'timed out', 'rejected after unmount'] as const)(
+		'handles an import %s after it interrupts the initial list load',
+		async (outcome) => {
+			const { deadlines } = mockDeadlines();
+			const initialPage = deferred<unknown>();
+			const restartedPage = deferred<unknown>();
+			const write = deferred<unknown>();
+			const getSpy = vi
+				.spyOn(api, 'GET')
+				.mockReturnValueOnce(initialPage.promise as never) // Deliberately ignores abort.
+				.mockReturnValueOnce(restartedPage.promise as never);
+			const postSpy = vi.spyOn(api, 'POST').mockReturnValueOnce(write.promise as never);
+			const errorToast = vi.spyOn(toast, 'error');
+			const { unmount } = render(LibraryProcessingRules);
+
+			await screen.findByText(m.loading());
+			await chooseFormat('JSON');
+			await typeDocument(jsonDocument);
+			await fireEvent.click(importButton());
+			expect(postSpy).toHaveBeenCalledExactlyOnceWith(RULES_PATH, {
+				body: ruleInput,
+				signal: deadlines[1]!.signal
+			});
+			expect(getSpy).toHaveBeenCalledExactlyOnceWith(RULES_PAGE_PATH, {
+				params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT } },
+				signal: expect.objectContaining({ aborted: true })
+			});
+			expect(screen.queryByText(m.modules_rules_empty())).toBeNull();
+
+			if (outcome === 'rejected after unmount') unmount();
+			if (outcome === 'timed out') {
+				const deadline = deadlines[1]!;
+				expireDeadline(deadline);
+				write.reject(deadline.signal.reason);
+			} else {
+				write.reject(problemError(409, 'Conflict', 'import rejected'));
+			}
+			await flush();
+			initialPage.resolve(pageResult([]));
+			await flush();
+
+			if (outcome === 'rejected') {
+				expect(screen.getByText(/import rejected/)).toBeTruthy();
+				expect(screen.getByText(m.loading())).toBeTruthy();
+				expect(getSpy).toHaveBeenCalledTimes(2);
+				expect(getSpy).toHaveBeenNthCalledWith(2, RULES_PAGE_PATH, {
+					params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT } },
+					signal: expect.objectContaining({ aborted: false })
+				});
+				restartedPage.resolve(pageResult([storedRule]));
+				await screen.findByRole('option', { name: optionLabel });
+				expect(getSpy).toHaveBeenCalledTimes(2);
+				expect(documentField().value).toBe(jsonDocument);
+			} else {
+				expect(getSpy).toHaveBeenCalledTimes(1);
+				if (outcome === 'timed out') {
+					expect(screen.getByText(m.modules_rules_write_timeout())).toBeTruthy();
+					expect(screen.queryByText(m.modules_rules_empty())).toBeNull();
+				} else {
+					expect(errorToast).not.toHaveBeenCalled();
+				}
+			}
+			expect(postSpy).toHaveBeenCalledTimes(1);
+		}
+	);
 });
