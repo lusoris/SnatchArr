@@ -11,8 +11,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import { systemModulesQuery, type ModuleState } from '#lib/queries/system.js';
 	import { keys, queryClient } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
+	import LibraryProcessingRules from './LibraryProcessingRules.svelte';
 
 	const modulesQuery = systemModulesQuery({ requireSession: false });
+	const libraryProcessingEnabled = $derived(
+		(modulesQuery.data ?? []).some((mod) => mod.id === 'library_processing' && mod.enabled)
+	);
 
 	let togglingId = $state<string | null>(null);
 	let toggleError = $state<unknown>(null);
@@ -120,6 +124,9 @@ SPDX-License-Identifier: EUPL-1.2
 						</div>
 					{/if}
 				</section>
+			{/if}
+			{#if session.isAdmin && libraryProcessingEnabled}
+				<LibraryProcessingRules />
 			{/if}
 		</div>
 

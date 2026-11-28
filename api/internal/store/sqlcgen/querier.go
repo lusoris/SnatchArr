@@ -46,6 +46,10 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateInstance(ctx context.Context, arg CreateInstanceParams) (Instance, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	//
+	// SPDX-License-Identifier: EUPL-1.2
+	CreateLibraryProcessingRule(ctx context.Context, arg CreateLibraryProcessingRuleParams) (LibraryProcessingRule, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateNotificationChannel(ctx context.Context, arg CreateNotificationChannelParams) (NotificationChannel, error)
 	CreateNotificationRule(ctx context.Context, arg CreateNotificationRuleParams) (NotificationRule, error)
@@ -74,6 +78,7 @@ type Querier interface {
 	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
 	DeleteInstanceUnlessDeclared(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteLibraryProcessingRule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteLoginLockout(ctx context.Context, key string) error
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int64, error)
@@ -128,6 +133,7 @@ type Querier interface {
 	GetInstancePriority(ctx context.Context, id uuid.UUID) (GetInstancePriorityRow, error)
 	GetItemSearchCooldown(ctx context.Context, userID uuid.UUID) (time.Time, error)
 	GetLatestWatchAwareSourceError(ctx context.Context) (*string, error)
+	GetLibraryProcessingRule(ctx context.Context, id uuid.UUID) (LibraryProcessingRule, error)
 	GetLoginLockout(ctx context.Context, key string) (LoginLockout, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -221,6 +227,8 @@ type Querier interface {
 	// Instances never evaluated come first, then the one evaluated longest ago (#176).
 	ListInstancesToPlan(ctx context.Context) ([]Instance, error)
 	ListItemWatchesForSource(ctx context.Context, sourceID uuid.UUID) ([]WatchawareItemWatch, error)
+	ListLibraryProcessingRulesKeyset(ctx context.Context, arg ListLibraryProcessingRulesKeysetParams) ([]LibraryProcessingRule, error)
+	ListMatchingLibraryProcessingRules(ctx context.Context, arg ListMatchingLibraryProcessingRulesParams) ([]LibraryProcessingRule, error)
 	ListModules(ctx context.Context) ([]Module, error)
 	ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
 	ListNotificationChannelsByIDs(ctx context.Context, ids []uuid.UUID) ([]NotificationChannel, error)
@@ -331,6 +339,7 @@ type Querier interface {
 	UpdateGateSeriesTitle(ctx context.Context, arg UpdateGateSeriesTitleParams) error
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
 	UpdateInstancePriority(ctx context.Context, arg UpdateInstancePriorityParams) (UpdateInstancePriorityRow, error)
+	UpdateLibraryProcessingRule(ctx context.Context, arg UpdateLibraryProcessingRuleParams) (LibraryProcessingRule, error)
 	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
 	UpdateNotificationRule(ctx context.Context, arg UpdateNotificationRuleParams) (NotificationRule, error)
 	UpdatePriorityPreset(ctx context.Context, arg UpdatePriorityPresetParams) (PriorityPreset, error)

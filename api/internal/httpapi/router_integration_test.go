@@ -200,6 +200,7 @@ type idsState struct {
 	watchawareSourceID string
 	adultSourceID      string
 	adultImageSetID    string
+	libraryRuleID      string
 }
 
 func newIDsState(t *testing.T) *idsState {
@@ -2326,8 +2327,144 @@ func stepsAdult() []routerStep {
 	}
 }
 
+// enableLibraryProcessingModule turns on the library processing module with a bounded deadline.
+func enableLibraryProcessingModule(t *testing.T, f *routerFixture) {
+	t.Helper()
+	if f.h.modules == nil {
+		t.Fatal("enableLibraryProcessingModule: modules registry is nil")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := f.h.modules.SetEnabled(ctx, domain.ModuleLibraryProcessing, true); err != nil {
+		t.Fatalf("enable module %s: %v", domain.ModuleLibraryProcessing, err)
+	}
+}
+
+func libraryProcessingRulePath(ids *idsState) string {
+	return "/library-processing/rules/" + ids.libraryRuleID
+}
+
+func stepsLibraryProcessing() []routerStep {
+	return []routerStep{
+		{
+			op:     "createLibraryProcessingRule",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/library-processing/rules" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"scope": "global_default",
+					"rule":  lpRuleBody("en", "de"),
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createLibraryProcessingRule id = %v, want non-empty string", decoded["id"])
+				}
+				if _, err := uuid.Parse(id); err != nil {
+					t.Fatalf("createLibraryProcessingRule id %q is not a uuid: %v", id, err)
+				}
+				if decoded["scope"] != "global_default" {
+					t.Fatalf("createLibraryProcessingRule scope = %v, want global_default", decoded["scope"])
+				}
+				ids.libraryRuleID = id
+			},
+		},
+		{
+			op:     "listLibraryProcessingRules",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/library-processing/rules" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "listLibraryProcessingRulesPage",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/library-processing/rules/page" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				items, ok := decoded["items"].([]any)
+				if !ok || len(items) != 1 {
+					t.Fatalf("listLibraryProcessingRulesPage items = %v, want 1 item", decoded["items"])
+				}
+				first, ok := items[0].(map[string]any)
+				if !ok || first["id"] != ids.libraryRuleID {
+					t.Fatalf("listLibraryProcessingRulesPage items[0] = %v, want id %s", items[0], ids.libraryRuleID)
+				}
+				if decoded["has_more"] != false {
+					t.Fatalf("listLibraryProcessingRulesPage has_more = %v, want false", decoded["has_more"])
+				}
+				if _, hasCursor := decoded["next_cursor"]; hasCursor {
+					t.Fatalf("listLibraryProcessingRulesPage next_cursor = %v, want omitted", decoded["next_cursor"])
+				}
+			},
+		},
+		{
+			op:     "getLibraryProcessingRule",
+			method: http.MethodGet,
+			path:   libraryProcessingRulePath,
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.libraryRuleID {
+					t.Fatalf("getLibraryProcessingRule id = %v, want %s", decoded["id"], ids.libraryRuleID)
+				}
+			},
+		},
+		{
+			op:     "updateLibraryProcessingRule",
+			method: http.MethodPut,
+			path:   libraryProcessingRulePath,
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"scope": "global_default",
+					"rule":  lpRuleBody("fr"),
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.libraryRuleID {
+					t.Fatalf("updateLibraryProcessingRule id = %v, want %s", decoded["id"], ids.libraryRuleID)
+				}
+				langs := lpLanguages(t, decoded)
+				if len(langs) != 1 || langs[0] != "fr" {
+					t.Fatalf("updateLibraryProcessingRule languages = %v, want [fr]", langs)
+				}
+			},
+		},
+		{
+			op:     "resolveLibraryProcessingRule",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/library-processing/resolve" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["rule_id"] != ids.libraryRuleID {
+					t.Fatalf("resolveLibraryProcessingRule rule_id = %v, want %s", decoded["rule_id"], ids.libraryRuleID)
+				}
+				if decoded["scope"] != "global_default" {
+					t.Fatalf("resolveLibraryProcessingRule scope = %v, want global_default", decoded["scope"])
+				}
+				langs := lpLanguages(t, decoded)
+				if len(langs) != 1 || langs[0] != "fr" {
+					t.Fatalf("resolveLibraryProcessingRule languages = %v, want [fr]", langs)
+				}
+			},
+		},
+		{
+			op:     "deleteLibraryProcessingRule",
+			method: http.MethodDelete,
+			path:   libraryProcessingRulePath,
+			want:   http.StatusNoContent,
+		},
+	}
+}
+
 func buildRouterSteps(f *routerFixture) []routerStep {
-	steps := make([]routerStep, 0, 92)
+	steps := make([]routerStep, 0, 100)
 	steps = append(steps, stepsAuth()...)
 	steps = append(steps, stepsIdentities()...)
 	steps = append(steps, stepsAPIKeys()...)
@@ -2354,6 +2491,7 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsNotificationRules()...)
 	steps = append(steps, stepsWatchaware()...)
 	steps = append(steps, stepsAdult()...)
+	steps = append(steps, stepsLibraryProcessing()...)
 	steps = append(steps, stepsDeletesAndAuth()...)
 	return steps
 }
@@ -2476,6 +2614,7 @@ func TestRouterOperations(t *testing.T) {
 		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleWatchAware, true)
 		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleAdult, true)
 	}
+	enableLibraryProcessingModule(t, f)
 	steps := buildRouterSteps(f)
 	assertCoverageGuard(t, steps)
 
@@ -2691,6 +2830,7 @@ func initViewerIDsState(t *testing.T, csrfToken string) *idsState {
 	ids.prowlarrLinkID = dummyUUID
 	ids.channelID = dummyUUID
 	ids.ruleID = dummyUUID
+	ids.libraryRuleID = dummyUUID
 	ids.watchawareSourceID = dummyUUID
 	ids.adultSourceID = dummyUUID
 	ids.adultImageSetID = dummyUUID
@@ -2797,6 +2937,7 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleWatchAware, true)
 		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleAdult, true)
 	}
+	enableLibraryProcessingModule(t, f)
 	_ = completeInitialSetup(t, f)
 
 	viewerClient, csrfToken := loginViewerSession(t, f)

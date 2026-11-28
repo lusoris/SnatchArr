@@ -358,6 +358,122 @@
     ],
     "type": "object"
   },
+  "createLibraryProcessingRule": {
+    "$defs": {
+      "LibraryProcessingMediaType": {
+        "description": "Media type target of a library processing rule (ADR-0041 section 10).",
+        "enum": [
+          "movie",
+          "episode",
+          "anime",
+          "music",
+          "audiobook",
+          "stash_scene"
+        ],
+        "type": "string"
+      },
+      "LibraryProcessingRuleInput": {
+        "additionalProperties": false,
+        "description": "Input payload for creating or replacing a library processing rule.",
+        "properties": {
+          "instance_id": {
+            "description": "Required when scope is item_override, library or instance; forbidden otherwise.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "Required when scope is item_override; forbidden otherwise.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "media_type": {
+            "$ref": "#/$defs/LibraryProcessingMediaType"
+          },
+          "root_path": {
+            "description": "Required when scope is library (clean POSIX absolute path); forbidden otherwise.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/$defs/Rule"
+          },
+          "scope": {
+            "$ref": "#/$defs/LibraryProcessingScope"
+          },
+          "user_language": {
+            "description": "Required when scope is user_language (ISO 639 code); forbidden otherwise.",
+            "maxLength": 3,
+            "minLength": 2,
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "LibraryProcessingScope": {
+        "description": "Precedence scope of a library processing rule (ADR-0041 section 10).",
+        "enum": [
+          "item_override",
+          "user_language",
+          "library",
+          "instance",
+          "media_type",
+          "global_default"
+        ],
+        "type": "string"
+      },
+      "Rule": {
+        "additionalProperties": false,
+        "description": "Effective processing rule resolved by the caller for this library item.",
+        "properties": {
+          "track": {
+            "$ref": "#/$defs/TrackRule",
+            "description": "Track-selection policy parameters."
+          }
+        },
+        "required": [
+          "track"
+        ],
+        "type": "object"
+      },
+      "TrackRule": {
+        "additionalProperties": false,
+        "description": "Effective track-selection rule resolved by the caller.",
+        "properties": {
+          "languages": {
+            "description": "ISO 639 language codes to keep; between 1 and 64 entries (inclusive), all unique.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "languages"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/LibraryProcessingRuleInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
   "createMyNotifyTarget": {
     "$defs": {
       "NotificationChannelConfig": {
@@ -1048,6 +1164,24 @@
     ],
     "type": "object"
   },
+  "deleteLibraryProcessingRule": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "ruleId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "ruleId"
+    ],
+    "type": "object"
+  },
   "deleteMyNotifyTarget": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1381,6 +1515,20 @@
     },
     "required": [
       "instanceId"
+    ],
+    "type": "object"
+  },
+  "getLibraryProcessingRule": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "ruleId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "ruleId"
     ],
     "type": "object"
   },
@@ -1862,6 +2010,32 @@
     "properties": {},
     "type": "object"
   },
+  "listLibraryProcessingRules": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listLibraryProcessingRulesPage": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "description": "Opaque keyset pagination cursor from a previous page.",
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
+      "limit": {
+        "default": 50,
+        "description": "Maximum rules to return in one page.",
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "type": "object"
+  },
   "listLogs": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -2131,6 +2305,48 @@
       "confirm": {
         "description": "Must be true to confirm this destructive operation",
         "type": "boolean"
+      }
+    },
+    "type": "object"
+  },
+  "resolveLibraryProcessingRule": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instance_id": {
+        "description": "Owning *arr or Stash instance UUID; required when item_id or root_path is set.",
+        "format": "uuid",
+        "type": "string"
+      },
+      "item_id": {
+        "description": "Instance-scoped item identifier; requires instance_id.",
+        "maxLength": 128,
+        "minLength": 1,
+        "type": "string"
+      },
+      "media_type": {
+        "description": "Media type of the library item.",
+        "enum": [
+          "movie",
+          "episode",
+          "anime",
+          "music",
+          "audiobook",
+          "stash_scene"
+        ],
+        "type": "string"
+      },
+      "requester_language": {
+        "description": "ISO 639 language code of the requester preference.",
+        "maxLength": 3,
+        "minLength": 2,
+        "type": "string"
+      },
+      "root_path": {
+        "description": "Clean POSIX absolute library root path reported by the instance; requires instance_id.",
+        "maxLength": 4096,
+        "minLength": 1,
+        "type": "string"
       }
     },
     "type": "object"
@@ -2883,6 +3099,127 @@
     "required": [
       "body",
       "instanceId"
+    ],
+    "type": "object"
+  },
+  "updateLibraryProcessingRule": {
+    "$defs": {
+      "LibraryProcessingMediaType": {
+        "description": "Media type target of a library processing rule (ADR-0041 section 10).",
+        "enum": [
+          "movie",
+          "episode",
+          "anime",
+          "music",
+          "audiobook",
+          "stash_scene"
+        ],
+        "type": "string"
+      },
+      "LibraryProcessingRuleInput": {
+        "additionalProperties": false,
+        "description": "Input payload for creating or replacing a library processing rule.",
+        "properties": {
+          "instance_id": {
+            "description": "Required when scope is item_override, library or instance; forbidden otherwise.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "Required when scope is item_override; forbidden otherwise.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "media_type": {
+            "$ref": "#/$defs/LibraryProcessingMediaType"
+          },
+          "root_path": {
+            "description": "Required when scope is library (clean POSIX absolute path); forbidden otherwise.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/$defs/Rule"
+          },
+          "scope": {
+            "$ref": "#/$defs/LibraryProcessingScope"
+          },
+          "user_language": {
+            "description": "Required when scope is user_language (ISO 639 code); forbidden otherwise.",
+            "maxLength": 3,
+            "minLength": 2,
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "LibraryProcessingScope": {
+        "description": "Precedence scope of a library processing rule (ADR-0041 section 10).",
+        "enum": [
+          "item_override",
+          "user_language",
+          "library",
+          "instance",
+          "media_type",
+          "global_default"
+        ],
+        "type": "string"
+      },
+      "Rule": {
+        "additionalProperties": false,
+        "description": "Effective processing rule resolved by the caller for this library item.",
+        "properties": {
+          "track": {
+            "$ref": "#/$defs/TrackRule",
+            "description": "Track-selection policy parameters."
+          }
+        },
+        "required": [
+          "track"
+        ],
+        "type": "object"
+      },
+      "TrackRule": {
+        "additionalProperties": false,
+        "description": "Effective track-selection rule resolved by the caller.",
+        "properties": {
+          "languages": {
+            "description": "ISO 639 language codes to keep; between 1 and 64 entries (inclusive), all unique.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "languages"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/LibraryProcessingRuleInput"
+      },
+      "ruleId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "ruleId"
     ],
     "type": "object"
   },

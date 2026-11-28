@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -55,25 +56,132 @@ func (s *Store) Q() *sqlcgen.Queries { return s.q }
 // Pool exposes the pool for health checks and advisory locks.
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
+const (
+	txStepTimeout       = 10 * time.Second
+	snapshotStepTimeout = 10 * time.Second
+	rollbackTimeout     = 5 * time.Second
+)
+
+type rwTxBeginner func(ctx context.Context) (pgx.Tx, error)
+
+type txBeginner func(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
+
+type txLabels struct {
+	begin    string
+	commit   string
+	rollback string
+}
+
 // Tx runs fn inside a transaction and commits when it returns nil.
-func (s *Store) Tx(ctx context.Context, fn func(q *sqlcgen.Queries) error) (err error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("store: begin: %w", err)
+func (s *Store) Tx(ctx context.Context, fn func(q *sqlcgen.Queries) error) error {
+	return runTx(ctx, s.pool.Begin, s.q, fn)
+}
+
+func runTx(
+	ctx context.Context,
+	begin rwTxBeginner,
+	queries *sqlcgen.Queries,
+	fn func(q *sqlcgen.Queries) error,
+) error {
+	return executeTx(
+		ctx,
+		func(parent context.Context) (pgx.Tx, error) {
+			beginCtx, cancel := txStepContext(parent)
+			defer cancel()
+			return begin(beginCtx)
+		},
+		func(parent context.Context, tx pgx.Tx) error {
+			commitCtx, cancel := txStepContext(parent)
+			defer cancel()
+			return tx.Commit(commitCtx)
+		},
+		queries,
+		txLabels{begin: "store: begin", commit: "store: commit", rollback: "store: rollback"},
+		fn,
+	)
+}
+
+func txStepContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := parent.Deadline(); ok {
+		return parent, func() {}
 	}
+	return context.WithTimeout(parent, txStepTimeout)
+}
+
+// SnapshotReadTx runs fn inside a repeatable-read, read-only transaction so multi-batch
+// reads observe a single consistent database snapshot without blocking concurrent writers.
+func (s *Store) SnapshotReadTx(ctx context.Context, fn func(q *sqlcgen.Queries) error) error {
+	return runSnapshotReadTx(ctx, s.pool.BeginTx, s.q, fn)
+}
+
+func runSnapshotReadTx(
+	ctx context.Context,
+	begin txBeginner,
+	queries *sqlcgen.Queries,
+	fn func(q *sqlcgen.Queries) error,
+) error {
+	return executeTx(
+		ctx,
+		func(parent context.Context) (pgx.Tx, error) {
+			beginCtx, beginCancel := context.WithTimeout(parent, snapshotStepTimeout)
+			defer beginCancel()
+			return begin(beginCtx, pgx.TxOptions{
+				IsoLevel:   pgx.RepeatableRead,
+				AccessMode: pgx.ReadOnly,
+			})
+		},
+		func(parent context.Context, tx pgx.Tx) error {
+			commitCtx, commitCancel := context.WithTimeout(parent, snapshotStepTimeout)
+			defer commitCancel()
+			return tx.Commit(commitCtx)
+		},
+		queries,
+		txLabels{
+			begin:    "store: begin snapshot tx",
+			commit:   "store: commit snapshot tx",
+			rollback: "store: rollback snapshot tx",
+		},
+		fn,
+	)
+}
+
+func executeTx(
+	ctx context.Context,
+	begin rwTxBeginner,
+	commit func(context.Context, pgx.Tx) error,
+	queries *sqlcgen.Queries,
+	labels txLabels,
+	fn func(q *sqlcgen.Queries) error,
+) (err error) {
+	tx, err := begin(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: %w", labels.begin, err)
+	}
+	committed := false
 	defer func() {
-		if err == nil {
-			return
-		}
-		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
-			err = errors.Join(err, fmt.Errorf("store: rollback: %w", rbErr))
+		if rbErr := rollbackTx(ctx, tx, labels.rollback); !committed && rbErr != nil {
+			err = errors.Join(err, rbErr)
 		}
 	}()
-	if err = fn(s.q.WithTx(tx)); err != nil {
+	var q *sqlcgen.Queries
+	if queries != nil {
+		q = queries.WithTx(tx)
+	}
+	if err = fn(q); err != nil {
 		return err
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return fmt.Errorf("store: commit: %w", err)
+	if commitErr := commit(ctx, tx); commitErr != nil {
+		return fmt.Errorf("%s: %w", labels.commit, commitErr)
+	}
+	committed = true
+	return nil
+}
+
+func rollbackTx(ctx context.Context, tx pgx.Tx, prefix string) error {
+	rbCtx, rbCancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+	defer rbCancel()
+	if err := tx.Rollback(rbCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		return fmt.Errorf("%s: %w", prefix, err)
 	}
 	return nil
 }

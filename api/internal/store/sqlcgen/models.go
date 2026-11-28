@@ -171,6 +171,20 @@ type ItemSearchCooldown struct {
 	LastSearchedAt time.Time
 }
 
+type LibraryProcessingRule struct {
+	ID               uuid.UUID
+	Scope            string
+	InstanceID       *uuid.UUID
+	ItemID           *string
+	UserLanguage     *string
+	UserLanguageCode *string
+	RootPath         *string
+	MediaType        *string
+	Rule             []byte
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 type LoginLockout struct {
 	Key         string
 	Fails       int32

@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ogen-go/ogen/uri"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -52,8 +53,34 @@ func Mount(r chi.Router, p MountParams) error {
 		csrfUnlessBearer(p.CSRF),
 	).Get(PathPrefix+"/adult/image-items/{itemId}/file", p.Handlers.ServeAdultImageItemFile())
 
-	r.With(withHTTP, csrfUnlessBearer(p.CSRF)).Handle(PathPrefix+"/*", srv)
+	rulesStream := p.Security.RequireUser(p.Logger)(p.Handlers.ServeLibraryProcessingRules())
+	r.With(withHTTP, csrfUnlessBearer(p.CSRF)).Handle(PathPrefix+"/*", dispatchStreamingRoutes(srv, rulesStream))
 	return nil
+}
+
+func isRulesGET(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+
+	// Match the generated router's path selection, including its fallback.
+	path := r.URL.Path
+	if rawPath := r.URL.RawPath; rawPath != "" {
+		if normalized, ok := uri.NormalizeEscapedPath(rawPath); ok {
+			path = normalized
+		}
+	}
+	return path == PathPrefix+"/library-processing/rules"
+}
+
+func dispatchStreamingRoutes(srv, rulesGET http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isRulesGET(r) {
+			rulesGET.ServeHTTP(w, r)
+			return
+		}
+		srv.ServeHTTP(w, r)
+	})
 }
 
 // StreamPath serves the Server-Sent Events stream. It lives outside the generated router.

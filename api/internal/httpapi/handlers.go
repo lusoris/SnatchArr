@@ -34,6 +34,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/foreigntitles"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
+	"github.com/lusoris/SnatchArr/api/internal/libraryprocessing"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/modules"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
@@ -51,41 +52,42 @@ import (
 
 // Handlers implements oas.Handler.
 type Handlers struct {
-	build           buildinfo.Info
-	cfg             config.Options
-	clk             clock.Clock
-	auth            *auth.Service
-	apiKeys         *auth.APIKeys
-	sessions        *session.Manager
-	instances       *instances.Service
-	policies        *policies.Service
-	queue           *queue.Store
-	queueSvc        queueService
-	options         *policies.Options
-	foreignTitles   foreignTitleSource
-	logs            *logring.Ring
-	runs            *snatch.Runs
-	workers         *snatch.Workers
-	rec             *snatch.Recorder
-	budget          *snatch.Budget
-	memory          *snatch.Memory
-	planner         *snatch.Planner
-	schedules       *snatch.Schedules
-	clients         *dlclients.Service
-	priorityPlans   priorityPlanReader
-	settings        *settings.Service
-	requests        *requests.Service
-	modules         *modules.Service
-	seerr           *seerr.Service
-	prowlarr        *prowlarr.Service
-	configarr       *configarr.Service
-	notify          *notify.Service
-	watchaware      *watchaware.Service
-	adult           *adult.Service
-	jellyfin        jellyfin.Authenticator
-	runtimeSettings *runtimesettings.Service
-	logger          *slog.Logger
-	qcCache         quickConnectCache
+	build             buildinfo.Info
+	cfg               config.Options
+	clk               clock.Clock
+	auth              *auth.Service
+	apiKeys           *auth.APIKeys
+	sessions          *session.Manager
+	instances         *instances.Service
+	policies          *policies.Service
+	queue             *queue.Store
+	queueSvc          queueService
+	options           *policies.Options
+	foreignTitles     foreignTitleSource
+	logs              *logring.Ring
+	runs              *snatch.Runs
+	workers           *snatch.Workers
+	rec               *snatch.Recorder
+	budget            *snatch.Budget
+	memory            *snatch.Memory
+	planner           *snatch.Planner
+	schedules         *snatch.Schedules
+	clients           *dlclients.Service
+	priorityPlans     priorityPlanReader
+	settings          *settings.Service
+	requests          *requests.Service
+	modules           *modules.Service
+	seerr             *seerr.Service
+	prowlarr          *prowlarr.Service
+	configarr         *configarr.Service
+	notify            *notify.Service
+	watchaware        *watchaware.Service
+	adult             *adult.Service
+	libraryProcessing *libraryprocessing.Service
+	jellyfin          jellyfin.Authenticator
+	runtimeSettings   *runtimesettings.Service
+	logger            *slog.Logger
+	qcCache           quickConnectCache
 }
 
 type quickConnectCache struct {
@@ -97,31 +99,32 @@ type quickConnectCache struct {
 // Deps groups the snatch services the handlers need.
 type Deps struct {
 	fx.In
-	Runs            *snatch.Runs
-	Workers         *snatch.Workers
-	Rec             *snatch.Recorder
-	Budget          *snatch.Budget
-	Memory          *snatch.Memory
-	Planner         *snatch.Planner
-	Schedules       *snatch.Schedules
-	Clients         *dlclients.Service
-	PriorityPlans   *dlclients.Reconciler
-	Settings        *settings.Service
-	Requests        *requests.Service
-	Modules         *modules.Service
-	Seerr           *seerr.Service
-	Prowlarr        *prowlarr.Service
-	Configarr       *configarr.Service
-	Notify          *notify.Service
-	WatchAware      *watchaware.Service
-	Adult           *adult.Service
-	Jellyfin        jellyfin.Authenticator
-	Options         *policies.Options
-	ForeignTitles   *foreigntitles.Service
-	Logs            *logring.Ring
-	Queue           *queue.Store
-	QueueSvc        *queue.Service
-	RuntimeSettings *runtimesettings.Service
+	Runs              *snatch.Runs
+	Workers           *snatch.Workers
+	Rec               *snatch.Recorder
+	Budget            *snatch.Budget
+	Memory            *snatch.Memory
+	Planner           *snatch.Planner
+	Schedules         *snatch.Schedules
+	Clients           *dlclients.Service
+	PriorityPlans     *dlclients.Reconciler
+	Settings          *settings.Service
+	Requests          *requests.Service
+	Modules           *modules.Service
+	Seerr             *seerr.Service
+	Prowlarr          *prowlarr.Service
+	Configarr         *configarr.Service
+	Notify            *notify.Service
+	WatchAware        *watchaware.Service
+	Adult             *adult.Service
+	LibraryProcessing *libraryprocessing.Service
+	Jellyfin          jellyfin.Authenticator
+	Options           *policies.Options
+	ForeignTitles     *foreigntitles.Service
+	Logs              *logring.Ring
+	Queue             *queue.Store
+	QueueSvc          *queue.Service
+	RuntimeSettings   *runtimesettings.Service
 }
 
 // NewHandlers wires the operation handlers.
@@ -138,7 +141,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 	}
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, apiKeys: apiKeys, sessions: sessions, instances: inst, policies: pol,
-		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, priorityPlans: plans, settings: d.Settings, requests: d.Requests, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, adult: d.Adult, jellyfin: jf, options: d.Options, foreignTitles: foreignTitleResolver(d.ForeignTitles), logs: d.Logs, runtimeSettings: d.RuntimeSettings, logger: logger,
+		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, priorityPlans: plans, settings: d.Settings, requests: d.Requests, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, adult: d.Adult, libraryProcessing: d.LibraryProcessing, jellyfin: jf, options: d.Options, foreignTitles: foreignTitleResolver(d.ForeignTitles), logs: d.Logs, runtimeSettings: d.RuntimeSettings, logger: logger,
 	}
 }
 
