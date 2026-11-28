@@ -533,6 +533,67 @@ describe('library processing rules deadlines and saved state', () => {
 		expect(selectOptionValues(refreshed)).toEqual(['', highPrecedenceRule.id, savedGlobal.id]);
 	});
 
+	it('exports the checked definition of a retained off-page rule after a timed-out save', async () => {
+		const { deadlines } = mockDeadlines();
+		const saved = savedGlobalFixture('2026-10-25T00:09:00Z');
+		const committedInput = { ...editedInput, rule: { track: { languages: ['it'] } } };
+		const committed = { ...saved, ...committedInput, updated_at: '2026-10-25T00:10:00Z' };
+		const firstPage = pageResult([highPrecedenceRule], 'cursor-2');
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule, storedRule]) as never)
+			.mockResolvedValueOnce(firstPage as never)
+			.mockResolvedValueOnce(firstPage as never)
+			.mockResolvedValueOnce({ data: committed } as never);
+		const putSpy = vi
+			.spyOn(api, 'PUT')
+			.mockResolvedValueOnce({ data: saved } as never)
+			.mockImplementationOnce(hangUntilAborted as never);
+
+		render(LibraryProcessingRules);
+		await openRuleAsJson(storedRule.id);
+		await fireEvent.change(ruleSelect(), { target: { value: highPrecedenceRule.id } });
+		await typeDocument(editedDocument);
+		await fireEvent.click(saveButton());
+		await screen.findByRole('button', { name: m.modules_rules_load_more() });
+		await waitFor(() => expect((saveButton() as HTMLButtonElement).disabled).toBe(false));
+		expect(selectOptionValues()).toEqual(['', highPrecedenceRule.id, saved.id]);
+
+		await typeDocument(JSON.stringify(committedInput, null, 2));
+		await fireEvent.click(saveButton());
+		const deadline = deadlines[3]!;
+		expect(putSpy).toHaveBeenNthCalledWith(2, RULE_PATH, {
+			params: { path: { ruleId: saved.id } },
+			body: committedInput,
+			signal: deadline.signal
+		});
+		expireDeadline(deadline);
+		await screen.findByText(m.modules_rules_write_timeout());
+		expect(getSpy).toHaveBeenCalledTimes(2);
+		await typeDocument(jsonDocument);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_check_state() }));
+		const preview = (await screen.findByRole('textbox', {
+			name: `${m.modules_rules_check_state()} · ${optionLabel} (JSON)`
+		})) as HTMLTextAreaElement;
+		expect(getSpy).toHaveBeenNthCalledWith(4, RULE_DETAIL_PATH, {
+			params: { path: { ruleId: saved.id } },
+			signal: expect.anything()
+		});
+		expect(preview.readOnly).toBe(true);
+		expect(readRuleDocument(preview.value, 'json')).toEqual(committedInput);
+		expect(documentField().value).toBe(jsonDocument);
+		expect(ruleSelect().value).toBe(highPrecedenceRule.id);
+		expect(screen.getByRole('button', { name: m.modules_rules_load_more() })).toBeTruthy();
+		expect(screen.getByText(m.modules_rules_write_timeout())).toBeTruthy();
+
+		await fireEvent.change(ruleSelect(), { target: { value: saved.id } });
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+		expect(readRuleDocument(documentField().value, 'json')).toEqual(committedInput);
+		expect(putSpy).toHaveBeenCalledTimes(2);
+		expect(getSpy).toHaveBeenCalledTimes(4);
+	});
+
 	it('retains a saved rule that moved behind a stale cursor across Load more until a reload confirms absence', async () => {
 		const trailingGlobal = {
 			...storedRule,
@@ -898,6 +959,66 @@ describe('library processing rules deadlines and saved state', () => {
 		).toBe(false);
 		expect(documentField().value).toBe(editedDocument);
 	});
+	it.each(['POST', 'PUT'] as const)(
+		'restarts the list when an explicit %s retry is rejected before any list snapshot',
+		async (method) => {
+			const { deadlines } = mockDeadlines();
+			const getSpy = vi.spyOn(api, 'GET').mockImplementationOnce(hangUntilAborted as never);
+			if (method === 'PUT') {
+				getSpy.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'import refresh failed'));
+				vi.spyOn(api, 'POST').mockResolvedValueOnce({ data: storedRule } as never);
+			}
+			getSpy
+				.mockRejectedValueOnce(problemError(503, 'Service Unavailable', 'list restart failed'))
+				.mockImplementationOnce(pageHonoringSignal([storedRule]) as never);
+			const writeSpy = vi
+				.spyOn(api, method)
+				.mockImplementationOnce(hangUntilAborted as never)
+				.mockRejectedValueOnce(problemError(409, 'Conflict', 'write retry rejected'));
+
+			render(LibraryProcessingRules);
+			await screen.findByText(m.loading());
+			await chooseFormat('JSON');
+			await typeDocument(jsonDocument);
+			if (method === 'PUT') {
+				// A successful import can leave an exportable rule without a list snapshot.
+				await fireEvent.click(importButton());
+				await screen.findByText(/import refresh failed/);
+				await openRuleAsJson(storedRule.id);
+				await typeDocument(editedDocument);
+			}
+			const writeButton = method === 'POST' ? importButton : saveButton;
+			const draft = method === 'POST' ? jsonDocument : editedDocument;
+			const readsBeforeWrite = method === 'POST' ? 1 : 2;
+			const deadlineIndex = deadlines.length;
+			await fireEvent.click(writeButton());
+			expireDeadline(deadlines[deadlineIndex]!);
+			await screen.findByRole('button', { name: m.modules_rules_check_state() });
+			await flush();
+			expect(writeSpy).toHaveBeenCalledTimes(1);
+			expect(getSpy).toHaveBeenCalledTimes(readsBeforeWrite);
+			expect(documentField().value).toBe(draft);
+
+			await fireEvent.click(writeButton());
+			await screen.findByText(/write retry rejected/);
+			await screen.findByText(/list restart failed/);
+			expect(writeSpy).toHaveBeenCalledTimes(2);
+			expect(getSpy).toHaveBeenCalledTimes(readsBeforeWrite + 1);
+			expect(getSpy).toHaveBeenLastCalledWith(RULES_PAGE_PATH, {
+				params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT } },
+				signal: expect.objectContaining({ aborted: false })
+			});
+			expect(screen.queryByRole('button', { name: m.modules_rules_check_state() })).toBeNull();
+
+			await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
+			await waitFor(() => expect(screen.queryByText(/list restart failed/)).toBeNull());
+			await screen.findByRole('option', { name: optionLabel });
+			expect(getSpy).toHaveBeenCalledTimes(readsBeforeWrite + 2);
+			expect(writeSpy).toHaveBeenCalledTimes(2);
+			expect(documentField().value).toBe(draft);
+			expect(ruleSelect().value).toBe(method === 'POST' ? '' : storedRule.id);
+		}
+	);
 	it.each(['rejected', 'timed out', 'rejected after unmount'] as const)(
 		'handles an import %s after it interrupts the initial list load',
 		async (outcome) => {

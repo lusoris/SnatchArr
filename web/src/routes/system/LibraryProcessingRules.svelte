@@ -111,6 +111,10 @@
 		}
 		submitError = err;
 		toast.error(describeError(err));
+		// A definitive rejection clears timeout recovery; restore the list if no read has completed.
+		if (!hasListSnapshot) {
+			void loadRules();
+		}
 	}
 
 	function extractNextCursor(page: RulePage): string | null {
@@ -246,6 +250,9 @@
 					label: `${ruleLabel(checkedRule)} (${format.toUpperCase()})`,
 					document: writeRuleDocument(checkedRule, format)
 				};
+				if (savedRule?.id === checkedRule.id) {
+					savedRule = checkedRule;
+				}
 			}
 			loadedRules = page.items;
 			hasMore = page.more;
@@ -353,7 +360,6 @@
 		const input = parseDocument();
 		if (!input) return;
 
-		const interruptedInitialLoad = loading && !hasListSnapshot;
 		importing = true;
 		const deadline = startWrite();
 		try {
@@ -377,14 +383,6 @@
 			await loadRules(res.data);
 		} catch (err) {
 			reportWriteFailure(err, deadline);
-			// Restore the interrupted list read when the timeout recovery action is absent.
-			if (
-				interruptedInitialLoad &&
-				!unmountController.signal.aborted &&
-				!isUnknownWriteOutcome(err, deadline)
-			) {
-				void loadRules();
-			}
 		} finally {
 			if (!unmountController.signal.aborted) importing = false;
 		}
