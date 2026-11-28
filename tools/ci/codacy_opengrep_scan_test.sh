@@ -23,6 +23,54 @@ DAY=2026-11-12
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# Verify the recorded totals against the issue rows before replaying scanner fixtures.
+python3 -I - "$FIXTURES/main-report.json" <<'PY'
+import json
+import sys
+from collections import Counter
+
+with open(sys.argv[1], encoding='utf-8') as fixture:
+    report = json.load(fixture)
+
+issues = report['issues']
+summary = report['patternSummary']
+groups = summary['groups']
+tools = report['toolResults']
+errors = []
+
+expected_groups = Counter(issue['severity'] for issue in issues)
+actual_groups = {}
+for group in groups:
+    severity = group['severity']
+    declared = group['totalIssues']
+    actual_groups[severity] = declared
+    pattern_total = sum(pattern['issueCount'] for pattern in group['patterns'])
+    if pattern_total != declared:
+        errors.append(f'Group {severity!r} pattern sum: expected {declared}, actual {pattern_total}')
+
+if len(actual_groups) != len(groups):
+    errors.append(f'Distinct group severities: expected {len(groups)}, actual {len(actual_groups)}')
+nonzero_groups = {key: count for key, count in actual_groups.items() if count != 0}
+if nonzero_groups != dict(expected_groups):
+    errors.append(f'Group counts: expected {dict(expected_groups)}, actual {actual_groups}')
+if summary['totalIssues'] != len(issues):
+    errors.append(f"Overall issue count: expected {len(issues)}, actual {summary['totalIssues']}")
+
+expected_tools = Counter(issue['toolId'] for issue in issues)
+actual_tools = {}
+for tool in tools:
+    actual_tools[tool['toolId']] = tool['issueCount']
+
+if len(actual_tools) != len(tools):
+    errors.append(f'Distinct tool IDs: expected {len(tools)}, actual {len(actual_tools)}')
+nonzero_tools = {key: count for key, count in actual_tools.items() if count != 0}
+if nonzero_tools != dict(expected_tools):
+    errors.append(f'Tool counts: expected {dict(expected_tools)}, actual {actual_tools}')
+
+if errors:
+    sys.exit('\n'.join(errors))
+PY
+
 # expect WANT NAME NEEDLE COMMAND...: run COMMAND and match its result and diagnostic.
 expect() {
   want=$1

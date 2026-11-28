@@ -15,8 +15,10 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import threading
 
 TIMEOUT_SECONDS = 60
+LOOKUP_TIMEOUT_SECONDS = 5
 ALLOWED_NAMES = ("praetorctl", "standardsctl")
 
 
@@ -85,9 +87,8 @@ def fetch_report_from_file(report_file: str) -> str:
         ) from err
 
 
-def resolve_praetorctl() -> str:
-    """Resolve PRAETORCTL to an allowed executable path or raise CheckError."""
-    value = os.environ.get("PRAETORCTL", "praetorctl")
+def _find_praetorctl(value: str) -> str:
+    """Filesystem-only lookup of VALUE; may block, so run it on a worker thread."""
     if value in ALLOWED_NAMES:
         resolved = shutil.which(value)
         if not resolved:
@@ -95,6 +96,17 @@ def resolve_praetorctl() -> str:
                 f"clones_check: praetorctl binary not found on PATH: {value}",
                 exit_code=2,
             )
+        if not os.path.isabs(resolved):
+            # A relative PATH entry yields a relative result; anchor it to the
+            # caller's cwd now, before the scan changes directory. Do not
+            # normalize or resolve symlinks, so the invoked name is preserved.
+            try:
+                resolved = os.path.join(os.getcwd(), resolved)
+            except OSError as err:
+                raise CheckError(
+                    f"clones_check: cannot make {resolved!r} absolute: {err}",
+                    exit_code=2,
+                ) from err
         return resolved
     candidate = pathlib.Path(value)
     if (
@@ -108,6 +120,58 @@ def resolve_praetorctl() -> str:
         f"clones_check: invalid PRAETORCTL={value!r}: not an allowed executable",
         exit_code=2,
     )
+
+
+def _record_lookup(value: str, results: list[str], errors: list[CheckError]) -> None:
+    """Run the lookup, recording one result or one CheckError.
+
+    Expected OS/path failures (OSError, ValueError) are converted to a named
+    CheckError with exit code 2 that includes and chains the cause. An existing
+    CheckError is recorded unchanged.
+    """
+    try:
+        results.append(_find_praetorctl(value))
+    except CheckError as err:
+        errors.append(err)
+    except (OSError, ValueError) as err:
+        wrapped = CheckError(
+            f"clones_check: praetorctl lookup failed: {type(err).__name__}: {err}",
+            exit_code=2,
+        )
+        wrapped.__cause__ = err
+        errors.append(wrapped)
+
+
+def resolve_praetorctl(timeout: float | None = None) -> str:
+    """Resolve PRAETORCTL to an allowed executable path or raise CheckError.
+
+    The filesystem lookup runs on a daemon worker and is bounded by TIMEOUT
+    (default LOOKUP_TIMEOUT_SECONDS). The worker never starts a process.
+    """
+    limit = LOOKUP_TIMEOUT_SECONDS if timeout is None else timeout
+    value = os.environ.get("PRAETORCTL", "praetorctl")
+    results: list[str] = []
+    errors: list[CheckError] = []
+    worker = threading.Thread(
+        target=_record_lookup,
+        args=(value, results, errors),
+        daemon=True,
+    )
+    worker.start()
+    worker.join(timeout=limit)
+    if worker.is_alive():
+        raise CheckError(
+            f"clones_check: praetorctl lookup timed out after {limit}s",
+            exit_code=2,
+        )
+    if errors:
+        raise errors[0]
+    if not results:
+        raise CheckError(
+            "clones_check: praetorctl lookup ended without a result",
+            exit_code=2,
+        )
+    return results[0]
 
 
 def run_scan_report(root: pathlib.Path) -> str:

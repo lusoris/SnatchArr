@@ -8,7 +8,8 @@
 # scan PRAETORCTL resolution cases (relative path, wrong basename, non-exec
 # file, bare sh, empty value, directory named praetorctl, executable
 # praetorctl/standardsctl absolute paths, PATH lookup when PRAETORCTL is unset,
-# and case 18 allowed bare name missing from PATH).
+# case 18 allowed bare name missing from PATH, and case 19 relative PATH entry
+# resolved from a working directory different from the scan root).
 set -eu
 
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
@@ -104,7 +105,8 @@ check_stub_log() {
   return 0
 }
 
-# Invoke clones_check.py in $fixture under mode $1 (unset, bare, or set) with value $2.
+# Invoke clones_check.py for $fixture under mode $1 (unset, bare, set, or rel) with value $2.
+# Mode rel runs from $fixture/work with PRAETORCTL unset and PATH=$2.
 run_scan_mode() {
   cd "$fixture" || exit 99
   case "$1" in
@@ -117,6 +119,11 @@ run_scan_mode() {
       ;;
     set)
       PRAETORCTL="$2" "$python_bin" "$checker" --root "$fixture" --clone-free "$clone_free" 2>&1
+      ;;
+    rel)
+      cd "$fixture/work" || exit 99
+      unset PRAETORCTL
+      PATH="$2" "$python_bin" "$checker" --root "$fixture" --clone-free "$clone_free" 2>&1
       ;;
     *)
       echo "FAIL unknown expect_scan mode: $1" >&2
@@ -171,6 +178,7 @@ chmod 755 "$fixture/web/node_modules/.bin/jscpd"
 mkdir -p "$fixture/dirs/praetorctl"
 chmod 755 "$fixture/dirs/praetorctl"
 mkdir -p "$fixture/empty"
+mkdir -p "$fixture/work"
 
 make_stub "$fixture/bin/praetorctl"
 make_stub "$fixture/bin/evil"
@@ -207,5 +215,14 @@ expect_scan 0 "" yes "17 unset PRAETORCTL resolves praetorctl on PATH" unset "$f
 
 # 18. negative: allowed bare name PRAETORCTL=standardsctl missing from PATH -> exit 2, reports not found on PATH, stub never ran
 expect_scan 2 "not found on PATH" no "18 allowed bare name not on PATH PRAETORCTL=standardsctl" bare "standardsctl"
+
+# 19. positive: PRAETORCTL unset, relative PATH entry ../bin, cwd $fixture/work differs from scan root -> exit 0, exact stub args
+expect_scan 0 "" yes "19 relative PATH entry from a different working directory" rel "../bin:$PATH" "dedupe scan --json $fixture"
+
+# 20. defensive: invalid executable is refused before any subprocess launch (launch boundary mocked; nothing runs)
+if ! python3 -I "$(dirname "$0")/clones_check_launch_test.py"; then
+    echo "FAIL: 20 clones_check launch refusal unit test" >&2
+    [ "$failed" -ne 0 ] || failed=1
+fi
 
 exit "$failed"
