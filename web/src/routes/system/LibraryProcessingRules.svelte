@@ -53,6 +53,9 @@
 	// Set only when a POST/PUT hit its own deadline: the server may or may not have committed it.
 	let writeTimeout = $state.raw<{ message: string; targetId: string } | null>(null);
 	let storedPreview = $state<{ id: string; label: string; document: string } | null>(null);
+	// The edited rule ID an authoritative read confirmed absent. A transport error or a 200 without
+	// a body never lands here; a later read that finds it, a new editor target or an import clears it.
+	let missingRuleId = $state('');
 
 	type RuleInput = ReturnType<typeof readRuleDocument>;
 
@@ -63,6 +66,7 @@
 			(lastSavedRule?.id === editingId ? lastSavedRule : undefined)
 	);
 	const busy = $derived(importing || saving);
+	const editingMissing = $derived(editingId !== '' && editingId === missingRuleId);
 
 	function startRequest(): { seq: number; signal: AbortSignal } {
 		activeLoadController?.abort();
@@ -225,8 +229,71 @@
 		return fetchRule(targetId, signal);
 	}
 
+	type CheckedRule = { id: string; rule: StoredRule | null };
+	type Selection = Awaited<ReturnType<typeof reconcileSelection>>;
+
+	// Checks the timed-out PUT target against the authoritative reads. POST has no target ID, so
+	// only a timed-out PUT is inspected. A throw (transport, empty body) is no answer at all.
+	async function inspectTimedOutTarget(
+		targetId: string,
+		page: ReturnType<typeof parsePageState>,
+		selection: Selection,
+		supplied: (StoredRule | string | undefined)[],
+		signal: AbortSignal
+	): Promise<CheckedRule | null> {
+		if (!targetId) return null;
+		let freshDetail = selection.nextPinned;
+		if (freshDetail && supplied.includes(freshDetail)) freshDetail = null;
+		const rule = await lookupStoredPreview(
+			targetId,
+			page,
+			freshDetail,
+			selection.missingId,
+			signal
+		);
+		return { id: targetId, rule };
+	}
+
+	function nextMissingId(
+		current: string,
+		items: StoredRule[],
+		checked: CheckedRule | null
+	): string {
+		if (checked && !checked.rule) return checked.id;
+		const foundByCheck = checked?.id === current && checked.rule !== null;
+		return foundByCheck || items.some((rule) => rule.id === current) ? '' : current;
+	}
+
+	function previewOf(rule: StoredRule | null | undefined): typeof storedPreview {
+		if (!rule) return null;
+		return {
+			id: rule.id,
+			label: `${ruleLabel(rule)} (${format.toUpperCase()})`,
+			document: writeRuleDocument(rule, format)
+		};
+	}
+
+	// Publishes one fully checked read in a single synchronous step; callers guard supersession.
+	function publishRules(
+		page: ReturnType<typeof parsePageState>,
+		selection: Selection,
+		checked: CheckedRule | null
+	): void {
+		storedPreview = previewOf(checked?.rule);
+		missingRuleId = nextMissingId(missingRuleId, page.items, checked);
+		loadedRules = page.items;
+		hasMore = page.more;
+		nextCursor = page.cursor;
+		pinnedRule = selection.nextPinned;
+		selectedId = selection.nextSelectedId;
+		syncRetainedRules(page, selection.missingId, checked);
+		hasListSnapshot = true;
+	}
+
 	async function loadRules(prefer?: StoredRule | string, known?: StoredRule): Promise<void> {
-		const recovery = writeTimeout;
+		// An unknown write owns the check: a timed-out POST has no target, so it stays list-only.
+		// The confirmed-missing edited rule is checked only when no unknown write exists.
+		const targetId = writeTimeout ? writeTimeout.targetId : missingRuleId;
 		const { seq, signal } = startRequest();
 		storedPreview = null;
 		loading = true;
@@ -242,36 +309,15 @@
 			const page = parsePageState(res.data);
 			const selection = await reconcileSelection(page.items, page.more, prefer, known, signal);
 			if (!isCurrent(seq, signal)) return;
-			// No inspection and a confirmed absent target are different outcomes.
-			let checked: { id: string; rule: StoredRule | null } | null = null;
-			// POST has no target ID; only a timed-out PUT can produce a preview.
-			if (recovery?.targetId && recovery === writeTimeout) {
-				let freshDetail = selection.nextPinned;
-				if (freshDetail === prefer || freshDetail === known) freshDetail = null;
-				const rule = await lookupStoredPreview(
-					recovery.targetId,
-					page,
-					freshDetail,
-					selection.missingId,
-					signal
-				);
-				if (!isCurrent(seq, signal)) return;
-				checked = { id: recovery.targetId, rule };
-				if (rule) {
-					storedPreview = {
-						id: rule.id,
-						label: `${ruleLabel(rule)} (${format.toUpperCase()})`,
-						document: writeRuleDocument(rule, format)
-					};
-				}
-			}
-			loadedRules = page.items;
-			hasMore = page.more;
-			nextCursor = page.cursor;
-			pinnedRule = selection.nextPinned;
-			selectedId = selection.nextSelectedId;
-			syncRetainedRules(page, selection.missingId, checked);
-			hasListSnapshot = true;
+			const checked = await inspectTimedOutTarget(
+				targetId,
+				page,
+				selection,
+				[prefer, known],
+				signal
+			);
+			if (!isCurrent(seq, signal)) return;
+			publishRules(page, selection, checked);
 		} catch (err) {
 			if (isCurrent(seq, signal)) loadError = err;
 		} finally {
@@ -282,6 +328,13 @@
 	function nextPageCursor(): string | null {
 		if (loading || loadingMore || !hasMore) return null;
 		return nextCursor;
+	}
+
+	// A Load more row for the saved rule is newer than the cached copy: adopt it before the overlays
+	// that stood in for it are dropped, so a later first-page retry falls back to the fresh record.
+	function adoptIncomingSaved(items: StoredRule[]): void {
+		const incoming = items.find((rule) => rule.id === lastSavedRule?.id);
+		if (incoming) lastSavedRule = incoming;
 	}
 
 	function clearReachedPinned(combined: StoredRule[]): void {
@@ -303,6 +356,8 @@
 			if (!isCurrent(seq, signal)) return;
 			const page = parsePageState(res.data);
 			const combined = appendRulePage(loadedRules, page.items);
+			adoptIncomingSaved(page.items);
+			missingRuleId = nextMissingId(missingRuleId, page.items, null);
 			loadedRules = combined;
 			hasMore = page.more;
 			nextCursor = page.cursor;
@@ -383,6 +438,7 @@
 			toast.success(status);
 			// The editor now holds a new document, not the one that was opened for editing.
 			editingId = '';
+			missingRuleId = '';
 			lastSavedRule = null;
 			savedRule = null;
 			// Keep the created rule selected and pinned before refreshing so a failed or partial
@@ -403,7 +459,7 @@
 		if (busy) return;
 		// Bind the target now: later list selection changes must not redirect the write.
 		const ruleId = editingId;
-		if (!ruleId) return;
+		if (!ruleId || ruleId === missingRuleId) return;
 		const input = parseDocument();
 		if (!input) return;
 
@@ -444,6 +500,7 @@
 		try {
 			text = writeRuleDocument(selectedRule, format);
 			editingId = selectedRule.id;
+			missingRuleId = '';
 			lastSavedRule = selectedRule;
 			status = m.modules_rules_export_success();
 		} catch (err) {
@@ -562,9 +619,14 @@
 		{/if}
 	</div>
 
-	{#if writeTimeout}
+	{#if writeTimeout || editingMissing}
 		<div class="flex flex-col gap-2" role="alert">
-			<p class="text-sm text-danger">{writeTimeout.message}</p>
+			{#if writeTimeout}
+				<p class="text-sm text-danger">{writeTimeout.message}</p>
+			{/if}
+			{#if editingMissing}
+				<p class="text-sm text-danger">{m.modules_rules_write_missing({ id: missingRuleId })}</p>
+			{/if}
 			<div>
 				<button
 					type="button"
@@ -610,7 +672,7 @@
 		<button
 			type="button"
 			class="btn min-h-11 px-3 py-1.5 text-xs md:min-h-0"
-			disabled={!editingId || busy}
+			disabled={!editingId || busy || editingMissing}
 			aria-busy={saving}
 			onclick={saveRule}
 		>
