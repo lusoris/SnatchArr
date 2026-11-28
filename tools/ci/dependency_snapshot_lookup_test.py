@@ -155,25 +155,96 @@ class ResolveDockerTest(unittest.TestCase):
         self.assertGreater(self._check_late_completion(0.75, 0.0, 0.0), 100.5)
 
     def test_main_wiring_and_resolver_errors(self):
-        """main wires the resolved docker path and fails cleanly on resolver errors."""
-        argv = ["x", "--trivy", "img:t@sha256:" + "0" * 64, "--out", "o.json",
-                "--sha", "s", "--ref", "r"]
-        with mock.patch.object(sys, "argv", argv), mock.patch.object(
-                self.mod, "scan_and_write", return_value=0) as scan:
+        """main wires validated metadata and resolved docker, and reports resolver errors."""
+        sha = "1234567890abcdef1234567890abcdef12345678"
+        ref = "refs/heads/main"
+        argv = [
+            "dependency_snapshot.py",
+            "--trivy",
+            "example.invalid/snapshot-fixture:1@sha256:" + "a" * 64,
+            "--out",
+            "o.json",
+            "--sha",
+            sha,
+            "--ref",
+            ref,
+            "--workflow",
+            "Security Scan",
+            "--job",
+            "dependency-submission",
+            "--run-id",
+            "12345678",
+        ]
+        want_job_vars = {
+            "GITHUB_WORKFLOW": "Security Scan",
+            "GITHUB_JOB": "dependency-submission",
+            "GITHUB_RUN_ID": "12345678",
+        }
+        with (
+            mock.patch.object(sys, "argv", argv),
+            mock.patch.object(self.mod, "scan_and_write", return_value=0) as scan,
+        ):
             with mock.patch.object(
-                    self.mod, "resolve_docker", return_value="/r/docker") as resolve:
+                self.mod, "resolve_docker", return_value="/r/docker"
+            ) as resolve:
                 self.assertEqual(self.mod.main(), 0)
             resolve.assert_called_once_with("docker")
-            self.assertEqual(scan.call_args.args[1], "/r/docker")
+            self.assertEqual(
+                scan.call_args.args[1:],
+                ("/r/docker", sha, ref, want_job_vars),
+            )
             for error in (OSError("gone"), ValueError("invalid")):
                 with self.subTest(error=error):
                     stderr = io.StringIO()
-                    with contextlib.redirect_stderr(stderr), mock.patch.object(
-                            self.mod, "resolve_docker", side_effect=error):
+                    with (
+                        contextlib.redirect_stderr(stderr),
+                        mock.patch.object(
+                            self.mod, "resolve_docker", side_effect=error
+                        ),
+                    ):
                         self.assertEqual(self.mod.main(), 1)
                     self.assertIn("could not be resolved", stderr.getvalue())
                     self.assertIn(str(error), stderr.getvalue())
             scan.assert_called_once()
+
+    def test_main_refuses_malformed_metadata(self):
+        """main refuses malformed --sha, --ref or --workflow before scan_and_write."""
+        base = [
+            "dependency_snapshot.py",
+            "--trivy",
+            "example.invalid/snapshot-fixture:1@sha256:" + "a" * 64,
+            "--out",
+            "o.json",
+            "--sha",
+            "1234567890abcdef1234567890abcdef12345678",
+            "--ref",
+            "refs/heads/main",
+            "--workflow",
+            "Security Scan",
+            "--job",
+            "",
+            "--run-id",
+            "",
+        ]
+        cases = (
+            (["--sha", "not-a-sha"], "invalid --sha value"),
+            (["--ref", "heads/main"], "invalid --ref value"),
+            (["--workflow", "Security\tScan"], "invalid --workflow value"),
+        )
+        with (
+            mock.patch.object(self.mod, "resolve_docker", return_value="/r/docker"),
+            mock.patch.object(self.mod, "scan_and_write", return_value=0) as scan,
+        ):
+            for extra, want_err in cases:
+                with self.subTest(extra=extra):
+                    stderr = io.StringIO()
+                    with (
+                        contextlib.redirect_stderr(stderr),
+                        mock.patch.object(sys, "argv", [*base, *extra]),
+                    ):
+                        self.assertEqual(self.mod.main(), 1)
+                    self.assertIn(want_err, stderr.getvalue())
+            scan.assert_not_called()
 
 
 if __name__ == "__main__":
