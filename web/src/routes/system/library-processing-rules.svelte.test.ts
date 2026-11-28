@@ -1135,6 +1135,14 @@ describe('library processing rules import/export and bounded pagination', () => 
 		expect(screen.getByRole('status').textContent).toBe('');
 		expect(screen.getByRole('alert').textContent).toContain(m.modules_rules_write_timeout());
 		expect(documentField().value).toBe(updatedDocument);
+
+		await typeDocument('');
+		await fireEvent.click(saveButton());
+
+		expect(screen.getByText(m.modules_rules_document_empty())).toBeTruthy();
+		expect(screen.getByText(m.modules_rules_write_timeout())).toBeTruthy();
+		expect(putSpy).toHaveBeenCalledTimes(1);
+		expect(postSpy).not.toHaveBeenCalled();
 	});
 
 	it('keeps a timed-out save unconfirmed when the edited rule is beyond the refreshed first page', async () => {

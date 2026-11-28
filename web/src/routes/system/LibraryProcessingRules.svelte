@@ -281,8 +281,6 @@
 		status = '';
 		submitError = null;
 
-		writeTimeout = '';
-
 		if (!text.trim()) {
 			documentError = m.modules_rules_document_empty();
 			return null;
@@ -294,6 +292,11 @@
 			documentError = m.modules_rules_invalid({ reason: describeError(err) });
 			return null;
 		}
+	}
+
+	function startWrite(): AbortSignal {
+		writeTimeout = '';
+		return AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 	}
 
 	function applySavedRule(saved: StoredRule): void {
@@ -323,7 +326,7 @@
 		if (!input) return;
 
 		importing = true;
-		const deadline = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+		const deadline = startWrite();
 		try {
 			const res = await api.POST('/library-processing/rules', {
 				body: input,
@@ -358,7 +361,7 @@
 		if (!input) return;
 
 		saving = true;
-		const deadline = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+		const deadline = startWrite();
 		try {
 			const res = await api.PUT('/library-processing/rules/{ruleId}', {
 				params: { path: { ruleId } },
@@ -379,7 +382,7 @@
 	}
 
 	// A read-only first-page refresh cannot establish whether a timed-out write committed.
-	// Keep the warning; starting a new import or save still clears it in parseDocument().
+	// Keep the warning until a validated import or save starts.
 	async function checkStoredState(): Promise<void> {
 		if (busy || loading) return;
 		await loadRules();
