@@ -17,10 +17,12 @@
 #   17. negative directory named docker refused
 #   18. negative bare docker not on PATH refused
 #   19. bounded --docker lookup: injected blocked fake lookup, success, validation errors, cleanup
+#   20. --workflow class at every position and --ref via git check-ref-format: literal env transport,
+#       long nested/plus/Unicode refs, malformed refs, missing git, failing git
 #
 #   tools/ci/dependency_snapshot_test.sh
 #
-# Exit status: 0 all cases pass, 1 failure, 2 python3 not on PATH.
+# Exit status: 0 all cases pass, 1 failure, 2 python3 or git not on PATH.
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -29,6 +31,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 PYTHON="$(command -v python3)" || PYTHON=""
 if [ -z "$PYTHON" ]; then
   printf 'dependency_snapshot_test: python3 not on PATH\n' >&2
+  exit 2
+fi
+if ! command -v git > /dev/null 2>&1; then
+  printf 'dependency_snapshot_test: git not on PATH\n' >&2
   exit 2
 fi
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
@@ -291,7 +297,40 @@ expect_scan "tab in --workflow refused" 1 "--workflow" 0 --workflow "$(printf 'S
 expect_scan "newline in --workflow refused" 1 "--workflow" 0 --workflow "$(printf 'Security\nScan')"
 expect_scan "NUL-adjacent control in --workflow refused" 1 "--workflow" 0 --workflow "$(printf 'Security\001Scan')"
 expect_scan "command substitution in --workflow refused" 1 "--workflow" 0 --workflow "Scan \$()"
-expect_scan "leading colon in --workflow refused" 1 "--workflow" 0 --workflow ': Scan'
+# check_env2 NAME: assert the real scan's client env line is exactly $WANT_ENV2.
+check_env2() {
+  got_env2="$(sed -n '2p' "$SNAP_STUB_ENV")"
+  if [ "$got_env2" != "$WANT_ENV2" ]; then
+    printf 'FAIL %s: env line = "%s", want "%s"\n' "$1" "$got_env2" "$WANT_ENV2" >&2
+    exit 1
+  fi
+}
+
+# expect_env2 NAME WANT_LINE ARGS...: assert a successful scan whose real client env line is WANT_LINE.
+expect_env2() {
+  ee_name="$1"
+  WANT_ENV2="$2"
+  shift 2
+  post_scan_check="check_env2"
+  expect_scan "$ee_name" 0 "Dependency snapshot: 2 resolved packages" 2 "$@"
+}
+
+# 14d2. Positive: first-position punctuation and length 1 in --workflow arrive literally in the client env
+expect_env2 "single leading parenthesis --workflow accepted" \
+  "sha=$SHA ref=refs/heads/main wf=( job=unset run=unset" --workflow '('
+expect_env2 "leading colon --workflow accepted" \
+  "sha=$SHA ref=refs/heads/main wf=: Scan job=unset run=unset" --workflow ': Scan'
+
+# 14d3. --ref is decided by git: plus, Unicode and a 316-character nested ref pass; malformed names are refused
+seg="$(printf '%050d' 0 | tr 0 s)"
+long_ref="refs/heads/$seg/$seg/$seg/$seg/$seg/$seg"
+for tref in 'refs/heads/feature+x' 'refs/heads/fé/日本語' "$long_ref"; do
+  expect_env2 "git-valid --ref of length ${#tref} accepted" \
+    "sha=$SHA ref=$tref wf=unset job=unset run=unset" --ref "$tref"
+done
+for tref in 'heads/main' 'refs/heads/a..b' 'refs/heads/x.lock' 'refs/heads/a@{b}' 'refs/heads/a//b'; do
+  expect_scan "malformed --ref $tref refused" 1 "invalid --ref value" 0 --ref "$tref"
+done
 
 # 14e. Negative: the relaxed workflow rule does not loosen --job or --run-id
 expect_scan "colon in --job refused" 1 "--job" 0 --job 'ci:build'
@@ -314,7 +353,9 @@ chmod 755 "$fixture/dir/docker"
 expect_scan "directory named docker refused" 1 "--docker" 0 --docker "$fixture/dir/docker"
 
 # 18. Negative: bare docker not on PATH
-mkdir -p "$fixture/empty"
+mkdir -p "$fixture/empty" "$fixture/gitfail"
+printf '#!/bin/sh\nexit 128\n' > "$fixture/gitfail/git"
+chmod 755 "$fixture/gitfail/git"
 (
   real_rm="$(command -v rm)"
   # rm ARGS...: forward rm to the resolved binary while PATH holds only the empty directory.
@@ -325,6 +366,10 @@ mkdir -p "$fixture/empty"
   PATH="$fixture/empty"
   expect_scan "bare docker not on PATH refused" 1 "not found on PATH" 0 \
     --docker docker
+  expect_scan "missing git refused" 1 "git not found" 0
+  # shellcheck disable=SC2123 # intentional search path holding only a git stub that exits 128
+  PATH="$fixture/gitfail"
+  expect_scan "git operational failure refused" 1 "git check-ref-format exited 128" 0
 )
 
 # 19. Bounded lookup deadline with an in-memory blocked fake lookup (isolated import, in-test watchdog)

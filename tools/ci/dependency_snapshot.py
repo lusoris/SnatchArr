@@ -28,6 +28,9 @@ The Docker binary is resolved by fixed name on PATH or as an executable /.../doc
 file, and validated GitHub workflow metadata reaches the container through the Docker
 client's environment rather than command-line arguments.
 
+The --ref value must start with refs/ and be accepted by the installed
+`git check-ref-format`, so git must be on PATH.
+
 Usage:
     python3 -I tools/ci/dependency_snapshot.py --trivy IMAGE:TAG@sha256:DIGEST --out PATH
 """
@@ -50,12 +53,12 @@ from collections.abc import Callable
 ALLOWED_DOCKER = ("docker",)
 IMAGE_RE = re.compile(r"^[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-REF_RE = re.compile(r"^refs/[A-Za-z0-9][A-Za-z0-9._/-]{0,239}$")
+GIT_REF_TIMEOUT_SECONDS = 5.0
 RUN_ID_RE = re.compile(r"^[0-9]{1,20}$")
 JOB_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,99}$")
-# Workflow display names: Unicode letters/digits, space, and . _ ( ) / : - ; at most 128 characters.
-# Controls, shell metacharacters (; $ ` | & quotes etc.) and non-space whitespace are refused.
-WORKFLOW_RE = re.compile(r"^(?:[^\W_]|\.)[\w .:()/-]{0,127}$")
+# Workflow display names: 1-128 characters, each a Unicode word character, space or . ( ) / : -
+# (the same class at every position). Controls, shell metacharacters and other whitespace are refused.
+WORKFLOW_RE = re.compile(r"[\w .:()/-]{1,128}")
 TIMEOUT_SECONDS = 900
 DOCKER_LOOKUP_TIMEOUT_SECONDS = 5.0
 MAX_REPORT_BYTES = 64 * 1024 * 1024
@@ -203,6 +206,39 @@ def resolve_docker(
     )
 
 
+def git_accepts_ref(ref: str) -> bool:
+    """Return True if REF starts with refs/ and git check-ref-format exits 0.
+
+    Exit 1 means a malformed name; any other failure raises ScanError.
+    """
+    if not ref.startswith("refs/"):
+        return False
+    try:
+        proc = subprocess.run(
+            ["git", "check-ref-format", ref],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=GIT_REF_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except FileNotFoundError as err:
+        raise ScanError("git not found on PATH (required to validate --ref)") from err
+    except subprocess.TimeoutExpired as err:
+        raise ScanError(
+            f"git check-ref-format exceeded {GIT_REF_TIMEOUT_SECONDS}s"
+        ) from err
+    except ValueError:
+        return False
+    except OSError as err:
+        raise ScanError(f"git check-ref-format did not run: {err}") from err
+    if proc.returncode == 0:
+        return True
+    if proc.returncode == 1:
+        return False
+    detail = proc.stderr.decode("utf-8", "replace").strip()[-200:]
+    raise ScanError(f"git check-ref-format exited {proc.returncode}: {detail}")
+
+
 def checked_sha_and_ref(args) -> tuple[str, str]:
     """Require and validate --sha and --ref values."""
     sha = args.sha
@@ -213,7 +249,7 @@ def checked_sha_and_ref(args) -> tuple[str, str]:
     ref = args.ref
     if not ref:
         raise ScanError("--ref or GITHUB_REF environment variable is required")
-    if not REF_RE.fullmatch(ref):
+    if not git_accepts_ref(ref):
         raise ScanError(f"invalid --ref value {ref!r}")
     return sha, ref
 
