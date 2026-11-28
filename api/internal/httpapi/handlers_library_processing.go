@@ -5,13 +5,24 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
 	"slices"
+	"time"
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/libraryprocessing"
+)
+
+const (
+	legacyRuleStreamBatchSize = libraryprocessing.MaxRulePageLimit
+	moduleGateCheckTimeout    = 10 * time.Second
 )
 
 func (h *Handlers) requireLibraryProcessing() (*libraryprocessing.Service, error) {
@@ -36,6 +47,181 @@ func (h *Handlers) ListLibraryProcessingRules(ctx context.Context) ([]oas.Librar
 		out = append(out, storedLibraryProcessingRuleToOAS(r))
 	}
 	return out, nil
+}
+
+// ListLibraryProcessingRulesPage returns one bounded keyset page of stored rules in precedence order.
+func (h *Handlers) ListLibraryProcessingRulesPage(
+	ctx context.Context,
+	params oas.ListLibraryProcessingRulesPageParams,
+) (*oas.LibraryProcessingRulePage, error) {
+	svc, err := h.requireLibraryProcessing()
+	if err != nil {
+		return nil, err
+	}
+	var q libraryprocessing.PageQuery
+	if limit, ok := params.Limit.Get(); ok {
+		q.Limit = limit
+	}
+	if cursor, ok := params.Cursor.Get(); ok {
+		q.Cursor = &cursor
+	}
+	page, err := svc.ListPage(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]oas.LibraryProcessingRule, 0, len(page.Items))
+	for _, r := range page.Items {
+		items = append(items, storedLibraryProcessingRuleToOAS(r))
+	}
+	out := &oas.LibraryProcessingRulePage{
+		Items:   items,
+		HasMore: page.HasMore,
+	}
+	if page.HasMore && page.NextCursor != "" {
+		out.NextCursor = oas.NewOptString(page.NextCursor)
+	}
+	return out, nil
+}
+
+type ruleArrayStreamWriter struct {
+	w         http.ResponseWriter
+	buf       bytes.Buffer
+	pending   []libraryprocessing.StoredRule
+	committed bool
+	wroteItem bool
+}
+
+func (sw *ruleArrayStreamWriter) onBatch(batch []libraryprocessing.StoredRule) error {
+	if len(sw.pending) > 0 {
+		if err := sw.flushPending(); err != nil {
+			return err
+		}
+	}
+	sw.pending = batch
+	return nil
+}
+
+func (sw *ruleArrayStreamWriter) commitHeaders() {
+	if sw.committed {
+		return
+	}
+	sw.w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	sw.w.WriteHeader(http.StatusOK)
+	sw.committed = true
+	sw.buf.WriteByte('[')
+}
+
+func (sw *ruleArrayStreamWriter) encodePending() error {
+	for _, item := range sw.pending {
+		oasItem := storedLibraryProcessingRuleToOAS(item)
+		raw, err := oasItem.MarshalJSON()
+		if err != nil {
+			return fmt.Errorf("httpapi: encode library processing rule: %w", err)
+		}
+		if sw.wroteItem {
+			sw.buf.WriteByte(',')
+		}
+		sw.buf.Write(raw)
+		sw.wroteItem = true
+	}
+	sw.pending = nil
+	return nil
+}
+
+func (sw *ruleArrayStreamWriter) flushPending() error {
+	sw.buf.Reset()
+	sw.commitHeaders()
+	if err := sw.encodePending(); err != nil {
+		return err
+	}
+	if _, err := sw.w.Write(sw.buf.Bytes()); err != nil {
+		return fmt.Errorf("httpapi: write library processing rules: %w", err)
+	}
+	// Plain JSON also works through writers without flush support.
+	if err := http.NewResponseController(sw.w).Flush(); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return fmt.Errorf("httpapi: flush library processing rules: %w", err)
+	}
+	return nil
+}
+
+func (sw *ruleArrayStreamWriter) finish() error {
+	sw.buf.Reset()
+	sw.commitHeaders()
+	if err := sw.encodePending(); err != nil {
+		return err
+	}
+	sw.buf.WriteByte(']')
+	if _, err := sw.w.Write(sw.buf.Bytes()); err != nil {
+		return fmt.Errorf("httpapi: finish library processing rules: %w", err)
+	}
+	return nil
+}
+
+// ServeLibraryProcessingRules streams the legacy full JSON array in bounded batches over
+// a repeatable-read snapshot, preserving RFC 9457 errors before headers commit and aborting
+// mid-stream failures without emitting a valid closing bracket.
+func (h *Handlers) ServeLibraryProcessingRules() http.HandlerFunc {
+	return h.serveLibraryProcessingRulesBatch(legacyRuleStreamBatchSize)
+}
+
+func (h *Handlers) serveLibraryProcessingRulesBatch(batchSize int) http.HandlerFunc {
+	onErr := ErrorHandler(h.logger)
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		svc, err := h.checkLibraryProcessingEnabled(ctx)
+		if err != nil {
+			onErr(ctx, w, r, err)
+			return
+		}
+		sw := &ruleArrayStreamWriter{w: w}
+		err = svc.StreamAll(ctx, batchSize, sw.onBatch)
+		if err == nil {
+			err = sw.finish()
+		}
+		if err != nil {
+			h.failRuleArrayStream(ctx, w, r, onErr, sw.committed, err)
+		}
+	}
+}
+
+func (h *Handlers) checkLibraryProcessingEnabled(ctx context.Context) (*libraryprocessing.Service, error) {
+	svc, err := h.requireLibraryProcessing()
+	if err != nil {
+		return nil, err
+	}
+	if h.modules == nil {
+		return svc, nil
+	}
+	gateCtx, cancel := context.WithTimeout(ctx, moduleGateCheckTimeout)
+	defer cancel()
+	enabled, err := h.modules.IsEnabled(gateCtx, domain.ModuleLibraryProcessing)
+	if err != nil {
+		return nil, fmt.Errorf("module gate %s: %w", domain.ModuleLibraryProcessing, err)
+	}
+	if !enabled {
+		return nil, fmt.Errorf("%w: module %s is disabled", domain.ErrNotFound, domain.ModuleLibraryProcessing)
+	}
+	return svc, nil
+}
+
+func (h *Handlers) failRuleArrayStream(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	onErr func(context.Context, http.ResponseWriter, *http.Request, error),
+	committed bool,
+	err error,
+) {
+	if !committed {
+		onErr(ctx, w, r, err)
+		return
+	}
+	if h.logger != nil {
+		h.logger.ErrorContext(ctx, "httpapi: stream library processing rules aborted",
+			slog.String("error", err.Error()),
+		)
+	}
+	panic(http.ErrAbortHandler)
 }
 
 // GetLibraryProcessingRule returns one stored library processing rule by ID.
@@ -127,6 +313,14 @@ func (h *Handlers) ResolveLibraryProcessingRule(
 	svc, err := h.requireLibraryProcessing()
 	if err != nil {
 		return nil, err
+	}
+	// Generated typed params drop url.ParseQuery errors from URL.Query(), so
+	// reject malformed query strings here. Direct callers without an HTTP
+	// request in the context are unaffected.
+	if r, ok := requestFrom(ctx); ok && r != nil && r.URL != nil {
+		if _, perr := url.ParseQuery(r.URL.RawQuery); perr != nil {
+			return nil, fmt.Errorf("%w: malformed query string", domain.ErrBadRequest)
+		}
 	}
 	res, err := svc.Resolve(ctx, libraryProcessingResolveQueryFromOAS(params))
 	if err != nil {

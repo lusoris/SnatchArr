@@ -4556,6 +4556,46 @@ func (s *LibraryProcessingRuleInput) SetRule(val Rule) {
 	s.Rule = val
 }
 
+// Bounded page of stored library processing rules ordered by precedence.
+// Ref: #/components/schemas/LibraryProcessingRulePage
+type LibraryProcessingRulePage struct {
+	Items []LibraryProcessingRule `json:"items"`
+	// True when another page exists after items; false on the final page.
+	HasMore bool `json:"has_more"`
+	// Opaque keyset cursor for the next page; omitted when has_more is false.
+	NextCursor OptString `json:"next_cursor"`
+}
+
+// GetItems returns the value of Items.
+func (s *LibraryProcessingRulePage) GetItems() []LibraryProcessingRule {
+	return s.Items
+}
+
+// GetHasMore returns the value of HasMore.
+func (s *LibraryProcessingRulePage) GetHasMore() bool {
+	return s.HasMore
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *LibraryProcessingRulePage) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// SetItems sets the value of Items.
+func (s *LibraryProcessingRulePage) SetItems(val []LibraryProcessingRule) {
+	s.Items = val
+}
+
+// SetHasMore sets the value of HasMore.
+func (s *LibraryProcessingRulePage) SetHasMore(val bool) {
+	s.HasMore = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *LibraryProcessingRulePage) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
 // Precedence scope of a library processing rule (ADR-0041 section 10).
 // Ref: #/components/schemas/LibraryProcessingScope
 type LibraryProcessingScope string
@@ -12281,7 +12321,7 @@ type TestNotificationChannelNoContent struct{}
 // Effective track-selection rule resolved by the caller.
 // Ref: #/components/schemas/TrackRule
 type TrackRule struct {
-	// ISO 639 language codes to keep; at least one.
+	// ISO 639 language codes to keep; between 1 and 64 entries (inclusive), all unique.
 	Languages []string `json:"languages"`
 }
 

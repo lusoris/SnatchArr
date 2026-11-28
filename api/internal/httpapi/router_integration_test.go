@@ -2379,6 +2379,29 @@ func stepsLibraryProcessing() []routerStep {
 			want:   http.StatusOK,
 		},
 		{
+			op:     "listLibraryProcessingRulesPage",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/library-processing/rules/page" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				items, ok := decoded["items"].([]any)
+				if !ok || len(items) != 1 {
+					t.Fatalf("listLibraryProcessingRulesPage items = %v, want 1 item", decoded["items"])
+				}
+				first, ok := items[0].(map[string]any)
+				if !ok || first["id"] != ids.libraryRuleID {
+					t.Fatalf("listLibraryProcessingRulesPage items[0] = %v, want id %s", items[0], ids.libraryRuleID)
+				}
+				if decoded["has_more"] != false {
+					t.Fatalf("listLibraryProcessingRulesPage has_more = %v, want false", decoded["has_more"])
+				}
+				if _, hasCursor := decoded["next_cursor"]; hasCursor {
+					t.Fatalf("listLibraryProcessingRulesPage next_cursor = %v, want omitted", decoded["next_cursor"])
+				}
+			},
+		},
+		{
 			op:     "getLibraryProcessingRule",
 			method: http.MethodGet,
 			path:   libraryProcessingRulePath,

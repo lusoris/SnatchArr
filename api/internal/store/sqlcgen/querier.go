@@ -227,7 +227,7 @@ type Querier interface {
 	// Instances never evaluated come first, then the one evaluated longest ago (#176).
 	ListInstancesToPlan(ctx context.Context) ([]Instance, error)
 	ListItemWatchesForSource(ctx context.Context, sourceID uuid.UUID) ([]WatchawareItemWatch, error)
-	ListLibraryProcessingRules(ctx context.Context) ([]LibraryProcessingRule, error)
+	ListLibraryProcessingRulesKeyset(ctx context.Context, arg ListLibraryProcessingRulesKeysetParams) ([]LibraryProcessingRule, error)
 	ListMatchingLibraryProcessingRules(ctx context.Context, arg ListMatchingLibraryProcessingRulesParams) ([]LibraryProcessingRule, error)
 	ListModules(ctx context.Context) ([]Module, error)
 	ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error)

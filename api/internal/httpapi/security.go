@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ogen-go/ogen/ogenerrors"
 
 	"github.com/golusoris/golusoris/auth/apikey"
 	"github.com/golusoris/golusoris/auth/session"
@@ -56,10 +57,13 @@ func NewSecurity(sessions *session.Manager, cfg config.Options, keys *apikey.Ser
 }
 
 // HandleCookieAuth loads the session named by the cookie and attaches its user.
-func (s *Security) HandleCookieAuth(ctx context.Context, _ oas.OperationName, _ oas.CookieAuth) (context.Context, error) {
+func (s *Security) HandleCookieAuth(ctx context.Context, op oas.OperationName, _ oas.CookieAuth) (context.Context, error) {
 	r, ok := requestFrom(ctx)
 	if !ok {
 		return ctx, fmt.Errorf("%w: no request in context", domain.ErrUnauthorized)
+	}
+	if _, present := bearerToken(r.Header); present && oas.GetRolesForBearerAuth(op) != nil {
+		return ctx, ogenerrors.ErrSkipServerSecurity
 	}
 	sess, err := s.sessions.Load(r)
 	if err != nil {
@@ -190,12 +194,26 @@ func (s *Security) RequireUser(logger *slog.Logger) func(http.Handler) http.Hand
 	}
 }
 
+// bearerToken extracts the bearer token from the Authorization header values.
+// It iterates all values, cuts on the first space, and requires the scheme to be
+// "Bearer" (case-insensitive). Returns the token (possibly empty) and true on
+// match, or "" and false otherwise.
+func bearerToken(h http.Header) (string, bool) {
+	for _, v := range h.Values("Authorization") {
+		scheme, token, found := strings.Cut(v, " ")
+		if found && strings.EqualFold(scheme, "Bearer") {
+			return token, true
+		}
+	}
+	return "", false
+}
+
 // authenticate resolves the user of a bearer API key when the request carries one, else
 // of the session cookie. The scheme match is case-insensitive, as in the generated router.
 func (s *Security) authenticate(r *http.Request) (domain.User, error) {
 	ctx := context.WithValue(r.Context(), ctxKeyRequest, r)
 	var err error
-	if scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " "); ok && strings.EqualFold(scheme, "Bearer") {
+	if token, ok := bearerToken(r.Header); ok {
 		ctx, err = s.HandleBearerAuth(ctx, "", oas.BearerAuth{Token: token})
 	} else {
 		ctx, err = s.HandleCookieAuth(ctx, "", oas.CookieAuth{})

@@ -6,13 +6,13 @@ package libraryprocessing
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"path"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/segmentio/encoding/json"
 	"golang.org/x/text/language"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -32,13 +32,12 @@ func DecodeRuleJSON(raw []byte) (Rule, error) {
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] != '{' {
 		return Rule{}, fmt.Errorf("%w: rule must be a JSON object", domain.ErrInvalid)
 	}
-	dec := json.NewDecoder(bytes.NewReader(trimmed))
-	dec.DisallowUnknownFields()
 	var w wireRule
-	if err := dec.Decode(&w); err != nil {
+	rest, err := json.Parse(trimmed, &w, json.DisallowUnknownFields|json.DontMatchCaseInsensitiveStructFields)
+	if err != nil {
 		return Rule{}, fmt.Errorf("%w: decode rule: %w", domain.ErrInvalid, err)
 	}
-	if len(bytes.Trim(trimmed[dec.InputOffset():], " \t\r\n")) != 0 {
+	if len(bytes.Trim(rest, " \t\r\n")) != 0 {
 		return Rule{}, fmt.Errorf("%w: trailing data after rule JSON", domain.ErrInvalid)
 	}
 	if w.Track == nil {

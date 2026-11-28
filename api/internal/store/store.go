@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -74,6 +75,44 @@ func (s *Store) Tx(ctx context.Context, fn func(q *sqlcgen.Queries) error) (err 
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("store: commit: %w", err)
+	}
+	return nil
+}
+
+const (
+	snapshotStepTimeout = 10 * time.Second
+	rollbackTimeout     = 5 * time.Second
+)
+
+// SnapshotReadTx runs fn inside a repeatable-read, read-only transaction so multi-batch
+// reads observe a single consistent database snapshot without blocking concurrent writers.
+func (s *Store) SnapshotReadTx(ctx context.Context, fn func(q *sqlcgen.Queries) error) (err error) {
+	beginCtx, beginCancel := context.WithTimeout(ctx, snapshotStepTimeout)
+	defer beginCancel()
+	tx, err := s.pool.BeginTx(beginCtx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadOnly,
+	})
+	if err != nil {
+		return fmt.Errorf("store: begin snapshot tx: %w", err)
+	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		rbCtx, rbCancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+		defer rbCancel()
+		if rbErr := tx.Rollback(rbCtx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			err = errors.Join(err, fmt.Errorf("store: rollback snapshot tx: %w", rbErr))
+		}
+	}()
+	if err = fn(s.q.WithTx(tx)); err != nil {
+		return err
+	}
+	commitCtx, commitCancel := context.WithTimeout(ctx, snapshotStepTimeout)
+	defer commitCancel()
+	if err = tx.Commit(commitCtx); err != nil {
+		return fmt.Errorf("store: commit snapshot tx: %w", err)
 	}
 	return nil
 }

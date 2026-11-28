@@ -24,20 +24,34 @@ RETURNING *;
 SELECT * FROM library_processing_rules
 WHERE id = $1;
 
--- name: ListLibraryProcessingRules :many
-SELECT * FROM library_processing_rules
+-- name: ListLibraryProcessingRulesKeyset :many
+SELECT lpr.*
+FROM library_processing_rules AS lpr
+CROSS JOIN LATERAL (
+    SELECT
+        CASE lpr.scope
+            WHEN 'item_override' THEN 1
+            WHEN 'user_language' THEN 2
+            WHEN 'library' THEN 3
+            WHEN 'instance' THEN 4
+            WHEN 'media_type' THEN 5
+            WHEN 'global_default' THEN 6
+            ELSE 7
+        END AS scope_rank
+) AS r
+WHERE (
+    NOT sqlc.arg(use_cursor)::boolean
+    OR (r.scope_rank, lpr.created_at, lpr.id) > (
+        sqlc.arg(after_rank)::integer,
+        sqlc.arg(after_created_at)::timestamptz,
+        sqlc.arg(after_id)::uuid
+    )
+)
 ORDER BY
-    CASE scope
-        WHEN 'item_override' THEN 1
-        WHEN 'user_language' THEN 2
-        WHEN 'library' THEN 3
-        WHEN 'instance' THEN 4
-        WHEN 'media_type' THEN 5
-        WHEN 'global_default' THEN 6
-        ELSE 7
-    END ASC,
-    created_at ASC,
-    id ASC;
+    r.scope_rank ASC,
+    lpr.created_at ASC,
+    lpr.id ASC
+LIMIT sqlc.arg(page_limit)::integer;
 
 -- name: UpdateLibraryProcessingRule :one
 UPDATE library_processing_rules

@@ -1923,6 +1923,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/library-processing/rules/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a bounded page of stored library processing rules
+         * @description Returns stored rules ordered by ADR-0041 section 10 scope precedence (item_override, user_language, library, instance, media_type, global_default), created_at ascending, and id ascending using keyset cursor pagination.
+         */
+        get: operations["listLibraryProcessingRulesPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/library-processing/rules/{ruleId}": {
         parameters: {
             query?: never;
@@ -3372,7 +3392,7 @@ export interface components {
         };
         /** @description Effective track-selection rule resolved by the caller. */
         TrackRule: {
-            /** @description ISO 639 language codes to keep; at least one. */
+            /** @description ISO 639 language codes to keep; between 1 and 64 entries (inclusive), all unique. */
             languages: string[];
         };
         /** @description Effective processing rule resolved by the caller for this library item. */
@@ -3423,6 +3443,14 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description Bounded page of stored library processing rules ordered by precedence. */
+        LibraryProcessingRulePage: {
+            items: components["schemas"]["LibraryProcessingRule"][];
+            /** @description True when another page exists after items; false on the final page. */
+            has_more: boolean;
+            /** @description Opaque keyset cursor for the next page; omitted when has_more is false. */
+            next_cursor?: string;
         };
         /** @description Effective rule selected for a library item and the scope that won. */
         LibraryProcessingResolvedRule: {
@@ -6847,6 +6875,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LibraryProcessingRule"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listLibraryProcessingRulesPage: {
+        parameters: {
+            query?: {
+                /** @description Maximum rules to return in one page. */
+                limit?: number;
+                /** @description Opaque keyset pagination cursor from a previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded page of stored library processing rules ordered by precedence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryProcessingRulePage"];
                 };
             };
             default: components["responses"]["Problem"];

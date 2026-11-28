@@ -5,9 +5,12 @@
 import { describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
 import {
+	appendRulePage,
+	compareStoredRules,
 	LIBRARY_PROCESSING_MEDIA_TYPES,
 	LIBRARY_PROCESSING_SCOPES,
 	libraryProcessingRuleInputSchema,
+	mergePinnedRule,
 	parseRuleInput,
 	toRuleInput,
 	type LibraryProcessingRule,
@@ -540,5 +543,107 @@ describe('toRuleInput', () => {
 		const source = stored('global_default');
 		source.rule.track.languages = ['EN'];
 		expect(toRuleInput(source).rule.track.languages).toEqual(['EN']);
+	});
+});
+
+describe('pagination ordering and selection helpers', () => {
+	function makeStored(
+		id: string,
+		scope: LibraryProcessingScope,
+		createdAt: string
+	): LibraryProcessingRule {
+		return {
+			...build(scope),
+			id,
+			created_at: createdAt,
+			updated_at: createdAt
+		} as unknown as LibraryProcessingRule;
+	}
+
+	it('orders rules by scope precedence, microsecond created_at, then id ascending', () => {
+		const global = makeStored(
+			'018f0000-0000-7000-8000-000000000009',
+			'global_default',
+			'2026-01-01T00:00:00Z'
+		);
+		const libLater = makeStored(
+			'018f0000-0000-7000-8000-000000000001',
+			'library',
+			'2026-01-01T00:00:00.000002Z'
+		);
+		const libEarlierB = makeStored(
+			'018f0000-0000-7000-8000-000000000005',
+			'library',
+			'2026-01-01T00:00:00.000001Z'
+		);
+		const libEarlierA = makeStored(
+			'018f0000-0000-7000-8000-000000000002',
+			'library',
+			'2026-01-01T00:00:00.000001Z'
+		);
+		const itemOverride = makeStored(
+			'018f0000-0000-7000-8000-000000000099',
+			'item_override',
+			'2026-01-02T00:00:00Z'
+		);
+
+		const sorted = [global, libLater, libEarlierB, libEarlierA, itemOverride].sort(
+			compareStoredRules
+		);
+		expect(sorted.map((r) => r.id)).toEqual([
+			itemOverride.id,
+			libEarlierA.id,
+			libEarlierB.id,
+			libLater.id,
+			global.id
+		]);
+		expect(compareStoredRules(global, global)).toBe(0);
+	});
+
+	it('appends new page items in order while deduplicating existing IDs', () => {
+		const a = makeStored(
+			'018f0000-0000-7000-8000-000000000001',
+			'item_override',
+			'2026-01-01T00:00:00Z'
+		);
+		const b = makeStored('018f0000-0000-7000-8000-000000000002', 'library', '2026-01-01T00:00:00Z');
+		const c = makeStored(
+			'018f0000-0000-7000-8000-000000000003',
+			'global_default',
+			'2026-01-01T00:00:00Z'
+		);
+
+		expect(appendRulePage([a, b], [b, c]).map((r) => r.id)).toEqual([a.id, b.id, c.id]);
+	});
+
+	it('merges an off-page pinned rule at its precedence slot without duplicating loaded rules', () => {
+		const first = makeStored(
+			'018f0000-0000-7000-8000-000000000001',
+			'item_override',
+			'2026-01-01T00:00:00Z'
+		);
+		const middle = makeStored(
+			'018f0000-0000-7000-8000-000000000002',
+			'library',
+			'2026-01-01T00:00:00Z'
+		);
+		const last = makeStored(
+			'018f0000-0000-7000-8000-000000000003',
+			'global_default',
+			'2026-01-01T00:00:00Z'
+		);
+
+		expect(mergePinnedRule([first, last], middle).map((r) => r.id)).toEqual([
+			first.id,
+			middle.id,
+			last.id
+		]);
+		expect(mergePinnedRule([first, middle], last).map((r) => r.id)).toEqual([
+			first.id,
+			middle.id,
+			last.id
+		]);
+		expect(mergePinnedRule([first, middle], first).map((r) => r.id)).toEqual([first.id, middle.id]);
+		expect(mergePinnedRule([first], null).map((r) => r.id)).toEqual([first.id]);
 	});
 });

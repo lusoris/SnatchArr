@@ -117,24 +117,52 @@ func (q *Queries) GetLibraryProcessingRule(ctx context.Context, id uuid.UUID) (L
 	return i, err
 }
 
-const listLibraryProcessingRules = `-- name: ListLibraryProcessingRules :many
-SELECT id, scope, instance_id, item_id, user_language, user_language_code, root_path, media_type, rule, created_at, updated_at FROM library_processing_rules
+const listLibraryProcessingRulesKeyset = `-- name: ListLibraryProcessingRulesKeyset :many
+SELECT lpr.id, lpr.scope, lpr.instance_id, lpr.item_id, lpr.user_language, lpr.user_language_code, lpr.root_path, lpr.media_type, lpr.rule, lpr.created_at, lpr.updated_at
+FROM library_processing_rules AS lpr
+CROSS JOIN LATERAL (
+    SELECT
+        CASE lpr.scope
+            WHEN 'item_override' THEN 1
+            WHEN 'user_language' THEN 2
+            WHEN 'library' THEN 3
+            WHEN 'instance' THEN 4
+            WHEN 'media_type' THEN 5
+            WHEN 'global_default' THEN 6
+            ELSE 7
+        END AS scope_rank
+) AS r
+WHERE (
+    NOT $1::boolean
+    OR (r.scope_rank, lpr.created_at, lpr.id) > (
+        $2::integer,
+        $3::timestamptz,
+        $4::uuid
+    )
+)
 ORDER BY
-    CASE scope
-        WHEN 'item_override' THEN 1
-        WHEN 'user_language' THEN 2
-        WHEN 'library' THEN 3
-        WHEN 'instance' THEN 4
-        WHEN 'media_type' THEN 5
-        WHEN 'global_default' THEN 6
-        ELSE 7
-    END ASC,
-    created_at ASC,
-    id ASC
+    r.scope_rank ASC,
+    lpr.created_at ASC,
+    lpr.id ASC
+LIMIT $5::integer
 `
 
-func (q *Queries) ListLibraryProcessingRules(ctx context.Context) ([]LibraryProcessingRule, error) {
-	rows, err := q.db.Query(ctx, listLibraryProcessingRules)
+type ListLibraryProcessingRulesKeysetParams struct {
+	UseCursor      bool
+	AfterRank      int32
+	AfterCreatedAt time.Time
+	AfterID        uuid.UUID
+	PageLimit      int32
+}
+
+func (q *Queries) ListLibraryProcessingRulesKeyset(ctx context.Context, arg ListLibraryProcessingRulesKeysetParams) ([]LibraryProcessingRule, error) {
+	rows, err := q.db.Query(ctx, listLibraryProcessingRulesKeyset,
+		arg.UseCursor,
+		arg.AfterRank,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

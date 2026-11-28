@@ -115,6 +115,7 @@ def self_test() -> int:
     """Run planted cases; each must give the expected verdict."""
 
     def config(*paths: str) -> str:
+        """Build a YAML config string listing the given tsqllint exclude paths."""
         head = '---\nexclude_paths:\n  - "gen/**"\n  - "a.ts"\nengines:\n  tsqllint:\n    exclude_paths:\n'
         return head + "".join(f'      - "{p}"\n' for p in paths)
 

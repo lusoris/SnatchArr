@@ -805,6 +805,19 @@ func (UnimplementedHandler) ListLibraryProcessingRules(ctx context.Context) (r [
 	return r, ht.ErrNotImplemented
 }
 
+// ListLibraryProcessingRulesPage implements listLibraryProcessingRulesPage operation.
+//
+// Returns stored rules ordered by ADR-0041 section 10 scope precedence (item_override, user_language,
+//
+//	library, instance, media_type, global_default), created_at ascending, and id ascending using
+//
+// keyset cursor pagination.
+//
+// GET /library-processing/rules/page
+func (UnimplementedHandler) ListLibraryProcessingRulesPage(ctx context.Context, params ListLibraryProcessingRulesPageParams) (r *LibraryProcessingRulePage, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListLogs implements listLogs operation.
 //
 // Records come from a fixed-size in-memory ring (snatcharr.logs.ring_size). Secret attributes,

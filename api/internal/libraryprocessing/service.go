@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -54,8 +55,15 @@ func NewServiceWithChecker(st *store.Store, clk clock.Clock, ids id.Generator, m
 	}
 }
 
+// operationTimeout bounds each public Service operation. A shorter caller
+// deadline or cancellation takes precedence.
+const operationTimeout = 5 * time.Second
+
 func (s *Service) ensureEnabled(ctx context.Context) error {
 	if s.mod == nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return fmt.Errorf("%w: module %s is disabled", domain.ErrNotFound, domain.ModuleLibraryProcessing)
 	}
 	enabled, err := s.mod.IsEnabled(ctx, domain.ModuleLibraryProcessing)
@@ -79,8 +87,13 @@ func (s *Service) checkInstance(ctx context.Context, instanceID *uuid.UUID) erro
 }
 
 func mapWriteError(err error) error {
-	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "23503" {
-		return fmt.Errorf("%w: referenced instance not found", domain.ErrNotFound)
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		switch {
+		case pgErr.Code == "23503":
+			return fmt.Errorf("%w: referenced instance not found", domain.ErrNotFound)
+		case pgErr.Code == "23P01" && pgErr.ConstraintName == "library_processing_rules_library_path_excl":
+			return fmt.Errorf("%w: library processing rule already exists for root path", domain.ErrConflict)
+		}
 	}
 	return store.MapError(err)
 }
@@ -134,6 +147,8 @@ func storedRuleFromRow(row sqlcgen.LibraryProcessingRule) (StoredRule, error) {
 
 // Create validates and persists a new scoped library processing rule.
 func (s *Service) Create(ctx context.Context, in RuleInput) (StoredRule, error) {
+	ctx, cancel := context.WithTimeout(ctx, operationTimeout)
+	defer cancel()
 	if err := s.ensureEnabled(ctx); err != nil {
 		return StoredRule{}, err
 	}
@@ -174,6 +189,8 @@ func (s *Service) Create(ctx context.Context, in RuleInput) (StoredRule, error) 
 
 // Get returns a stored library processing rule by its ID.
 func (s *Service) Get(ctx context.Context, ruleID uuid.UUID) (StoredRule, error) {
+	ctx, cancel := context.WithTimeout(ctx, operationTimeout)
+	defer cancel()
 	if err := s.ensureEnabled(ctx); err != nil {
 		return StoredRule{}, err
 	}
@@ -184,28 +201,24 @@ func (s *Service) Get(ctx context.Context, ruleID uuid.UUID) (StoredRule, error)
 	return storedRuleFromRow(row)
 }
 
-// List returns all stored library processing rules in precedence order.
+// List returns all stored library processing rules in precedence order using bounded
+// database batches over a single repeatable-read snapshot.
 func (s *Service) List(ctx context.Context) ([]StoredRule, error) {
-	if err := s.ensureEnabled(ctx); err != nil {
-		return nil, err
-	}
-	rows, err := s.st.Q().ListLibraryProcessingRules(ctx)
+	out := make([]StoredRule, 0)
+	err := s.StreamAll(ctx, defaultSnapshotBatchSize, func(batch []StoredRule) error {
+		out = append(out, batch...)
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("libraryprocessing: list rules: %w", store.MapError(err))
-	}
-	out := make([]StoredRule, 0, len(rows))
-	for _, row := range rows {
-		sr, convErr := storedRuleFromRow(row)
-		if convErr != nil {
-			return nil, convErr
-		}
-		out = append(out, sr)
+		return nil, err
 	}
 	return out, nil
 }
 
 // Update validates and replaces the scope target and rule body of an existing stored rule.
 func (s *Service) Update(ctx context.Context, ruleID uuid.UUID, in RuleInput) (StoredRule, error) {
+	ctx, cancel := context.WithTimeout(ctx, operationTimeout)
+	defer cancel()
 	if err := s.ensureEnabled(ctx); err != nil {
 		return StoredRule{}, err
 	}
@@ -243,6 +256,8 @@ func (s *Service) Update(ctx context.Context, ruleID uuid.UUID, in RuleInput) (S
 
 // Delete removes a stored library processing rule by ID.
 func (s *Service) Delete(ctx context.Context, ruleID uuid.UUID) error {
+	ctx, cancel := context.WithTimeout(ctx, operationTimeout)
+	defer cancel()
 	if err := s.ensureEnabled(ctx); err != nil {
 		return err
 	}
@@ -258,6 +273,8 @@ func (s *Service) Delete(ctx context.Context, ruleID uuid.UUID) error {
 
 // Resolve evaluates stored PostgreSQL rules across all six scopes using Select.
 func (s *Service) Resolve(ctx context.Context, q ResolveQuery) (ResolvedRule, error) {
+	ctx, cancel := context.WithTimeout(ctx, operationTimeout)
+	defer cancel()
 	if err := s.ensureEnabled(ctx); err != nil {
 		return ResolvedRule{}, err
 	}

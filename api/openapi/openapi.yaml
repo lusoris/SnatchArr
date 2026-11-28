@@ -2856,6 +2856,44 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /library-processing/rules/page:
+    get:
+      tags: [library-processing]
+      operationId: listLibraryProcessingRulesPage
+      x-module: library_processing
+      summary: List a bounded page of stored library processing rules
+      description: >-
+        Returns stored rules ordered by ADR-0041 section 10 scope precedence
+        (item_override, user_language, library, instance, media_type, global_default),
+        created_at ascending, and id ascending using keyset cursor pagination.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum rules to return in one page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque keyset pagination cursor from a previous page.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+      responses:
+        "200":
+          description: Bounded page of stored library processing rules ordered by precedence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryProcessingRulePage"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /library-processing/rules/{ruleId}:
     parameters:
       - $ref: "#/components/parameters/LibraryProcessingRuleId"
@@ -5945,11 +5983,12 @@ components:
         - languages
       properties:
         languages:
-          description: ISO 639 language codes to keep; at least one.
+          description: ISO 639 language codes to keep; between 1 and 64 entries (inclusive), all unique.
           type: array
           items:
             type: string
           minItems: 1
+          maxItems: 64
           uniqueItems: true
 
     Rule:
@@ -6054,6 +6093,27 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    LibraryProcessingRulePage:
+      description: Bounded page of stored library processing rules ordered by precedence.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibraryProcessingRule"
+        has_more:
+          type: boolean
+          description: True when another page exists after items; false on the final page.
+        next_cursor:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Opaque keyset cursor for the next page; omitted when has_more is false.
 
     LibraryProcessingResolvedRule:
       description: Effective rule selected for a library item and the scope that won.

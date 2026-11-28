@@ -348,6 +348,52 @@ func TestLibraryProcessingResolveSelectedProvenance(t *testing.T) {
 	}
 }
 
+func TestLibraryProcessingResolveMalformedQuery(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	setupFixtureStubs(f)
+	_ = completeInitialSetup(t, f)
+	csrf := getAdminCsrfToken(t, f)
+	base := f.srv.URL + PathPrefix
+	lpSetModule(t, f.client, base, csrf, true)
+
+	global := lpCreateRule(t, f.client, base, csrf, map[string]any{
+		"scope": "global_default",
+		"rule":  lpRuleBody("en"),
+	})
+	instanceID := lpCreateInstance(t, f, "resolve-query")
+	libRule := lpCreateRule(t, f.client, base, csrf, map[string]any{
+		"scope":       "library",
+		"instance_id": instanceID,
+		"root_path":   "/media/TV Shows",
+		"rule":        lpRuleBody("ja", "en"),
+	})
+
+	// Malformed percent encoding in the library selector is a bad request.
+	res := doHTTP(t, f.client, http.MethodGet, base+"/library-processing/resolve?instance_id="+instanceID+"&root_path=%zz", "", nil)
+	lpAssertProblem(t, res, http.StatusBadRequest)
+
+	// A valid percent-encoded root resolves to the library-specific rule.
+	res = doHTTP(t, f.client, http.MethodGet, base+"/library-processing/resolve?instance_id="+instanceID+"&root_path=%2Fmedia%2FTV%20Shows", "", nil)
+	if res.statusCode != http.StatusOK {
+		t.Fatalf("resolve encoded root status = %d, want 200; body: %s", res.statusCode, string(res.body))
+	}
+	resolved := lpDecode(t, res.body)
+	if resolved["rule_id"] != libRule["id"] {
+		t.Errorf("resolve encoded root rule_id = %v, want %v", resolved["rule_id"], libRule["id"])
+	}
+
+	// Omitting the selector falls back to the global default.
+	res = doHTTP(t, f.client, http.MethodGet, base+"/library-processing/resolve", "", nil)
+	if res.statusCode != http.StatusOK {
+		t.Fatalf("resolve omitted status = %d, want 200; body: %s", res.statusCode, string(res.body))
+	}
+	resolved = lpDecode(t, res.body)
+	if resolved["rule_id"] != global["id"] {
+		t.Errorf("resolve omitted rule_id = %v, want %v", resolved["rule_id"], global["id"])
+	}
+}
+
 func TestLibraryProcessingInvalidRuleWrite(t *testing.T) {
 	t.Parallel()
 	f := newRouterFixture(t)

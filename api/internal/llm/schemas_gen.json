@@ -446,10 +446,11 @@
         "description": "Effective track-selection rule resolved by the caller.",
         "properties": {
           "languages": {
-            "description": "ISO 639 language codes to keep; at least one.",
+            "description": "ISO 639 language codes to keep; between 1 and 64 entries (inclusive), all unique.",
             "items": {
               "type": "string"
             },
+            "maxItems": 64,
             "minItems": 1,
             "type": "array",
             "uniqueItems": true
@@ -2015,6 +2016,26 @@
     "properties": {},
     "type": "object"
   },
+  "listLibraryProcessingRulesPage": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "description": "Opaque keyset pagination cursor from a previous page.",
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
+      "limit": {
+        "default": 50,
+        "description": "Maximum rules to return in one page.",
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "type": "object"
+  },
   "listLogs": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -3169,10 +3190,11 @@
         "description": "Effective track-selection rule resolved by the caller.",
         "properties": {
           "languages": {
-            "description": "ISO 639 language codes to keep; at least one.",
+            "description": "ISO 639 language codes to keep; between 1 and 64 entries (inclusive), all unique.",
             "items": {
               "type": "string"
             },
+            "maxItems": 64,
             "minItems": 1,
             "type": "array",
             "uniqueItems": true

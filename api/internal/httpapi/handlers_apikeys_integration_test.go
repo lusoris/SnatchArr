@@ -736,3 +736,59 @@ func TestAPIKeyRequesterRoleFencing(t *testing.T) {
 		t.Fatalf("requester revoke own key status = %d, want 204", delOwnResp.StatusCode)
 	}
 }
+
+func TestCredentialSelectionWithValidSessionAndKey(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	admin := completeInitialSetup(t, f)
+	secondClient, _ := setupSecondLoggedInUser(t, f)
+
+	rawKey, issued, err := f.keys.Issue(t.Context(), admin.ID.String(), []string{"admin"})
+	if err != nil {
+		t.Fatalf("keys.Issue: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/auth/session", nil)
+	if err != nil {
+		t.Fatalf("new session request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+rawKey)
+	resp, err := secondClient.Do(req)
+	if err != nil {
+		t.Fatalf("session request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("session status = %d, want 200", resp.StatusCode)
+	}
+	var session oas.Session
+	if err = json.NewDecoder(resp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	if session.User.ID != admin.ID {
+		t.Fatalf("session user ID = %s, want %s", session.User.ID, admin.ID)
+	}
+
+	req2, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/auth/api-keys", nil)
+	if err != nil {
+		t.Fatalf("new list request: %v", err)
+	}
+	req2.Header.Set("Authorization", "Bearer "+rawKey)
+	resp2, err := secondClient.Do(req2)
+	if err != nil {
+		t.Fatalf("list api keys: %v", err)
+	}
+	defer func() { _ = resp2.Body.Close() }()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("list status = %d, want 200", resp2.StatusCode)
+	}
+	var keys []oas.ApiKey
+	if err = json.NewDecoder(resp2.Body).Decode(&keys); err != nil {
+		t.Fatalf("decode keys: %v", err)
+	}
+	for _, k := range keys {
+		if k.ID == issued.ID {
+			t.Fatalf("admin's key ID %s found in second user's key list", issued.ID)
+		}
+	}
+}

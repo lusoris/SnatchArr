@@ -6,9 +6,13 @@ import { z } from 'zod';
 import type { components } from './api/schema.js';
 
 export type LibraryProcessingRule = components['schemas']['LibraryProcessingRule'];
+export type LibraryProcessingRulePage = components['schemas']['LibraryProcessingRulePage'];
 export type LibraryProcessingRuleInput = components['schemas']['LibraryProcessingRuleInput'];
 export type LibraryProcessingScope = components['schemas']['LibraryProcessingScope'];
 export type LibraryProcessingMediaType = components['schemas']['LibraryProcessingMediaType'];
+
+/** Default bounded page size requested by the system UI for stored rules. */
+export const LIBRARY_PROCESSING_RULE_PAGE_LIMIT = 50;
 
 /** Precedence scopes, exactly as the API enum declares them. */
 export const LIBRARY_PROCESSING_SCOPES = [
@@ -202,4 +206,67 @@ export function toRuleInput(stored: LibraryProcessingRule): LibraryProcessingRul
 		...(media_type !== undefined && { media_type }),
 		rule: { ...rule, track: { ...track, languages: [...track.languages] } }
 	};
+}
+
+const SCOPE_RANK: Record<LibraryProcessingScope, number> = {
+	item_override: 1,
+	user_language: 2,
+	library: 3,
+	instance: 4,
+	media_type: 5,
+	global_default: 6
+};
+
+const UTC_TIMESTAMP_PARTS = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z$/;
+
+function canonicalCreatedKey(createdAt: string): string {
+	const match = UTC_TIMESTAMP_PARTS.exec(createdAt);
+	if (!match) return createdAt;
+	const [, seconds, fraction = ''] = match;
+	return `${seconds}.${fraction.padEnd(9, '0')}Z`;
+}
+
+/** Orders stored rules by scope precedence, created_at ascending, then id ascending. */
+export function compareStoredRules(a: LibraryProcessingRule, b: LibraryProcessingRule): number {
+	const rankDiff = SCOPE_RANK[a.scope] - SCOPE_RANK[b.scope];
+	if (rankDiff !== 0) return rankDiff;
+	const createdA = canonicalCreatedKey(a.created_at);
+	const createdB = canonicalCreatedKey(b.created_at);
+	if (createdA !== createdB) return createdA < createdB ? -1 : 1;
+	if (a.id === b.id) return 0;
+	return a.id < b.id ? -1 : 1;
+}
+
+/** Appends incoming page items without duplicating already-loaded rule IDs. */
+export function appendRulePage(
+	existing: readonly LibraryProcessingRule[],
+	incoming: readonly LibraryProcessingRule[]
+): LibraryProcessingRule[] {
+	const seen = new Set(existing.map((rule) => rule.id));
+	const merged = [...existing];
+	for (const rule of incoming) {
+		if (!seen.has(rule.id)) {
+			seen.add(rule.id);
+			merged.push(rule);
+		}
+	}
+	return merged;
+}
+
+/** Inserts an off-page selected rule at its precedence position until its page is loaded. */
+export function mergePinnedRule(
+	loaded: readonly LibraryProcessingRule[],
+	pinned: LibraryProcessingRule | null
+): LibraryProcessingRule[] {
+	if (!pinned || loaded.some((rule) => rule.id === pinned.id)) {
+		return [...loaded];
+	}
+	const out = [...loaded];
+	const insertAt = out.findIndex((rule) => compareStoredRules(pinned, rule) < 0);
+	if (insertAt === -1) {
+		out.push(pinned);
+	} else {
+		out.splice(insertAt, 0, pinned);
+	}
+	return out;
 }

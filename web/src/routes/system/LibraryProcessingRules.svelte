@@ -5,77 +5,267 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import { api, describeError } from '#lib/api/client.js';
+	import { api, describeError, problemStatus } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { readRuleDocument, writeRuleDocument } from '#lib/library-processing-document.js';
+	import {
+		appendRulePage,
+		LIBRARY_PROCESSING_RULE_PAGE_LIMIT,
+		mergePinnedRule
+	} from '#lib/library-processing-rule.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	type StoredRule = components['schemas']['LibraryProcessingRule'];
+	type RulePage = components['schemas']['LibraryProcessingRulePage'];
 	type Format = 'yaml' | 'json';
 
 	const formats: Format[] = ['yaml', 'json'];
-	const controller = new AbortController();
+	const unmountController = new AbortController();
+
+	let activeLoadController: AbortController | null = null;
+	let requestSeq = 0;
 
 	let format = $state<Format>('yaml');
 	let text = $state('');
-	let rules = $state<StoredRule[]>([]);
+	let loadedRules = $state<StoredRule[]>([]);
+	let pinnedRule = $state<StoredRule | null>(null);
+	let nextCursor = $state<string | null>(null);
+	let hasMore = $state(false);
 	let selectedId = $state('');
 	let loading = $state(true);
+	let loadingMore = $state(false);
 	let loadError = $state<unknown>(null);
+	let loadMoreError = $state<unknown>(null);
 	let submitError = $state<unknown>(null);
 	let documentError = $state('');
 	let status = $state('');
 	let importing = $state(false);
+	let saving = $state(false);
+	// The stored rule whose document was opened in the editor; only an explicit save writes to it.
+	let editingId = $state('');
 
+	type RuleInput = ReturnType<typeof readRuleDocument>;
+
+	const rules = $derived(mergePinnedRule(loadedRules, pinnedRule));
 	const selectedRule = $derived(rules.find((rule) => rule.id === selectedId));
+	const editingRule = $derived(rules.find((rule) => rule.id === editingId));
+	const busy = $derived(importing || saving);
 
-	async function loadRules(selectId?: string): Promise<void> {
-		loading = true;
-		loadError = null;
+	function startRequest(): { seq: number; signal: AbortSignal } {
+		activeLoadController?.abort();
+		const next = new AbortController();
+		activeLoadController = next;
+		requestSeq += 1;
+		return {
+			seq: requestSeq,
+			signal: AbortSignal.any([unmountController.signal, next.signal])
+		};
+	}
+
+	function isCurrent(seq: number, signal: AbortSignal): boolean {
+		return seq === requestSeq && !signal.aborted && !unmountController.signal.aborted;
+	}
+
+	function extractNextCursor(page: RulePage): string | null {
+		if (!page.has_more || !page.next_cursor) return null;
+		return page.next_cursor;
+	}
+
+	function parsePageState(page: RulePage | undefined): {
+		items: StoredRule[];
+		more: boolean;
+		cursor: string | null;
+	} {
+		if (!page) return { items: [], more: false, cursor: null };
+		const cursor = extractNextCursor(page);
+		return { items: page.items, more: cursor !== null, cursor };
+	}
+
+	function extractPreference(prefer?: StoredRule | string): {
+		targetId: string;
+		preferred: StoredRule | null;
+	} {
+		if (typeof prefer === 'string') {
+			return { targetId: prefer, preferred: null };
+		}
+		if (prefer) {
+			return { targetId: prefer.id, preferred: prefer };
+		}
+		return { targetId: selectedId, preferred: null };
+	}
+
+	async function fetchRuleOrFallback(
+		targetId: string,
+		fallback: StoredRule | undefined,
+		signal: AbortSignal
+	): Promise<StoredRule | null> {
 		try {
-			const res = await api.GET('/library-processing/rules', { signal: controller.signal });
-			rules = res.data ?? [];
-			if (selectId) selectedId = selectId;
-			else if (!rules.some((rule) => rule.id === selectedId)) selectedId = '';
+			const detail = await api.GET('/library-processing/rules/{ruleId}', {
+				params: { path: { ruleId: targetId } },
+				signal
+			});
+			return detail.data ?? null;
 		} catch (err) {
-			if (!controller.signal.aborted) loadError = err;
-		} finally {
-			if (!controller.signal.aborted) loading = false;
+			if (problemStatus(err) === 404) return null;
+			if (fallback?.id === targetId) return fallback;
+			throw err;
 		}
 	}
 
-	async function importRule(): Promise<void> {
-		if (importing) return;
+	async function reconcileSelection(
+		items: StoredRule[],
+		more: boolean,
+		prefer: StoredRule | string | undefined,
+		previousSelected: StoredRule | undefined,
+		signal: AbortSignal
+	): Promise<{ nextSelectedId: string; nextPinned: StoredRule | null }> {
+		const { targetId, preferred } = extractPreference(prefer);
+		if (!targetId) {
+			return { nextSelectedId: '', nextPinned: null };
+		}
+		if (items.some((rule) => rule.id === targetId)) {
+			return { nextSelectedId: targetId, nextPinned: null };
+		}
+		if (!more) {
+			return { nextSelectedId: '', nextPinned: null };
+		}
+		const resolved = preferred ?? (await fetchRuleOrFallback(targetId, previousSelected, signal));
+		return { nextSelectedId: resolved?.id ?? '', nextPinned: resolved };
+	}
+
+	async function loadRules(prefer?: StoredRule | string): Promise<void> {
+		const previousSelected = selectedRule;
+		const { seq, signal } = startRequest();
+		loading = true;
+		loadingMore = false;
+		loadError = null;
+		loadMoreError = null;
+		try {
+			const res = await api.GET('/library-processing/rules/page', {
+				params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT } },
+				signal
+			});
+			const page = parsePageState(res.data);
+			const selection = await reconcileSelection(
+				page.items,
+				page.more,
+				prefer,
+				previousSelected,
+				signal
+			);
+			if (!isCurrent(seq, signal)) return;
+			loadedRules = page.items;
+			hasMore = page.more;
+			nextCursor = page.cursor;
+			pinnedRule = selection.nextPinned;
+			selectedId = selection.nextSelectedId;
+		} catch (err) {
+			if (isCurrent(seq, signal)) loadError = err;
+		} finally {
+			if (isCurrent(seq, signal)) loading = false;
+		}
+	}
+
+	function nextPageCursor(): string | null {
+		if (loading || loadingMore || !hasMore) return null;
+		return nextCursor;
+	}
+
+	function clearReachedPinned(combined: StoredRule[]): void {
+		const pinnedId = pinnedRule?.id;
+		if (pinnedId && combined.some((rule) => rule.id === pinnedId)) {
+			pinnedRule = null;
+		}
+	}
+
+	async function loadMoreRules(): Promise<void> {
+		const cursor = nextPageCursor();
+		if (!cursor) return;
+		const { seq, signal } = startRequest();
+		loadingMore = true;
+		loadMoreError = null;
+		try {
+			const res = await api.GET('/library-processing/rules/page', {
+				params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT, cursor } },
+				signal
+			});
+			if (!isCurrent(seq, signal)) return;
+			const page = parsePageState(res.data);
+			const combined = appendRulePage(loadedRules, page.items);
+			loadedRules = combined;
+			hasMore = page.more;
+			nextCursor = page.cursor;
+			clearReachedPinned(combined);
+		} catch (err) {
+			if (isCurrent(seq, signal)) loadMoreError = err;
+		} finally {
+			if (isCurrent(seq, signal)) loadingMore = false;
+		}
+	}
+
+	// Parse and validate first so invalid input never reaches the API.
+	function parseDocument(): RuleInput | null {
 		documentError = '';
 		status = '';
 		submitError = null;
 
 		if (!text.trim()) {
 			documentError = m.modules_rules_document_empty();
-			return;
+			return null;
 		}
 
-		// Parse and validate first so invalid input never reaches the API.
-		let input: ReturnType<typeof readRuleDocument>;
 		try {
-			input = readRuleDocument(text, format);
+			return readRuleDocument(text, format);
 		} catch (err) {
 			documentError = m.modules_rules_invalid({ reason: describeError(err) });
-			return;
+			return null;
 		}
+	}
+
+	async function importRule(): Promise<void> {
+		if (busy) return;
+		const input = parseDocument();
+		if (!input) return;
 
 		importing = true;
 		try {
 			const res = await api.POST('/library-processing/rules', { body: input });
 			status = m.modules_rules_import_success();
 			toast.success(status);
-			await loadRules(res.data?.id);
+			// The editor now holds a new document, not the one that was opened for editing.
+			editingId = '';
+			await loadRules(res.data);
 		} catch (err) {
 			submitError = err;
 			toast.error(describeError(err));
 		} finally {
 			importing = false;
+		}
+	}
+
+	async function saveRule(): Promise<void> {
+		if (busy) return;
+		// Bind the target now: later list selection changes must not redirect the write.
+		const ruleId = editingId;
+		if (!ruleId) return;
+		const input = parseDocument();
+		if (!input) return;
+
+		saving = true;
+		try {
+			await api.PUT('/library-processing/rules/{ruleId}', {
+				params: { path: { ruleId } },
+				body: input
+			});
+			status = m.modules_rules_save_success();
+			toast.success(status);
+			await loadRules();
+		} catch (err) {
+			submitError = err;
+			toast.error(describeError(err));
+		} finally {
+			saving = false;
 		}
 	}
 
@@ -86,6 +276,7 @@
 		if (!selectedRule) return;
 		try {
 			text = writeRuleDocument(selectedRule, format);
+			editingId = selectedRule.id;
 			status = m.modules_rules_export_success();
 		} catch (err) {
 			documentError = describeError(err);
@@ -96,7 +287,10 @@
 		return `${rule.scope} · ${rule.id}`;
 	}
 
-	onMount(() => () => controller.abort());
+	onMount(() => () => {
+		activeLoadController?.abort();
+		unmountController.abort();
+	});
 	onMount(() => {
 		void loadRules();
 	});
@@ -110,7 +304,7 @@
 		<p class="text-sm text-subtle">{m.modules_rules_desc()}</p>
 	</div>
 
-	<fieldset class="flex flex-wrap items-center gap-4" disabled={importing}>
+	<fieldset class="flex flex-wrap items-center gap-4" disabled={busy}>
 		<legend class="mb-1 text-sm font-medium">{m.modules_rules_format_legend()}</legend>
 		{#each formats as option (option)}
 			<label class="flex min-h-11 items-center gap-2 text-sm md:min-h-0">
@@ -150,12 +344,26 @@
 				<button
 					type="button"
 					class="btn min-h-11 px-3 py-1.5 text-xs md:min-h-0"
-					disabled={!selectedRule || importing}
+					disabled={!selectedRule || busy}
 					onclick={exportRule}
 				>
 					{m.modules_rules_export()}
 				</button>
+				{#if hasMore}
+					<button
+						type="button"
+						class="btn min-h-11 px-3 py-1.5 text-xs md:min-h-0"
+						disabled={loadingMore || busy}
+						aria-busy={loadingMore}
+						onclick={loadMoreRules}
+					>
+						{loadingMore ? m.modules_rules_loading_more() : m.modules_rules_load_more()}
+					</button>
+				{/if}
 			</div>
+			{#if loadMoreError}
+				<ProblemNote error={loadMoreError} />
+			{/if}
 		{/if}
 	</div>
 
@@ -163,13 +371,18 @@
 		<label for="modules-rules-document" class="text-sm font-medium">
 			{m.modules_rules_document_label()}
 		</label>
+		{#if editingId}
+			<p id="modules-rules-editing" class="text-sm text-subtle">
+				{m.modules_rules_editing({ rule: editingRule ? ruleLabel(editingRule) : editingId })}
+			</p>
+		{/if}
 		<textarea
 			id="modules-rules-document"
 			class="input min-h-48 w-full font-mono text-sm"
 			spellcheck="false"
 			rows="12"
 			bind:value={text}
-			disabled={importing}
+			disabled={busy}
 			aria-invalid={documentError ? 'true' : undefined}
 			aria-describedby={documentError ? 'modules-rules-document-error' : undefined}></textarea>
 		{#if documentError}
@@ -187,11 +400,20 @@
 		<button
 			type="button"
 			class="btn btn-primary min-h-11 px-3 py-1.5 text-xs md:min-h-0"
-			disabled={importing}
+			disabled={busy}
 			aria-busy={importing}
 			onclick={importRule}
 		>
 			{importing ? m.modules_rules_importing() : m.modules_rules_import()}
+		</button>
+		<button
+			type="button"
+			class="btn min-h-11 px-3 py-1.5 text-xs md:min-h-0"
+			disabled={!editingId || busy}
+			aria-busy={saving}
+			onclick={saveRule}
+		>
+			{saving ? m.modules_rules_saving() : m.modules_rules_save()}
 		</button>
 		<p class="text-sm text-subtle" role="status" aria-live="polite">{status}</p>
 	</div>

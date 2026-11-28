@@ -92,6 +92,7 @@ const (
 	ListIdentitiesOperation                   OperationName = "ListIdentities"
 	ListInstancesOperation                    OperationName = "ListInstances"
 	ListLibraryProcessingRulesOperation       OperationName = "ListLibraryProcessingRules"
+	ListLibraryProcessingRulesPageOperation   OperationName = "ListLibraryProcessingRulesPage"
 	ListLogsOperation                         OperationName = "ListLogs"
 	ListModulesOperation                      OperationName = "ListModules"
 	ListMyNotifyTargetsOperation              OperationName = "ListMyNotifyTargets"

@@ -5,6 +5,8 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/ogen-go/ogen/ogenerrors"
 
 	"github.com/golusoris/golusoris/auth/apikey"
 
@@ -167,5 +170,45 @@ func assertStreamStatus(t *testing.T, h http.Handler, path string, c streamCreds
 	}
 	if rec.Code != want || rec.Header().Get("Content-Type") != wantType {
 		t.Fatalf("GET %s = %d %q, want %d %q (body %s)", path, rec.Code, rec.Header().Get("Content-Type"), want, wantType, rec.Body)
+	}
+}
+
+func TestSecurityDispatchDelegatesBearer(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	admin := completeInitialSetup(t, f)
+
+	raw, _, err := f.keys.Issue(t.Context(), admin.ID.String(), nil)
+	if err != nil {
+		t.Fatalf("keys.Issue: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		f.srv.URL+PathPrefix+"/auth/session", nil)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext: %v", err)
+	}
+	for _, c := range f.jar.Cookies(req.URL) {
+		req.AddCookie(c)
+	}
+	req.Header.Set("Authorization", "Bearer "+raw)
+
+	ctx := context.WithValue(t.Context(), ctxKeyRequest, req)
+	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth,
+		f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler), nil)
+
+	// Dual-scheme route: cookie handler must skip, delegating to bearer.
+	_, err = sec.HandleCookieAuth(ctx, oas.GetSessionOperation, oas.CookieAuth{})
+	if !errors.Is(err, ogenerrors.ErrSkipServerSecurity) {
+		t.Fatalf("HandleCookieAuth(GetSession) = %v, want ErrSkipServerSecurity", err)
+	}
+
+	// Cookie-only route: cookie handler must succeed and resolve the principal.
+	gotCtx, err := sec.HandleCookieAuth(ctx, oas.ListAPIKeysOperation, oas.CookieAuth{})
+	if err != nil {
+		t.Fatalf("HandleCookieAuth(ListAPIKeys) = %v, want nil", err)
+	}
+	if got, ok := UserFrom(gotCtx); !ok || got.ID != admin.ID {
+		t.Fatalf("UserFrom = %v, want %v", got.ID, admin.ID)
 	}
 }

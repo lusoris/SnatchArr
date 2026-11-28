@@ -52,8 +52,20 @@ func Mount(r chi.Router, p MountParams) error {
 		csrfUnlessBearer(p.CSRF),
 	).Get(PathPrefix+"/adult/image-items/{itemId}/file", p.Handlers.ServeAdultImageItemFile())
 
-	r.With(withHTTP, csrfUnlessBearer(p.CSRF)).Handle(PathPrefix+"/*", srv)
+	rulesStream := p.Security.RequireUser(p.Logger)(p.Handlers.ServeLibraryProcessingRules())
+	r.With(withHTTP, csrfUnlessBearer(p.CSRF)).Handle(PathPrefix+"/*", dispatchStreamingRoutes(srv, rulesStream))
 	return nil
+}
+
+func dispatchStreamingRoutes(srv, rulesGET http.Handler) http.Handler {
+	const rulesPath = PathPrefix + "/library-processing/rules"
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == rulesPath {
+			rulesGET.ServeHTTP(w, r)
+			return
+		}
+		srv.ServeHTTP(w, r)
+	})
 }
 
 // StreamPath serves the Server-Sent Events stream. It lives outside the generated router.
