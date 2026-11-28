@@ -116,6 +116,7 @@ pre-push:
       glob:
         - "*.py"
         - "tools/ci/codacy_opengrep/*"
+        - "tools/ci/codacy_opengrep_install*.sh"
         - "tools/ci/tool-versions.env"
       run: make tools-opengrep
     semgrep:

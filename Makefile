@@ -234,7 +234,8 @@ tools-opengrep: ## Codacy Opengrep Python rules over tracked Python files, again
 	  Linux-x86_64) ;;
 	  *) echo "tools-opengrep: skipped on $$(uname -s)-$$(uname -m): the pinned Opengrep binary is Linux x86_64 only"; exit 0 ;;
 	esac
-	(cd tools/ci/codacy_opengrep && npm ci --ignore-scripts --no-audit)
+	sh tools/ci/codacy_opengrep_install_test.sh
+	sh tools/ci/codacy_opengrep_install.sh
 	python3 -I tools/ci/codacy_opengrep_scan.py
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────

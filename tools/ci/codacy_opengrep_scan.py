@@ -79,6 +79,7 @@ BASELINE = "tools/ci/codacy_opengrep/baseline.json"
 CONFIG = "tools/ci/codacy_opengrep/opengrep-python.config.json"
 FIXTURES = "tools/ci/codacy_opengrep/testdata"
 PACKAGE = "tools/ci/codacy_opengrep"
+NPM_DIR = ".cache/codacy_opengrep"  # issue 1325: keep npm's mutable tree outside ./tools/.
 TOOL_VERSIONS = "tools/ci/tool-versions.env"
 CLI_PACKAGE = "@codacy/analysis-cli"
 REGISTRY_PROGRAM = """
@@ -605,16 +606,17 @@ def codacy_home(versions: dict[str, str]) -> Iterator[Path]:
 
 
 def cli_path(root: Path) -> Path:
-    """Return the installed CLI after checking it is the exact version package.json pins."""
+    """Return the cached CLI after checking it is the exact version tracked package.json pins."""
     package = root / PACKAGE
+    npm_dir = root / NPM_DIR
     wanted = load_json(package / "package.json")
     pin = wanted.get("dependencies", {}).get(CLI_PACKAGE) if isinstance(wanted, dict) else None
     if not isinstance(pin, str) or not VERSION_RE.fullmatch(pin):
         raise ScanError(f"{PACKAGE}/package.json: {CLI_PACKAGE} needs an exact x.y.z pin")
-    installed_file = package / "node_modules" / CLI_PACKAGE / "package.json"
-    cli = package / "node_modules/.bin/codacy-analysis"
+    installed_file = npm_dir / "node_modules" / CLI_PACKAGE / "package.json"
+    cli = npm_dir / "node_modules/.bin/codacy-analysis"
     if not installed_file.is_file() or not cli.is_file():
-        raise ScanError(f"{CLI_PACKAGE} not installed: run npm ci --ignore-scripts in {PACKAGE}")
+        raise ScanError(f"{CLI_PACKAGE} not installed: run sh tools/ci/codacy_opengrep_install.sh")
     installed = load_json(installed_file)
     if not isinstance(installed, dict) or installed.get("version") != pin:
         raise ScanError(f"{CLI_PACKAGE} {installed.get('version') if isinstance(installed, dict) else '?'} installed, the pin is {pin}")
@@ -709,7 +711,7 @@ def check_cli_opengrep(root: Path, pinned: str) -> None:
     with tempfile.TemporaryDirectory(
         prefix="snatcharr-opengrep-registry-"
     ) as temporary:
-        wanted = registry_version(root / PACKAGE, cli_env(os.environ, Path(temporary)))
+        wanted = registry_version(root / NPM_DIR, cli_env(os.environ, Path(temporary)))
     problem = pin_problem(wanted, pinned)
     if problem is not None:
         raise ScanError(problem)
