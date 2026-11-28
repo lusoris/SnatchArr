@@ -1,5 +1,108 @@
 # Changelog
 
+## [0.9.0](https://github.com/lusoris/SnatchArr/compare/v0.8.1...v0.9.0) (2026-11-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **ci:** validate Docker arguments for dependency snapshots
+* **ci:** bound Docker executable lookup for dependency snapshots ([#1358](https://github.com/lusoris/SnatchArr/issues/1358))
+* range-check worker settings, walk every OpenAPI operation ([#1159](https://github.com/lusoris/SnatchArr/issues/1159))
+* **api:** new snatch policies default sonarr_missing_mode to 'dynamic' instead of 'episodes'.
+* **worker:** dynamic search strategy per arr API family ([#1032](https://github.com/lusoris/SnatchArr/issues/1032))
+
+### Features
+
+* **adult:** build the Jellyfin overlay link map from Whisparr movies ([#1250](https://github.com/lusoris/SnatchArr/issues/1250)) ([9309fcd](https://github.com/lusoris/SnatchArr/commit/9309fcd55ba5d72541e65450e6665d10dbb29282))
+* **api:** default sonarr_missing_mode to dynamic ([#1035](https://github.com/lusoris/SnatchArr/issues/1035)) ([3925cb7](https://github.com/lusoris/SnatchArr/commit/3925cb74948c09b6a1310298c59a609a1c46be1c))
+* **api:** serve snatch policy presets from API ([#1031](https://github.com/lusoris/SnatchArr/issues/1031)) ([d20ed0f](https://github.com/lusoris/SnatchArr/commit/d20ed0f89bd08c327888001f161b778dbf6e6212)), closes [#561](https://github.com/lusoris/SnatchArr/issues/561)
+* **arrclient:** harvest Sonarr and Radarr title aliases ([#1025](https://github.com/lusoris/SnatchArr/issues/1025)) ([f373bcf](https://github.com/lusoris/SnatchArr/commit/f373bcf55184afe92a02d9e537b32739a7c21b44))
+* **auth:** start a Jellyfin session from the user's access token ([#1095](https://github.com/lusoris/SnatchArr/issues/1095)) ([4223840](https://github.com/lusoris/SnatchArr/commit/422384038bf2102cad92e68770031f6f0a4aeb03)), closes [#1027](https://github.com/lusoris/SnatchArr/issues/1027)
+* **dlclients:** execute priority plans in act mode ([1c764cc](https://github.com/lusoris/SnatchArr/commit/1c764cc1ed7a404898ddaf53d55617ce9dfa0ad6))
+* **metadata:** add TheTVDB provider for foreign titles ([#1149](https://github.com/lusoris/SnatchArr/issues/1149)) ([9df36fe](https://github.com/lusoris/SnatchArr/commit/9df36fe1d8e9e7c1a630955b6a139ac11e460888)), closes [#1109](https://github.com/lusoris/SnatchArr/issues/1109)
+* **modules:** register opt-in library processing ([4e0c9ce](https://github.com/lusoris/SnatchArr/commit/4e0c9ce6a4da1837dd0f5a2d6098ca0a8bb4f696))
+* **policies:** show which Radarr profiles allow foreign-title search ([#1010](https://github.com/lusoris/SnatchArr/issues/1010)) ([8bc3947](https://github.com/lusoris/SnatchArr/commit/8bc39474324adce78273f91235292c2fce032fa3)), closes [#204](https://github.com/lusoris/SnatchArr/issues/204)
+* **prowlarr:** charge variant searches per indexer and cache them ([#1009](https://github.com/lusoris/SnatchArr/issues/1009)) ([dcc1eb2](https://github.com/lusoris/SnatchArr/commit/dcc1eb23d176d4e5f33a4d3880eff981a06c32da)), closes [#696](https://github.com/lusoris/SnatchArr/issues/696)
+* **prowlarr:** make the search DB timeout and cache result limit settings ([#1017](https://github.com/lusoris/SnatchArr/issues/1017)) ([4041ae3](https://github.com/lusoris/SnatchArr/commit/4041ae39d7269f730e99ea0569aa0c1660a81dbf))
+* **prowlarr:** select indexers for a foreign-title language ([#1007](https://github.com/lusoris/SnatchArr/issues/1007)) ([c2c711e](https://github.com/lusoris/SnatchArr/commit/c2c711e62a49c950aedccea7c64d8d213a4c8ff8))
+* **web:** show download client priority plan and mode ([#1006](https://github.com/lusoris/SnatchArr/issues/1006)) ([8dc1be2](https://github.com/lusoris/SnatchArr/commit/8dc1be2bf8f77e08b8e3d613f8c08384e27c7255))
+* **worker:** dynamic search strategy per arr API family ([#1032](https://github.com/lusoris/SnatchArr/issues/1032)) ([e86ebe1](https://github.com/lusoris/SnatchArr/commit/e86ebe101660636b757b70d00a18985909df1e55))
+
+
+### Bug Fixes
+
+* **api:** cancel a stale lease holder and refuse its completion ([#1293](https://github.com/lusoris/SnatchArr/issues/1293)) ([8f33035](https://github.com/lusoris/SnatchArr/commit/8f33035355e4dcaa53f900f4d6c7672960c43266)), closes [#1289](https://github.com/lusoris/SnatchArr/issues/1289)
+* **api:** connect the retrying pool before the auto migrator ([#1197](https://github.com/lusoris/SnatchArr/issues/1197)) ([bcecd4b](https://github.com/lusoris/SnatchArr/commit/bcecd4be5539280231155eb771498de9133ec11c))
+* **api:** skip instances deleted while hourly caps are read ([#1001](https://github.com/lusoris/SnatchArr/issues/1001)) ([416c781](https://github.com/lusoris/SnatchArr/commit/416c78148b360349101508e40d175c64eba696a1))
+* **ci:** bound Docker executable lookup for dependency snapshots ([#1358](https://github.com/lusoris/SnatchArr/issues/1358)) ([1534aaa](https://github.com/lusoris/SnatchArr/commit/1534aaaee49ca0a489f6baf91b8fd5c5b3ae1b3d))
+* **ci:** call sveltesentio by its plurano name ([#1259](https://github.com/lusoris/SnatchArr/issues/1259)) ([203de96](https://github.com/lusoris/SnatchArr/commit/203de96e2dea50be1c8b3150c3e838fd2cbcd264))
+* **ci:** call sveltesentio by its plurano owner ([#1261](https://github.com/lusoris/SnatchArr/issues/1261)) ([c27bdb9](https://github.com/lusoris/SnatchArr/commit/c27bdb9227a35c17a895d8edf33cd1f8b6bbc8a3))
+* **ci:** check Docker release age across the Renovate preset closure ([#1094](https://github.com/lusoris/SnatchArr/issues/1094)) ([4b94304](https://github.com/lusoris/SnatchArr/commit/4b94304b59b88f7699b84c6e2ab2a2e1de2f7238)), closes [#1093](https://github.com/lusoris/SnatchArr/issues/1093)
+* **ci:** give every Postgres test pin the storetest digest ([#1091](https://github.com/lusoris/SnatchArr/issues/1091)) ([e60dac8](https://github.com/lusoris/SnatchArr/commit/e60dac8371612a04ec03ebff8b52430275aa9de0))
+* **ci:** render the roadmap bot PR body from the template ([#1163](https://github.com/lusoris/SnatchArr/issues/1163)) ([0865e93](https://github.com/lusoris/SnatchArr/commit/0865e93655fc71cd0b46a904bf84ae4cf7a28ccc)), closes [#1154](https://github.com/lusoris/SnatchArr/issues/1154)
+* **ci:** require a second hash before Python nosec reasons ([#1083](https://github.com/lusoris/SnatchArr/issues/1083)) ([c7b7870](https://github.com/lusoris/SnatchArr/commit/c7b7870253096fd8be0f6d36ed4bd0fea0aa74f7)), closes [#1082](https://github.com/lusoris/SnatchArr/issues/1082)
+* **ci:** scan with the go.mod Go release in make api-vuln ([#1089](https://github.com/lusoris/SnatchArr/issues/1089)) ([cbf497a](https://github.com/lusoris/SnatchArr/commit/cbf497a0e2090f241309c0aa4bf42c70294e2328))
+* **ci:** sign off the roadmap bot's commits ([#1069](https://github.com/lusoris/SnatchArr/issues/1069)) ([f0cf0ba](https://github.com/lusoris/SnatchArr/commit/f0cf0bae35c3ef32753923a08f31e216858c564f))
+* **ci:** validate Docker arguments for dependency snapshots ([90f98eb](https://github.com/lusoris/SnatchArr/commit/90f98eb04277eef37ea6a8af85d3df1d043459a2))
+* **ci:** verify the pinned clone scanner before use ([#1353](https://github.com/lusoris/SnatchArr/issues/1353)) ([1c3716e](https://github.com/lusoris/SnatchArr/commit/1c3716ea30a6654986207dfeb9a0d2a6170da8dd))
+* **deploy:** pin the devcontainer and chart images to tag@sha256 digests ([#1011](https://github.com/lusoris/SnatchArr/issues/1011)) ([4fbad2d](https://github.com/lusoris/SnatchArr/commit/4fbad2d3922abe589f860334b937961a420c6c92))
+* **deps:** update dependency @inlang/paraglide-js to v3 ([#1233](https://github.com/lusoris/SnatchArr/issues/1233)) ([823e715](https://github.com/lusoris/SnatchArr/commit/823e71563734e778638d34a7f8170c36f1fd39a5))
+* **deps:** update Go to 1.27.4 for GO-2026-6859 ([#1088](https://github.com/lusoris/SnatchArr/issues/1088)) ([9cdcdf2](https://github.com/lusoris/SnatchArr/commit/9cdcdf2828580b12d1540d89da470256f4be442b))
+* **deps:** update golusoris ([#1182](https://github.com/lusoris/SnatchArr/issues/1182)) ([1de08b4](https://github.com/lusoris/SnatchArr/commit/1de08b4765690bb06f8db2da04d2a9196a649b9f))
+* **deps:** update golusoris ([#1223](https://github.com/lusoris/SnatchArr/issues/1223)) ([9017b9b](https://github.com/lusoris/SnatchArr/commit/9017b9b74f672b2a25d8ea7d395c3e1430c74b8f))
+* **deps:** update gomod non-major ([#1188](https://github.com/lusoris/SnatchArr/issues/1188)) ([acca663](https://github.com/lusoris/SnatchArr/commit/acca663c187d76c809d72e471f07a0ef95c295ff))
+* **deps:** update npm non-major with the CI fixes it needs ([#1321](https://github.com/lusoris/SnatchArr/issues/1321)) ([3a24544](https://github.com/lusoris/SnatchArr/commit/3a245449e380e5b94d7e454d9d74b4125d0ecd87))
+* **deps:** update quinn-proto, quinn-udp and rustix for RUSTSEC advisories ([#1142](https://github.com/lusoris/SnatchArr/issues/1142)) ([083f6c2](https://github.com/lusoris/SnatchArr/commit/083f6c2f45d23c390b8d42afb282119e799900bc))
+* **dlclients:** keep user pauses and state the observe-mode resume ([#1014](https://github.com/lusoris/SnatchArr/issues/1014)) ([ac04287](https://github.com/lusoris/SnatchArr/commit/ac042873986041165961bc8522cb9c8a0e5e3f4f))
+* **docker:** install pnpm from npm, not corepack ([#1275](https://github.com/lusoris/SnatchArr/issues/1275)) ([ddce914](https://github.com/lusoris/SnatchArr/commit/ddce9149f3f8af6125f87c810c4a344b2cfa1fa6))
+* **docs:** keep the CNPG example on the upgrade test image ([#1210](https://github.com/lusoris/SnatchArr/issues/1210)) ([cc183c3](https://github.com/lusoris/SnatchArr/commit/cc183c3712a93d2b799f10e1a6ac9e41cf2db61a))
+* **docs:** restore the Limits anchor and refuse missing anchors ([#1018](https://github.com/lusoris/SnatchArr/issues/1018)) ([eb4711f](https://github.com/lusoris/SnatchArr/commit/eb4711f4d105a5c996b2396c77adf2658b52cd1f))
+* **e2e:** bound the live_lib test port-file waits ([#1173](https://github.com/lusoris/SnatchArr/issues/1173)) ([e4643d0](https://github.com/lusoris/SnatchArr/commit/e4643d0db91dcdfb99a692bd462cf2344b9f337a)), closes [#1169](https://github.com/lusoris/SnatchArr/issues/1169)
+* **healthprobe:** give the probe its own transport ([#1170](https://github.com/lusoris/SnatchArr/issues/1170)) ([4943cdc](https://github.com/lusoris/SnatchArr/commit/4943cdce2b04059b0ec64da170c3315b0129a069)), closes [#1165](https://github.com/lusoris/SnatchArr/issues/1165)
+* **queue:** classify the Lidarr missing-tracks check as broken ([#993](https://github.com/lusoris/SnatchArr/issues/993)) ([a09a4ce](https://github.com/lusoris/SnatchArr/commit/a09a4ce669cba089d48d9e434cda49a56cc04f93))
+* **queue:** strike "no files found" only for a listed job folder ([#1246](https://github.com/lusoris/SnatchArr/issues/1246)) ([0e0735d](https://github.com/lusoris/SnatchArr/commit/0e0735d7db3c218bf82700151b155aac7267caaf)), closes [#1236](https://github.com/lusoris/SnatchArr/issues/1236)
+* **queue:** turn on the stored import_fixable blocklist once ([#994](https://github.com/lusoris/SnatchArr/issues/994)) ([5991bb1](https://github.com/lusoris/SnatchArr/commit/5991bb128d2796a6b985d3806130dce3815d07ec))
+* range-check worker settings, walk every OpenAPI operation ([#1159](https://github.com/lusoris/SnatchArr/issues/1159)) ([934eb1b](https://github.com/lusoris/SnatchArr/commit/934eb1ba679c25e14e4351287c2ec1d112e52155)), closes [#861](https://github.com/lusoris/SnatchArr/issues/861) [#859](https://github.com/lusoris/SnatchArr/issues/859) [#147](https://github.com/lusoris/SnatchArr/issues/147)
+* **renovate:** let undated non-Docker-Hub images reach a pull request ([#1092](https://github.com/lusoris/SnatchArr/issues/1092)) ([aca4010](https://github.com/lusoris/SnatchArr/commit/aca401013e1de7d22e6739f1bd9f79c25cbc9f70))
+* **renovate:** stop jscpd bumps that break the clone scan ([#1276](https://github.com/lusoris/SnatchArr/issues/1276)) ([286542d](https://github.com/lusoris/SnatchArr/commit/286542d6fd926f65a44cac4a22b7ac328523be4b))
+* resolve secrets gate config path and inject chart image digests ([#1039](https://github.com/lusoris/SnatchArr/issues/1039)) ([c6cfd31](https://github.com/lusoris/SnatchArr/commit/c6cfd3127c2d1e9550a94cf273820842e68c8d03))
+* **test:** give each test binary its own reaper session ([#1174](https://github.com/lusoris/SnatchArr/issues/1174)) ([fdb953d](https://github.com/lusoris/SnatchArr/commit/fdb953dd4eb57a3977060da425ff8652ecc73527))
+* **test:** start the MCP stdio timeout once the server holds the request ([#1086](https://github.com/lusoris/SnatchArr/issues/1086)) ([15d181e](https://github.com/lusoris/SnatchArr/commit/15d181e90819a3403cf90f03f10b9ea63d2d9fb7))
+* **web:** show each page name once in the search palette ([#1311](https://github.com/lusoris/SnatchArr/issues/1311)) ([a2140a9](https://github.com/lusoris/SnatchArr/commit/a2140a9c5adb21ddbca7b456af1ab5199fb39c4e))
+* **worker:** move rust-version to the pinned toolchain ([#1240](https://github.com/lusoris/SnatchArr/issues/1240)) ([863308a](https://github.com/lusoris/SnatchArr/commit/863308a78ac6077912170d3daed393c394198055))
+* **worker:** open the event stream again after an unsent refusal ([#1267](https://github.com/lusoris/SnatchArr/issues/1267)) ([9cf01d4](https://github.com/lusoris/SnatchArr/commit/9cf01d46341cfe9f836ce9e6b857b51e8e618b63))
+* **worker:** read more wanted pages when the planned ones run short ([#1260](https://github.com/lusoris/SnatchArr/issues/1260)) ([1ae3836](https://github.com/lusoris/SnatchArr/commit/1ae38363f95528d01a698b97766731e870b3c9c5))
+* **worker:** replace chrono with the maintained time crate ([#1214](https://github.com/lusoris/SnatchArr/issues/1214)) ([e30cf8b](https://github.com/lusoris/SnatchArr/commit/e30cf8b00c7b912a72de24947f38274b97353b8a)), closes [#1211](https://github.com/lusoris/SnatchArr/issues/1211) [#1215](https://github.com/lusoris/SnatchArr/issues/1215)
+
+
+### Refactoring
+
+* **web:** share one query for the optional modules list ([#1316](https://github.com/lusoris/SnatchArr/issues/1316)) ([612ecf2](https://github.com/lusoris/SnatchArr/commit/612ecf2e5fa5c1e71d895b1caf14016a79509bb9))
+* **worker:** extract dispatch_or_defer helper ([#1038](https://github.com/lusoris/SnatchArr/issues/1038)) ([9ffbbff](https://github.com/lusoris/SnatchArr/commit/9ffbbffcd607bc558091e0bfbe034680ad5b04a9))
+
+
+### Documentation
+
+* **adr:** accept ADR-0025 module switches ([#1081](https://github.com/lusoris/SnatchArr/issues/1081)) ([37153bd](https://github.com/lusoris/SnatchArr/commit/37153bde4d569e8b7d906abe8085b587c790224a)), closes [#570](https://github.com/lusoris/SnatchArr/issues/570)
+* **adr:** accept ADR-0028 Jellyfin companion plugin and its contract ([#1026](https://github.com/lusoris/SnatchArr/issues/1026)) ([3a9f053](https://github.com/lusoris/SnatchArr/commit/3a9f053c274dad608a3f8bac202a81755924dd55)), closes [#567](https://github.com/lusoris/SnatchArr/issues/567)
+* **adr:** accept ADR-0047 list sync across instances ([#1071](https://github.com/lusoris/SnatchArr/issues/1071)) ([55d0291](https://github.com/lusoris/SnatchArr/commit/55d0291b1b9301d81d808071830c87b2938c6885))
+* **adr:** fix stale anchors and contradictions in ADR-0028 ([#1028](https://github.com/lusoris/SnatchArr/issues/1028)) ([cbc627f](https://github.com/lusoris/SnatchArr/commit/cbc627f0b7eb6666a3ecf26ef4d8127d09c2dbda))
+* **adr:** move media execution to torcul (ADR-0050) ([#1315](https://github.com/lusoris/SnatchArr/issues/1315)) ([01e558e](https://github.com/lusoris/SnatchArr/commit/01e558ebef6950dd89e63e38a0b7d6cb3491e42a))
+* **adr:** plan the metadata proxy as a separate deployable ([#1144](https://github.com/lusoris/SnatchArr/issues/1144)) ([0d1e659](https://github.com/lusoris/SnatchArr/commit/0d1e65904e315978f1a7aefde0cb390a48cc2a7a))
+* **adr:** propose a mixed adult library overlay in ADR-0028 ([#1248](https://github.com/lusoris/SnatchArr/issues/1248)) ([32ec72c](https://github.com/lusoris/SnatchArr/commit/32ec72cc708333e8b0f43c9ac79b2ca9b1f251b7)), closes [#1209](https://github.com/lusoris/SnatchArr/issues/1209)
+* **dlclients:** document the pause ownership release functions ([#1020](https://github.com/lusoris/SnatchArr/issues/1020)) ([545a27c](https://github.com/lusoris/SnatchArr/commit/545a27ce963d5a83a66bd9ed7c543e21fe3ebc2c))
+* **readme:** adopt the shared README layout ([#1235](https://github.com/lusoris/SnatchArr/issues/1235)) ([d61d9f9](https://github.com/lusoris/SnatchArr/commit/d61d9f9e0f4125e64e153f290af46a8521ac3d09)), closes [#1221](https://github.com/lusoris/SnatchArr/issues/1221)
+* **roadmap:** refresh the milestone open-issue counts ([#1036](https://github.com/lusoris/SnatchArr/issues/1036)) ([021c2d1](https://github.com/lusoris/SnatchArr/commit/021c2d14719923edc97f9b5265245baf49061e95))
+* **roadmap:** refresh the milestone open-issue counts ([#1087](https://github.com/lusoris/SnatchArr/issues/1087)) ([4d5c3aa](https://github.com/lusoris/SnatchArr/commit/4d5c3aaf86c5f320564e50da14f038326844f523))
+* **roadmap:** refresh the milestone open-issue counts ([#1164](https://github.com/lusoris/SnatchArr/issues/1164)) ([f1a4ae0](https://github.com/lusoris/SnatchArr/commit/f1a4ae0b388cbe30a228d4df8a50157fd38885c6))
+* **roadmap:** refresh the milestone open-issue counts ([#1191](https://github.com/lusoris/SnatchArr/issues/1191)) ([bbefd57](https://github.com/lusoris/SnatchArr/commit/bbefd57868b415e0f0681afc23014fa7cdf5ea47))
+* **roadmap:** refresh the milestone open-issue counts ([#1207](https://github.com/lusoris/SnatchArr/issues/1207)) ([cef90bc](https://github.com/lusoris/SnatchArr/commit/cef90bc30280c9d6928a9963c24e5ab69be205b8))
+* **roadmap:** refresh the milestone open-issue counts ([#1218](https://github.com/lusoris/SnatchArr/issues/1218)) ([9d9e651](https://github.com/lusoris/SnatchArr/commit/9d9e6512c72c532fbbe41103866d99965c12a415))
+* **roadmap:** refresh the milestone open-issue counts ([#1241](https://github.com/lusoris/SnatchArr/issues/1241)) ([754a359](https://github.com/lusoris/SnatchArr/commit/754a3597422a1dbfb8b2db47d3e504a994e2f569))
+* **roadmap:** refresh the milestone open-issue counts ([#1252](https://github.com/lusoris/SnatchArr/issues/1252)) ([c7c25c3](https://github.com/lusoris/SnatchArr/commit/c7c25c3d619ce702ecb97dd87499a865f0892c2b))
+* **roadmap:** refresh the milestone open-issue counts ([#1288](https://github.com/lusoris/SnatchArr/issues/1288)) ([60119de](https://github.com/lusoris/SnatchArr/commit/60119de931999d29f67cc129687ccc203d949b33))
+* **roadmap:** refresh the milestone open-issue counts ([#1305](https://github.com/lusoris/SnatchArr/issues/1305)) ([f9c87d3](https://github.com/lusoris/SnatchArr/commit/f9c87d3c4aca7d21a1f31d263a036e5b670535fa))
+
 ## [0.8.1](https://github.com/lusoris/SnatchArr/compare/v0.8.0...v0.8.1) (2026-11-04)
 
 

@@ -11,7 +11,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 <!-- README-STANDARD badge block -->
 <!-- 1 release/version -->
-[![Release](https://img.shields.io/static/v1?label=release&message=v0.8.1&style=for-the-badge&color=b295ff&labelColor=141229)](https://github.com/lusoris/SnatchArr/releases) <!-- x-release-please-version -->
+[![Release](https://img.shields.io/static/v1?label=release&message=v0.9.0&style=for-the-badge&color=b295ff&labelColor=141229)](https://github.com/lusoris/SnatchArr/releases) <!-- x-release-please-version -->
 <!-- 2 CI/build + 3 security/scorecard: added by engine-readme-badges-renderer-facet-20261118 -->
 <!-- 4 standards -->
 [![HISS-21](https://img.shields.io/static/v1?label=standards&message=HISS-21&style=for-the-badge&color=b295ff&labelColor=141229)](AGENTS.md)
