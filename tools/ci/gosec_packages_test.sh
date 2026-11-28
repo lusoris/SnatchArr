@@ -44,7 +44,7 @@ printf 'package untracked\n' >"$M/untracked/u.go"
 # run ARGS...: run gosec_packages.sh in the module; sets rc, out (stdout) and err (stderr).
 run() {
   rc=0
-  out="$(cd "$M" && sh tools/ci/gosec_packages.sh "$@" 2>"$WORK/stderr")" || rc=$?
+  out="$(cd "$M" && run_bounded 40 sh tools/ci/gosec_packages.sh "$@" 2>"$WORK/stderr")" || rc=$?
   err="$(cat "$WORK/stderr")"
 }
 # Absolute private bin first on PATH (this process only): go there is a note wrapper for the first

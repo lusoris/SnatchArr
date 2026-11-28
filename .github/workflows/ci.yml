@@ -330,6 +330,7 @@ jobs:
               - 'tools/ci/test_lib.sh'
               - 'tools/ci/clones_check.py'
               - 'tools/ci/clones_check_test.sh'
+              - 'tools/ci/clones_check_launch_test.py'
               - 'tools/ci/clone-free.txt'
               - 'tools/ci/testdata/clones/**'
             contracts:
@@ -1020,12 +1021,18 @@ jobs:
       # PRAETOR_REF is the repository's engine pin: the git hooks and make read it from here
       # (.config/lefthook/engine.sh) and run the same engine CI installs. One value only.
       - name: Install praetorctl
+        id: pinned_engine
         env:
           PRAETOR_REF: 4e6c6d9cbf9cc8e634f2c9e4751706496278cd52
+        shell: bash
         run: |
-          go install "github.com/cordanaLLM/praetor/cmd/standardsctl@${PRAETOR_REF}"
-          ln -s "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          bin="$RUNNER_TEMP/praetor-bin"
+          mkdir -p "$bin"
+          GOBIN="$bin" go install "github.com/cordanaLLM/praetor/cmd/standardsctl@${PRAETOR_REF}"
+          ln -s "$bin/standardsctl" "$bin/praetorctl"
+          echo "$bin" >> "$GITHUB_PATH"
+          digest=$(sha256sum < "$bin/standardsctl")
+          echo "sha256=${digest%% *}" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: web/package.json
@@ -1035,9 +1042,22 @@ jobs:
       - name: Install web dependencies
         run: cd web && pnpm install --frozen-lockfile
       - name: Clone gate
+        shell: bash
+        env:
+          EXPECTED_SHA256: ${{ steps.pinned_engine.outputs.sha256 }}
         run: |
           sh tools/ci/clones_check_test.sh
-          python3 tools/ci/clones_check.py
+          bin="$RUNNER_TEMP/praetor-bin/standardsctl"
+          if [ -L "$bin" ] || [ ! -f "$bin" ] || [ ! -x "$bin" ]; then
+            echo "::error::praetor binary is missing, a symlink, or not executable"
+            exit 1
+          fi
+          actual=$(sha256sum < "$bin")
+          if [ "${actual%% *}" != "${EXPECTED_SHA256:-}" ]; then
+            echo "::error::praetor binary digest changed"
+            exit 1
+          fi
+          PRAETORCTL="$bin" python3 tools/ci/clones_check.py
       - name: Context integrity
         run: praetorctl compile-context --verify
       - name: HISS audit
