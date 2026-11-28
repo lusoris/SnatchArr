@@ -25,8 +25,10 @@ so the dependency graph shows the repository path, the snapshot is written to --
 and package counts are printed.
 
 The Docker binary is resolved by fixed name on PATH or as an executable /.../docker
-file, and validated GitHub workflow metadata reaches the container through the Docker
-client's environment rather than command-line arguments.
+file; alternate executable names previously passed to --docker must migrate to
+'docker' on PATH or an executable /.../docker path. Validated GitHub workflow
+metadata reaches the container through the Docker client's environment rather than
+command-line arguments.
 
 The --ref value must start with refs/ and be accepted by the installed
 `git check-ref-format`, so git must be on PATH.
@@ -47,6 +49,7 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
 import urllib.parse
 from collections.abc import Callable
 
@@ -179,6 +182,7 @@ def resolve_docker(
     The filesystem lookup runs in one daemon thread with a bounded join, so a
     stalled lookup is refused after TIMEOUT seconds, before any Docker process starts.
     """
+    deadline = time.monotonic() + timeout
     results: list[str | None] = []
     errors: list[OSError | ValueError] = []
     worker = threading.Thread(
@@ -187,8 +191,8 @@ def resolve_docker(
         daemon=True,
     )
     worker.start()
-    worker.join(timeout=timeout)
-    if worker.is_alive():
+    worker.join(timeout=max(0.0, deadline - time.monotonic()))
+    if worker.is_alive() or time.monotonic() >= deadline:
         raise ScanError(f"--docker {value!r} lookup exceeded {timeout}s")
     if errors:
         raise errors[0]
@@ -269,6 +273,7 @@ def checked_job_vars(args) -> dict[str, str]:
             raise ScanError(f"invalid {flag} value {val!r}")
         job_vars[env_name] = val
     return job_vars
+
 
 
 def tar_of_files(files_dict):
@@ -487,7 +492,12 @@ def main():
                 f"image '{args.trivy}' is not pinned as NAME:TAG@sha256:DIGEST"
             )
 
-        docker = resolve_docker(args.docker)
+        try:
+            docker = resolve_docker(args.docker)
+        except (OSError, ValueError) as err:
+            raise ScanError(
+                f"--docker {args.docker!r} could not be resolved: {err}"
+            ) from err
         sha, ref = checked_sha_and_ref(args)
         job_vars = checked_job_vars(args)
 
