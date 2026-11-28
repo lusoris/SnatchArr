@@ -350,7 +350,7 @@ func streamSnapshotBatches(
 // within a single repeatable-read snapshot transaction, invoking onBatch per non-empty batch.
 // The module check and all batches share one operationTimeout deadline.
 func (s *Service) StreamAll(ctx context.Context, batchSize int, onBatch func([]StoredRule) error) error {
-	ctx, cancel := context.WithTimeout(ctx, operationTimeout)
+	ctx, cancel := WithOperationDeadline(ctx)
 	defer cancel()
 	if err := s.ensureEnabled(ctx); err != nil {
 		return err

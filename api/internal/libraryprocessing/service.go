@@ -59,6 +59,12 @@ func NewServiceWithChecker(st *store.Store, clk clock.Clock, ids id.Generator, m
 // deadline or cancellation takes precedence.
 const operationTimeout = 5 * time.Second
 
+// WithOperationDeadline derives a child context bounded by the service
+// operation timeout while preserving shorter caller deadlines and cancellation.
+func WithOperationDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, operationTimeout)
+}
+
 func (s *Service) ensureEnabled(ctx context.Context) error {
 	if s.mod == nil {
 		if err := ctx.Err(); err != nil {

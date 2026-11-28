@@ -11,6 +11,7 @@
 	import { readRuleDocument, writeRuleDocument } from '#lib/library-processing-document.js';
 	import {
 		appendRulePage,
+		compareStoredRules,
 		LIBRARY_PROCESSING_RULE_PAGE_LIMIT,
 		mergePinnedRule
 	} from '#lib/library-processing-rule.js';
@@ -44,12 +45,16 @@
 	let saving = $state(false);
 	// The stored rule whose document was opened in the editor; only an explicit save writes to it.
 	let editingId = $state('');
+	let lastSavedRule = $state<StoredRule | null>(null);
 
 	type RuleInput = ReturnType<typeof readRuleDocument>;
 
 	const rules = $derived(mergePinnedRule(loadedRules, pinnedRule));
 	const selectedRule = $derived(rules.find((rule) => rule.id === selectedId));
-	const editingRule = $derived(rules.find((rule) => rule.id === editingId));
+	const editingRule = $derived(
+		rules.find((rule) => rule.id === editingId) ??
+			(lastSavedRule?.id === editingId ? lastSavedRule : undefined)
+	);
 	const busy = $derived(importing || saving);
 
 	function startRequest(): { seq: number; signal: AbortSignal } {
@@ -223,6 +228,24 @@
 		}
 	}
 
+	function applySavedRule(saved: StoredRule): void {
+		lastSavedRule = saved;
+		if (loadedRules.some((rule) => rule.id === saved.id)) {
+			loadedRules = loadedRules
+				.map((rule) => (rule.id === saved.id ? saved : rule))
+				.sort(compareStoredRules);
+			if (pinnedRule?.id === saved.id) pinnedRule = null;
+			return;
+		}
+		if (!hasMore) {
+			loadedRules = [...loadedRules, saved].sort(compareStoredRules);
+			return;
+		}
+		if (pinnedRule?.id === saved.id || selectedId === saved.id || !pinnedRule) {
+			pinnedRule = saved;
+		}
+	}
+
 	async function importRule(): Promise<void> {
 		if (busy) return;
 		const input = parseDocument();
@@ -235,6 +258,7 @@
 			toast.success(status);
 			// The editor now holds a new document, not the one that was opened for editing.
 			editingId = '';
+			lastSavedRule = null;
 			await loadRules(res.data);
 		} catch (err) {
 			submitError = err;
@@ -254,10 +278,13 @@
 
 		saving = true;
 		try {
-			await api.PUT('/library-processing/rules/{ruleId}', {
+			const res = await api.PUT('/library-processing/rules/{ruleId}', {
 				params: { path: { ruleId } },
 				body: input
 			});
+			if (res.data) {
+				applySavedRule(res.data);
+			}
 			status = m.modules_rules_save_success();
 			toast.success(status);
 			await loadRules();
@@ -277,6 +304,7 @@
 		try {
 			text = writeRuleDocument(selectedRule, format);
 			editingId = selectedRule.id;
+			lastSavedRule = selectedRule;
 			status = m.modules_rules_export_success();
 		} catch (err) {
 			documentError = describeError(err);
@@ -320,20 +348,7 @@
 		</label>
 		{#if loading}
 			<p class="text-sm text-subtle" aria-live="polite">{m.loading()}</p>
-		{:else if loadError}
-			<ProblemNote error={loadError} />
-			<div>
-				<button
-					type="button"
-					class="btn min-h-11 px-3 py-1.5 text-xs md:min-h-0"
-					onclick={() => loadRules()}
-				>
-					{m.modules_rules_retry()}
-				</button>
-			</div>
-		{:else if rules.length === 0}
-			<p class="text-sm text-subtle">{m.modules_rules_empty()}</p>
-		{:else}
+		{:else if rules.length > 0}
 			<div class="flex flex-wrap items-center gap-2">
 				<select id="modules-rules-select" class="input min-h-11 md:min-h-0" bind:value={selectedId}>
 					<option value="">{m.modules_rules_select_placeholder()}</option>
@@ -361,9 +376,24 @@
 					</button>
 				{/if}
 			</div>
-			{#if loadMoreError}
+			{#if loadMoreError && !loadError}
 				<ProblemNote error={loadMoreError} />
 			{/if}
+		{:else if !loadError}
+			<p class="text-sm text-subtle">{m.modules_rules_empty()}</p>
+		{/if}
+		{#if !loading && loadError}
+			<ProblemNote error={loadError} />
+			<div>
+				<button
+					type="button"
+					class="btn min-h-11 px-3 py-1.5 text-xs md:min-h-0"
+					disabled={busy}
+					onclick={() => loadRules()}
+				>
+					{m.modules_rules_retry()}
+				</button>
+			</div>
 		{/if}
 	</div>
 

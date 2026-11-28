@@ -84,12 +84,23 @@ const (
 	rollbackTimeout     = 5 * time.Second
 )
 
+type txBeginner func(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
+
 // SnapshotReadTx runs fn inside a repeatable-read, read-only transaction so multi-batch
 // reads observe a single consistent database snapshot without blocking concurrent writers.
-func (s *Store) SnapshotReadTx(ctx context.Context, fn func(q *sqlcgen.Queries) error) (err error) {
+func (s *Store) SnapshotReadTx(ctx context.Context, fn func(q *sqlcgen.Queries) error) error {
+	return runSnapshotReadTx(ctx, s.pool.BeginTx, s.q, fn)
+}
+
+func runSnapshotReadTx(
+	ctx context.Context,
+	begin txBeginner,
+	queries *sqlcgen.Queries,
+	fn func(q *sqlcgen.Queries) error,
+) (err error) {
 	beginCtx, beginCancel := context.WithTimeout(ctx, snapshotStepTimeout)
 	defer beginCancel()
-	tx, err := s.pool.BeginTx(beginCtx, pgx.TxOptions{
+	tx, err := begin(beginCtx, pgx.TxOptions{
 		IsoLevel:   pgx.RepeatableRead,
 		AccessMode: pgx.ReadOnly,
 	})
@@ -97,22 +108,30 @@ func (s *Store) SnapshotReadTx(ctx context.Context, fn func(q *sqlcgen.Queries) 
 		return fmt.Errorf("store: begin snapshot tx: %w", err)
 	}
 	defer func() {
-		if err == nil {
-			return
-		}
-		rbCtx, rbCancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
-		defer rbCancel()
-		if rbErr := tx.Rollback(rbCtx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
-			err = errors.Join(err, fmt.Errorf("store: rollback snapshot tx: %w", rbErr))
+		if rbErr := rollbackSnapshotTx(ctx, tx); rbErr != nil {
+			err = errors.Join(err, rbErr)
 		}
 	}()
-	if err = fn(s.q.WithTx(tx)); err != nil {
+	var q *sqlcgen.Queries
+	if queries != nil {
+		q = queries.WithTx(tx)
+	}
+	if err = fn(q); err != nil {
 		return err
 	}
 	commitCtx, commitCancel := context.WithTimeout(ctx, snapshotStepTimeout)
 	defer commitCancel()
-	if err = tx.Commit(commitCtx); err != nil {
-		return fmt.Errorf("store: commit snapshot tx: %w", err)
+	if commitErr := tx.Commit(commitCtx); commitErr != nil {
+		return fmt.Errorf("store: commit snapshot tx: %w", commitErr)
+	}
+	return nil
+}
+
+func rollbackSnapshotTx(ctx context.Context, tx pgx.Tx) error {
+	rbCtx, rbCancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+	defer rbCancel()
+	if err := tx.Rollback(rbCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		return fmt.Errorf("store: rollback snapshot tx: %w", err)
 	}
 	return nil
 }

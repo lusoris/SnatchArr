@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/libraryprocessing"
 )
 
@@ -40,6 +41,9 @@ func lpGetRulePage(t *testing.T, client *http.Client, base, rawQuery string) lpP
 	var page lpPageResponse
 	if err := json.Unmarshal(res.body, &page); err != nil {
 		t.Fatalf("decode rule page: %v; body: %s", err, string(res.body))
+	}
+	if page.Items == nil {
+		t.Fatalf("decode rule page items = nil, want non-nil []; body: %s", string(res.body))
 	}
 	return page
 }
@@ -216,12 +220,12 @@ func TestLibraryProcessingRulesPagingPrecedenceTiesAndOmittedParams(t *testing.T
 	lpSetModule(t, f.client, base, csrf, true)
 
 	// Empty state: both unpaged array and paged endpoint return empty items and final-page status.
-	if emptyList := lpListRules(t, f.client, base); len(emptyList) != 0 {
-		t.Fatalf("empty unpaged list = %v, want []", emptyList)
+	if emptyList := lpListRules(t, f.client, base); emptyList == nil || len(emptyList) != 0 {
+		t.Fatalf("empty unpaged list = %#v, want non-nil []", emptyList)
 	}
 	emptyPage := lpGetRulePage(t, f.client, base, "")
-	if len(emptyPage.Items) != 0 || emptyPage.HasMore || emptyPage.NextCursor != nil {
-		t.Fatalf("empty page = %+v, want 0 items, has_more=false, next_cursor=nil", emptyPage)
+	if emptyPage.Items == nil || len(emptyPage.Items) != 0 || emptyPage.HasMore || emptyPage.NextCursor != nil {
+		t.Fatalf("empty page = %+v, want non-nil 0 items, has_more=false, next_cursor=nil", emptyPage)
 	}
 
 	seedPrecedenceAndTieRules(t, f, base, csrf)
@@ -321,6 +325,32 @@ func TestLibraryProcessingRulesPagingBoundsAndMalformedCursors(t *testing.T) {
 
 	lpSetModule(t, f.client, base, csrf, true)
 
+	// Malformed raw query strings must be rejected with 400 before defaults or cursor decoding apply.
+	malformedRawQueries := []string{
+		"limit=%zz",
+		"cursor=%zz",
+		"limit=1;cursor=abc",
+		"limit=%zz&cursor=not-valid-base64!!!",
+		"unknown=%zz",
+	}
+	for _, rq := range malformedRawQueries {
+		res := doHTTP(t, f.client, http.MethodGet, base+"/library-processing/rules/page?"+rq, "", nil)
+		lpAssertProblem(t, res, http.StatusBadRequest)
+	}
+
+	// Valid percent-encoded limit and direct Go callers without an HTTP request in ctx remain valid.
+	encodedPage := lpGetRulePage(t, f.client, base, "limit=%31")
+	if encodedPage.Items == nil || len(encodedPage.Items) != 0 || encodedPage.HasMore {
+		t.Fatalf("percent-encoded limit page = %+v, want empty final page", encodedPage)
+	}
+	directPage, err := f.h.ListLibraryProcessingRulesPage(t.Context(), oas.ListLibraryProcessingRulesPageParams{})
+	if err != nil {
+		t.Fatalf("direct ListLibraryProcessingRulesPage without HTTP request: %v", err)
+	}
+	if directPage.Items == nil || len(directPage.Items) != 0 || directPage.HasMore {
+		t.Fatalf("direct page = %+v, want non-nil empty final page", directPage)
+	}
+
 	// Generated OpenAPI parse/schema violations -> exactly 400 Problem Details (rejected before the service runs).
 	// Schema: limit integer minimum 1 maximum 200; cursor string minLength 1 maxLength 512.
 	schemaInvalidQueries := []string{
@@ -414,26 +444,31 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 		t.Fatalf("snapshot stream IDs = %v, want pre-mutation snapshot %v", streamedIDs, lpRuleIDs(baseline))
 	}
 
-	// 2. Multi-batch HTTP streaming handler with batchSize=2 produces the exact 7-item JSON array.
-	rec := httptest.NewRecorder()
+	// 2. Multi-batch HTTP streaming handler with batchSize=2 produces the exact 7-item JSON array:
+	// the 3 intermediate flushes inside SnapshotReadTx arm and clear the snapshot deadline before
+	// commit, and the final batch after commit runs under the live request context.
+	dw := newDeadlineRecordingWriter()
+	beforeStream := time.Now()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-	f.h.serveLibraryProcessingRulesBatch(2)(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("multi-batch stream status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	f.h.serveLibraryProcessingRulesBatch(2)(dw, req)
+	afterStream := time.Now()
+	if dw.Code != http.StatusOK {
+		t.Fatalf("multi-batch stream status = %d, want 200; body: %s", dw.Code, dw.Body.String())
 	}
 	var multiBatchList []map[string]any
-	if decErr := json.Unmarshal(rec.Body.Bytes(), &multiBatchList); decErr != nil {
-		t.Fatalf("decode multi-batch JSON array: %v; body: %s", decErr, rec.Body.String())
+	if decErr := json.Unmarshal(dw.Body.Bytes(), &multiBatchList); decErr != nil {
+		t.Fatalf("decode multi-batch JSON array: %v; body: %s", decErr, dw.Body.String())
 	}
 	if len(multiBatchList) != 7 {
 		t.Fatalf("multi-batch list len = %d, want 7", len(multiBatchList))
 	}
 	assertStrictPrecedenceOrder(t, multiBatchList)
+	dw.assertStreamDeadlines(t, beforeStream.Add(5*time.Second), afterStream.Add(5*time.Second), time.Time{}, time.Time{}, 3)
 
 	// 3. Pre-commit failure (canceled context before batch 1): returns Problem JSON, never 200 or '['.
 	preCtx, preCancel := context.WithCancel(t.Context())
 	preCancel()
-	preRec := httptest.NewRecorder()
+	preRec := newDeadlineRecordingWriter()
 	preReq := httptest.NewRequestWithContext(preCtx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
 	f.h.serveLibraryProcessingRulesBatch(2)(preRec, preReq)
 	if preRec.Code == http.StatusOK {
@@ -442,13 +477,17 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 	if ct := preRec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/problem+json") {
 		t.Fatalf("pre-commit error Content-Type = %q, want application/problem+json", ct)
 	}
+	if !preRec.currentDeadline.IsZero() {
+		t.Fatalf("pre-commit error left write deadline set to %v", preRec.currentDeadline)
+	}
 
-	// 4. Mid-stream failure after batch 1 committed headers: aborts with http.ErrAbortHandler and leaves JSON array unterminated.
+	// 4. Mid-stream failure after batch 1 committed headers: aborts with http.ErrAbortHandler,
+	// clears the write deadline on supported writers, and leaves JSON array unterminated.
 	midCtx, midCancel := context.WithCancel(t.Context())
 	defer midCancel()
 	abortWriter := &cancelOnWriteResponseWriter{
-		ResponseRecorder: httptest.NewRecorder(),
-		cancelAfterWrite: midCancel,
+		deadlineRecordingWriter: newDeadlineRecordingWriter(),
+		cancelAfterWrite:        midCancel,
 	}
 	midReq := httptest.NewRequestWithContext(midCtx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
 	var aborted bool
@@ -467,6 +506,9 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 	if !aborted {
 		t.Fatalf("expected panic(http.ErrAbortHandler) on mid-stream failure; body: %s", abortWriter.Body.String())
 	}
+	if !abortWriter.currentDeadline.IsZero() {
+		t.Fatalf("mid-stream abort left write deadline set to %v, want cleared", abortWriter.currentDeadline)
+	}
 	var shouldFail []any
 	if json.Unmarshal(abortWriter.Body.Bytes(), &shouldFail) == nil {
 		t.Fatalf("truncated mid-stream body parsed as complete JSON array: %s", abortWriter.Body.String())
@@ -477,13 +519,13 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 }
 
 type cancelOnWriteResponseWriter struct {
-	*httptest.ResponseRecorder
+	*deadlineRecordingWriter
 	writes           int
 	cancelAfterWrite context.CancelFunc
 }
 
 func (w *cancelOnWriteResponseWriter) Write(p []byte) (int, error) {
-	n, err := w.ResponseRecorder.Write(p)
+	n, err := w.deadlineRecordingWriter.Write(p)
 	w.writes++
 	if w.writes == 1 && w.cancelAfterWrite != nil {
 		w.cancelAfterWrite()

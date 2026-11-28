@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"maps"
 	"net/http"
 	"net/url"
@@ -103,14 +104,25 @@ func lpGetRule(t *testing.T, client *http.Client, base, id string) map[string]an
 	return lpDecode(t, res.body)
 }
 
+func decodeRuleListJSON(body []byte) ([]map[string]any, error) {
+	var list []map[string]any
+	if err := json.Unmarshal(body, &list); err != nil {
+		return nil, err
+	}
+	if list == nil {
+		return nil, errors.New("decoded rule list is nil, want JSON array []")
+	}
+	return list, nil
+}
+
 func lpListRules(t *testing.T, client *http.Client, base string) []map[string]any {
 	t.Helper()
 	res := doHTTP(t, client, http.MethodGet, base+"/library-processing/rules", "", nil)
 	if res.statusCode != http.StatusOK {
 		t.Fatalf("list rules status = %d, want 200; body: %s", res.statusCode, string(res.body))
 	}
-	var list []map[string]any
-	if err := json.Unmarshal(res.body, &list); err != nil {
+	list, err := decodeRuleListJSON(res.body)
+	if err != nil {
 		t.Fatalf("decode list: %v; body: %s", err, string(res.body))
 	}
 	return list
@@ -516,8 +528,8 @@ func TestLibraryProcessingInvalidRuleWrite(t *testing.T) {
 	}
 
 	// No invalid write may have been persisted.
-	if list := lpListRules(t, f.client, base); len(list) != 0 {
-		t.Errorf("list after invalid writes = %v, want empty", list)
+	if list := lpListRules(t, f.client, base); list == nil || len(list) != 0 {
+		t.Errorf("list after invalid writes = %#v, want non-nil empty []", list)
 	}
 
 	// Invalid replacement of an existing rule is rejected and leaves it intact.
@@ -749,8 +761,8 @@ func TestLibraryProcessingDeleteAndUnknownIDs(t *testing.T) {
 		t.Fatalf("delete status = %d body = %q, want 204 empty", delRes.statusCode, string(delRes.body))
 	}
 	lpAssertProblem(t, doHTTP(t, f.client, http.MethodGet, base+"/library-processing/rules/"+id, "", nil), http.StatusNotFound)
-	if list := lpListRules(t, f.client, base); len(list) != 0 {
-		t.Errorf("list after delete = %v, want empty", list)
+	if list := lpListRules(t, f.client, base); list == nil || len(list) != 0 {
+		t.Errorf("list after delete = %#v, want non-nil empty []", list)
 	}
 	lpAssertProblem(t, doHTTP(t, f.client, http.MethodGet, base+"/library-processing/resolve?media_type=anime", "", nil), http.StatusNotFound)
 	lpAssertProblem(t, doHTTP(t, f.client, http.MethodDelete, base+"/library-processing/rules/"+id, csrf, nil), http.StatusNotFound)

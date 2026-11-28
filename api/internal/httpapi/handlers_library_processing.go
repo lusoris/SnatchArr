@@ -20,10 +20,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/libraryprocessing"
 )
 
-const (
-	legacyRuleStreamBatchSize = libraryprocessing.MaxRulePageLimit
-	moduleGateCheckTimeout    = 10 * time.Second
-)
+const legacyRuleStreamBatchSize = libraryprocessing.MaxRulePageLimit
 
 func (h *Handlers) requireLibraryProcessing() (*libraryprocessing.Service, error) {
 	if h.libraryProcessing == nil {
@@ -58,6 +55,9 @@ func (h *Handlers) ListLibraryProcessingRulesPage(
 	if err != nil {
 		return nil, err
 	}
+	if err = validateRawQuery(ctx); err != nil {
+		return nil, err
+	}
 	var q libraryprocessing.PageQuery
 	if limit, ok := params.Limit.Get(); ok {
 		q.Limit = limit
@@ -84,18 +84,38 @@ func (h *Handlers) ListLibraryProcessingRulesPage(
 }
 
 type ruleArrayStreamWriter struct {
-	w         http.ResponseWriter
-	buf       bytes.Buffer
-	pending   []libraryprocessing.StoredRule
-	committed bool
-	wroteItem bool
+	w                http.ResponseWriter
+	rc               *http.ResponseController
+	responseDeadline time.Time
+	buf              bytes.Buffer
+	pending          []libraryprocessing.StoredRule
+	committed        bool
+	wroteItem        bool
 }
 
-func (sw *ruleArrayStreamWriter) onBatch(batch []libraryprocessing.StoredRule) error {
+func (sw *ruleArrayStreamWriter) controller() *http.ResponseController {
+	if sw.rc == nil {
+		sw.rc = http.NewResponseController(sw.w)
+	}
+	return sw.rc
+}
+
+func (sw *ruleArrayStreamWriter) flush() error {
+	// Plain JSON also works through writers without flush support.
+	if err := sw.controller().Flush(); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return fmt.Errorf("httpapi: flush library processing rules: %w", err)
+	}
+	return nil
+}
+
+func (sw *ruleArrayStreamWriter) onBatch(ctx context.Context, batch []libraryprocessing.StoredRule) error {
 	if len(sw.pending) > 0 {
-		if err := sw.flushPending(); err != nil {
+		if err := sw.flushPending(ctx); err != nil {
 			return err
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	sw.pending = batch
 	return nil
@@ -108,10 +128,13 @@ func (sw *ruleArrayStreamWriter) commitHeaders() {
 	sw.w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	sw.w.WriteHeader(http.StatusOK)
 	sw.committed = true
-	sw.buf.WriteByte('[')
 }
 
-func (sw *ruleArrayStreamWriter) encodePending() error {
+func (sw *ruleArrayStreamWriter) encodeChunk(closeArray bool) error {
+	sw.buf.Reset()
+	if !sw.committed {
+		sw.buf.WriteByte('[')
+	}
 	for _, item := range sw.pending {
 		oasItem := storedLibraryProcessingRuleToOAS(item)
 		raw, err := oasItem.MarshalJSON()
@@ -125,61 +148,192 @@ func (sw *ruleArrayStreamWriter) encodePending() error {
 		sw.wroteItem = true
 	}
 	sw.pending = nil
-	return nil
-}
-
-func (sw *ruleArrayStreamWriter) flushPending() error {
-	sw.buf.Reset()
-	sw.commitHeaders()
-	if err := sw.encodePending(); err != nil {
-		return err
-	}
-	if _, err := sw.w.Write(sw.buf.Bytes()); err != nil {
-		return fmt.Errorf("httpapi: write library processing rules: %w", err)
-	}
-	// Plain JSON also works through writers without flush support.
-	if err := http.NewResponseController(sw.w).Flush(); err != nil && !errors.Is(err, http.ErrNotSupported) {
-		return fmt.Errorf("httpapi: flush library processing rules: %w", err)
+	if closeArray {
+		sw.buf.WriteByte(']')
 	}
 	return nil
 }
 
-func (sw *ruleArrayStreamWriter) finish() error {
-	sw.buf.Reset()
-	sw.commitHeaders()
-	if err := sw.encodePending(); err != nil {
+func (sw *ruleArrayStreamWriter) writeChunk(ctx context.Context, closeArray bool) (err error) {
+	if err = ctx.Err(); err != nil {
 		return err
 	}
-	sw.buf.WriteByte(']')
-	if _, err := sw.w.Write(sw.buf.Bytes()); err != nil {
-		return fmt.Errorf("httpapi: finish library processing rules: %w", err)
+	// Apply the chunk deadline only for this write and flush, then restore the response limit.
+	restoreDeadline, err := applyStreamWriteDeadline(sw.controller(), ctx, sw.responseDeadline)
+	if err != nil {
+		return err
 	}
-	return nil
+	defer func() {
+		if restoreErr := restoreDeadline(); restoreErr != nil {
+			err = errors.Join(err, restoreErr)
+		}
+	}()
+	if err = sw.encodeChunk(closeArray); err != nil {
+		return err
+	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
+	sw.commitHeaders()
+	if _, writeErr := sw.w.Write(sw.buf.Bytes()); writeErr != nil {
+		return fmt.Errorf("httpapi: write library processing rules: %w", writeErr)
+	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
+	return sw.flush()
+}
+
+func (sw *ruleArrayStreamWriter) flushPending(ctx context.Context) error {
+	return sw.writeChunk(ctx, false)
+}
+
+func (sw *ruleArrayStreamWriter) finish(ctx context.Context) error {
+	return sw.writeChunk(ctx, true)
 }
 
 // ServeLibraryProcessingRules streams the legacy full JSON array in bounded batches over
 // a repeatable-read snapshot, preserving RFC 9457 errors before headers commit and aborting
 // mid-stream failures without emitting a valid closing bracket.
+//
+// Transaction and deadline boundary:
+//   - Response bound: SnatchArr's default native HTTP server (golusoris httpx/server) sets
+//     WriteTimeout to 60s and exposes *http.Server via http.ServerContextKey. From handler
+//     entry, ruleStreamResponseContext bounds total response streaming by the server's positive
+//     WriteTimeout or any earlier caller deadline on r.Context(), while preserving parent
+//     request cancellation. When no positive server WriteTimeout is present, the response bound
+//     is the caller deadline alone, or unbounded (zero write deadline) if none was set.
+//   - Snapshot and intermediate writes: module gate checks, SnapshotReadTx queries and commit,
+//     and intermediate batch flushes (flushPending) run under the 5s service operation budget
+//     capped by the response deadline. Each intermediate flush arms that snapshot deadline and
+//     restores the response deadline before returning (finite server/caller deadline when
+//     bounded, or zero when unbounded), so the 5s snapshot deadline never stays armed on the
+//     connection during SnapshotReadTx.Commit.
+//   - Post-commit final write: once SnapshotReadTx commits, the final buffered batch and closing
+//     ']' (finish) run under the response context independently of the 5s snapshot budget,
+//     capped by the server WriteTimeout or earlier caller deadline, and keep any finite response
+//     deadline armed even if the final write or flush fails.
+//
+// Middleware and writer support:
+//   - SnatchArr's production stack (Recover, Logger via httpsnoop.Wrap) preserves Unwrap,
+//     Flush/FlushError, and SetWriteDeadline for net/http HTTP/1.1 and HTTP/2 writers, and
+//     Recover re-panics http.ErrAbortHandler without writing a recovery body.
+//   - Limitations: writers without SetWriteDeadline or Flush/FlushError (such as custom
+//     wrappers lacking Unwrap or httptest.ResponseRecorder) return http.ErrNotSupported and
+//     degrade to context-only checks without socket deadlines or incremental flushing.
+//   - net/http exposes no getter for the pre-existing connection write deadline, which starts
+//     when request headers finish reading before middleware runs. Bounding by handler entry plus
+//     srv.WriteTimeout therefore adds preceding middleware time rather than restoring the exact
+//     initial connection deadline. Only an unbounded response restores a zero deadline.
 func (h *Handlers) ServeLibraryProcessingRules() http.HandlerFunc {
 	return h.serveLibraryProcessingRulesBatch(legacyRuleStreamBatchSize)
 }
 
+type ruleStreamFunc func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error
+
+type snapshotContextFunc func(ctx context.Context) (context.Context, context.CancelFunc)
+
 func (h *Handlers) serveLibraryProcessingRulesBatch(batchSize int) http.HandlerFunc {
-	onErr := ErrorHandler(h.logger)
+	return h.serveLibraryProcessingRulesWith(batchSize, nil)
+}
+
+func noopCancel() {}
+
+func ruleStreamResponseContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if srv, ok := ctx.Value(http.ServerContextKey).(*http.Server); ok && srv != nil && srv.WriteTimeout > 0 {
+		// WithTimeout retains any earlier parent deadline and propagates parent cancellation.
+		return context.WithTimeout(ctx, srv.WriteTimeout)
+	}
+	return ctx, noopCancel
+}
+
+func noopRestoreDeadline() error { return nil }
+
+func applyStreamWriteDeadline(rc *http.ResponseController, ctx context.Context, responseDeadline time.Time) (func() error, error) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return noopRestoreDeadline, nil
+	}
+	if err := rc.SetWriteDeadline(deadline); err != nil {
+		if errors.Is(err, http.ErrNotSupported) {
+			return noopRestoreDeadline, nil
+		}
+		return nil, fmt.Errorf("httpapi: set library processing rules write deadline: %w", err)
+	}
+	if deadline.Equal(responseDeadline) {
+		return noopRestoreDeadline, nil
+	}
+	return func() error {
+		if err := rc.SetWriteDeadline(responseDeadline); err != nil {
+			if responseDeadline.IsZero() {
+				return fmt.Errorf("httpapi: clear library processing rules write deadline: %w", err)
+			}
+			return fmt.Errorf("httpapi: restore library processing rules write deadline: %w", err)
+		}
+		return nil
+	}, nil
+}
+
+func streamRuleArray(
+	responseCtx, snapshotCtx context.Context,
+	w http.ResponseWriter,
+	batchSize int,
+	streamFn ruleStreamFunc,
+) (bool, error) {
+	if err := snapshotCtx.Err(); err != nil {
+		return false, err
+	}
+	responseDeadline, _ := responseCtx.Deadline()
+	sw := &ruleArrayStreamWriter{
+		w:                w,
+		rc:               http.NewResponseController(w),
+		responseDeadline: responseDeadline,
+	}
+	if err := streamFn(snapshotCtx, batchSize, func(batch []libraryprocessing.StoredRule) error {
+		return sw.onBatch(snapshotCtx, batch)
+	}); err != nil {
+		return sw.committed, err
+	}
+	// A committed snapshot no longer governs output; the response context still does.
+	err := sw.finish(responseCtx)
+	return sw.committed, err
+}
+
+func (h *Handlers) serveLibraryProcessingRulesWith(batchSize int, override ruleStreamFunc) http.HandlerFunc {
+	return h.serveLibraryProcessingRulesAt(batchSize, nil, override)
+}
+
+func (h *Handlers) serveLibraryProcessingRulesAt(
+	batchSize int,
+	withSnapshot snapshotContextFunc,
+	override ruleStreamFunc,
+) http.HandlerFunc {
+	if withSnapshot == nil {
+		withSnapshot = libraryprocessing.WithOperationDeadline
+	}
+	logger := h.logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	onErr := ErrorHandler(logger)
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		svc, err := h.checkLibraryProcessingEnabled(ctx)
+		reqCtx := r.Context()
+		responseCtx, cancelResponse := ruleStreamResponseContext(reqCtx)
+		defer cancelResponse()
+		streamCtx, cancel := withSnapshot(responseCtx)
+		defer cancel()
+		svc, err := h.checkLibraryProcessingEnabled(streamCtx)
 		if err != nil {
-			onErr(ctx, w, r, err)
+			onErr(reqCtx, w, r, err)
 			return
 		}
-		sw := &ruleArrayStreamWriter{w: w}
-		err = svc.StreamAll(ctx, batchSize, sw.onBatch)
-		if err == nil {
-			err = sw.finish()
+		streamFn := svc.StreamAll
+		if override != nil {
+			streamFn = override
 		}
+		committed, err := streamRuleArray(responseCtx, streamCtx, w, batchSize, streamFn)
 		if err != nil {
-			h.failRuleArrayStream(ctx, w, r, onErr, sw.committed, err)
+			h.failRuleArrayStream(reqCtx, w, r, onErr, committed, err)
 		}
 	}
 }
@@ -192,9 +346,7 @@ func (h *Handlers) checkLibraryProcessingEnabled(ctx context.Context) (*libraryp
 	if h.modules == nil {
 		return svc, nil
 	}
-	gateCtx, cancel := context.WithTimeout(ctx, moduleGateCheckTimeout)
-	defer cancel()
-	enabled, err := h.modules.IsEnabled(gateCtx, domain.ModuleLibraryProcessing)
+	enabled, err := h.modules.IsEnabled(ctx, domain.ModuleLibraryProcessing)
 	if err != nil {
 		return nil, fmt.Errorf("module gate %s: %w", domain.ModuleLibraryProcessing, err)
 	}
@@ -305,6 +457,18 @@ func (h *Handlers) DeleteLibraryProcessingRule(
 	return svc.Delete(ctx, params.RuleId)
 }
 
+func validateRawQuery(ctx context.Context) error {
+	// Generated typed params drop url.ParseQuery errors from URL.Query(), so
+	// reject malformed query strings here. Direct callers without an HTTP
+	// request in the context are unaffected.
+	if r, ok := requestFrom(ctx); ok && r != nil && r.URL != nil {
+		if _, err := url.ParseQuery(r.URL.RawQuery); err != nil {
+			return fmt.Errorf("%w: malformed query string", domain.ErrBadRequest)
+		}
+	}
+	return nil
+}
+
 // ResolveLibraryProcessingRule selects the highest-precedence matching rule for the requested context.
 func (h *Handlers) ResolveLibraryProcessingRule(
 	ctx context.Context,
@@ -314,13 +478,8 @@ func (h *Handlers) ResolveLibraryProcessingRule(
 	if err != nil {
 		return nil, err
 	}
-	// Generated typed params drop url.ParseQuery errors from URL.Query(), so
-	// reject malformed query strings here. Direct callers without an HTTP
-	// request in the context are unaffected.
-	if r, ok := requestFrom(ctx); ok && r != nil && r.URL != nil {
-		if _, perr := url.ParseQuery(r.URL.RawQuery); perr != nil {
-			return nil, fmt.Errorf("%w: malformed query string", domain.ErrBadRequest)
-		}
+	if err = validateRawQuery(ctx); err != nil {
+		return nil, err
 	}
 	res, err := svc.Resolve(ctx, libraryProcessingResolveQueryFromOAS(params))
 	if err != nil {

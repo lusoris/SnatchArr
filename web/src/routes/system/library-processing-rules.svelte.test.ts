@@ -747,4 +747,141 @@ describe('library processing rules import/export and bounded pagination', () => 
 		expect(refreshed.value).toBe('');
 		expect(screen.queryByRole('option', { name: optionLabel })).toBeNull();
 	});
+
+	it('retains the authoritative PUT result and user feedback when the subsequent page refresh fails', async () => {
+		const updatedInput = {
+			scope: 'media_type',
+			media_type: 'movie',
+			rule: { track: { languages: ['fr'] } }
+		};
+		const updatedDocument = JSON.stringify(updatedInput, null, 2);
+		const updatedRule = {
+			...updatedInput,
+			id: storedRule.id,
+			created_at: storedRule.created_at,
+			updated_at: '2026-10-25T00:05:00Z'
+		} as unknown as StoredRule;
+		const updatedLabel = `${updatedRule.scope} · ${updatedRule.id}`;
+
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([storedRule]) as never)
+			.mockRejectedValueOnce(
+				new ProblemError({
+					type: 'about:blank',
+					title: 'Bad Gateway',
+					status: 502,
+					detail: 'page refresh unavailable'
+				})
+			)
+			.mockResolvedValueOnce(pageResult([updatedRule]) as never);
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: updatedRule } as never);
+		const toastSuccessSpy = vi.spyOn(toast, 'success');
+		const toastErrorSpy = vi.spyOn(toast, 'error');
+
+		render(LibraryProcessingRules);
+		await openRuleAsJson(storedRule.id);
+		await typeDocument(updatedDocument);
+		await fireEvent.click(saveButton());
+
+		expect(putSpy).toHaveBeenCalledTimes(1);
+		expect(await screen.findByText(/page refresh unavailable/)).toBeTruthy();
+
+		// Save success feedback is preserved alongside the refresh ProblemNote and retry action.
+		expect(toastSuccessSpy).toHaveBeenCalledWith(m.modules_rules_save_success());
+		expect(toastErrorSpy).not.toHaveBeenCalled();
+		expect(screen.getByRole('status').textContent).toBe(m.modules_rules_save_success());
+		expect(screen.getByText(m.modules_rules_editing({ rule: updatedLabel }))).toBeTruthy();
+
+		// The authoritative PUT result stays selectable and exportable despite the failed page refresh.
+		const select = screen.getByLabelText(m.modules_rules_select_label()) as HTMLSelectElement;
+		expect(select.value).toBe(updatedRule.id);
+		expect(screen.getByRole('option', { name: updatedLabel })).toBeTruthy();
+		expect(screen.queryByRole('option', { name: optionLabel })).toBeNull();
+
+		await typeDocument('{}');
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+		expect(readRuleDocument(documentField().value, 'json')).toEqual(updatedInput);
+
+		// Retrying the failed page load clears the refresh error and keeps the updated rule.
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
+		await waitFor(() => expect(screen.queryByText(/page refresh unavailable/)).toBeNull());
+		expect(getSpy).toHaveBeenCalledTimes(3);
+		const retriedSelect = screen.getByLabelText(
+			m.modules_rules_select_label()
+		) as HTMLSelectElement;
+		expect(retriedSelect.value).toBe(updatedRule.id);
+	});
+
+	it('retains the authoritative PUT result and user feedback when an off-page detail refresh fails', async () => {
+		const initialEditable = {
+			scope: 'item_override',
+			instance_id: INSTANCE_ID,
+			item_id: 'ep-202',
+			rule: { track: { languages: ['en'] } },
+			id: storedRule.id,
+			created_at: storedRule.created_at,
+			updated_at: storedRule.updated_at
+		} as unknown as StoredRule;
+		const updatedGlobal = {
+			...editedInput,
+			id: storedRule.id,
+			created_at: storedRule.created_at,
+			updated_at: '2026-10-25T00:06:00Z'
+		} as unknown as StoredRule;
+
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([initialEditable, highPrecedenceRule], 'cursor-2') as never)
+			// After PUT changes scope to global_default, page 1 only holds highPrecedenceRule while has_more=true.
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+			// Subsequent single-rule detail refresh fails transiently.
+			.mockRejectedValueOnce(
+				new ProblemError({
+					type: 'about:blank',
+					title: 'Service Unavailable',
+					status: 503,
+					detail: 'detail lookup unavailable'
+				})
+			);
+		vi.spyOn(api, 'PUT').mockResolvedValue({ data: updatedGlobal } as never);
+		const toastSuccessSpy = vi.spyOn(toast, 'success');
+		const toastErrorSpy = vi.spyOn(toast, 'error');
+
+		render(LibraryProcessingRules);
+		await openRuleAsJson(initialEditable.id);
+		await typeDocument(editedDocument);
+		await fireEvent.click(saveButton());
+
+		await waitFor(() =>
+			expect(getSpy).toHaveBeenCalledWith(
+				RULE_DETAIL_PATH,
+				expect.objectContaining({
+					params: { path: { ruleId: updatedGlobal.id } }
+				})
+			)
+		);
+
+		const select = (await screen.findByLabelText(
+			m.modules_rules_select_label()
+		)) as HTMLSelectElement;
+		await waitFor(() => expect(select.value).toBe(updatedGlobal.id));
+
+		// Precedence order reflects the updated global_default scope after item_override, not the stale scope.
+		expect(Array.from(select.options).map((opt) => opt.value)).toEqual([
+			'',
+			highPrecedenceRule.id,
+			updatedGlobal.id
+		]);
+		expect(screen.getByRole('option', { name: optionLabel })).toBeTruthy();
+		expect(toastSuccessSpy).toHaveBeenCalledWith(m.modules_rules_save_success());
+		expect(toastErrorSpy).not.toHaveBeenCalled();
+		expect(screen.getByRole('status').textContent).toBe(m.modules_rules_save_success());
+		expect(screen.getByText(m.modules_rules_editing({ rule: optionLabel }))).toBeTruthy();
+
+		// Exporting writes the authoritative PUT body (languages: ['fr']), never the pre-PUT body (['en']).
+		await typeDocument('{}');
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+		expect(readRuleDocument(documentField().value, 'json')).toEqual(editedInput);
+	});
 });
