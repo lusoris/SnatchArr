@@ -126,6 +126,92 @@ function importButton(): HTMLElement {
 	return screen.getByRole('button', { name: m.modules_rules_import() });
 }
 
+function problemError(status: number, title: string, detail: string): ProblemError {
+	return new ProblemError({ type: 'about:blank', title, status, detail });
+}
+
+function ruleSelect(): HTMLSelectElement {
+	return screen.getByLabelText(m.modules_rules_select_label()) as HTMLSelectElement;
+}
+
+function selectOptionValues(select: HTMLSelectElement = ruleSelect()): string[] {
+	return Array.from(select.options).map((opt) => opt.value);
+}
+
+function itemOverrideFixture(itemId: string): StoredRule {
+	return {
+		scope: 'item_override',
+		instance_id: INSTANCE_ID,
+		item_id: itemId,
+		rule: { track: { languages: ['en'] } },
+		id: storedRule.id,
+		created_at: storedRule.created_at,
+		updated_at: storedRule.updated_at
+	} as unknown as StoredRule;
+}
+
+function savedGlobalFixture(updatedAt: string): StoredRule {
+	return {
+		...editedInput,
+		id: storedRule.id,
+		created_at: storedRule.created_at,
+		updated_at: updatedAt
+	} as unknown as StoredRule;
+}
+
+function userLanguageFixture(id: string, lang: string, createdAt: string): StoredRule {
+	return {
+		scope: 'user_language',
+		user_language: lang,
+		rule: { track: { languages: [lang] } },
+		id,
+		created_at: createdAt,
+		updated_at: createdAt
+	} as unknown as StoredRule;
+}
+
+function mockScopeChangeDetailFallback(initial: StoredRule) {
+	return vi
+		.spyOn(api, 'GET')
+		.mockResolvedValueOnce(pageResult([initial, highPrecedenceRule], 'cursor-2') as never)
+		.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+		.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'page refresh down'))
+		.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+		.mockRejectedValueOnce(problemError(503, 'Service Unavailable', 'detail lookup unavailable'));
+}
+
+function mockPinnedAndOffPageSaveFailure(pinnedOther: StoredRule) {
+	return vi
+		.spyOn(api, 'GET')
+		.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+		.mockResolvedValueOnce(pageResult([pinnedOther, storedRule], 'cursor-3') as never)
+		.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'initial save refresh down'))
+		.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+		.mockResolvedValueOnce({ data: pinnedOther } as never)
+		.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'refresh failed with other pinned'));
+}
+
+function mockSelectionChangePages(initial: StoredRule, updated: StoredRule) {
+	return vi
+		.spyOn(api, 'GET')
+		.mockResolvedValueOnce(pageResult([initial, highPrecedenceRule], 'cursor-2') as never)
+		.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+		.mockResolvedValueOnce(pageResult([secondPageRule], 'cursor-3') as never)
+		.mockResolvedValueOnce(pageResult([updated]) as never);
+}
+
+function mockMovedBehindStaleCursorPages(trailingGlobal: StoredRule) {
+	const firstPage = [highPrecedenceRule, secondPageRule];
+	return vi
+		.spyOn(api, 'GET')
+		.mockResolvedValueOnce(pageResult(firstPage, 'cursor-2') as never)
+		.mockResolvedValueOnce(pageResult([storedRule], 'cursor-3') as never)
+		.mockResolvedValueOnce(pageResult(firstPage, 'cursor-2') as never)
+		.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'refresh down after scope move'))
+		.mockResolvedValueOnce(pageResult([trailingGlobal]) as never)
+		.mockResolvedValueOnce(pageResult([...firstPage, trailingGlobal]) as never);
+}
+
 describe('library processing rules import/export and bounded pagination', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -215,9 +301,22 @@ describe('library processing rules import/export and bounded pagination', () => 
 			const importAlert = await screen.findByRole('alert');
 			expect((importAlert.textContent ?? '').trim().length).toBeGreaterThan(0);
 			expect(documentField().getAttribute('aria-invalid')).toBe('true');
+			expect(postSpy).not.toHaveBeenCalled();
 
-			await fireEvent.click(saveButton());
-			expect(screen.getByRole('alert')).toBeTruthy();
+			// Clear the Import validation state via Export before exercising Save validation.
+			await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+			expect(screen.queryByRole('alert')).toBeNull();
+			expect(documentField().getAttribute('aria-invalid')).toBeNull();
+
+			await typeDocument(invalidNull);
+			const save = saveButton() as HTMLButtonElement;
+			expect(save.disabled).toBe(false);
+			await fireEvent.click(save);
+
+			const saveAlert = await screen.findByRole('alert');
+			expect((saveAlert.textContent ?? '').trim().length).toBeGreaterThan(0);
+			expect(documentField().getAttribute('aria-invalid')).toBe('true');
+			expect(screen.getByRole('status').textContent).toBe('');
 			expect(postSpy).not.toHaveBeenCalled();
 			expect(putSpy).not.toHaveBeenCalled();
 		}
@@ -711,29 +810,17 @@ describe('library processing rules import/export and bounded pagination', () => 
 	});
 
 	it('clears an off-page selection when single-rule reconciliation reports 404 after refresh', async () => {
-		const otherRule = {
-			scope: 'user_language',
-			user_language: 'fr',
-			rule: { track: { languages: ['fr'] } },
-			id: '018f0000-0000-7000-8000-000000000004',
-			created_at: '2026-10-25T00:00:30Z',
-			updated_at: '2026-10-25T00:00:30Z'
-		} as unknown as StoredRule;
-
+		const frenchRule = userLanguageFixture(
+			'018f0000-0000-7000-8000-000000000004',
+			'fr',
+			'2026-10-25T00:00:30Z'
+		);
 		const getSpy = vi
 			.spyOn(api, 'GET')
 			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
 			.mockResolvedValueOnce(pageResult([storedRule]) as never)
-			// Refresh after import with missing POST body reconciles prior selectedId via single-rule GET -> 404.
-			.mockResolvedValueOnce(pageResult([highPrecedenceRule, otherRule], 'cursor-2') as never)
-			.mockRejectedValueOnce(
-				new ProblemError({
-					type: 'about:blank',
-					title: 'Not Found',
-					status: 404,
-					detail: 'rule deleted'
-				})
-			);
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule, frenchRule], 'cursor-2') as never)
+			.mockRejectedValueOnce(problemError(404, 'Not Found', 'rule deleted'));
 		vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
 
 		render(LibraryProcessingRules);
@@ -746,26 +833,20 @@ describe('library processing rules import/export and bounded pagination', () => 
 		await fireEvent.change(select, { target: { value: storedRule.id } });
 		expect(select.value).toBe(storedRule.id);
 
-		await chooseFormat('YAML');
+		await chooseFormat('JSON');
 		await typeDocument(
-			[
-				'scope: user_language',
-				'user_language: fr',
-				'rule:',
-				'  track:',
-				'    languages:',
-				'      - fr',
-				''
-			].join('\n')
+			JSON.stringify({
+				scope: 'user_language',
+				user_language: 'fr',
+				rule: { track: { languages: ['fr'] } }
+			})
 		);
 		await fireEvent.click(importButton());
 
 		await waitFor(() =>
 			expect(getSpy).toHaveBeenCalledWith(
 				RULE_DETAIL_PATH,
-				expect.objectContaining({
-					params: { path: { ruleId: storedRule.id } }
-				})
+				expect.objectContaining({ params: { path: { ruleId: storedRule.id } } })
 			)
 		);
 		const refreshed = (await screen.findByLabelText(
@@ -794,14 +875,7 @@ describe('library processing rules import/export and bounded pagination', () => 
 		const getSpy = vi
 			.spyOn(api, 'GET')
 			.mockResolvedValueOnce(pageResult([storedRule]) as never)
-			.mockRejectedValueOnce(
-				new ProblemError({
-					type: 'about:blank',
-					title: 'Bad Gateway',
-					status: 502,
-					detail: 'page refresh unavailable'
-				})
-			)
+			.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'page refresh unavailable'))
 			.mockResolvedValueOnce(pageResult([updatedRule]) as never);
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: updatedRule } as never);
 		const toastSuccessSpy = vi.spyOn(toast, 'success');
@@ -814,15 +888,12 @@ describe('library processing rules import/export and bounded pagination', () => 
 
 		expect(putSpy).toHaveBeenCalledTimes(1);
 		expect(await screen.findByText(/page refresh unavailable/)).toBeTruthy();
-
-		// Save success feedback is preserved alongside the refresh ProblemNote and retry action.
 		expect(toastSuccessSpy).toHaveBeenCalledWith(m.modules_rules_save_success());
 		expect(toastErrorSpy).not.toHaveBeenCalled();
 		expect(screen.getByRole('status').textContent).toBe(m.modules_rules_save_success());
 		expect(screen.getByText(m.modules_rules_editing({ rule: updatedLabel }))).toBeTruthy();
 
-		// The authoritative PUT result stays selectable and exportable despite the failed page refresh.
-		const select = screen.getByLabelText(m.modules_rules_select_label()) as HTMLSelectElement;
+		const select = ruleSelect();
 		expect(select.value).toBe(updatedRule.id);
 		expect(screen.getByRole('option', { name: updatedLabel })).toBeTruthy();
 		expect(screen.queryByRole('option', { name: optionLabel })).toBeNull();
@@ -831,56 +902,16 @@ describe('library processing rules import/export and bounded pagination', () => 
 		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
 		expect(readRuleDocument(documentField().value, 'json')).toEqual(updatedInput);
 
-		// Retrying the failed page load clears the refresh error and keeps the updated rule.
 		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
 		await waitFor(() => expect(screen.queryByText(/page refresh unavailable/)).toBeNull());
 		expect(getSpy).toHaveBeenCalledTimes(3);
-		const retriedSelect = screen.getByLabelText(
-			m.modules_rules_select_label()
-		) as HTMLSelectElement;
-		expect(retriedSelect.value).toBe(updatedRule.id);
+		expect(ruleSelect().value).toBe(updatedRule.id);
 	});
 
 	it('reuses authoritative PUT data without a redundant detail GET and retains it when a later detail refresh fails', async () => {
-		const initialEditable = {
-			scope: 'item_override',
-			instance_id: INSTANCE_ID,
-			item_id: 'ep-202',
-			rule: { track: { languages: ['en'] } },
-			id: storedRule.id,
-			created_at: storedRule.created_at,
-			updated_at: storedRule.updated_at
-		} as unknown as StoredRule;
-		const updatedGlobal = {
-			...editedInput,
-			id: storedRule.id,
-			created_at: storedRule.created_at,
-			updated_at: '2026-10-25T00:06:00Z'
-		} as unknown as StoredRule;
-
-		const getSpy = vi
-			.spyOn(api, 'GET')
-			.mockResolvedValueOnce(pageResult([initialEditable, highPrecedenceRule], 'cursor-2') as never)
-			// Save refresh: page 1 holds only highPrecedenceRule while has_more=true; PUT response avoids detail GET.
-			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
-			// Next save fails page 1 so Retry can exercise off-page detail fallback on 503.
-			.mockRejectedValueOnce(
-				new ProblemError({
-					type: 'about:blank',
-					title: 'Bad Gateway',
-					status: 502,
-					detail: 'page refresh down'
-				})
-			)
-			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
-			.mockRejectedValueOnce(
-				new ProblemError({
-					type: 'about:blank',
-					title: 'Service Unavailable',
-					status: 503,
-					detail: 'detail lookup unavailable'
-				})
-			);
+		const initialEditable = itemOverrideFixture('ep-202');
+		const updatedGlobal = savedGlobalFixture('2026-10-25T00:06:00Z');
+		const getSpy = mockScopeChangeDetailFallback(initialEditable);
 		vi.spyOn(api, 'PUT').mockResolvedValue({ data: updatedGlobal } as never);
 		const toastSuccessSpy = vi.spyOn(toast, 'success');
 		const toastErrorSpy = vi.spyOn(toast, 'error');
@@ -894,26 +925,19 @@ describe('library processing rules import/export and bounded pagination', () => 
 			m.modules_rules_select_label()
 		)) as HTMLSelectElement;
 		await waitFor(() => expect(select.value).toBe(updatedGlobal.id));
-		// Mount page GET + post-PUT page GET only; no redundant detail GET for updatedGlobal.
 		expect(getSpy).toHaveBeenCalledTimes(2);
-		expect(Array.from(select.options).map((opt) => opt.value)).toEqual([
-			'',
-			highPrecedenceRule.id,
-			updatedGlobal.id
-		]);
+		expect(selectOptionValues(select)).toEqual(['', highPrecedenceRule.id, updatedGlobal.id]);
 		expect(toastSuccessSpy).toHaveBeenCalledWith(m.modules_rules_save_success());
 		expect(toastErrorSpy).not.toHaveBeenCalled();
 
-		// Trigger a failed page refresh, then Retry -> page 1 succeeds + detail GET fails 503 -> fallback retains updatedGlobal.
+		// Failed page refresh + Retry -> page 1 succeeds + detail GET fails 503 -> fallback retains updatedGlobal.
 		await fireEvent.click(saveButton());
 		expect(await screen.findByText(/page refresh down/)).toBeTruthy();
 		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
 		await waitFor(() =>
 			expect(getSpy).toHaveBeenCalledWith(
 				RULE_DETAIL_PATH,
-				expect.objectContaining({
-					params: { path: { ruleId: updatedGlobal.id } }
-				})
+				expect.objectContaining({ params: { path: { ruleId: updatedGlobal.id } } })
 			)
 		);
 
@@ -921,11 +945,7 @@ describe('library processing rules import/export and bounded pagination', () => 
 			m.modules_rules_select_label()
 		)) as HTMLSelectElement;
 		await waitFor(() => expect(retried.value).toBe(updatedGlobal.id));
-		expect(Array.from(retried.options).map((opt) => opt.value)).toEqual([
-			'',
-			highPrecedenceRule.id,
-			updatedGlobal.id
-		]);
+		expect(selectOptionValues(retried)).toEqual(['', highPrecedenceRule.id, updatedGlobal.id]);
 		expect(screen.getByText(m.modules_rules_editing({ rule: optionLabel }))).toBeTruthy();
 
 		await typeDocument('{}');
@@ -934,45 +954,13 @@ describe('library processing rules import/export and bounded pagination', () => 
 	});
 
 	it('retains a saved off-page rule alongside another pinned selection when refresh fails', async () => {
-		const pinnedOther = {
-			scope: 'user_language',
-			user_language: 'de',
-			rule: { track: { languages: ['de'] } },
-			id: '018f0000-0000-7000-8000-000000000008',
-			created_at: '2026-10-25T00:02:00Z',
-			updated_at: '2026-10-25T00:02:00Z'
-		} as unknown as StoredRule;
-		const savedGlobal = {
-			...editedInput,
-			id: storedRule.id,
-			created_at: storedRule.created_at,
-			updated_at: '2026-10-25T00:07:00Z'
-		} as unknown as StoredRule;
-
-		vi.spyOn(api, 'GET')
-			// Mount page 1 + Load more page 2 so both storedRule and pinnedOther are selectable.
-			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
-			.mockResolvedValueOnce(pageResult([pinnedOther, storedRule], 'cursor-3') as never)
-			// Save #1 fails page 1 -> Retry resets to page 1 and pins pinnedOther alone, leaving storedRule off-page.
-			.mockRejectedValueOnce(
-				new ProblemError({
-					type: 'about:blank',
-					title: 'Bad Gateway',
-					status: 502,
-					detail: 'initial save refresh down'
-				})
-			)
-			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
-			.mockResolvedValueOnce({ data: pinnedOther } as never)
-			// Save #2 fails page 1 while pinnedRule === pinnedOther and storedRule is not in loadedRules.
-			.mockRejectedValueOnce(
-				new ProblemError({
-					type: 'about:blank',
-					title: 'Bad Gateway',
-					status: 502,
-					detail: 'refresh failed with other pinned'
-				})
-			);
+		const pinnedOther = userLanguageFixture(
+			'018f0000-0000-7000-8000-000000000008',
+			'de',
+			'2026-10-25T00:02:00Z'
+		);
+		const savedGlobal = savedGlobalFixture('2026-10-25T00:07:00Z');
+		mockPinnedAndOffPageSaveFailure(pinnedOther);
 		vi.spyOn(api, 'PUT')
 			.mockResolvedValueOnce({ data: undefined } as never)
 			.mockResolvedValueOnce({ data: savedGlobal } as never);
@@ -983,10 +971,9 @@ describe('library processing rules import/export and bounded pagination', () => 
 		await waitFor(() => expect(screen.getByRole('option', { name: optionLabel })).toBeTruthy());
 
 		await openRuleAsJson(storedRule.id);
-		const select = screen.getByLabelText(m.modules_rules_select_label()) as HTMLSelectElement;
-		await fireEvent.change(select, { target: { value: pinnedOther.id } });
+		await fireEvent.change(ruleSelect(), { target: { value: pinnedOther.id } });
 
-		// Save #1 (with empty PUT data) + Retry leaves loadedRules=[highPrecedenceRule] and pinnedRule=pinnedOther.
+		// Save #1 + Retry resets loadedRules to page 1 and pins pinnedOther while storedRule is off-page.
 		await fireEvent.click(saveButton());
 		expect(await screen.findByText(/initial save refresh down/)).toBeTruthy();
 		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
@@ -997,9 +984,9 @@ describe('library processing rules import/export and bounded pagination', () => 
 		await fireEvent.click(saveButton());
 		expect(await screen.findByText(/refresh failed with other pinned/)).toBeTruthy();
 
-		const afterSelect = screen.getByLabelText(m.modules_rules_select_label()) as HTMLSelectElement;
+		const afterSelect = ruleSelect();
 		expect(afterSelect.value).toBe(pinnedOther.id);
-		expect(Array.from(afterSelect.options).map((opt) => opt.value)).toEqual([
+		expect(selectOptionValues(afterSelect)).toEqual([
 			'',
 			highPrecedenceRule.id,
 			pinnedOther.id,
@@ -1010,43 +997,17 @@ describe('library processing rules import/export and bounded pagination', () => 
 	});
 
 	it('preserves selection, editor draft, saved off-page rule, and keyset pagination when selection changes during save', async () => {
-		const initialEditable = {
-			scope: 'item_override',
-			instance_id: INSTANCE_ID,
-			item_id: 'ep-303',
-			rule: { track: { languages: ['en'] } },
-			id: storedRule.id,
-			created_at: storedRule.created_at,
-			updated_at: storedRule.updated_at
-		} as unknown as StoredRule;
-		const updatedGlobal = {
-			...editedInput,
-			id: storedRule.id,
-			created_at: storedRule.created_at,
-			updated_at: '2026-10-25T00:08:00Z'
-		} as unknown as StoredRule;
-
+		const initialEditable = itemOverrideFixture('ep-303');
+		const updatedGlobal = savedGlobalFixture('2026-10-25T00:08:00Z');
 		const put = deferred<unknown>();
-		const getSpy = vi
-			.spyOn(api, 'GET')
-			.mockResolvedValueOnce(pageResult([initialEditable, highPrecedenceRule], 'cursor-2') as never)
-			// After PUT moves initialEditable to global_default, page 1 holds only highPrecedenceRule.
-			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
-			// Subsequent Load more pages arrive in precedence order and deduplicate updatedGlobal on the final page.
-			.mockResolvedValueOnce(pageResult([secondPageRule], 'cursor-3') as never)
-			.mockResolvedValueOnce(pageResult([updatedGlobal]) as never);
+		const getSpy = mockSelectionChangePages(initialEditable, updatedGlobal);
 		vi.spyOn(api, 'PUT').mockReturnValue(put.promise as never);
 
 		render(LibraryProcessingRules);
 		await openRuleAsJson(initialEditable.id);
 		await typeDocument(editedDocument);
 		await fireEvent.click(saveButton());
-
-		// Selection changes while PUT is in flight.
-		const inFlightSelect = screen.getByLabelText(
-			m.modules_rules_select_label()
-		) as HTMLSelectElement;
-		await fireEvent.change(inFlightSelect, { target: { value: highPrecedenceRule.id } });
+		await fireEvent.change(ruleSelect(), { target: { value: highPrecedenceRule.id } });
 
 		put.resolve({ data: updatedGlobal });
 		await waitFor(() =>
@@ -1060,16 +1021,11 @@ describe('library processing rules import/export and bounded pagination', () => 
 		expect(refreshed.value).toBe(highPrecedenceRule.id);
 		expect(documentField().value).toBe(editedDocument);
 		expect(screen.getByText(m.modules_rules_editing({ rule: optionLabel }))).toBeTruthy();
-		expect(Array.from(refreshed.options).map((opt) => opt.value)).toEqual([
-			'',
-			highPrecedenceRule.id,
-			updatedGlobal.id
-		]);
+		expect(selectOptionValues(refreshed)).toEqual(['', highPrecedenceRule.id, updatedGlobal.id]);
 
-		// Page 2 (media_type) inserts ahead of off-page updatedGlobal (global_default).
 		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
 		await waitFor(() =>
-			expect(Array.from(refreshed.options).map((opt) => opt.value)).toEqual([
+			expect(selectOptionValues(refreshed)).toEqual([
 				'',
 				highPrecedenceRule.id,
 				secondPageRule.id,
@@ -1077,17 +1033,141 @@ describe('library processing rules import/export and bounded pagination', () => 
 			])
 		);
 
-		// Final page reaches updatedGlobal without duplicating its option.
 		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
 		await waitFor(() =>
 			expect(screen.queryByRole('button', { name: m.modules_rules_load_more() })).toBeNull()
 		);
-		expect(Array.from(refreshed.options).map((opt) => opt.value)).toEqual([
+		expect(selectOptionValues(refreshed)).toEqual([
 			'',
 			highPrecedenceRule.id,
 			secondPageRule.id,
 			updatedGlobal.id
 		]);
 		expect(refreshed.value).toBe(highPrecedenceRule.id);
+	});
+
+	it('keeps a saved page-2 rule selectable and exportable when refresh returns only page 1', async () => {
+		const savedGlobal = savedGlobalFixture('2026-10-25T00:09:00Z');
+		vi.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+			.mockResolvedValueOnce(pageResult([storedRule]) as never)
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+			.mockResolvedValueOnce(pageResult([savedGlobal]) as never);
+		vi.spyOn(api, 'PUT').mockResolvedValue({ data: savedGlobal } as never);
+
+		render(LibraryProcessingRules);
+		await screen.findByLabelText(m.modules_rules_select_label());
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
+		await waitFor(() => expect(screen.getByRole('option', { name: optionLabel })).toBeTruthy());
+
+		await openRuleAsJson(storedRule.id);
+		await fireEvent.change(ruleSelect(), { target: { value: highPrecedenceRule.id } });
+		await typeDocument(editedDocument);
+		await fireEvent.click(saveButton());
+
+		await waitFor(() =>
+			expect(screen.getByRole('status').textContent).toBe(m.modules_rules_save_success())
+		);
+		await waitFor(() => expect((saveButton() as HTMLButtonElement).disabled).toBe(false));
+		const refreshed = (await screen.findByLabelText(
+			m.modules_rules_select_label()
+		)) as HTMLSelectElement;
+		expect(refreshed.value).toBe(highPrecedenceRule.id);
+		expect(selectOptionValues(refreshed)).toEqual(['', highPrecedenceRule.id, savedGlobal.id]);
+		expect(screen.getByText(m.modules_rules_editing({ rule: optionLabel }))).toBeTruthy();
+
+		await fireEvent.change(refreshed, { target: { value: savedGlobal.id } });
+		await typeDocument('{}');
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+		expect(readRuleDocument(documentField().value, 'json')).toEqual(editedInput);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
+		await waitFor(() =>
+			expect(screen.queryByRole('button', { name: m.modules_rules_load_more() })).toBeNull()
+		);
+		expect(selectOptionValues(refreshed)).toEqual(['', highPrecedenceRule.id, savedGlobal.id]);
+	});
+
+	it('retains a saved rule that moved behind a stale cursor across Load more until a reload confirms absence', async () => {
+		const trailingGlobal = {
+			...storedRule,
+			id: '018f0000-0000-7000-8000-000000000009',
+			created_at: '2026-10-25T00:10:00Z'
+		} as unknown as StoredRule;
+		const movedInput = {
+			scope: 'user_language',
+			user_language: 'fr',
+			rule: { track: { languages: ['fr'] } }
+		};
+		const movedRule = userLanguageFixture(storedRule.id, 'fr', storedRule.created_at);
+		mockMovedBehindStaleCursorPages(trailingGlobal);
+		vi.spyOn(api, 'PUT')
+			.mockResolvedValueOnce({ data: savedGlobalFixture('2026-10-25T00:11:00Z') } as never)
+			.mockResolvedValueOnce({ data: movedRule } as never);
+
+		render(LibraryProcessingRules);
+		await screen.findByLabelText(m.modules_rules_select_label());
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
+		await waitFor(() => expect(screen.getByRole('option', { name: optionLabel })).toBeTruthy());
+
+		await openRuleAsJson(storedRule.id);
+		await fireEvent.change(ruleSelect(), { target: { value: highPrecedenceRule.id } });
+		await typeDocument(editedDocument);
+		await fireEvent.click(saveButton());
+		await waitFor(() =>
+			expect(screen.getByRole('status').textContent).toBe(m.modules_rules_save_success())
+		);
+		await waitFor(() => expect((saveButton() as HTMLButtonElement).disabled).toBe(false));
+
+		await typeDocument(JSON.stringify(movedInput, null, 2));
+		await fireEvent.click(saveButton());
+		expect(await screen.findByText(/refresh down after scope move/)).toBeTruthy();
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
+		await waitFor(() =>
+			expect(screen.queryByRole('button', { name: m.modules_rules_load_more() })).toBeNull()
+		);
+		expect(selectOptionValues()).toEqual([
+			'',
+			highPrecedenceRule.id,
+			movedRule.id,
+			secondPageRule.id,
+			trailingGlobal.id
+		]);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
+		await waitFor(() => expect(screen.queryByText(/refresh down after scope move/)).toBeNull());
+		expect(selectOptionValues()).toEqual([
+			'',
+			highPrecedenceRule.id,
+			secondPageRule.id,
+			trailingGlobal.id
+		]);
+	});
+
+	it('shows a Load more failure alongside an existing refresh error and keeps the refresh error with Retry', async () => {
+		vi.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+			.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'refresh failed 502'))
+			.mockRejectedValueOnce(problemError(503, 'Service Unavailable', 'load more failed 503'))
+			.mockResolvedValueOnce(pageResult([storedRule]) as never);
+		vi.spyOn(api, 'PUT').mockResolvedValue({ data: highPrecedenceRule } as never);
+
+		render(LibraryProcessingRules);
+		await openRuleAsJson(highPrecedenceRule.id);
+		await fireEvent.click(saveButton());
+		expect(await screen.findByText(/refresh failed 502/)).toBeTruthy();
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
+		expect(await screen.findByText(/load more failed 503/)).toBeTruthy();
+		expect(screen.getByText(/refresh failed 502/)).toBeTruthy();
+		expect(screen.getAllByRole('alert')).toHaveLength(2);
+		expect(screen.getByRole('button', { name: m.modules_rules_retry() })).toBeTruthy();
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
+		await waitFor(() => expect(screen.getByRole('option', { name: optionLabel })).toBeTruthy());
+		expect(screen.queryByText(/load more failed 503/)).toBeNull();
+		expect(screen.getByText(/refresh failed 502/)).toBeTruthy();
+		expect(screen.getByRole('button', { name: m.modules_rules_retry() })).toBeTruthy();
 	});
 });

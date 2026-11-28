@@ -175,6 +175,7 @@ func registerHealthChecks(reg *statuspage.Registry, pool *pgxpool.Pool, startup 
 type httpDeps struct {
 	fx.In
 	LC     fx.Lifecycle
+	Server *http.Server
 	Router chi.Router
 	Logger *slog.Logger
 	Clock  clock.Clock
@@ -210,7 +211,12 @@ func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 	if err := httpapi.Mount(d.Router, api); err != nil {
 		return err
 	}
-	return mountWebUI(d)
+	if err := mountWebUI(d); err != nil {
+		return err
+	}
+	// Install at the native server boundary, outside the router and its middleware.
+	d.Server.Handler = httpapi.WithNativeRulesWriteCancellation(d.Server.Handler)
+	return nil
 }
 
 func mountWebUI(d httpDeps) error {

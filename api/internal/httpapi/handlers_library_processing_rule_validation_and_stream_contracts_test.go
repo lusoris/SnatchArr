@@ -142,11 +142,15 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 	chk := &deadlineObservingChecker{enabled: true}
 	h := &Handlers{libraryProcessing: libraryprocessing.NewServiceWithChecker(nil, nil, nil, chk)}
 
-	t.Run("empty stream writes non-nil JSON array after commit without arming snapshot deadline", func(t *testing.T) {
+	t.Run("empty stream writes non-nil JSON array after commit without touching the native cutoff", func(t *testing.T) {
 		t.Parallel()
 		dw := newDeadlineRecordingWriter()
+		cutoff := time.Now().Add(time.Minute)
+		dw.currentDeadline = cutoff
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		h.serveLibraryProcessingRulesWith(2, fakeBatchStreamer(nil))(dw, req)
+		if invokeRulesWithNativeCancellation(h.serveLibraryProcessingRulesWith(2, fakeBatchStreamer(nil)), dw, req) {
+			t.Fatal("empty stream aborted")
+		}
 
 		if dw.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200; body: %s", dw.Code, dw.Body.String())
@@ -155,13 +159,16 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		if err != nil || list == nil || len(list) != 0 {
 			t.Fatalf("empty body %q -> (%#v, %v), want non-nil []", dw.Body.String(), list, err)
 		}
-		dw.assertStreamDeadlines(t, time.Time{}, time.Time{}, time.Time{}, time.Time{}, 0)
+		// The closing "[]" is the only chunk: one write and one flush.
+		dw.assertNativeRulesCutoff(t, cutoff, 1)
 	})
 
-	t.Run("multi-batch stream disarms snapshot deadline before commit and runs finish under request context", func(t *testing.T) {
+	t.Run("multi-batch stream leaves the native cutoff untouched through commit and finish", func(t *testing.T) {
 		t.Parallel()
 		fixtures := sampleStoredRules(5)
 		dw := newDeadlineRecordingWriter()
+		cutoff := time.Now().Add(time.Minute)
+		dw.currentDeadline = cutoff
 		var deadlineAtCommit time.Time
 		seenAtCommit := false
 		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
@@ -173,23 +180,23 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 			seenAtCommit = true
 			return nil
 		}
-		before := time.Now()
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		h.serveLibraryProcessingRulesWith(2, streamer)(dw, req)
-		after := time.Now()
+		if invokeRulesWithNativeCancellation(h.serveLibraryProcessingRulesWith(2, streamer), dw, req) {
+			t.Fatal("successful stream aborted")
+		}
 
 		if dw.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200; body: %s", dw.Code, dw.Body.String())
 		}
-		if !seenAtCommit || !deadlineAtCommit.IsZero() {
-			t.Fatalf("deadline armed during SnapshotReadTx commit = %v (seen=%v), want zero", deadlineAtCommit, seenAtCommit)
+		if !seenAtCommit || !deadlineAtCommit.Equal(cutoff) {
+			t.Fatalf("native cutoff at SnapshotReadTx commit = %v (seen=%v), want unchanged %v", deadlineAtCommit, seenAtCommit, cutoff)
 		}
 		list, err := decodeRuleListJSON(dw.Body.Bytes())
 		if err != nil || len(list) != 5 {
 			t.Fatalf("decoded len = %d err = %v; body: %s", len(list), err, dw.Body.String())
 		}
-		// 5 items with batchSize=2 -> 3 batches -> 2 intermediate flushPending inside tx + 1 finish after commit.
-		dw.assertStreamDeadlines(t, before.Add(snapshotContract), after.Add(snapshotContract), time.Time{}, time.Time{}, 2)
+		// 5 items with batchSize=2 -> 3 batches -> 2 intermediate chunks inside tx + 1 final chunk after commit.
+		dw.assertNativeRulesCutoff(t, cutoff, 3)
 	})
 
 	t.Run("committed multi-batch stream finishes last batch when snapshot clock expires before finish", func(t *testing.T) {
@@ -197,7 +204,6 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		fixtures := sampleStoredRules(3)
 		reqCtx, reqCancel := context.WithTimeout(t.Context(), time.Hour)
 		defer reqCancel()
-		callerDeadline, _ := reqCtx.Deadline()
 		snapDeadline := time.Now().Add(snapshotContract)
 		var expSnap *expiringSnapshotCtx
 		withSnap := func(parent context.Context) (context.Context, context.CancelFunc) {
@@ -207,12 +213,14 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		}
 
 		dw := newDeadlineRecordingWriter()
+		cutoff := time.Now().Add(30 * time.Minute)
+		dw.currentDeadline = cutoff
 		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			if err := fakeBatchStreamer(fixtures)(ctx, batchSize, onBatch); err != nil {
 				return err
 			}
-			if !dw.currentDeadline.Equal(callerDeadline) {
-				t.Errorf("write deadline armed at commit = %v, want caller response deadline %v", dw.currentDeadline, callerDeadline)
+			if !dw.currentDeadline.Equal(cutoff) {
+				t.Errorf("native cutoff at commit = %v, want unchanged %v", dw.currentDeadline, cutoff)
 			}
 			// SnapshotReadTx has committed; expire only the snapshot clock before finish writes batch 2.
 			expSnap.expire()
@@ -220,7 +228,9 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		}
 
 		req := httptest.NewRequestWithContext(reqCtx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		h.serveLibraryProcessingRulesAt(2, withSnap, streamer)(dw, req)
+		if invokeRulesWithNativeCancellation(h.serveLibraryProcessingRulesAt(2, withSnap, streamer), dw, req) {
+			t.Fatal("final chunk aborted after only the snapshot clock expired")
+		}
 
 		if !errors.Is(expSnap.Err(), context.DeadlineExceeded) {
 			t.Fatalf("snapshotCtx.Err() = %v, want context.DeadlineExceeded", expSnap.Err())
@@ -235,7 +245,8 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		if err != nil || len(list) != 3 {
 			t.Fatalf("decoded len = %d err = %v; body: %s", len(list), err, dw.Body.String())
 		}
-		dw.assertStreamDeadlines(t, snapDeadline, snapDeadline, callerDeadline, callerDeadline, 1)
+		// 3 items -> 1 intermediate chunk + 1 final chunk; snapshot expiry after commit must not reach the writer.
+		dw.assertNativeRulesCutoff(t, cutoff, 2)
 	})
 
 	t.Run("committed single-batch stream finishes when snapshot clock expires right after commit", func(t *testing.T) {
@@ -250,6 +261,8 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		}
 
 		dw := newDeadlineRecordingWriter()
+		cutoff := time.Now().Add(time.Minute)
+		dw.currentDeadline = cutoff
 		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			if err := fakeBatchStreamer(fixtures)(ctx, batchSize, onBatch); err != nil {
 				return err
@@ -259,7 +272,9 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		}
 
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		h.serveLibraryProcessingRulesAt(2, withSnap, streamer)(dw, req)
+		if invokeRulesWithNativeCancellation(h.serveLibraryProcessingRulesAt(2, withSnap, streamer), dw, req) {
+			t.Fatal("single final chunk aborted after only the snapshot clock expired")
+		}
 
 		if !errors.Is(expSnap.Err(), context.DeadlineExceeded) {
 			t.Fatalf("snapshotCtx.Err() = %v, want context.DeadlineExceeded", expSnap.Err())
@@ -271,7 +286,8 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		if err != nil || len(list) != 2 {
 			t.Fatalf("decoded len = %d err = %v; body: %s", len(list), err, dw.Body.String())
 		}
-		dw.assertStreamDeadlines(t, time.Time{}, time.Time{}, time.Time{}, time.Time{}, 0)
+		// One batch stays buffered, so the final chunk is the only write and flush.
+		dw.assertNativeRulesCutoff(t, cutoff, 1)
 	})
 
 	t.Run("request cancellation after commit before finish aborts post-header multi-batch stream", func(t *testing.T) {
@@ -279,6 +295,8 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		reqCtx, reqCancel := context.WithCancel(t.Context())
 		defer reqCancel()
 		dw := newDeadlineRecordingWriter()
+		cutoff := time.Now().Add(time.Minute)
+		dw.currentDeadline = cutoff
 		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			if err := fakeBatchStreamer(sampleStoredRules(3))(ctx, batchSize, onBatch); err != nil {
 				return err
@@ -289,13 +307,15 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		}
 
 		req := httptest.NewRequestWithContext(reqCtx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		aborted := invokeCapturingAbort(h.serveLibraryProcessingRulesWith(2, streamer), dw, req)
+		aborted := invokeRulesWithNativeCancellation(h.serveLibraryProcessingRulesWith(2, streamer), dw, req)
 		if !aborted {
 			t.Fatalf("expected ErrAbortHandler when caller cancels after commit; body: %s", dw.Body.String())
 		}
-		if !dw.currentDeadline.IsZero() {
-			t.Fatalf("currentDeadline = %v, want cleared", dw.currentDeadline)
+		// The final chunk is rejected before any I/O, so only batch 1 was written.
+		if dw.writeCalls != 1 || dw.flushCalls != 1 {
+			t.Fatalf("writes=%d flushes=%d, want only the intermediate chunk", dw.writeCalls, dw.flushCalls)
 		}
+		dw.assertNativeCutoffPreserved(t, cutoff)
 		var shouldFail []any
 		if json.Unmarshal(dw.Body.Bytes(), &shouldFail) == nil {
 			t.Fatalf("canceled multi-batch body parsed as complete JSON array: %s", dw.Body.String())
@@ -307,6 +327,8 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		reqCtx, reqCancel := context.WithCancel(t.Context())
 		defer reqCancel()
 		dw := newDeadlineRecordingWriter()
+		cutoff := time.Now().Add(time.Minute)
+		dw.currentDeadline = cutoff
 		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			if err := fakeBatchStreamer(sampleStoredRules(2))(ctx, batchSize, onBatch); err != nil {
 				return err
@@ -317,11 +339,15 @@ func TestServeLibraryProcessingRulesStreamWriterContractsUnit(t *testing.T) {
 		}
 
 		req := httptest.NewRequestWithContext(reqCtx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		h.serveLibraryProcessingRulesWith(2, streamer)(dw, req)
-		assertProblemResponse(t, dw.ResponseRecorder, http.StatusInternalServerError)
-		if !dw.currentDeadline.IsZero() {
-			t.Fatalf("currentDeadline = %v, want zero", dw.currentDeadline)
+		if invokeRulesWithNativeCancellation(h.serveLibraryProcessingRulesWith(2, streamer), dw, req) {
+			t.Fatal("pre-commit failure aborted instead of returning a problem response")
 		}
+		assertProblemResponse(t, dw.ResponseRecorder, http.StatusInternalServerError)
+		// The only write is the problem body itself; no stream chunk, no flush.
+		if dw.writeCalls != 1 || dw.flushCalls != 0 {
+			t.Fatalf("writes=%d flushes=%d, want only the problem body write", dw.writeCalls, dw.flushCalls)
+		}
+		dw.assertNativeCutoffPreserved(t, cutoff)
 	})
 
 	t.Run("unsupported writer still streams valid JSON array", func(t *testing.T) {

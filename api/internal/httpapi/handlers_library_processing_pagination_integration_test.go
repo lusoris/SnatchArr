@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -338,17 +337,28 @@ func TestLibraryProcessingRulesPagingBoundsAndMalformedCursors(t *testing.T) {
 		lpAssertProblem(t, res, http.StatusBadRequest)
 	}
 
-	// Valid percent-encoded limit and direct Go callers without an HTTP request in ctx remain valid.
-	encodedPage := lpGetRulePage(t, f.client, base, "limit=%31")
-	if encodedPage.Items == nil || len(encodedPage.Items) != 0 || encodedPage.HasMore {
-		t.Fatalf("percent-encoded limit page = %+v, want empty final page", encodedPage)
-	}
+	// Direct Go callers can omit params without an HTTP request in the context.
 	directPage, err := f.h.ListLibraryProcessingRulesPage(t.Context(), oas.ListLibraryProcessingRulesPageParams{})
 	if err != nil {
 		t.Fatalf("direct ListLibraryProcessingRulesPage without HTTP request: %v", err)
 	}
-	if directPage.Items == nil || len(directPage.Items) != 0 || directPage.HasMore {
-		t.Fatalf("direct page = %+v, want non-nil empty final page", directPage)
+	if _, hasCursor := directPage.NextCursor.Get(); directPage.Items == nil || len(directPage.Items) != 0 || directPage.HasMore || hasCursor {
+		t.Fatalf("direct page = %+v, want non-nil empty final page without cursor", directPage)
+	}
+
+	// Two rows distinguish the encoded limit of 1 from the default limit.
+	lpCreateRule(t, f.client, base, csrf, map[string]any{
+		"scope": "global_default",
+		"rule":  lpRuleBody("en"),
+	})
+	lpCreateRule(t, f.client, base, csrf, map[string]any{
+		"scope":      "media_type",
+		"media_type": "movie",
+		"rule":       lpRuleBody("en"),
+	})
+	encodedPage := lpGetRulePage(t, f.client, base, "limit=%31")
+	if len(encodedPage.Items) != 1 || !encodedPage.HasMore || encodedPage.NextCursor == nil || *encodedPage.NextCursor == "" {
+		t.Fatalf("percent-encoded limit page = %+v, want one item, has_more=true, and a cursor", encodedPage)
 	}
 
 	// Generated OpenAPI parse/schema violations -> exactly 400 Problem Details (rejected before the service runs).
@@ -448,10 +458,12 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 	// the 3 intermediate flushes inside SnapshotReadTx arm and clear the snapshot deadline before
 	// commit, and the final batch after commit runs under the live request context.
 	dw := newDeadlineRecordingWriter()
-	beforeStream := time.Now()
+	streamCutoff := time.Now().Add(time.Minute)
+	dw.currentDeadline = streamCutoff
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-	f.h.serveLibraryProcessingRulesBatch(2)(dw, req)
-	afterStream := time.Now()
+	if invokeRulesWithNativeCancellation(f.h.serveLibraryProcessingRulesBatch(2), dw, req) {
+		t.Fatal("multi-batch stream aborted")
+	}
 	if dw.Code != http.StatusOK {
 		t.Fatalf("multi-batch stream status = %d, want 200; body: %s", dw.Code, dw.Body.String())
 	}
@@ -463,23 +475,26 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 		t.Fatalf("multi-batch list len = %d, want 7", len(multiBatchList))
 	}
 	assertStrictPrecedenceOrder(t, multiBatchList)
-	dw.assertStreamDeadlines(t, beforeStream.Add(5*time.Second), afterStream.Add(5*time.Second), time.Time{}, time.Time{}, 3)
+	// 7 items with batchSize=2 -> 4 chunks (3 inside the snapshot, 1 after commit); the native cutoff is never touched.
+	dw.assertNativeRulesCutoff(t, streamCutoff, 4)
 
 	// 3. Pre-commit failure (canceled context before batch 1): returns Problem JSON, never 200 or '['.
 	preCtx, preCancel := context.WithCancel(t.Context())
 	preCancel()
 	preRec := newDeadlineRecordingWriter()
+	preCutoff := time.Now().Add(time.Minute)
+	preRec.currentDeadline = preCutoff
 	preReq := httptest.NewRequestWithContext(preCtx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-	f.h.serveLibraryProcessingRulesBatch(2)(preRec, preReq)
+	if invokeRulesWithNativeCancellation(f.h.serveLibraryProcessingRulesBatch(2), preRec, preReq) {
+		t.Fatal("pre-commit failure aborted instead of returning a problem response")
+	}
 	if preRec.Code == http.StatusOK {
 		t.Fatalf("pre-commit canceled request returned 200; body: %s", preRec.Body.String())
 	}
 	if ct := preRec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/problem+json") {
 		t.Fatalf("pre-commit error Content-Type = %q, want application/problem+json", ct)
 	}
-	if !preRec.currentDeadline.IsZero() {
-		t.Fatalf("pre-commit error left write deadline set to %v", preRec.currentDeadline)
-	}
+	preRec.assertNativeCutoffPreserved(t, preCutoff)
 
 	// 4. Mid-stream failure after batch 1 committed headers: aborts with http.ErrAbortHandler,
 	// clears the write deadline on supported writers, and leaves JSON array unterminated.
@@ -490,25 +505,14 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 		cancelAfterWrite:        midCancel,
 	}
 	midReq := httptest.NewRequestWithContext(midCtx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-	var aborted bool
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if rErr, ok := r.(error); ok && errors.Is(rErr, http.ErrAbortHandler) {
-					aborted = true
-					return
-				}
-				panic(r)
-			}
-		}()
-		f.h.serveLibraryProcessingRulesBatch(2)(abortWriter, midReq)
-	}()
+	abortWriter.currentDeadline = time.Now().Add(time.Minute)
+	aborted := invokeRulesWithNativeCancellation(f.h.serveLibraryProcessingRulesBatch(2), abortWriter, midReq)
 	if !aborted {
 		t.Fatalf("expected panic(http.ErrAbortHandler) on mid-stream failure; body: %s", abortWriter.Body.String())
 	}
-	if !abortWriter.currentDeadline.IsZero() {
-		t.Fatalf("mid-stream abort left write deadline set to %v, want cleared", abortWriter.currentDeadline)
-	}
+	// Cancellation lands while the first chunk is being written, so the
+	// native write deadline is expired exactly once and never restored.
+	abortWriter.assertNativeExpiredOnce(t)
 	var shouldFail []any
 	if json.Unmarshal(abortWriter.Body.Bytes(), &shouldFail) == nil {
 		t.Fatalf("truncated mid-stream body parsed as complete JSON array: %s", abortWriter.Body.String())

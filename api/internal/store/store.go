@@ -57,6 +57,7 @@ func (s *Store) Q() *sqlcgen.Queries { return s.q }
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 const (
+	txStepTimeout       = 10 * time.Second
 	snapshotStepTimeout = 10 * time.Second
 	rollbackTimeout     = 5 * time.Second
 )
@@ -84,12 +85,27 @@ func runTx(
 ) error {
 	return executeTx(
 		ctx,
-		begin,
-		func(parent context.Context, tx pgx.Tx) error { return tx.Commit(parent) },
+		func(parent context.Context) (pgx.Tx, error) {
+			beginCtx, cancel := txStepContext(parent)
+			defer cancel()
+			return begin(beginCtx)
+		},
+		func(parent context.Context, tx pgx.Tx) error {
+			commitCtx, cancel := txStepContext(parent)
+			defer cancel()
+			return tx.Commit(commitCtx)
+		},
 		queries,
 		txLabels{begin: "store: begin", commit: "store: commit", rollback: "store: rollback"},
 		fn,
 	)
+}
+
+func txStepContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := parent.Deadline(); ok {
+		return parent, func() {}
+	}
+	return context.WithTimeout(parent, txStepTimeout)
 }
 
 // SnapshotReadTx runs fn inside a repeatable-read, read-only transaction so multi-batch

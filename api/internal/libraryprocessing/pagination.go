@@ -320,26 +320,42 @@ func streamSnapshotBatches(
 	limit int,
 	onBatch func([]StoredRule) error,
 ) error {
+	return streamRuleBatches(ctx, func(ctx context.Context, cursor *RuleCursorKey) ([]StoredRule, bool, error) {
+		return queryRuleBatch(ctx, q, limit, cursor)
+	}, onBatch)
+}
+
+func streamRuleBatches(
+	ctx context.Context,
+	queryBatch func(context.Context, *RuleCursorKey) ([]StoredRule, bool, error),
+	onBatch func([]StoredRule) error,
+) error {
 	var cursor *RuleCursorKey
 	for range maxSnapshotBatches {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		items, hasMore, err := queryRuleBatch(ctx, q, limit, cursor)
+		items, hasMore, err := queryBatch(ctx, cursor)
 		if err != nil {
 			return err
 		}
-		if len(items) > 0 {
-			if batchErr := onBatch(items); batchErr != nil {
-				return batchErr
-			}
-		}
-		if !hasMore || len(items) == 0 {
+		if len(items) == 0 {
 			return nil
 		}
-		nextKey, err := cursorKeyFromRule(items[len(items)-1])
-		if err != nil {
-			return err
+		var nextKey RuleCursorKey
+		var keyErr error
+		if hasMore {
+			// The callback may reorder or overwrite the batch.
+			nextKey, keyErr = cursorKeyFromRule(items[len(items)-1])
+		}
+		if batchErr := onBatch(items); batchErr != nil {
+			return batchErr
+		}
+		if !hasMore {
+			return nil
+		}
+		if keyErr != nil {
+			return keyErr
 		}
 		cursor = &nextKey
 	}

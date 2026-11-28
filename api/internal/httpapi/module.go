@@ -57,10 +57,13 @@ func Mount(r chi.Router, p MountParams) error {
 	return nil
 }
 
+func isRulesGET(r *http.Request) bool {
+	return r.Method == http.MethodGet && r.URL.Path == PathPrefix+"/library-processing/rules"
+}
+
 func dispatchStreamingRoutes(srv, rulesGET http.Handler) http.Handler {
-	const rulesPath = PathPrefix + "/library-processing/rules"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == rulesPath {
+		if isRulesGET(r) {
 			rulesGET.ServeHTTP(w, r)
 			return
 		}

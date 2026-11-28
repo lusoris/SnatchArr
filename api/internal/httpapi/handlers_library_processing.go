@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"time"
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -84,13 +83,13 @@ func (h *Handlers) ListLibraryProcessingRulesPage(
 }
 
 type ruleArrayStreamWriter struct {
-	w                http.ResponseWriter
-	rc               *http.ResponseController
-	responseDeadline time.Time
-	buf              bytes.Buffer
-	pending          []libraryprocessing.StoredRule
-	committed        bool
-	wroteItem        bool
+	w           http.ResponseWriter
+	rc          *http.ResponseController
+	cancelWrite cancelRuleWriteFunc
+	buf         bytes.Buffer
+	pending     []libraryprocessing.StoredRule
+	committed   bool
+	wroteItem   bool
 }
 
 func (sw *ruleArrayStreamWriter) controller() *http.ResponseController {
@@ -154,20 +153,37 @@ func (sw *ruleArrayStreamWriter) encodeChunk(closeArray bool) error {
 	return nil
 }
 
+// armWriteCancel arms the native write cancellation for ctx and returns the
+// join to defer. The join runs even on panic, before the server can finish the
+// request, and folds the context and cancel errors into *err.
+func (sw *ruleArrayStreamWriter) armWriteCancel(ctx context.Context, err *error) func() {
+	if sw.cancelWrite == nil {
+		return func() {}
+	}
+	done := make(chan struct{})
+	var cancelErr error
+	stop := context.AfterFunc(ctx, func() {
+		defer close(done)
+		cancelErr = sw.cancelWrite()
+	})
+	return func() {
+		if stop() {
+			return
+		}
+		<-done
+		if *err == nil {
+			*err = ctx.Err()
+		}
+		if cancelErr != nil {
+			*err = errors.Join(*err, fmt.Errorf("httpapi: cancel library processing rules write: %w", cancelErr))
+		}
+	}
+}
+
 func (sw *ruleArrayStreamWriter) writeChunk(ctx context.Context, closeArray bool) (err error) {
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	// Apply the chunk deadline only for this write and flush, then restore the response limit.
-	restoreDeadline, err := applyStreamWriteDeadline(sw.controller(), ctx, sw.responseDeadline)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if restoreErr := restoreDeadline(); restoreErr != nil {
-			err = errors.Join(err, restoreErr)
-		}
-	}()
 	if err = sw.encodeChunk(closeArray); err != nil {
 		return err
 	}
@@ -175,13 +191,22 @@ func (sw *ruleArrayStreamWriter) writeChunk(ctx context.Context, closeArray bool
 		return err
 	}
 	sw.commitHeaders()
+	// Only an in-flight write or flush can expire the native deadline.
+	// Commit first so precommit errors can still use the problem response.
+	defer sw.armWriteCancel(ctx, &err)()
+	if err = ctx.Err(); err != nil {
+		return err
+	}
 	if _, writeErr := sw.w.Write(sw.buf.Bytes()); writeErr != nil {
 		return fmt.Errorf("httpapi: write library processing rules: %w", writeErr)
 	}
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	return sw.flush()
+	if err = sw.flush(); err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 func (sw *ruleArrayStreamWriter) flushPending(ctx context.Context) error {
@@ -196,35 +221,16 @@ func (sw *ruleArrayStreamWriter) finish(ctx context.Context) error {
 // a repeatable-read snapshot, preserving RFC 9457 errors before headers commit and aborting
 // mid-stream failures without emitting a valid closing bracket.
 //
-// Transaction and deadline boundary:
-//   - Response bound: SnatchArr's default native HTTP server (golusoris httpx/server) sets
-//     WriteTimeout to 60s and exposes *http.Server via http.ServerContextKey. From handler
-//     entry, ruleStreamResponseContext bounds total response streaming by the server's positive
-//     WriteTimeout or any earlier caller deadline on r.Context(), while preserving parent
-//     request cancellation. When no positive server WriteTimeout is present, the response bound
-//     is the caller deadline alone, or unbounded (zero write deadline) if none was set.
-//   - Snapshot and intermediate writes: module gate checks, SnapshotReadTx queries and commit,
-//     and intermediate batch flushes (flushPending) run under the 5s service operation budget
-//     capped by the response deadline. Each intermediate flush arms that snapshot deadline and
-//     restores the response deadline before returning (finite server/caller deadline when
-//     bounded, or zero when unbounded), so the 5s snapshot deadline never stays armed on the
-//     connection during SnapshotReadTx.Commit.
-//   - Post-commit final write: once SnapshotReadTx commits, the final buffered batch and closing
-//     ']' (finish) run under the response context independently of the 5s snapshot budget,
-//     capped by the server WriteTimeout or earlier caller deadline, and keep any finite response
-//     deadline armed even if the final write or flush fails.
+// Module gating, snapshot queries and commit, and intermediate writes share the
+// service operation budget, capped by the response context. After the snapshot
+// commits, the final batch and closing bracket use only the response context,
+// which preserves request cancellation and any earlier caller deadline.
 //
-// Middleware and writer support:
-//   - SnatchArr's production stack (Recover, Logger via httpsnoop.Wrap) preserves Unwrap,
-//     Flush/FlushError, and SetWriteDeadline for net/http HTTP/1.1 and HTTP/2 writers, and
-//     Recover re-panics http.ErrAbortHandler without writing a recovery body.
-//   - Limitations: writers without SetWriteDeadline or Flush/FlushError (such as custom
-//     wrappers lacking Unwrap or httptest.ResponseRecorder) return http.ErrNotSupported and
-//     degrade to context-only checks without socket deadlines or incremental flushing.
-//   - net/http exposes no getter for the pre-existing connection write deadline, which starts
-//     when request headers finish reading before middleware runs. Bounding by handler entry plus
-//     srv.WriteTimeout therefore adds preceding middleware time rather than restoring the exact
-//     initial connection deadline. Only an unbounded response restores a zero deadline.
+// The outer native server handler provides write cancellation for this route.
+// While a chunk is being written or flushed, phase cancellation can expire the
+// native deadline. Otherwise, the server's existing deadline is left untouched:
+// it is never extended, cleared, or restored. Without the native capability,
+// cancellation is checked between I/O calls but cannot interrupt a blocked call.
 func (h *Handlers) ServeLibraryProcessingRules() http.HandlerFunc {
 	return h.serveLibraryProcessingRulesBatch(legacyRuleStreamBatchSize)
 }
@@ -247,33 +253,6 @@ func ruleStreamResponseContext(ctx context.Context) (context.Context, context.Ca
 	return ctx, noopCancel
 }
 
-func noopRestoreDeadline() error { return nil }
-
-func applyStreamWriteDeadline(rc *http.ResponseController, ctx context.Context, responseDeadline time.Time) (func() error, error) {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return noopRestoreDeadline, nil
-	}
-	if err := rc.SetWriteDeadline(deadline); err != nil {
-		if errors.Is(err, http.ErrNotSupported) {
-			return noopRestoreDeadline, nil
-		}
-		return nil, fmt.Errorf("httpapi: set library processing rules write deadline: %w", err)
-	}
-	if deadline.Equal(responseDeadline) {
-		return noopRestoreDeadline, nil
-	}
-	return func() error {
-		if err := rc.SetWriteDeadline(responseDeadline); err != nil {
-			if responseDeadline.IsZero() {
-				return fmt.Errorf("httpapi: clear library processing rules write deadline: %w", err)
-			}
-			return fmt.Errorf("httpapi: restore library processing rules write deadline: %w", err)
-		}
-		return nil
-	}, nil
-}
-
 func streamRuleArray(
 	responseCtx, snapshotCtx context.Context,
 	w http.ResponseWriter,
@@ -283,11 +262,11 @@ func streamRuleArray(
 	if err := snapshotCtx.Err(); err != nil {
 		return false, err
 	}
-	responseDeadline, _ := responseCtx.Deadline()
+	cancelWrite, _ := responseCtx.Value(cancelRuleWriteKey{}).(cancelRuleWriteFunc)
 	sw := &ruleArrayStreamWriter{
-		w:                w,
-		rc:               http.NewResponseController(w),
-		responseDeadline: responseDeadline,
+		w:           w,
+		rc:          http.NewResponseController(w),
+		cancelWrite: cancelWrite,
 	}
 	if err := streamFn(snapshotCtx, batchSize, func(batch []libraryprocessing.StoredRule) error {
 		return sw.onBatch(snapshotCtx, batch)

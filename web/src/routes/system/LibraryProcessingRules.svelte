@@ -156,10 +156,13 @@
 		return { nextSelectedId: resolved.id, nextPinned: resolved, missingId: '' };
 	}
 
+	function hasRule(items: StoredRule[], target: StoredRule | null): boolean {
+		return target !== null && items.some((rule) => rule.id === target.id);
+	}
+
 	function syncSavedRule(items: StoredRule[], more: boolean, missingId = ''): void {
 		if (!savedRule) return;
-		const id = savedRule.id;
-		if (!more || id === missingId || items.some((rule) => rule.id === id)) {
+		if (!more || savedRule.id === missingId || hasRule(items, savedRule)) {
 			savedRule = null;
 		}
 	}
@@ -204,12 +207,9 @@
 		return nextCursor;
 	}
 
-	function clearReachedPinned(combined: StoredRule[], more: boolean): void {
-		const pinnedId = pinnedRule?.id;
-		if (pinnedId && combined.some((rule) => rule.id === pinnedId)) {
-			pinnedRule = null;
-		}
-		syncSavedRule(combined, more);
+	function clearReachedPinned(combined: StoredRule[]): void {
+		if (hasRule(combined, pinnedRule)) pinnedRule = null;
+		if (hasRule(combined, savedRule)) savedRule = null;
 	}
 
 	async function loadMoreRules(): Promise<void> {
@@ -229,7 +229,7 @@
 			loadedRules = combined;
 			hasMore = page.more;
 			nextCursor = page.cursor;
-			clearReachedPinned(combined, page.more);
+			clearReachedPinned(combined);
 		} catch (err) {
 			if (isCurrent(seq, signal)) loadMoreError = err;
 		} finally {
@@ -265,7 +265,6 @@
 		if (!loadedRules.some((rule) => rule.id === saved.id)) {
 			if (!hasMore) {
 				loadedRules = [...loadedRules, saved].sort(compareStoredRules);
-				savedRule = null;
 			}
 			return;
 		}
@@ -276,7 +275,6 @@
 			return;
 		}
 		loadedRules = [...withoutSaved, saved].sort(compareStoredRules);
-		savedRule = null;
 	}
 
 	async function importRule(): Promise<void> {
@@ -410,7 +408,7 @@
 					</button>
 				{/if}
 			</div>
-			{#if loadMoreError && !loadError}
+			{#if loadMoreError}
 				<ProblemNote error={loadMoreError} />
 			{/if}
 		{:else if !loadError}

@@ -41,7 +41,21 @@ func newSingleConnStore(t *testing.T, base *store.Store) *store.Store {
 	if err != nil {
 		t.Fatalf("open single-conn pool: %v", err)
 	}
-	t.Cleanup(pool.Close)
+	t.Cleanup(func() {
+		// A leaked lease must not prevent the test from reporting its failure.
+		done := make(chan struct{})
+		go func() {
+			pool.Close()
+			close(done)
+		}()
+		timer := time.NewTimer(2 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			t.Error("single-conn pool did not close within cleanup deadline")
+		}
+	})
 	return store.New(pool)
 }
 
@@ -65,7 +79,9 @@ func TestSnapshotReadTxAbnormalExitReleasesConnection(t *testing.T) {
 			recovered = recover()
 		}()
 		_ = st.SnapshotReadTx(t.Context(), func(q *sqlcgen.Queries) error {
-			if err := querySnapshotPage(t.Context(), q); err != nil {
+			queryCtx, queryCancel := context.WithTimeout(t.Context(), 2*time.Second)
+			defer queryCancel()
+			if err := querySnapshotPage(queryCtx, q); err != nil {
 				t.Errorf("query inside snapshot tx: %v", err)
 			}
 			panic(panicPayload)
@@ -86,8 +102,11 @@ func TestSnapshotReadTxAbnormalExitReleasesConnection(t *testing.T) {
 
 	sentinel := errors.New("callback failed")
 	canceledCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 	err := st.SnapshotReadTx(canceledCtx, func(q *sqlcgen.Queries) error {
-		if qErr := querySnapshotPage(t.Context(), q); qErr != nil {
+		queryCtx, queryCancel := context.WithTimeout(canceledCtx, 2*time.Second)
+		defer queryCancel()
+		if qErr := querySnapshotPage(queryCtx, q); qErr != nil {
 			return qErr
 		}
 		cancel()

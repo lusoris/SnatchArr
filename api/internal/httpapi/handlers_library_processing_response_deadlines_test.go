@@ -18,8 +18,14 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/libraryprocessing"
 )
 
+// deadlineRecordingWriter models the native writer. The production cancel
+// setter runs on a context.AfterFunc goroutine while the handler goroutine is
+// blocked in Write or Flush, so recorded state is guarded by mu. Hooks run
+// outside mu so a blocked hook cannot stall the setter. Tests read the fields
+// directly only after the handler returned: the handler joins the setter first.
 type deadlineRecordingWriter struct {
 	*httptest.ResponseRecorder
+	mu              sync.Mutex
 	currentDeadline time.Time
 	deadlines       []time.Time
 	writeDeadlines  []time.Time
@@ -42,25 +48,33 @@ func (w *deadlineRecordingWriter) SetReadDeadline(_ time.Time) error {
 }
 
 func (w *deadlineRecordingWriter) SetWriteDeadline(d time.Time) error {
+	w.mu.Lock()
 	w.setCalls++
+	call := w.setCalls
+	w.mu.Unlock()
 	if w.setDeadlineErr != nil {
-		if err := w.setDeadlineErr(w.setCalls, d); err != nil {
+		if err := w.setDeadlineErr(call, d); err != nil {
 			return err
 		}
 	}
+	w.mu.Lock()
 	w.currentDeadline = d
 	w.deadlines = append(w.deadlines, d)
+	w.mu.Unlock()
 	if w.onSetDeadline != nil {
-		w.onSetDeadline(w.setCalls, d)
+		w.onSetDeadline(call, d)
 	}
 	return nil
 }
 
 func (w *deadlineRecordingWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
 	w.writeCalls++
+	call := w.writeCalls
 	w.writeDeadlines = append(w.writeDeadlines, w.currentDeadline)
+	w.mu.Unlock()
 	if w.writeErr != nil {
-		if err := w.writeErr(w.writeCalls); err != nil {
+		if err := w.writeErr(call); err != nil {
 			return 0, err
 		}
 	}
@@ -68,158 +82,63 @@ func (w *deadlineRecordingWriter) Write(p []byte) (int, error) {
 }
 
 func (w *deadlineRecordingWriter) FlushError() error {
+	w.mu.Lock()
 	w.flushCalls++
+	call := w.flushCalls
 	w.flushDeadlines = append(w.flushDeadlines, w.currentDeadline)
+	w.mu.Unlock()
 	if w.flushErr != nil {
-		return w.flushErr(w.flushCalls)
+		return w.flushErr(call)
 	}
 	return nil
 }
 
-// assertStreamDeadlines verifies that each intermediate flush inside SnapshotReadTx armed a
-// write deadline in [snapLo, snapHi] and restored the response deadline in [responseLo, responseHi]
-// (or cleared to zero when responseLo is zero) before returning, while the post-commit finish
-// write/flush armed [responseLo, responseHi] (or left the deadline cleared when responseLo is zero)
-// and kept that response deadline in effect afterwards.
-func (w *deadlineRecordingWriter) assertStreamDeadlines(
-	t *testing.T,
-	snapLo, snapHi time.Time,
-	responseLo, responseHi time.Time,
-	intermediateFlushes int,
-) {
+// assertNativeCutoffPreserved checks that no setter call ran and the native
+// cutoff is unchanged.
+func (w *deadlineRecordingWriter) assertNativeCutoffPreserved(t *testing.T, cutoff time.Time) {
 	t.Helper()
-	wantOps := intermediateFlushes + 1
-	if len(w.writeDeadlines) != wantOps {
-		t.Fatalf("Write count = %d, want %d (deadlines=%v)", len(w.writeDeadlines), wantOps, w.writeDeadlines)
-	}
-	if len(w.flushDeadlines) != wantOps {
-		t.Fatalf("FlushError count = %d, want %d (deadlines=%v)", len(w.flushDeadlines), wantOps, w.flushDeadlines)
-	}
-
-	if responseLo.IsZero() {
-		if !responseHi.IsZero() {
-			t.Fatalf("responseHi = %v must be zero when responseLo is zero", responseHi)
-		}
-		w.assertUnboundedResponseDeadlines(t, snapLo, snapHi, intermediateFlushes)
-		return
-	}
-	if intermediateFlushes > 0 && snapLo.Equal(responseLo) && snapHi.Equal(responseHi) {
-		w.assertSharedTightDeadlines(t, responseLo, responseHi, intermediateFlushes)
-		return
-	}
-	if intermediateFlushes > 0 && !snapHi.Before(responseLo) {
-		t.Fatalf("expected snapshot window [%v, %v] strictly before response window [%v, %v]", snapLo, snapHi, responseLo, responseHi)
-	}
-	w.assertRestoredResponseDeadlines(t, snapLo, snapHi, responseLo, responseHi, intermediateFlushes)
-}
-
-func (w *deadlineRecordingWriter) assertUnboundedResponseDeadlines(
-	t *testing.T,
-	snapLo, snapHi time.Time,
-	intermediateFlushes int,
-) {
-	t.Helper()
-	wantDeadlineCalls := 2 * intermediateFlushes
-	if len(w.deadlines) != wantDeadlineCalls {
-		t.Fatalf("SetWriteDeadline calls = %v (len %d), want len %d", w.deadlines, len(w.deadlines), wantDeadlineCalls)
-	}
-	for i := range intermediateFlushes {
-		armed := w.deadlines[2*i]
-		cleared := w.deadlines[2*i+1]
-		if armed.IsZero() || armed.Before(snapLo) || armed.After(snapHi) {
-			t.Fatalf("intermediate[%d] armed deadline %v outside [%v, %v]", i, armed, snapLo, snapHi)
-		}
-		if !cleared.IsZero() {
-			t.Fatalf("intermediate[%d] clear deadline = %v, want zero before next tx step/commit", i, cleared)
-		}
-		if !w.writeDeadlines[i].Equal(armed) {
-			t.Fatalf("Write[%d] active deadline = %v, want %v", i, w.writeDeadlines[i], armed)
-		}
-		if !w.flushDeadlines[i].Equal(armed) {
-			t.Fatalf("FlushError[%d] active deadline = %v, want %v", i, w.flushDeadlines[i], armed)
-		}
-	}
-	if !w.writeDeadlines[intermediateFlushes].IsZero() {
-		t.Fatalf("finish Write active deadline = %v, want zero", w.writeDeadlines[intermediateFlushes])
-	}
-	if !w.flushDeadlines[intermediateFlushes].IsZero() {
-		t.Fatalf("finish FlushError active deadline = %v, want zero", w.flushDeadlines[intermediateFlushes])
-	}
-	if !w.currentDeadline.IsZero() {
-		t.Fatalf("final currentDeadline = %v, want zero", w.currentDeadline)
+	if w.setCalls != 0 || !w.currentDeadline.Equal(cutoff) {
+		t.Fatalf("native cutoff %v became %v with %d setter calls: %v", cutoff, w.currentDeadline, w.setCalls, w.deadlines)
 	}
 }
 
-func (w *deadlineRecordingWriter) assertSharedTightDeadlines(
-	t *testing.T,
-	responseLo, responseHi time.Time,
-	intermediateFlushes int,
-) {
+// assertNativeExpiredOnce checks the single cancellation the handler may issue.
+func (w *deadlineRecordingWriter) assertNativeExpiredOnce(t *testing.T) {
 	t.Helper()
-	wantDeadlineCalls := intermediateFlushes + 1
-	if len(w.deadlines) != wantDeadlineCalls {
-		t.Fatalf("SetWriteDeadline calls = %v (len %d), want len %d", w.deadlines, len(w.deadlines), wantDeadlineCalls)
-	}
-	finArmed := w.deadlines[intermediateFlushes]
-	if finArmed.IsZero() || finArmed.Before(responseLo) || finArmed.After(responseHi) {
-		t.Fatalf("shared armed deadline %v outside [%v, %v]", finArmed, responseLo, responseHi)
-	}
-	for i := range wantDeadlineCalls {
-		if !w.deadlines[i].Equal(finArmed) {
-			t.Fatalf("SetWriteDeadline[%d] = %v, want %v", i, w.deadlines[i], finArmed)
-		}
-		if !w.writeDeadlines[i].Equal(finArmed) {
-			t.Fatalf("Write[%d] active deadline = %v, want %v", i, w.writeDeadlines[i], finArmed)
-		}
-		if !w.flushDeadlines[i].Equal(finArmed) {
-			t.Fatalf("FlushError[%d] active deadline = %v, want %v", i, w.flushDeadlines[i], finArmed)
-		}
-	}
-	if !w.currentDeadline.Equal(finArmed) {
-		t.Fatalf("final currentDeadline = %v, want %v", w.currentDeadline, finArmed)
+	if w.setCalls != 1 || !w.currentDeadline.Equal(time.Unix(1, 0)) {
+		t.Fatalf("native expiry calls=%d current=%v deadlines=%v; want one expiry to the past", w.setCalls, w.currentDeadline, w.deadlines)
 	}
 }
 
-func (w *deadlineRecordingWriter) assertRestoredResponseDeadlines(
-	t *testing.T,
-	snapLo, snapHi time.Time,
-	responseLo, responseHi time.Time,
-	intermediateFlushes int,
-) {
+func (w *deadlineRecordingWriter) assertNativeRulesCutoff(t *testing.T, cutoff time.Time, chunks int) {
 	t.Helper()
-	wantDeadlineCalls := 2*intermediateFlushes + 1
-	if len(w.deadlines) != wantDeadlineCalls {
-		t.Fatalf("SetWriteDeadline calls = %v (len %d), want len %d", w.deadlines, len(w.deadlines), wantDeadlineCalls)
+	if w.setCalls != 0 || !w.currentDeadline.Equal(cutoff) {
+		t.Fatalf("native cutoff %v became %v with %d setter calls: %v", cutoff, w.currentDeadline, w.setCalls, w.deadlines)
 	}
-	finArmed := w.deadlines[2*intermediateFlushes]
-	if finArmed.IsZero() || finArmed.Before(responseLo) || finArmed.After(responseHi) {
-		t.Fatalf("finish armed deadline %v outside [%v, %v]", finArmed, responseLo, responseHi)
-	}
-	for i := range intermediateFlushes {
-		armed := w.deadlines[2*i]
-		restored := w.deadlines[2*i+1]
-		if armed.IsZero() || armed.Before(snapLo) || armed.After(snapHi) {
-			t.Fatalf("intermediate[%d] armed deadline %v outside [%v, %v]", i, armed, snapLo, snapHi)
+	for _, observed := range [][]time.Time{w.writeDeadlines, w.flushDeadlines} {
+		if len(observed) != chunks {
+			t.Fatalf("write/flush cutoffs = %v, want %d observations", observed, chunks)
 		}
-		if !restored.Equal(finArmed) {
-			t.Fatalf("intermediate[%d] restored deadline = %v, want response deadline %v", i, restored, finArmed)
-		}
-		if !w.writeDeadlines[i].Equal(armed) {
-			t.Fatalf("Write[%d] active deadline = %v, want %v", i, w.writeDeadlines[i], armed)
-		}
-		if !w.flushDeadlines[i].Equal(armed) {
-			t.Fatalf("FlushError[%d] active deadline = %v, want %v", i, w.flushDeadlines[i], armed)
+		for _, d := range observed {
+			if !d.Equal(cutoff) {
+				t.Fatalf("cutoff during I/O = %v, want %v", d, cutoff)
+			}
 		}
 	}
-	if !w.writeDeadlines[intermediateFlushes].Equal(finArmed) {
-		t.Fatalf("finish Write active deadline = %v, want %v", w.writeDeadlines[intermediateFlushes], finArmed)
-	}
-	if !w.flushDeadlines[intermediateFlushes].Equal(finArmed) {
-		t.Fatalf("finish FlushError active deadline = %v, want %v", w.flushDeadlines[intermediateFlushes], finArmed)
-	}
-	if !w.currentDeadline.Equal(finArmed) {
-		t.Fatalf("final currentDeadline = %v, want %v", w.currentDeadline, finArmed)
-	}
+}
+
+// Middleware forwards flushes but hides the native deadline setter.
+type rulesDeadlineMiddlewareWriter struct{ http.ResponseWriter }
+
+func (w rulesDeadlineMiddlewareWriter) FlushError() error {
+	return http.NewResponseController(w.ResponseWriter).Flush()
+}
+
+func invokeRulesWithNativeCancellation(h http.HandlerFunc, w http.ResponseWriter, req *http.Request) bool {
+	native := WithNativeRulesWriteCancellation(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h(rulesDeadlineMiddlewareWriter{w}, r)
+	}))
+	return invokeCapturingAbort(native.ServeHTTP, w, req)
 }
 
 type deadlineObservingChecker struct {
@@ -358,6 +277,9 @@ func assertProblemResponse(t *testing.T, rec *httptest.ResponseRecorder, wantSta
 	if err := json.Unmarshal(rec.Body.Bytes(), &prob); err != nil {
 		t.Fatalf("decode problem: %v; body: %s", err, rec.Body.String())
 	}
+	if prob == nil {
+		t.Fatalf("expected a problem object; body: %s", rec.Body.String())
+	}
 }
 
 func TestServeLibraryProcessingRulesWriteDeadlinePreCommitAndErrors(t *testing.T) {
@@ -369,21 +291,25 @@ func TestServeLibraryProcessingRulesWriteDeadlinePreCommitAndErrors(t *testing.T
 		chk := &deadlineObservingChecker{enabled: false}
 		h := &Handlers{libraryProcessing: libraryprocessing.NewServiceWithChecker(nil, nil, nil, chk)}
 		dw := newDeadlineRecordingWriter()
+		cutoff := time.Now().Add(time.Minute)
+		dw.currentDeadline = cutoff
 		before := time.Now()
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		h.ServeLibraryProcessingRules()(dw, req)
+		if invokeRulesWithNativeCancellation(h.ServeLibraryProcessingRules(), dw, req) {
+			t.Fatal("pre-commit problem response aborted")
+		}
 		after := time.Now()
 
 		assertProblemResponse(t, dw.ResponseRecorder, http.StatusNotFound)
 		if !chk.hasDeadline || chk.deadline.Before(before.Add(snapshotContract)) || chk.deadline.After(after.Add(snapshotContract)) {
 			t.Fatalf("service deadline = %v (has=%v), outside snapshot window", chk.deadline, chk.hasDeadline)
 		}
-		if len(dw.deadlines) != 0 || !dw.currentDeadline.IsZero() {
-			t.Fatalf("writer deadlines = %v (current=%v), want none armed on pre-commit error", dw.deadlines, dw.currentDeadline)
+		if dw.setCalls != 0 || !dw.currentDeadline.Equal(cutoff) {
+			t.Fatalf("pre-commit error changed native cutoff: calls=%d current=%v", dw.setCalls, dw.currentDeadline)
 		}
 	})
 
-	t.Run("shorter caller deadline propagates to snapshot and final write", func(t *testing.T) {
+	t.Run("short caller bounds snapshot without replacing native cutoff", func(t *testing.T) {
 		t.Parallel()
 		chk := &deadlineObservingChecker{enabled: true}
 		h := &Handlers{libraryProcessing: libraryprocessing.NewServiceWithChecker(nil, nil, nil, chk)}
@@ -391,13 +317,17 @@ func TestServeLibraryProcessingRulesWriteDeadlinePreCommitAndErrors(t *testing.T
 		defer cancel()
 		callerDeadline, _ := ctx.Deadline()
 		dw := newDeadlineRecordingWriter()
+		cutoff := callerDeadline.Add(time.Minute)
+		dw.currentDeadline = cutoff
 		var streamDeadline time.Time
 		streamer := func(sCtx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			streamDeadline, _ = sCtx.Deadline()
 			return fakeBatchStreamer(sampleStoredRules(3))(sCtx, batchSize, onBatch)
 		}
 		req := httptest.NewRequestWithContext(ctx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		h.serveLibraryProcessingRulesWith(2, streamer)(dw, req)
+		if invokeRulesWithNativeCancellation(h.serveLibraryProcessingRulesWith(2, streamer), dw, req) {
+			t.Fatal("successful stream aborted")
+		}
 
 		if dw.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200; body: %s", dw.Code, dw.Body.String())
@@ -409,17 +339,18 @@ func TestServeLibraryProcessingRulesWriteDeadlinePreCommitAndErrors(t *testing.T
 		if err != nil || len(list) != 3 {
 			t.Fatalf("decoded len = %d err = %v; body: %s", len(list), err, dw.Body.String())
 		}
-		dw.assertStreamDeadlines(t, callerDeadline, callerDeadline, callerDeadline, callerDeadline, 1)
+		dw.assertNativeRulesCutoff(t, cutoff, 2)
 	})
 
-	t.Run("looser caller deadline caps intermediate snapshot writes at 5s and keeps caller deadline for finish", func(t *testing.T) {
+	t.Run("snapshot budget caps a looser caller without extending native cutoff", func(t *testing.T) {
 		t.Parallel()
 		chk := &deadlineObservingChecker{enabled: true}
 		h := &Handlers{libraryProcessing: libraryprocessing.NewServiceWithChecker(nil, nil, nil, chk)}
 		ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 		defer cancel()
-		callerDeadline, _ := ctx.Deadline()
 		dw := newDeadlineRecordingWriter()
+		cutoff := time.Now().Add(30 * time.Minute)
+		dw.currentDeadline = cutoff
 		var streamDeadline time.Time
 		streamer := func(sCtx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			streamDeadline, _ = sCtx.Deadline()
@@ -427,7 +358,9 @@ func TestServeLibraryProcessingRulesWriteDeadlinePreCommitAndErrors(t *testing.T
 		}
 		before := time.Now()
 		req := httptest.NewRequestWithContext(ctx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		h.serveLibraryProcessingRulesWith(2, streamer)(dw, req)
+		if invokeRulesWithNativeCancellation(h.serveLibraryProcessingRulesWith(2, streamer), dw, req) {
+			t.Fatal("successful stream aborted")
+		}
 		after := time.Now()
 
 		if dw.Code != http.StatusOK {
@@ -442,7 +375,7 @@ func TestServeLibraryProcessingRulesWriteDeadlinePreCommitAndErrors(t *testing.T
 		if err != nil || len(list) != 5 {
 			t.Fatalf("decoded len = %d err = %v; body: %s", len(list), err, dw.Body.String())
 		}
-		dw.assertStreamDeadlines(t, snapLo, snapHi, callerDeadline, callerDeadline, 2)
+		dw.assertNativeRulesCutoff(t, cutoff, 3)
 	})
 
 	t.Run("expired caller deadline returns problem+json without setting past write deadline", func(t *testing.T) {
@@ -453,11 +386,158 @@ func TestServeLibraryProcessingRulesWriteDeadlinePreCommitAndErrors(t *testing.T
 		defer cancel()
 		dw := newDeadlineRecordingWriter()
 		req := httptest.NewRequestWithContext(ctx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
-		h.ServeLibraryProcessingRules()(dw, req)
+		if invokeRulesWithNativeCancellation(h.ServeLibraryProcessingRules(), dw, req) {
+			t.Fatal("expired caller's pre-commit problem response aborted")
+		}
 
 		assertProblemResponse(t, dw.ResponseRecorder, http.StatusInternalServerError)
-		if len(dw.deadlines) != 0 || !dw.currentDeadline.IsZero() {
+		if dw.setCalls != 0 || !dw.currentDeadline.IsZero() {
 			t.Fatalf("deadlines = %v (current=%v), want none", dw.deadlines, dw.currentDeadline)
 		}
 	})
+}
+
+func TestServeLibraryProcessingRulesBlockedIOCancellation(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                                        string
+		final, flush, expireSnapshot, withoutNative bool
+		writes, flushes                             int
+	}{
+		{name: "snapshot timeout interrupts flush", flush: true, expireSnapshot: true, writes: 1, flushes: 1},
+		{name: "caller cancellation interrupts snapshot write", writes: 1},
+		{name: "caller cancellation interrupts final write", final: true, writes: 2, flushes: 1},
+		{name: "caller cancellation interrupts final flush", final: true, flush: true, writes: 2, flushes: 2},
+		{name: "without native capability cancellation is checked after write", withoutNative: true, writes: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			dw := newDeadlineRecordingWriter()
+			cutoff, expired := time.Now().Add(time.Minute), time.Unix(1, 0)
+			dw.currentDeadline = cutoff
+			interrupted := make(chan struct{})
+			dw.onSetDeadline = func(call int, d time.Time) {
+				if call == 1 && d.Equal(expired) {
+					close(interrupted)
+				}
+			}
+			var snapshot *expiringSnapshotCtx
+			withSnap := func(parent context.Context) (context.Context, context.CancelFunc) {
+				var release context.CancelFunc
+				snapshot, release = newExpiringSnapshotCtx(parent, time.Now().Add(5*time.Second))
+				return snapshot, release
+			}
+			var streamReturned, entered bool
+			stream := func(sCtx context.Context, size int, batch func([]libraryprocessing.StoredRule) error) error {
+				err := fakeBatchStreamer(sampleStoredRules(3))(sCtx, size, batch)
+				streamReturned = err == nil
+				return err
+			}
+			block := func(call int) error {
+				wantCall := 1
+				if tc.final {
+					wantCall = 2
+				}
+				if call != wantCall {
+					return nil
+				}
+				entered = true
+				if streamReturned != tc.final {
+					t.Errorf("stream returned successfully before I/O = %v, want %v", streamReturned, tc.final)
+				}
+				// Expire only the snapshot clock, or cancel the caller. Expiry is
+				// injected, never waited for.
+				if tc.expireSnapshot {
+					snapshot.expire()
+				} else {
+					cancel()
+				}
+				if tc.withoutNative {
+					return nil
+				}
+				timer := time.NewTimer(10 * time.Second)
+				defer timer.Stop()
+				select {
+				case <-interrupted:
+					return context.DeadlineExceeded
+				case <-timer.C:
+					t.Error("blocked I/O did not receive native expiry")
+					return errors.New("test I/O watchdog expired")
+				}
+			}
+			if tc.flush {
+				dw.flushErr = block
+			} else {
+				dw.writeErr = block
+			}
+			h := &Handlers{libraryProcessing: libraryprocessing.NewServiceWithChecker(nil, nil, nil, &deadlineObservingChecker{enabled: true})}
+			handler := h.serveLibraryProcessingRulesAt(2, withSnap, stream)
+			req := httptest.NewRequestWithContext(ctx, http.MethodGet, PathPrefix+"/library-processing/rules", nil)
+			var aborted bool
+			if tc.withoutNative {
+				// A downstream setter alone must not confer native cancellation.
+				aborted = invokeCapturingAbort(handler, dw, req)
+			} else {
+				aborted = invokeRulesWithNativeCancellation(handler, dw, req)
+			}
+			if !entered || !aborted || dw.Code != http.StatusOK || dw.writeCalls != tc.writes || dw.flushCalls != tc.flushes {
+				t.Fatalf("entered=%v aborted=%v status=%d writes=%d flushes=%d; body: %s", entered, aborted, dw.Code, dw.writeCalls, dw.flushCalls, dw.Body.String())
+			}
+			if (!tc.final || !tc.flush) && json.Valid(dw.Body.Bytes()) {
+				t.Fatalf("aborted stream emitted complete JSON: %s", dw.Body.String())
+			}
+			if tc.expireSnapshot && (!errors.Is(snapshot.Err(), context.DeadlineExceeded) || ctx.Err() != nil) {
+				t.Fatalf("snapshot error=%v, caller error=%v; want only snapshot expiry", snapshot.Err(), ctx.Err())
+			}
+			if tc.withoutNative {
+				dw.assertNativeCutoffPreserved(t, cutoff)
+			} else {
+				dw.assertNativeExpiredOnce(t)
+			}
+		})
+	}
+}
+
+func TestServeLibraryProcessingRulesFinalWriteOutlivesSnapshot(t *testing.T) {
+	t.Parallel()
+	dw := newDeadlineRecordingWriter()
+	cutoff := time.Now().Add(time.Minute)
+	dw.currentDeadline = cutoff
+	var snapshotDone <-chan struct{}
+	var streamReturned bool
+	stream := func(ctx context.Context, size int, batch func([]libraryprocessing.StoredRule) error) error {
+		snapshotDone = ctx.Done()
+		err := fakeBatchStreamer(sampleStoredRules(3))(ctx, size, batch)
+		streamReturned = err == nil
+		return err
+	}
+	dw.writeErr = func(call int) error {
+		if call != 2 {
+			return nil
+		}
+		if !streamReturned {
+			return errors.New("final write started before the snapshot streamer returned")
+		}
+		// Hold the final write until the snapshot is released or its budget expires.
+		timer := time.NewTimer(10 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-snapshotDone:
+			return nil
+		case <-timer.C:
+			return errors.New("snapshot did not finish within its budget")
+		}
+	}
+	h := &Handlers{libraryProcessing: libraryprocessing.NewServiceWithChecker(nil, nil, nil, &deadlineObservingChecker{enabled: true})}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil)
+	if invokeRulesWithNativeCancellation(h.serveLibraryProcessingRulesWith(2, stream), dw, req) {
+		t.Fatalf("final write aborted after snapshot ended; body: %s", dw.Body.String())
+	}
+	list, err := decodeRuleListJSON(dw.Body.Bytes())
+	if dw.Code != http.StatusOK || err != nil || len(list) != 3 {
+		t.Fatalf("status=%d decoded len=%d err=%v; body: %s", dw.Code, len(list), err, dw.Body.String())
+	}
+	dw.assertNativeRulesCutoff(t, cutoff, 2)
 }

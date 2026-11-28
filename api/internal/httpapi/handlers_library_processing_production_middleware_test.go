@@ -7,6 +7,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -68,16 +69,36 @@ func TestServeLibraryProcessingRulesProductionMiddlewareAndNativeHTTP(t *testing
 			logger:            logger,
 		}
 
-		var controllerCheckErr error
-		rawStream := h.serveLibraryProcessingRulesWith(2, fakeBatchStreamer(sampleStoredRules(5)))
+		controllerCheck := make(chan error, 1)
+		firstBatchRead := make(chan struct{})
+		streamBatches := fakeBatchStreamer(sampleStoredRules(5))
+		rawStream := h.serveLibraryProcessingRulesWith(2, func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
+			batches := 0
+			return streamBatches(ctx, batchSize, func(batch []libraryprocessing.StoredRule) error {
+				batches++
+				if batches == 3 {
+					// The second callback flushes the first batch. Wait here so a
+					// flush at handler return cannot satisfy the client assertion.
+					timer := time.NewTimer(2 * time.Second)
+					defer timer.Stop()
+					select {
+					case <-firstBatchRead:
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-timer.C:
+						return errors.New("client did not read the first batch before the stream continued")
+					}
+				}
+				return onBatch(batch)
+			})
+		})
 		wrappedRules := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Verify httpsnoop.Wrap in Recover + Logger preserves ResponseController SetWriteDeadline & Flush.
 			rc := http.NewResponseController(w)
-			if err := rc.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
-				controllerCheckErr = err
-			} else if err := rc.SetWriteDeadline(time.Time{}); err != nil {
-				controllerCheckErr = err
+			err := rc.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if err == nil {
+				err = rc.SetWriteDeadline(time.Time{})
 			}
+			controllerCheck <- err
 			rawStream(w, r)
 		})
 
@@ -97,22 +118,40 @@ func TestServeLibraryProcessingRulesProductionMiddlewareAndNativeHTTP(t *testing
 			t.Fatalf("GET /rules: %v", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
-		body, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			t.Fatalf("read response body: %v", readErr)
-		}
-		if controllerCheckErr != nil {
-			t.Fatalf("production ResponseWriter failed SetWriteDeadline through middleware: %v", controllerCheckErr)
+		select {
+		case err := <-controllerCheck:
+			if err != nil {
+				t.Fatalf("production ResponseWriter failed SetWriteDeadline through middleware: %v", err)
+			}
+		default:
+			t.Fatal("rules handler did not publish the deadline probe result")
 		}
 		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want 200; body: %s", resp.StatusCode, string(body))
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
 		}
 		if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
 			t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
 		}
-		list, decErr := decodeRuleListJSON(body)
+
+		var body bytes.Buffer
+		// Retain bytes read ahead by the decoder for the final full-array check.
+		dec := json.NewDecoder(io.TeeReader(resp.Body, &body))
+		if tok, err := dec.Token(); err != nil || tok != json.Delim('[') {
+			t.Fatalf("read opening array before stream completion: token=%v err=%v", tok, err)
+		}
+		for i := range 2 {
+			var rule oas.LibraryProcessingRule
+			if err := dec.Decode(&rule); err != nil {
+				t.Fatalf("read first batch item %d before stream completion: %v", i, err)
+			}
+		}
+		close(firstBatchRead)
+		if _, err := io.Copy(&body, resp.Body); err != nil {
+			t.Fatalf("read remaining response body: %v", err)
+		}
+		list, decErr := decodeRuleListJSON(body.Bytes())
 		if decErr != nil || len(list) != 5 {
-			t.Fatalf("decoded len = %d err = %v; body: %s", len(list), decErr, string(body))
+			t.Fatalf("decoded len = %d err = %v; body: %s", len(list), decErr, body.String())
 		}
 	})
 
@@ -151,15 +190,25 @@ func TestServeLibraryProcessingRulesProductionMiddlewareAndNativeHTTP(t *testing
 		req.Header.Set("Authorization", "Bearer test-token")
 
 		resp, doErr := client.Do(req)
-		if doErr == nil {
-			defer func() { _ = resp.Body.Close() }()
-			body, readErr := io.ReadAll(resp.Body)
-			if readErr == nil {
-				t.Fatalf("expected truncated chunked stream read error after ErrAbortHandler, got clean body: %s", string(body))
-			}
-			if strings.Contains(string(body), "about:blank") {
-				t.Fatalf("Recover middleware wrote problem+json after committed headers: %s", string(body))
-			}
+		if doErr != nil {
+			t.Fatalf("GET /rules did not receive response headers: %v", doErr)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200 before stream abort", resp.StatusCode)
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		if !errors.Is(readErr, io.ErrUnexpectedEOF) {
+			t.Fatalf("read error = %v, want unexpected EOF after ErrAbortHandler; body: %s", readErr, body)
+		}
+		if strings.Contains(string(body), "about:blank") {
+			t.Fatalf("Recover middleware wrote problem+json after committed headers: %s", body)
+		}
+		// Adding only the closing bracket must recover the flushed first batch.
+		partial := string(body)
+		list, decErr := decodeRuleListJSON(append(body, ']'))
+		if decErr != nil || len(list) != 2 {
+			t.Fatalf("partial response decoded len = %d err = %v, want two flushed rules; body: %s", len(list), decErr, partial)
 		}
 	})
 

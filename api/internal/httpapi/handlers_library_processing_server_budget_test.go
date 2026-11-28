@@ -10,7 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,198 +21,89 @@ func withServerWriteTimeout(r *http.Request, d time.Duration) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), http.ServerContextKey, &http.Server{WriteTimeout: d}))
 }
 
-func TestRuleStreamWriteDeadlines(t *testing.T) {
-	t.Parallel()
-	const defaultServerWriteTimeout = 60 * time.Second
+// rulesBudgetNativeWriter models the native writer. The cancel setter runs on
+// an AfterFunc goroutine, so cutoff and calls are guarded by mu. Tests read
+// them directly only after the handler returned (it joins the setter first) or
+// from the handler goroutine while no cancellation is in flight.
+type rulesBudgetNativeWriter struct {
+	*httptest.ResponseRecorder
+	mu           sync.Mutex
+	cutoff       time.Time
+	calls        []time.Time
+	interrupt    chan struct{}
+	interruptErr error
+}
 
-	t.Run("default 60s server budget caps final output and restores after snapshot flush", func(t *testing.T) {
-		t.Parallel()
-		r := withServerWriteTimeout(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil), defaultServerWriteTimeout)
-		before := time.Now()
-		responseCtx, cancelResponse := ruleStreamResponseContext(r.Context())
-		defer cancelResponse()
-		after := time.Now()
-		serverLo := before.Add(defaultServerWriteTimeout)
-		serverHi := after.Add(defaultServerWriteTimeout)
-		snapshot := before.Add(5 * time.Second)
-		snapshotCtx, cancelSnapshot := context.WithDeadline(responseCtx, snapshot)
-		defer cancelSnapshot()
+func newRulesBudgetNativeWriter(cutoff time.Time) *rulesBudgetNativeWriter {
+	return &rulesBudgetNativeWriter{ResponseRecorder: httptest.NewRecorder(), cutoff: cutoff}
+}
 
-		dw := newDeadlineRecordingWriter()
-		deadline, ok := responseCtx.Deadline()
-		if !ok || deadline.Before(serverLo) || deadline.After(serverHi) {
-			t.Fatalf("response deadline = %v (ok=%v), want in [%v, %v]", deadline, ok, serverLo, serverHi)
+func (w *rulesBudgetNativeWriter) SetWriteDeadline(d time.Time) error {
+	w.mu.Lock()
+	w.calls = append(w.calls, d)
+	if w.interruptErr == nil {
+		w.cutoff = d
+	}
+	w.mu.Unlock()
+	if w.interrupt != nil && !d.IsZero() && d.Before(time.Now()) {
+		select {
+		case w.interrupt <- struct{}{}:
+		default:
 		}
-		sw := &ruleArrayStreamWriter{w: dw, responseDeadline: deadline}
-		if err := sw.flushPending(snapshotCtx); err != nil {
-			t.Fatal(err)
-		}
-		if len(dw.deadlines) != 2 || !dw.deadlines[0].Equal(snapshot) || dw.deadlines[1].Before(serverLo) || dw.deadlines[1].After(serverHi) {
-			t.Fatalf("intermediate deadline calls = %v, want [%v, server in [%v, %v]]", dw.deadlines, snapshot, serverLo, serverHi)
-		}
-		restored := dw.deadlines[1]
-		dw.deadlines = nil
-		cancelSnapshot()
-		if err := sw.finish(responseCtx); err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(dw.deadlines, []time.Time{restored}) {
-			t.Fatalf("final deadline calls = %v, want [%v]", dw.deadlines, restored)
-		}
-		if !dw.currentDeadline.Equal(restored) {
-			t.Fatalf("currentDeadline = %v, want server deadline %v", dw.currentDeadline, restored)
-		}
-		if got := dw.Body.String(); got != "[]" {
-			t.Fatalf("body = %q, want []", got)
-		}
-	})
+	}
+	return w.interruptErr
+}
 
-	t.Run("default 60s server budget independently caps looser caller deadline", func(t *testing.T) {
-		t.Parallel()
-		baseReq := withServerWriteTimeout(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil), defaultServerWriteTimeout)
-		callerCtx, cancelCaller := context.WithTimeout(baseReq.Context(), time.Hour)
-		defer cancelCaller()
-		before := time.Now()
-		responseCtx, cancelResponse := ruleStreamResponseContext(callerCtx)
-		defer cancelResponse()
-		after := time.Now()
-		serverLo := before.Add(defaultServerWriteTimeout)
-		serverHi := after.Add(defaultServerWriteTimeout)
-		snapshot := before.Add(5 * time.Second)
-		snapshotCtx, cancelSnapshot := context.WithDeadline(responseCtx, snapshot)
-		defer cancelSnapshot()
+func (w *rulesBudgetNativeWriter) assertPreserved(t *testing.T, cutoff time.Time) {
+	t.Helper()
+	if len(w.calls) != 0 || !w.cutoff.Equal(cutoff) {
+		t.Fatalf("deadline calls = %v, native cutoff = %v; want no calls and cutoff %v", w.calls, w.cutoff, cutoff)
+	}
+}
 
-		dw := newDeadlineRecordingWriter()
-		deadline, ok := responseCtx.Deadline()
-		if !ok || deadline.Before(serverLo) || deadline.After(serverHi) {
-			t.Fatalf("response deadline = %v (ok=%v), want capped at server [%v, %v]", deadline, ok, serverLo, serverHi)
-		}
-		sw := &ruleArrayStreamWriter{w: dw, responseDeadline: deadline}
-		if err := sw.flushPending(snapshotCtx); err != nil {
-			t.Fatal(err)
-		}
-		if len(dw.deadlines) != 2 || !dw.deadlines[0].Equal(snapshot) || !dw.deadlines[1].Equal(deadline) {
-			t.Fatalf("intermediate deadline calls = %v, want [%v, %v]", dw.deadlines, snapshot, deadline)
-		}
-		dw.deadlines = nil
-		cancelSnapshot()
-		if err := sw.finish(responseCtx); err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(dw.deadlines, []time.Time{deadline}) {
-			t.Fatalf("final deadline calls = %v, want [%v]", dw.deadlines, deadline)
-		}
-		if got := dw.Body.String(); got != "[]" {
-			t.Fatalf("body = %q, want []", got)
-		}
-	})
+func (w *rulesBudgetNativeWriter) assertInterrupted(t *testing.T, started time.Time) {
+	t.Helper()
+	if len(w.calls) != 1 || w.calls[0].IsZero() || !w.calls[0].Before(started) {
+		t.Fatalf("deadline calls = %v; want one nonzero past deadline", w.calls)
+	}
+}
 
-	t.Run("earlier caller deadline above snapshot budget restores and caps final output", func(t *testing.T) {
-		t.Parallel()
-		baseReq := withServerWriteTimeout(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil), defaultServerWriteTimeout)
-		entered := time.Now()
-		caller := entered.Add(20 * time.Second)
-		snapshot := entered.Add(5 * time.Second)
-		callerCtx, cancelCaller := context.WithDeadline(baseReq.Context(), caller)
-		defer cancelCaller()
-		responseCtx, cancelResponse := ruleStreamResponseContext(callerCtx)
-		defer cancelResponse()
-		snapshotCtx, cancelSnapshot := context.WithDeadline(responseCtx, snapshot)
-		defer cancelSnapshot()
+func (w *rulesBudgetNativeWriter) waitForInterrupt() error {
+	select {
+	case <-w.interrupt:
+		return nil
+	case <-time.After(2 * time.Second):
+		return errors.New("blocked rules I/O was not interrupted")
+	}
+}
 
-		dw := newDeadlineRecordingWriter()
-		deadline, _ := responseCtx.Deadline()
-		sw := &ruleArrayStreamWriter{w: dw, responseDeadline: deadline}
-		if err := sw.flushPending(snapshotCtx); err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(dw.deadlines, []time.Time{snapshot, caller}) {
-			t.Fatalf("intermediate deadline calls = %v, want [%v, %v]", dw.deadlines, snapshot, caller)
-		}
-		dw.deadlines = nil
-		cancelSnapshot()
-		if err := sw.finish(responseCtx); err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(dw.deadlines, []time.Time{caller}) {
-			t.Fatalf("final deadline calls = %v, want [%v]", dw.deadlines, caller)
-		}
-		if !dw.currentDeadline.Equal(caller) {
-			t.Fatalf("currentDeadline = %v, want %v", dw.currentDeadline, caller)
-		}
-		if got := dw.Body.String(); got != "[]" {
-			t.Fatalf("body = %q, want []", got)
-		}
-	})
+// Hide the native setter from the streaming handler, as middleware can do.
+type rulesBudgetOpaqueWriter struct {
+	http.ResponseWriter
+	write func(http.ResponseWriter, []byte) (int, error)
+	flush func() error
+}
 
-	t.Run("earlier caller deadline below snapshot budget caps both intermediate and final writes", func(t *testing.T) {
-		t.Parallel()
-		baseReq := withServerWriteTimeout(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil), defaultServerWriteTimeout)
-		entered := time.Now()
-		caller := entered.Add(2 * time.Second)
-		snapshot := entered.Add(5 * time.Second)
-		callerCtx, cancelCaller := context.WithDeadline(baseReq.Context(), caller)
-		defer cancelCaller()
-		responseCtx, cancelResponse := ruleStreamResponseContext(callerCtx)
-		defer cancelResponse()
-		snapshotCtx, cancelSnapshot := context.WithDeadline(responseCtx, snapshot)
-		defer cancelSnapshot()
+func (w rulesBudgetOpaqueWriter) Write(p []byte) (int, error) {
+	if w.write != nil {
+		return w.write(w.ResponseWriter, p)
+	}
+	return w.ResponseWriter.Write(p)
+}
 
-		dw := newDeadlineRecordingWriter()
-		deadline, _ := responseCtx.Deadline()
-		sw := &ruleArrayStreamWriter{w: dw, responseDeadline: deadline}
-		if err := sw.flushPending(snapshotCtx); err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(dw.deadlines, []time.Time{caller}) {
-			t.Fatalf("intermediate deadline calls = %v, want [%v]", dw.deadlines, caller)
-		}
-		dw.deadlines = nil
-		cancelSnapshot()
-		if err := sw.finish(responseCtx); err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(dw.deadlines, []time.Time{caller}) {
-			t.Fatalf("final deadline calls = %v, want [%v]", dw.deadlines, caller)
-		}
-		if got := dw.Body.String(); got != "[]" {
-			t.Fatalf("body = %q, want []", got)
-		}
-	})
+func (w rulesBudgetOpaqueWriter) FlushError() error {
+	if w.flush != nil {
+		return w.flush()
+	}
+	return http.NewResponseController(w.ResponseWriter).Flush()
+}
 
-	t.Run("disabled server timeout clears intermediate deadline to zero and does not cancel response context on cleanup", func(t *testing.T) {
-		t.Parallel()
-		r := withServerWriteTimeout(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil), 0)
-		snapshot := time.Now().Add(5 * time.Second)
-		responseCtx, cancelResponse := ruleStreamResponseContext(r.Context())
-		snapshotCtx, cancelSnapshot := context.WithDeadline(responseCtx, snapshot)
-		defer cancelSnapshot()
-
-		dw := newDeadlineRecordingWriter()
-		deadline, _ := responseCtx.Deadline()
-		sw := &ruleArrayStreamWriter{w: dw, responseDeadline: deadline}
-		if err := sw.flushPending(snapshotCtx); err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(dw.deadlines, []time.Time{snapshot, {}}) {
-			t.Fatalf("intermediate deadline calls = %v, want [%v, zero]", dw.deadlines, snapshot)
-		}
-		dw.deadlines = nil
-		cancelSnapshot()
-		if err := sw.finish(responseCtx); err != nil {
-			t.Fatal(err)
-		}
-		if len(dw.deadlines) != 0 || !dw.currentDeadline.IsZero() {
-			t.Fatalf("final deadline calls = %v (current=%v), want none and zero", dw.deadlines, dw.currentDeadline)
-		}
-		cancelResponse()
-		if err := responseCtx.Err(); err != nil {
-			t.Fatalf("responseCtx.Err() after cancelResponse = %v, want nil when no server timeout applied", err)
-		}
-		if got := dw.Body.String(); got != "[]" {
-			t.Fatalf("body = %q, want []", got)
-		}
-	})
+func rulesBudgetTransport(next http.HandlerFunc, hooks rulesBudgetOpaqueWriter) http.HandlerFunc {
+	return WithNativeRulesWriteCancellation(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wrapped := hooks
+		wrapped.ResponseWriter = w
+		next(wrapped, r)
+	})).ServeHTTP
 }
 
 func TestServeLibraryProcessingRulesServerWriteTimeoutEndToEnd(t *testing.T) {
@@ -224,43 +115,74 @@ func TestServeLibraryProcessingRulesServerWriteTimeoutEndToEnd(t *testing.T) {
 	chk := &deadlineObservingChecker{enabled: true}
 	h := &Handlers{libraryProcessing: libraryprocessing.NewServiceWithChecker(nil, nil, nil, chk)}
 
-	t.Run("default 60s server WriteTimeout restores 60s across intermediate flushes and bounds finish", func(t *testing.T) {
-		t.Parallel()
-		fixtures := sampleStoredRules(5)
-		dw := newDeadlineRecordingWriter()
-		var deadlineAtCommit time.Time
-		seenAtCommit := false
-		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
-			if err := fakeBatchStreamer(fixtures)(ctx, batchSize, onBatch); err != nil {
-				return err
+	for _, tc := range []struct {
+		name           string
+		server, caller time.Duration
+	}{
+		{"default native cutoff", defaultServerWriteTimeout, 0},
+		{"looser caller leaves native cutoff intact", defaultServerWriteTimeout, time.Hour},
+		{"caller deadline after snapshot budget", defaultServerWriteTimeout, 20 * time.Second},
+		{"caller deadline caps snapshot budget", defaultServerWriteTimeout, 2 * time.Second},
+		{"disabled server timeout", 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			var caller, cutoff time.Time
+			if tc.caller != 0 {
+				caller = time.Now().Add(tc.caller)
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithDeadline(ctx, caller)
+				defer cancel()
 			}
-			deadlineAtCommit = dw.currentDeadline
-			seenAtCommit = true
-			return nil
-		}
-
-		req := withServerWriteTimeout(
-			httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil),
-			defaultServerWriteTimeout,
-		)
-		before := time.Now()
-		h.serveLibraryProcessingRulesWith(2, streamer)(dw, req)
-		after := time.Now()
-
-		if dw.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200; body: %s", dw.Code, dw.Body.String())
-		}
-		serverLo := before.Add(defaultServerWriteTimeout)
-		serverHi := after.Add(defaultServerWriteTimeout)
-		if !seenAtCommit || deadlineAtCommit.Before(serverLo) || deadlineAtCommit.After(serverHi) {
-			t.Fatalf("deadline armed at commit = %v (seen=%v), want server deadline in [%v, %v]", deadlineAtCommit, seenAtCommit, serverLo, serverHi)
-		}
-		list, err := decodeRuleListJSON(dw.Body.Bytes())
-		if err != nil || len(list) != 5 {
-			t.Fatalf("decoded len = %d err = %v; body: %s", len(list), err, dw.Body.String())
-		}
-		dw.assertStreamDeadlines(t, before.Add(snapshotContract), after.Add(snapshotContract), serverLo, serverHi, 2)
-	})
+			if tc.server != 0 {
+				cutoff = time.Now().Add(tc.server)
+			}
+			dw := newRulesBudgetNativeWriter(cutoff)
+			req := withServerWriteTimeout(httptest.NewRequestWithContext(ctx, http.MethodGet, PathPrefix+"/library-processing/rules", nil), tc.server)
+			var snapshotDeadline time.Time
+			var snapshotParentErr func() error
+			streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
+				snapshotDeadline, _ = ctx.Deadline()
+				for batch := range 3 {
+					if err := onBatch(sampleStoredRules(5)[batch*2 : min(batch*2+2, 5)]); err != nil {
+						return err
+					}
+					dw.assertPreserved(t, cutoff)
+				}
+				return nil
+			}
+			handler := h.serveLibraryProcessingRulesWith(2, streamer)
+			if tc.server == 0 {
+				handler = h.serveLibraryProcessingRulesAt(2, func(parent context.Context) (context.Context, context.CancelFunc) {
+					snapshotParentErr = parent.Err
+					return context.WithTimeout(parent, snapshotContract)
+				}, streamer)
+			}
+			before := time.Now()
+			rulesBudgetTransport(handler, rulesBudgetOpaqueWriter{})(dw, req)
+			lo, hi := before.Add(snapshotContract), time.Now().Add(snapshotContract)
+			if !caller.IsZero() && caller.Before(lo) {
+				lo, hi = caller, caller
+			}
+			if snapshotDeadline.Before(lo) || snapshotDeadline.After(hi) {
+				t.Fatalf("snapshot deadline = %v, want in [%v, %v]", snapshotDeadline, lo, hi)
+			}
+			if tc.server == 0 {
+				if snapshotParentErr == nil {
+					t.Fatal("snapshot parent is missing after disabled-timeout response")
+				}
+				if parentErr := snapshotParentErr(); parentErr != nil {
+					t.Fatalf("snapshot parent canceled after disabled-timeout response: %v", parentErr)
+				}
+			}
+			dw.assertPreserved(t, cutoff)
+			list, err := decodeRuleListJSON(dw.Body.Bytes())
+			if dw.Code != http.StatusOK || !dw.Flushed || err != nil || len(list) != 5 {
+				t.Fatalf("status = %d, flushed = %v, decoded len = %d, err = %v; body: %s", dw.Code, dw.Flushed, len(list), err, dw.Body.String())
+			}
+		})
+	}
 
 	t.Run("default 60s server WriteTimeout finishes after deterministic snapshot expiry and keeps snapshot Err stable", func(t *testing.T) {
 		t.Parallel()
@@ -273,13 +195,13 @@ func TestServeLibraryProcessingRulesServerWriteTimeoutEndToEnd(t *testing.T) {
 			return expSnap, cancel
 		}
 
-		dw := newDeadlineRecordingWriter()
-		var commitDeadline time.Time
+		cutoff := time.Now().Add(defaultServerWriteTimeout)
+		dw := newRulesBudgetNativeWriter(cutoff)
 		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			if err := fakeBatchStreamer(fixtures)(ctx, batchSize, onBatch); err != nil {
 				return err
 			}
-			commitDeadline = dw.currentDeadline
+			dw.assertPreserved(t, cutoff)
 			expSnap.expire()
 			return nil
 		}
@@ -288,15 +210,7 @@ func TestServeLibraryProcessingRulesServerWriteTimeoutEndToEnd(t *testing.T) {
 			httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil),
 			defaultServerWriteTimeout,
 		)
-		before := time.Now()
-		h.serveLibraryProcessingRulesAt(2, withSnap, streamer)(dw, req)
-		after := time.Now()
-
-		serverLo := before.Add(defaultServerWriteTimeout)
-		serverHi := after.Add(defaultServerWriteTimeout)
-		if commitDeadline.Before(serverLo) || commitDeadline.After(serverHi) {
-			t.Fatalf("commitDeadline = %v, want in [%v, %v]", commitDeadline, serverLo, serverHi)
-		}
+		rulesBudgetTransport(h.serveLibraryProcessingRulesAt(2, withSnap, streamer), rulesBudgetOpaqueWriter{})(dw, req)
 		if !errors.Is(expSnap.Err(), context.DeadlineExceeded) {
 			t.Fatalf("snapshotCtx.Err() = %v, want context.DeadlineExceeded even after server response cancel", expSnap.Err())
 		}
@@ -307,7 +221,7 @@ func TestServeLibraryProcessingRulesServerWriteTimeoutEndToEnd(t *testing.T) {
 		if err != nil || len(list) != 3 {
 			t.Fatalf("decoded len = %d err = %v; body: %s", len(list), err, dw.Body.String())
 		}
-		dw.assertStreamDeadlines(t, snapDeadline, snapDeadline, serverLo, serverHi, 1)
+		dw.assertPreserved(t, cutoff)
 	})
 
 	t.Run("parent request cancellation propagates through 60s server response context before and after headers", func(t *testing.T) {
@@ -315,7 +229,8 @@ func TestServeLibraryProcessingRulesServerWriteTimeoutEndToEnd(t *testing.T) {
 		// Pre-header cancellation returns RFC 9457 problem+json.
 		preCtx, preCancel := context.WithCancel(t.Context())
 		defer preCancel()
-		dwPre := newDeadlineRecordingWriter()
+		cutoff := time.Now().Add(defaultServerWriteTimeout)
+		dwPre := newRulesBudgetNativeWriter(cutoff)
 		preStream := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			if err := fakeBatchStreamer(sampleStoredRules(2))(ctx, batchSize, onBatch); err != nil {
 				return err
@@ -327,13 +242,14 @@ func TestServeLibraryProcessingRulesServerWriteTimeoutEndToEnd(t *testing.T) {
 			httptest.NewRequestWithContext(preCtx, http.MethodGet, PathPrefix+"/library-processing/rules", nil),
 			defaultServerWriteTimeout,
 		)
-		h.serveLibraryProcessingRulesWith(2, preStream)(dwPre, reqPre)
+		rulesBudgetTransport(h.serveLibraryProcessingRulesWith(2, preStream), rulesBudgetOpaqueWriter{})(dwPre, reqPre)
+		dwPre.assertPreserved(t, cutoff)
 		assertProblemResponse(t, dwPre.ResponseRecorder, http.StatusInternalServerError)
 
 		// Post-header cancellation after intermediate flush aborts incomplete JSON stream and keeps server deadline.
 		postCtx, postCancel := context.WithCancel(t.Context())
 		defer postCancel()
-		dwPost := newDeadlineRecordingWriter()
+		dwPost := newRulesBudgetNativeWriter(cutoff)
 		postStream := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			if err := fakeBatchStreamer(sampleStoredRules(3))(ctx, batchSize, onBatch); err != nil {
 				return err
@@ -345,80 +261,120 @@ func TestServeLibraryProcessingRulesServerWriteTimeoutEndToEnd(t *testing.T) {
 			httptest.NewRequestWithContext(postCtx, http.MethodGet, PathPrefix+"/library-processing/rules", nil),
 			defaultServerWriteTimeout,
 		)
-		before := time.Now()
-		aborted := invokeCapturingAbort(h.serveLibraryProcessingRulesWith(2, postStream), dwPost, reqPost)
-		after := time.Now()
+		aborted := invokeCapturingAbort(rulesBudgetTransport(h.serveLibraryProcessingRulesWith(2, postStream), rulesBudgetOpaqueWriter{}), dwPost, reqPost)
 		if !aborted {
 			t.Fatalf("expected ErrAbortHandler when parent cancels post-header; body: %s", dwPost.Body.String())
 		}
-		if dwPost.currentDeadline.Before(before.Add(defaultServerWriteTimeout)) || dwPost.currentDeadline.After(after.Add(defaultServerWriteTimeout)) {
-			t.Fatalf("currentDeadline = %v, want preserved 60s server deadline", dwPost.currentDeadline)
-		}
+		dwPost.assertPreserved(t, cutoff)
 		var shouldFail []any
 		if json.Unmarshal(dwPost.Body.Bytes(), &shouldFail) == nil {
 			t.Fatalf("canceled stream parsed as complete JSON array: %s", dwPost.Body.String())
 		}
 	})
 
-	t.Run("restore 60s server deadline failure in intermediate flushPending aborts before commit", func(t *testing.T) {
+	t.Run("snapshot expiry interrupts a blocked intermediate flush and reports setter failure before snapshot commit", func(t *testing.T) {
 		t.Parallel()
-		restoreBoom := errors.New("restore 60s server deadline broken")
-		dw := newDeadlineRecordingWriter()
-		restoreCalls := 0
-		dw.setDeadlineErr = func(call int, _ time.Time) error {
-			if call == 2 {
-				restoreCalls++
-				return restoreBoom
-			}
-			return nil
+		started := time.Now()
+		cutoff := started.Add(defaultServerWriteTimeout)
+		dw := newRulesBudgetNativeWriter(cutoff)
+		dw.interrupt = make(chan struct{}, 1)
+		boom := errors.New("native write cancellation failed")
+		dw.interruptErr = boom
+		var snap *expiringSnapshotCtx
+		withSnap := func(parent context.Context) (context.Context, context.CancelFunc) {
+			var cancel context.CancelFunc
+			snap, cancel = newExpiringSnapshotCtx(parent, started.Add(snapshotContract))
+			return snap, cancel
 		}
-		reachedCommit := false
+		var batchErr error
+		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
+			batchErr = fakeBatchStreamer(sampleStoredRules(3))(ctx, batchSize, onBatch)
+			return batchErr
+		}
+		hooks := rulesBudgetOpaqueWriter{flush: func() error {
+			snap.expire()
+			return dw.waitForInterrupt()
+		}}
+		req := withServerWriteTimeout(httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil), defaultServerWriteTimeout)
+		if !invokeCapturingAbort(rulesBudgetTransport(h.serveLibraryProcessingRulesAt(2, withSnap, streamer), hooks), dw, req) {
+			t.Fatalf("expected abort during intermediate flush; body: %s", dw.Body.String())
+		}
+		if !errors.Is(batchErr, context.DeadlineExceeded) || !errors.Is(batchErr, boom) {
+			t.Fatalf("batch error = %v, want snapshot expiry and setter failure", batchErr)
+		}
+		dw.assertInterrupted(t, started)
+		if !dw.cutoff.Equal(cutoff) || dw.Body.Len() == 0 || json.Valid(dw.Body.Bytes()) {
+			t.Fatalf("native cutoff = %v, body = %q; want unchanged cutoff and partial JSON", dw.cutoff, dw.Body.String())
+		}
+	})
+
+	t.Run("request cancellation interrupts a blocked final write after snapshot expiry", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		started := time.Now()
+		dw := newRulesBudgetNativeWriter(started.Add(defaultServerWriteTimeout))
+		dw.interrupt = make(chan struct{}, 1)
+		var snap *expiringSnapshotCtx
+		withSnap := func(parent context.Context) (context.Context, context.CancelFunc) {
+			var cleanup context.CancelFunc
+			snap, cleanup = newExpiringSnapshotCtx(parent, started.Add(snapshotContract))
+			return snap, cleanup
+		}
+		snapshotDone := false
 		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			if err := fakeBatchStreamer(sampleStoredRules(3))(ctx, batchSize, onBatch); err != nil {
 				return err
 			}
-			reachedCommit = true
+			snap.expire()
+			snapshotDone = true
 			return nil
 		}
-		req := withServerWriteTimeout(
-			httptest.NewRequestWithContext(t.Context(), http.MethodGet, PathPrefix+"/library-processing/rules", nil),
-			defaultServerWriteTimeout,
-		)
-		if !invokeCapturingAbort(h.serveLibraryProcessingRulesWith(2, streamer), dw, req) {
-			t.Fatalf("expected ErrAbortHandler on server deadline restore failure; body: %s", dw.Body.String())
+		var finalInterrupted bool
+		hooks := rulesBudgetOpaqueWriter{write: func(w http.ResponseWriter, p []byte) (int, error) {
+			if !snapshotDone {
+				return w.Write(p)
+			}
+			cancel()
+			if err := dw.waitForInterrupt(); err != nil {
+				return 0, err
+			}
+			finalInterrupted = true
+			return 0, context.Canceled
+		}}
+		req := withServerWriteTimeout(httptest.NewRequestWithContext(ctx, http.MethodGet, PathPrefix+"/library-processing/rules", nil), defaultServerWriteTimeout)
+		aborted := invokeCapturingAbort(rulesBudgetTransport(h.serveLibraryProcessingRulesAt(2, withSnap, streamer), hooks), dw, req)
+		if !aborted || !finalInterrupted || dw.Body.Len() == 0 || json.Valid(dw.Body.Bytes()) {
+			t.Fatalf("aborted = %v, final write interrupted = %v, body = %q; want interrupted final write and partial JSON", aborted, finalInterrupted, dw.Body.String())
 		}
-		if reachedCommit || restoreCalls != 1 {
-			t.Fatalf("reachedCommit=%v restoreCalls=%d, want (false, 1)", reachedCommit, restoreCalls)
-		}
-		var shouldFail []any
-		if json.Unmarshal(dw.Body.Bytes(), &shouldFail) == nil {
-			t.Fatalf("partial JSON unexpectedly complete: %s", dw.Body.String())
-		}
+		dw.assertInterrupted(t, started)
 	})
-
-	t.Run("expired 60s server response deadline after commit rejects final output", func(t *testing.T) {
+	t.Run("expired response deadline after snapshot commit rejects final output without touching native cutoff", func(t *testing.T) {
 		t.Parallel()
-		serverDeadline := time.Now().Add(defaultServerWriteTimeout)
-		expResp, cancelResp := newExpiringSnapshotCtx(t.Context(), serverDeadline)
+		cutoff := time.Now().Add(defaultServerWriteTimeout)
+		expResp, cancelResp := newExpiringSnapshotCtx(t.Context(), cutoff.Add(-20*time.Second))
 		defer cancelResp()
-		snapCtx, cancelSnap := context.WithTimeout(expResp, snapshotContract)
-		defer cancelSnap()
-
-		dw := newDeadlineRecordingWriter()
+		dw := newRulesBudgetNativeWriter(cutoff)
 		streamer := func(ctx context.Context, batchSize int, onBatch func([]libraryprocessing.StoredRule) error) error {
 			if err := fakeBatchStreamer(sampleStoredRules(3))(ctx, batchSize, onBatch); err != nil {
 				return err
 			}
 			expResp.expire()
+			// The response and snapshot contexts are derived from a custom
+			// context, so cancellation reaches them through a goroutine. Wait
+			// for the snapshot (the youngest child) instead of racing it.
+			select {
+			case <-ctx.Done():
+			case <-time.After(10 * time.Second):
+				return errors.New("response expiry did not propagate to the snapshot context")
+			}
 			return nil
 		}
-		committed, err := streamRuleArray(expResp, snapCtx, dw, 2, streamer)
-		if !committed || !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("(committed=%v, err=%v), want (true, context.DeadlineExceeded)", committed, err)
+		req := withServerWriteTimeout(httptest.NewRequestWithContext(expResp, http.MethodGet, PathPrefix+"/library-processing/rules", nil), defaultServerWriteTimeout)
+		if !invokeCapturingAbort(rulesBudgetTransport(h.serveLibraryProcessingRulesWith(2, streamer), rulesBudgetOpaqueWriter{}), dw, req) {
+			t.Fatalf("expected abort after response expiry; body: %s", dw.Body.String())
 		}
-		if !dw.currentDeadline.Equal(serverDeadline) {
-			t.Fatalf("currentDeadline = %v, want preserved server deadline %v", dw.currentDeadline, serverDeadline)
-		}
+		dw.assertPreserved(t, cutoff)
 		var shouldFail []any
 		if json.Unmarshal(dw.Body.Bytes(), &shouldFail) == nil {
 			t.Fatalf("expired server budget emitted complete JSON array: %s", dw.Body.String())
