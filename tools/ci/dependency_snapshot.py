@@ -44,6 +44,7 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
 import urllib.parse
 from collections.abc import Callable
 
@@ -154,6 +155,7 @@ def resolve_docker(
     The filesystem lookup runs in one daemon thread with a bounded join, so a
     stalled lookup is refused after TIMEOUT seconds, before any Docker process starts.
     """
+    deadline = time.monotonic() + timeout
     results: list[str | None] = []
     errors: list[OSError | ValueError] = []
     worker = threading.Thread(
@@ -162,8 +164,8 @@ def resolve_docker(
         daemon=True,
     )
     worker.start()
-    worker.join(timeout=timeout)
-    if worker.is_alive():
+    worker.join(timeout=max(0.0, deadline - time.monotonic()))
+    if worker.is_alive() or time.monotonic() >= deadline:
         raise ScanError(f"--docker {value!r} lookup exceeded {timeout}s")
     if errors:
         raise errors[0]
@@ -370,7 +372,12 @@ def main():
                 f"image '{args.trivy}' is not pinned as NAME:TAG@sha256:DIGEST"
             )
 
-        docker = resolve_docker(args.docker)
+        try:
+            docker = resolve_docker(args.docker)
+        except (OSError, ValueError) as err:
+            raise ScanError(
+                f"--docker {args.docker!r} could not be resolved: {err}"
+            ) from err
         sha = args.sha
         if not sha:
             raise ScanError("--sha or GITHUB_SHA environment variable is required")
