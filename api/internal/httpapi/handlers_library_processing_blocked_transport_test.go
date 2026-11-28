@@ -305,17 +305,21 @@ func startBlockedTransportServer(t *testing.T, h2 bool, writeTimeout time.Durati
 	return ts, client, ctx
 }
 
-func runBlockedTransportCase(t *testing.T, h2, native bool, mode blockedTransportMode) {
+type blockedTransportFixture struct {
+	ctx          context.Context
+	probe        *blockedTransportProbe
+	replies      *blockedTransportClient
+	sent         time.Time
+	writeTimeout time.Duration
+	h2           bool
+}
+
+func buildBlockedTransportHandler(t *testing.T, native bool, probe *blockedTransportProbe) http.Handler {
 	t.Helper()
-	writeTimeout := blockedTransportLong
-	if mode == blockedNativeTimeout {
-		writeTimeout = blockedTransportShort
-	}
-	probe := newBlockedTransportProbe()
 	withSnap := func(parent context.Context) (context.Context, context.CancelFunc) {
-		ctx, cancel := context.WithCancel(parent)
+		snapCtx, cancel := context.WithCancel(parent)
 		probe.snapCancel = cancel
-		return ctx, cancel
+		return snapCtx, cancel
 	}
 	h := &Handlers{
 		libraryProcessing: libraryprocessing.NewServiceWithChecker(nil, nil, nil, &deadlineObservingChecker{enabled: true}),
@@ -332,8 +336,19 @@ func runBlockedTransportCase(t *testing.T, h2, native bool, mode blockedTranspor
 		router.ServeHTTP(w, r)
 	})
 	if native {
-		handler = WithNativeRulesWriteCancellation(handler)
+		return WithNativeRulesWriteCancellation(handler)
 	}
+	return handler
+}
+
+func startBlockedTransportFixture(t *testing.T, h2, native bool, mode blockedTransportMode) *blockedTransportFixture {
+	t.Helper()
+	writeTimeout := blockedTransportLong
+	if mode == blockedNativeTimeout {
+		writeTimeout = blockedTransportShort
+	}
+	probe := newBlockedTransportProbe()
+	handler := buildBlockedTransportHandler(t, native, probe)
 	ts, client, ctx := startBlockedTransportServer(t, h2, writeTimeout, handler)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+PathPrefix+"/library-processing/rules", nil)
@@ -348,62 +363,106 @@ func runBlockedTransportCase(t *testing.T, h2, native bool, mode blockedTranspor
 	if mode != blockedNativeTimeout {
 		blockedTransportStillBlocked(t, probe, blockedTransportQuiet)
 	}
+	return &blockedTransportFixture{
+		ctx:          ctx,
+		probe:        probe,
+		replies:      replies,
+		sent:         sent,
+		writeTimeout: writeTimeout,
+		h2:           h2,
+	}
+}
 
+// assertCancelReleases waits for the handler to abort via the native callback
+// before draining the client stream.
+func (f *blockedTransportFixture) assertCancelReleases(t *testing.T) {
+	t.Helper()
+	f.probe.cancelAsked.Store(true)
+	f.probe.snapCancel()
+	// The client has not read, canceled or disconnected; only the native
+	// callback can free the write.
+	blockedTransportWait(t, f.probe.handlerDone,
+		"snapshot cancellation did not release the blocked write: native cancel is missing or a no-op")
+	assertBlockedTransportAborted(t, f.probe)
+	if !f.probe.writeAfterCancel {
+		t.Fatal("blocked write returned before snapshot cancellation was requested")
+	}
+	if elapsed := f.probe.writeReturned.Sub(f.sent); elapsed >= f.writeTimeout/2 {
+		t.Fatalf("release took %v, too close to the native %v total timeout", elapsed, f.writeTimeout)
+	}
+	if f.ctx.Err() != nil {
+		t.Fatalf("client context ended before the server returned: %v", f.ctx.Err())
+	}
+	assertBlockedTransportTruncated(t, f.replies)
+}
+
+// assertNativeTimeout waits for the short native WriteTimeout to abort the
+// handler before draining the client stream.
+func (f *blockedTransportFixture) assertNativeTimeout(t *testing.T) {
+	t.Helper()
+	blockedTransportWait(t, f.probe.handlerDone, "native WriteTimeout did not release the blocked write")
+	assertBlockedTransportAborted(t, f.probe)
+	if f.probe.writeAfterCancel {
+		t.Fatal("test canceled the snapshot in the native-timeout case")
+	}
+	if elapsed := f.probe.writeReturned.Sub(f.sent); elapsed < f.writeTimeout {
+		t.Fatalf("write released after %v, before the native %v total timeout", elapsed, f.writeTimeout)
+	}
+	assertBlockedTransportTruncated(t, f.replies)
+}
+
+// assertNoNativeStaysBlocked verifies that snapshot cancellation alone leaves
+// the write blocked, so the client must drain before the handler can return.
+func (f *blockedTransportFixture) assertNoNativeStaysBlocked(t *testing.T) {
+	t.Helper()
+	f.probe.cancelAsked.Store(true)
+	f.probe.snapCancel()
+	blockedTransportStillBlocked(t, f.probe, 2*blockedTransportQuiet)
+	assertBlockedTransportTruncated(t, f.replies)
+	blockedTransportWait(t, f.probe.handlerDone, "handler did not return after the client drained")
+	if f.probe.writeErr != nil || !f.probe.writeAfterCancel {
+		t.Fatalf("write error = %v, after cancel = %v; want a write that finished only after cancel", f.probe.writeErr, f.probe.writeAfterCancel)
+	}
+}
+
+// assertPositiveControl drains the full response array before waiting for the
+// handler to return cleanly.
+func (f *blockedTransportFixture) assertPositiveControl(t *testing.T) {
+	t.Helper()
+	var body bytes.Buffer
+	head, drainErr := f.replies.drainTo(t, &body)
+	if drainErr != nil {
+		t.Fatalf("positive control body read: %v", drainErr)
+	}
+	wantProto := 1
+	if f.h2 {
+		wantProto = 2
+	}
+	if head.status != http.StatusOK || head.protoMajor != wantProto {
+		t.Fatalf("positive control got %s status %d", head.proto, head.status)
+	}
+	list, decErr := decodeRuleListJSON(body.Bytes())
+	if decErr != nil || len(list) != 3 {
+		t.Fatalf("positive control decoded len = %d err = %v", len(list), decErr)
+	}
+	blockedTransportWait(t, f.probe.handlerDone, "handler did not return after full drain")
+	if f.probe.writeErr != nil || f.probe.writeAfterCancel {
+		t.Fatalf("positive control write error = %v, after cancel = %v", f.probe.writeErr, f.probe.writeAfterCancel)
+	}
+}
+
+func runBlockedTransportCase(t *testing.T, h2, native bool, mode blockedTransportMode) {
+	t.Helper()
+	f := startBlockedTransportFixture(t, h2, native, mode)
 	switch mode {
 	case blockedCancelReleases:
-		probe.cancelAsked.Store(true)
-		probe.snapCancel()
-		// The client has not read, canceled or disconnected; only the native
-		// callback can free the write.
-		blockedTransportWait(t, probe.handlerDone,
-			"snapshot cancellation did not release the blocked write: native cancel is missing or a no-op")
-		assertBlockedTransportAborted(t, probe)
-		if !probe.writeAfterCancel {
-			t.Fatal("blocked write returned before snapshot cancellation was requested")
-		}
-		if elapsed := probe.writeReturned.Sub(sent); elapsed >= writeTimeout/2 {
-			t.Fatalf("release took %v, too close to the native %v total timeout", elapsed, writeTimeout)
-		}
-		if ctx.Err() != nil {
-			t.Fatalf("client context ended before the server returned: %v", ctx.Err())
-		}
-		assertBlockedTransportTruncated(t, replies)
+		f.assertCancelReleases(t)
 	case blockedNativeTimeout:
-		blockedTransportWait(t, probe.handlerDone, "native WriteTimeout did not release the blocked write")
-		assertBlockedTransportAborted(t, probe)
-		if probe.writeAfterCancel {
-			t.Fatal("test canceled the snapshot in the native-timeout case")
-		}
-		if elapsed := probe.writeReturned.Sub(sent); elapsed < writeTimeout {
-			t.Fatalf("write released after %v, before the native %v total timeout", elapsed, writeTimeout)
-		}
-		assertBlockedTransportTruncated(t, replies)
+		f.assertNativeTimeout(t)
 	case blockedNoNativeStaysBlocked:
-		probe.cancelAsked.Store(true)
-		probe.snapCancel()
-		blockedTransportStillBlocked(t, probe, 2*blockedTransportQuiet)
-		assertBlockedTransportTruncated(t, replies)
-		blockedTransportWait(t, probe.handlerDone, "handler did not return after the client drained")
-		if probe.writeErr != nil || !probe.writeAfterCancel {
-			t.Fatalf("write error = %v, after cancel = %v; want a write that finished only after cancel", probe.writeErr, probe.writeAfterCancel)
-		}
+		f.assertNoNativeStaysBlocked(t)
 	case blockedPositiveControl:
-		var body bytes.Buffer
-		head, err := replies.drainTo(t, &body)
-		if err != nil {
-			t.Fatalf("positive control body read: %v", err)
-		}
-		if head.status != http.StatusOK || head.protoMajor != map[bool]int{false: 1, true: 2}[h2] {
-			t.Fatalf("positive control got %s status %d", head.proto, head.status)
-		}
-		list, err := decodeRuleListJSON(body.Bytes())
-		if err != nil || len(list) != 3 {
-			t.Fatalf("positive control decoded len = %d err = %v", len(list), err)
-		}
-		blockedTransportWait(t, probe.handlerDone, "handler did not return after full drain")
-		if probe.writeErr != nil || probe.writeAfterCancel {
-			t.Fatalf("positive control write error = %v, after cancel = %v", probe.writeErr, probe.writeAfterCancel)
-		}
+		f.assertPositiveControl(t)
 	}
 }
 
@@ -419,8 +478,8 @@ func assertBlockedTransportAborted(t *testing.T, probe *blockedTransportProbe) {
 	}
 }
 
-// Only after the server returned does the client read; it must see an
-// incomplete array, never the closing bracket.
+// assertBlockedTransportTruncated drains the response and requires an
+// incomplete JSON array without a closing bracket.
 func assertBlockedTransportTruncated(t *testing.T, replies *blockedTransportClient) {
 	t.Helper()
 	var tail blockedTransportTail

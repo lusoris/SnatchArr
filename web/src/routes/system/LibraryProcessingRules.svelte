@@ -23,6 +23,8 @@
 
 	const formats: Format[] = ['yaml', 'json'];
 	const unmountController = new AbortController();
+	// Per-request deadline for every rules API call (page, detail, import, save).
+	const REQUEST_TIMEOUT_MS = 15_000;
 
 	let activeLoadController: AbortController | null = null;
 	let requestSeq = 0;
@@ -47,6 +49,8 @@
 	let editingId = $state('');
 	let lastSavedRule = $state<StoredRule | null>(null);
 	let savedRule = $state<StoredRule | null>(null);
+	// Set only when a POST/PUT hit its own deadline: the server may or may not have committed it.
+	let writeTimeout = $state('');
 
 	type RuleInput = ReturnType<typeof readRuleDocument>;
 
@@ -71,6 +75,40 @@
 
 	function isCurrent(seq: number, signal: AbortSignal): boolean {
 		return seq === requestSeq && !signal.aborted && !unmountController.signal.aborted;
+	}
+
+	// The deadline is combined only into the signal handed to the transport. isCurrent() keeps
+	// checking the supersession/unmount signal alone, so a timeout still reaches the catch and
+	// finally blocks as a current request and clears the busy state with an error.
+	function withDeadline(signal: AbortSignal): AbortSignal {
+		return AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]);
+	}
+
+	// A write that hit its own deadline has an unknown outcome (the server may have committed it).
+	// Native semantics: AbortSignal.timeout() aborts with a TimeoutError reason. A definitive problem
+	// response from the server is never treated as unknown.
+	function isUnknownWriteOutcome(err: unknown, deadline: AbortSignal): boolean {
+		if (!deadline.aborted || problemStatus(err) !== 0) return false;
+		const reason: unknown = deadline.reason;
+		return (
+			typeof reason === 'object' &&
+			reason !== null &&
+			'name' in reason &&
+			reason.name === 'TimeoutError'
+		);
+	}
+
+	function reportWriteFailure(err: unknown, deadline: AbortSignal): void {
+		if (isUnknownWriteOutcome(err, deadline)) {
+			// Nothing was confirmed: no success, no pinning, no automatic retry. Only the explicit
+			// read-only refresh checks the stored state. Nothing is reported after unmount.
+			if (unmountController.signal.aborted) return;
+			writeTimeout = m.modules_rules_write_timeout();
+			toast.error(writeTimeout);
+			return;
+		}
+		submitError = err;
+		toast.error(describeError(err));
 	}
 
 	function extractNextCursor(page: RulePage): string | null {
@@ -109,7 +147,7 @@
 		try {
 			const detail = await api.GET('/library-processing/rules/{ruleId}', {
 				params: { path: { ruleId: targetId } },
-				signal
+				signal: withDeadline(signal)
 			});
 			return detail.data ?? null;
 		} catch (err) {
@@ -177,7 +215,7 @@
 		try {
 			const res = await api.GET('/library-processing/rules/page', {
 				params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT } },
-				signal
+				signal: withDeadline(signal)
 			});
 			const page = parsePageState(res.data);
 			const selection = await reconcileSelection(
@@ -221,7 +259,7 @@
 		try {
 			const res = await api.GET('/library-processing/rules/page', {
 				params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT, cursor } },
-				signal
+				signal: withDeadline(signal)
 			});
 			if (!isCurrent(seq, signal)) return;
 			const page = parsePageState(res.data);
@@ -242,6 +280,8 @@
 		documentError = '';
 		status = '';
 		submitError = null;
+
+		writeTimeout = '';
 
 		if (!text.trim()) {
 			documentError = m.modules_rules_document_empty();
@@ -283,18 +323,27 @@
 		if (!input) return;
 
 		importing = true;
+		const deadline = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 		try {
-			const res = await api.POST('/library-processing/rules', { body: input });
+			const res = await api.POST('/library-processing/rules', {
+				body: input,
+				signal: deadline
+			});
 			status = m.modules_rules_import_success();
 			toast.success(status);
 			// The editor now holds a new document, not the one that was opened for editing.
 			editingId = '';
 			lastSavedRule = null;
 			savedRule = null;
+			// Keep the created rule selected and pinned before refreshing so a failed or partial
+			// refresh cannot lose it; a successful refresh deduplicates it when the page contains it.
+			if (res.data) {
+				pinnedRule = res.data;
+				selectedId = res.data.id;
+			}
 			await loadRules(res.data);
 		} catch (err) {
-			submitError = err;
-			toast.error(describeError(err));
+			reportWriteFailure(err, deadline);
 		} finally {
 			importing = false;
 		}
@@ -309,10 +358,12 @@
 		if (!input) return;
 
 		saving = true;
+		const deadline = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 		try {
 			const res = await api.PUT('/library-processing/rules/{ruleId}', {
 				params: { path: { ruleId } },
-				body: input
+				body: input,
+				signal: deadline
 			});
 			if (res.data) {
 				applySavedRule(res.data);
@@ -321,11 +372,18 @@
 			toast.success(status);
 			await loadRules(undefined, res.data);
 		} catch (err) {
-			submitError = err;
-			toast.error(describeError(err));
+			reportWriteFailure(err, deadline);
 		} finally {
 			saving = false;
 		}
+	}
+
+	// Read-only check after an unknown write outcome: one GET bounded by the request deadline. It never
+	// repeats the write and confirms nothing by itself; the stored list is the evidence.
+	async function checkStoredState(): Promise<void> {
+		if (busy || loading) return;
+		await loadRules();
+		if (!loading && !loadError) writeTimeout = '';
 	}
 
 	function exportRule(): void {
@@ -453,6 +511,22 @@
 			</p>
 		{/if}
 	</div>
+
+	{#if writeTimeout}
+		<div class="flex flex-col gap-2" role="alert">
+			<p class="text-sm text-danger">{writeTimeout}</p>
+			<div>
+				<button
+					type="button"
+					class="btn min-h-11 px-3 py-1.5 text-xs md:min-h-0"
+					disabled={busy || loading}
+					onclick={checkStoredState}
+				>
+					{m.modules_rules_check_state()}
+				</button>
+			</div>
+		</div>
+	{/if}
 
 	{#if submitError}
 		<ProblemNote error={submitError} />

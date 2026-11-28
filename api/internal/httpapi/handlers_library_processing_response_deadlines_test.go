@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -253,7 +254,7 @@ func invokeCapturingAbort(h http.HandlerFunc, w http.ResponseWriter, req *http.R
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				if rErr, ok := r.(error); ok && errors.Is(rErr, http.ErrAbortHandler) {
+				if r == any(http.ErrAbortHandler) {
 					aborted = true
 					return
 				}
@@ -263,6 +264,26 @@ func invokeCapturingAbort(h http.HandlerFunc, w http.ResponseWriter, req *http.R
 		h(w, req)
 	}()
 	return aborted
+}
+
+func TestInvokeCapturingAbortRequiresExactSentinel(t *testing.T) {
+	t.Parallel()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	if !invokeCapturingAbort(func(http.ResponseWriter, *http.Request) {
+		panic(http.ErrAbortHandler)
+	}, httptest.NewRecorder(), req) {
+		t.Fatal("exact http.ErrAbortHandler did not report an abort")
+	}
+
+	wrapped := fmt.Errorf("wrapped abort: %w", http.ErrAbortHandler)
+	defer func() {
+		if got := recover(); got != any(wrapped) {
+			t.Fatalf("recovered %v; want the original wrapped panic value %v", got, wrapped)
+		}
+	}()
+	invokeCapturingAbort(func(http.ResponseWriter, *http.Request) {
+		panic(wrapped)
+	}, httptest.NewRecorder(), req)
 }
 
 func assertProblemResponse(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int) {

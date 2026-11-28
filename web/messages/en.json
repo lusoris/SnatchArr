@@ -1077,6 +1077,8 @@
 	"modules_rules_save": "Save changes",
 	"modules_rules_saving": "Saving…",
 	"modules_rules_save_success": "Rule saved.",
+	"modules_rules_write_timeout": "The server did not answer in time, so it is unknown whether the rule was stored. Your document is kept. Check the stored rules before submitting again.",
+	"modules_rules_check_state": "Check stored rules",
 	"modules_rules_editing": "Editing stored rule: {rule}",
 	"modules_rules_load_more": "Load more rules",
 	"modules_rules_loading_more": "Loading more…"

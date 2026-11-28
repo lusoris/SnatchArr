@@ -36,7 +36,8 @@ func TestRunTxStepDeadlines(t *testing.T) {
 				parent, cancelDeadline = context.WithTimeout(parent, time.Minute)
 				defer cancelDeadline()
 			}
-			checkDeadline := func(step string, ctx context.Context) {
+			checkDeadline := func(step string, ctx context.Context, before time.Time) {
+				after := time.Now()
 				t.Helper()
 				deadline, ok := ctx.Deadline()
 				if !ok {
@@ -45,18 +46,23 @@ func TestRunTxStepDeadlines(t *testing.T) {
 				if want, callerHasDeadline := parent.Deadline(); callerHasDeadline && !deadline.Equal(want) {
 					t.Fatalf("%s deadline = %v, want caller deadline %v", step, deadline, want)
 				}
-				if name != "caller deadline" && time.Until(deadline) > txStepTimeout {
-					t.Fatalf("%s deadline exceeds the fallback timeout", step)
+				if name != "caller deadline" {
+					earliest, latest := before.Add(txStepTimeout), after.Add(txStepTimeout)
+					if deadline.Before(earliest) || deadline.After(latest) {
+						t.Fatalf("%s fallback deadline = %v, want between %v and %v", step, deadline, earliest, latest)
+					}
 				}
 			}
 			var beginErr func() error
 			var committed bool
+			var commitBefore time.Time
+			beginBefore := time.Now()
 			err := runTx(parent, func(ctx context.Context) (pgx.Tx, error) {
 				beginErr = ctx.Err
-				checkDeadline("begin", ctx)
+				checkDeadline("begin", ctx, beginBefore)
 				return deadlineProbeTx{commit: func(ctx context.Context) error {
 					committed = true
-					checkDeadline("commit", ctx)
+					checkDeadline("commit", ctx, commitBefore)
 					return ctx.Err()
 				}}, nil
 			}, nil, func(*sqlcgen.Queries) error {
@@ -69,6 +75,7 @@ func TestRunTxStepDeadlines(t *testing.T) {
 				if name == "caller cancellation" {
 					cancelParent()
 				}
+				commitBefore = time.Now()
 				return nil
 			})
 			var wantErr error

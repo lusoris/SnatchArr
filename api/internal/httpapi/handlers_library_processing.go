@@ -57,10 +57,11 @@ func (h *Handlers) ListLibraryProcessingRulesPage(
 	if err = validateRawQuery(ctx); err != nil {
 		return nil, err
 	}
-	var q libraryprocessing.PageQuery
-	if limit, ok := params.Limit.Get(); ok {
-		q.Limit = limit
+	limit, hasLimit := params.Limit.Get()
+	if hasLimit && limit == 0 {
+		return nil, fmt.Errorf("%w: limit must be at least 1", domain.ErrBadRequest)
 	}
+	q := libraryprocessing.PageQuery{Limit: limit}
 	if cursor, ok := params.Cursor.Get(); ok {
 		q.Cursor = &cursor
 	}

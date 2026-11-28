@@ -1077,6 +1077,8 @@
 	"modules_rules_save": "Änderungen speichern",
 	"modules_rules_saving": "Speichere …",
 	"modules_rules_save_success": "Regel gespeichert.",
+	"modules_rules_write_timeout": "Der Server hat nicht rechtzeitig geantwortet, daher ist unklar, ob die Regel gespeichert wurde. Dein Dokument bleibt erhalten. Prüfe die gespeicherten Regeln, bevor du erneut sendest.",
+	"modules_rules_check_state": "Gespeicherte Regeln prüfen",
 	"modules_rules_editing": "Gespeicherte Regel wird bearbeitet: {rule}",
 	"modules_rules_load_more": "Weitere Regeln laden",
 	"modules_rules_loading_more": "Lade weitere …"

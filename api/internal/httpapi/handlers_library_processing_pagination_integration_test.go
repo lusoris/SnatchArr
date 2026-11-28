@@ -97,12 +97,30 @@ func seedPrecedenceAndTieRules(t *testing.T, f *routerFixture, base, csrf string
 
 	// Seed in intentionally scrambled scope order; pairs without clock advance share exact created_at
 	// so tie-breaking on id ASC is exercised alongside scope_rank ASC and created_at ASC.
+	lpSeedGlobalPrecedenceRule(t, f, base, csrf)
+
+	lpSeedMediaTypePrecedenceRules(t, f, base, csrf)
+
+	lpSeedInstancePrecedenceRules(t, f, base, csrf, instA, instB)
+
+	lpSeedLibraryPrecedenceRules(t, f, base, csrf, instA)
+
+	lpSeedLanguagePrecedenceRules(t, f, base, csrf)
+
+	lpSeedItemOverridePrecedenceRules(t, f, base, csrf, instA)
+}
+
+func lpSeedGlobalPrecedenceRule(t *testing.T, f *routerFixture, base, csrf string) {
+	t.Helper()
 	lpCreateRule(t, f.client, base, csrf, map[string]any{
 		"scope": "global_default",
 		"rule":  lpRuleBody("en"),
 	})
 	f.clk.Advance(time.Second)
+}
 
+func lpSeedMediaTypePrecedenceRules(t *testing.T, f *routerFixture, base, csrf string) {
+	t.Helper()
 	lpCreateRule(t, f.client, base, csrf, map[string]any{
 		"scope":      "media_type",
 		"media_type": "movie",
@@ -119,7 +137,10 @@ func seedPrecedenceAndTieRules(t *testing.T, f *routerFixture, base, csrf string
 		"media_type": "episode",
 		"rule":       lpRuleBody("de"),
 	})
+}
 
+func lpSeedInstancePrecedenceRules(t *testing.T, f *routerFixture, base, csrf string, instA, instB any) {
+	t.Helper()
 	lpCreateRule(t, f.client, base, csrf, map[string]any{
 		"scope":       "instance",
 		"instance_id": instA,
@@ -130,7 +151,10 @@ func seedPrecedenceAndTieRules(t *testing.T, f *routerFixture, base, csrf string
 		"instance_id": instB,
 		"rule":        lpRuleBody("es"),
 	})
+}
 
+func lpSeedLibraryPrecedenceRules(t *testing.T, f *routerFixture, base, csrf string, instA any) {
+	t.Helper()
 	lpCreateRule(t, f.client, base, csrf, map[string]any{
 		"scope":       "library",
 		"instance_id": instA,
@@ -143,7 +167,10 @@ func seedPrecedenceAndTieRules(t *testing.T, f *routerFixture, base, csrf string
 		"root_path":   "/media/anime",
 		"rule":        lpRuleBody("ja"),
 	})
+}
 
+func lpSeedLanguagePrecedenceRules(t *testing.T, f *routerFixture, base, csrf string) {
+	t.Helper()
 	lpCreateRule(t, f.client, base, csrf, map[string]any{
 		"scope":         "user_language",
 		"user_language": "de",
@@ -154,7 +181,10 @@ func seedPrecedenceAndTieRules(t *testing.T, f *routerFixture, base, csrf string
 		"user_language": "fr",
 		"rule":          lpRuleBody("fr"),
 	})
+}
 
+func lpSeedItemOverridePrecedenceRules(t *testing.T, f *routerFixture, base, csrf string, instA any) {
+	t.Helper()
 	// Three item_override rules at the exact same timestamp -> pure UUID tie-break at rank 1.
 	for _, itemID := range []string{"ep-3", "ep-1", "ep-2"} {
 		lpCreateRule(t, f.client, base, csrf, map[string]any{
@@ -218,14 +248,7 @@ func TestLibraryProcessingRulesPagingPrecedenceTiesAndOmittedParams(t *testing.T
 	base := f.srv.URL + PathPrefix
 	lpSetModule(t, f.client, base, csrf, true)
 
-	// Empty state: both unpaged array and paged endpoint return empty items and final-page status.
-	if emptyList := lpListRules(t, f.client, base); emptyList == nil || len(emptyList) != 0 {
-		t.Fatalf("empty unpaged list = %#v, want non-nil []", emptyList)
-	}
-	emptyPage := lpGetRulePage(t, f.client, base, "")
-	if emptyPage.Items == nil || len(emptyPage.Items) != 0 || emptyPage.HasMore || emptyPage.NextCursor != nil {
-		t.Fatalf("empty page = %+v, want non-nil 0 items, has_more=false, next_cursor=nil", emptyPage)
-	}
+	lpCheckEmptyRulePages(t, f, base)
 
 	seedPrecedenceAndTieRules(t, f, base, csrf)
 
@@ -236,6 +259,29 @@ func TestLibraryProcessingRulesPagingPrecedenceTiesAndOmittedParams(t *testing.T
 	}
 	assertStrictPrecedenceOrder(t, fullList)
 
+	lpCheckOmittedRulePageParams(t, f, base, fullList)
+
+	lpCheckRulePageWalks(t, f, base, fullList)
+
+	lpCheckRulePageBoundaries(t, f, base, fullList)
+
+	lpCheckRuleCursorWithOmittedLimit(t, f, base, fullList)
+}
+
+func lpCheckEmptyRulePages(t *testing.T, f *routerFixture, base string) {
+	t.Helper()
+	// Empty state: both unpaged array and paged endpoint return empty items and final-page status.
+	if emptyList := lpListRules(t, f.client, base); emptyList == nil || len(emptyList) != 0 {
+		t.Fatalf("empty unpaged list = %#v, want non-nil []", emptyList)
+	}
+	emptyPage := lpGetRulePage(t, f.client, base, "")
+	if emptyPage.Items == nil || len(emptyPage.Items) != 0 || emptyPage.HasMore || emptyPage.NextCursor != nil {
+		t.Fatalf("empty page = %+v, want non-nil 0 items, has_more=false, next_cursor=nil", emptyPage)
+	}
+}
+
+func lpCheckOmittedRulePageParams(t *testing.T, f *routerFixture, base string, fullList []map[string]any) {
+	t.Helper()
 	// Omitted limit and cursor on /page returns the complete first page (13 <= default 50) with has_more=false.
 	omittedPage := lpGetRulePage(t, f.client, base, "")
 	if omittedPage.HasMore || omittedPage.NextCursor != nil {
@@ -244,7 +290,10 @@ func TestLibraryProcessingRulesPagingPrecedenceTiesAndOmittedParams(t *testing.T
 	if !reflect.DeepEqual(omittedPage.Items, fullList) {
 		t.Fatalf("omitted params page items != unpaged full list")
 	}
+}
 
+func lpCheckRulePageWalks(t *testing.T, f *routerFixture, base string, fullList []map[string]any) {
+	t.Helper()
 	// Multi-page walks over 13 seeded rows (13 is prime, so the only exact-fit limits are 1 and 13):
 	// limit=1 (schema minimum; 13 pages, every tie boundary), limit=4 (partial last page: 4+4+4+1),
 	// limit=5 (5+5+3), limit=12 (partial: 12+1), limit=13 (exact fit: 1 page, no empty trailing page),
@@ -268,7 +317,10 @@ func TestLibraryProcessingRulesPagingPrecedenceTiesAndOmittedParams(t *testing.T
 			t.Errorf("limit=%d walked IDs = %v, want %v", tc.limit, lpRuleIDs(walked), lpRuleIDs(fullList))
 		}
 	}
+}
 
+func lpCheckRulePageBoundaries(t *testing.T, f *routerFixture, base string, fullList []map[string]any) {
+	t.Helper()
 	// Exact boundary: limit == total (13) returns every row with has_more=false and no cursor.
 	exactPage := lpGetRulePage(t, f.client, base, "limit=13")
 	if len(exactPage.Items) != 13 || exactPage.HasMore || exactPage.NextCursor != nil {
@@ -293,7 +345,10 @@ func TestLibraryProcessingRulesPagingPrecedenceTiesAndOmittedParams(t *testing.T
 	if !reflect.DeepEqual(tail.Items, fullList[12:]) {
 		t.Fatalf("limit=12 tail items != last row of unpaged full list")
 	}
+}
 
+func lpCheckRuleCursorWithOmittedLimit(t *testing.T, f *routerFixture, base string, fullList []map[string]any) {
+	t.Helper()
 	// Cursor with omitted limit uses the default limit (50) for the remainder: 13 - 2 = 11 rows.
 	firstTwo := lpGetRulePage(t, f.client, base, "limit=2")
 	if !firstTwo.HasMore || firstTwo.NextCursor == nil {
@@ -324,6 +379,19 @@ func TestLibraryProcessingRulesPagingBoundsAndMalformedCursors(t *testing.T) {
 
 	lpSetModule(t, f.client, base, csrf, true)
 
+	lpCheckMalformedRulePageQueries(t, f, base)
+
+	lpCheckDirectEmptyRulePage(t, f)
+
+	lpCheckEncodedRulePageLimit(t, f, base, csrf)
+
+	lpCheckRulePageSchemaViolations(t, f, base)
+
+	lpCheckInvalidRulePageCursors(t, f, base)
+}
+
+func lpCheckMalformedRulePageQueries(t *testing.T, f *routerFixture, base string) {
+	t.Helper()
 	// Malformed raw query strings must be rejected with 400 before defaults or cursor decoding apply.
 	malformedRawQueries := []string{
 		"limit=%zz",
@@ -336,7 +404,10 @@ func TestLibraryProcessingRulesPagingBoundsAndMalformedCursors(t *testing.T) {
 		res := doHTTP(t, f.client, http.MethodGet, base+"/library-processing/rules/page?"+rq, "", nil)
 		lpAssertProblem(t, res, http.StatusBadRequest)
 	}
+}
 
+func lpCheckDirectEmptyRulePage(t *testing.T, f *routerFixture) {
+	t.Helper()
 	// Direct Go callers can omit params without an HTTP request in the context.
 	directPage, err := f.h.ListLibraryProcessingRulesPage(t.Context(), oas.ListLibraryProcessingRulesPageParams{})
 	if err != nil {
@@ -345,7 +416,10 @@ func TestLibraryProcessingRulesPagingBoundsAndMalformedCursors(t *testing.T) {
 	if _, hasCursor := directPage.NextCursor.Get(); directPage.Items == nil || len(directPage.Items) != 0 || directPage.HasMore || hasCursor {
 		t.Fatalf("direct page = %+v, want non-nil empty final page without cursor", directPage)
 	}
+}
 
+func lpCheckEncodedRulePageLimit(t *testing.T, f *routerFixture, base, csrf string) {
+	t.Helper()
 	// Two rows distinguish the encoded limit of 1 from the default limit.
 	lpCreateRule(t, f.client, base, csrf, map[string]any{
 		"scope": "global_default",
@@ -360,7 +434,10 @@ func TestLibraryProcessingRulesPagingBoundsAndMalformedCursors(t *testing.T) {
 	if len(encodedPage.Items) != 1 || !encodedPage.HasMore || encodedPage.NextCursor == nil || *encodedPage.NextCursor == "" {
 		t.Fatalf("percent-encoded limit page = %+v, want one item, has_more=true, and a cursor", encodedPage)
 	}
+}
 
+func lpCheckRulePageSchemaViolations(t *testing.T, f *routerFixture, base string) {
+	t.Helper()
 	// Generated OpenAPI parse/schema violations -> exactly 400 Problem Details (rejected before the service runs).
 	// Schema: limit integer minimum 1 maximum 200; cursor string minLength 1 maxLength 512.
 	schemaInvalidQueries := []string{
@@ -375,7 +452,10 @@ func TestLibraryProcessingRulesPagingBoundsAndMalformedCursors(t *testing.T) {
 		res := doHTTP(t, f.client, http.MethodGet, base+"/library-processing/rules/page?"+rq, "", nil)
 		lpAssertProblem(t, res, http.StatusBadRequest)
 	}
+}
 
+func lpCheckInvalidRulePageCursors(t *testing.T, f *routerFixture, base string) {
+	t.Helper()
 	// Schema-valid but semantically invalid cursors -> exactly 422 Problem Details (service-level validation).
 	b64 := func(s string) string {
 		return base64.RawURLEncoding.EncodeToString([]byte(s))
@@ -421,6 +501,14 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 		t.Fatalf("baseline len = %d, want 5", len(baseline))
 	}
 
+	lpCheckRuleStreamSnapshot(t, f, base, csrf, instID, baseline)
+	lpCheckMultiBatchRuleStream(t, f)
+	lpCheckRuleStreamPreCommitFailure(t, f)
+	lpCheckRuleStreamMidStreamFailure(t, f)
+}
+
+func lpCheckRuleStreamSnapshot(t *testing.T, f *routerFixture, base, csrf string, instID any, baseline []map[string]any) {
+	t.Helper()
 	// 1. Snapshot consistency: mutate rows on another connection after batch 1 inside StreamAll(batchSize=2).
 	var streamedIDs []string
 	batchesSeen := 0
@@ -453,7 +541,10 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 	if !reflect.DeepEqual(streamedIDs, lpRuleIDs(baseline)) {
 		t.Fatalf("snapshot stream IDs = %v, want pre-mutation snapshot %v", streamedIDs, lpRuleIDs(baseline))
 	}
+}
 
+func lpCheckMultiBatchRuleStream(t *testing.T, f *routerFixture) {
+	t.Helper()
 	// 2. Multi-batch HTTP streaming handler with batchSize=2 produces the exact 7-item JSON array:
 	// the 3 intermediate flushes inside SnapshotReadTx arm and clear the snapshot deadline before
 	// commit, and the final batch after commit runs under the live request context.
@@ -477,7 +568,10 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 	assertStrictPrecedenceOrder(t, multiBatchList)
 	// 7 items with batchSize=2 -> 4 chunks (3 inside the snapshot, 1 after commit); the native cutoff is never touched.
 	dw.assertNativeRulesCutoff(t, streamCutoff, 4)
+}
 
+func lpCheckRuleStreamPreCommitFailure(t *testing.T, f *routerFixture) {
+	t.Helper()
 	// 3. Pre-commit failure (canceled context before batch 1): returns Problem JSON, never 200 or '['.
 	preCtx, preCancel := context.WithCancel(t.Context())
 	preCancel()
@@ -495,7 +589,10 @@ func TestLibraryProcessingLegacySnapshotConsistencyAndStreamFailures(t *testing.
 		t.Fatalf("pre-commit error Content-Type = %q, want application/problem+json", ct)
 	}
 	preRec.assertNativeCutoffPreserved(t, preCutoff)
+}
 
+func lpCheckRuleStreamMidStreamFailure(t *testing.T, f *routerFixture) {
+	t.Helper()
 	// 4. Mid-stream failure after batch 1 committed headers: aborts with http.ErrAbortHandler,
 	// clears the write deadline on supported writers, and leaves JSON array unterminated.
 	midCtx, midCancel := context.WithCancel(t.Context())

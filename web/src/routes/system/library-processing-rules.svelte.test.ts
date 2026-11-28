@@ -111,6 +111,19 @@ function deferred<T>() {
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+// A request that never settles on its own and only ends when its signal aborts.
+function hangUntilAborted(_path: string, init?: { signal?: AbortSignal }): Promise<never> {
+	return new Promise((_resolve, reject) => {
+		const signal = init?.signal;
+		if (!signal) return;
+		if (signal.aborted) {
+			reject(signal.reason);
+			return;
+		}
+		signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+	});
+}
+
 function saveButton(): HTMLElement {
 	return screen.getByRole('button', { name: m.modules_rules_save() });
 }
@@ -120,6 +133,31 @@ async function openRuleAsJson(id: string): Promise<void> {
 	await fireEvent.change(select, { target: { value: id } });
 	await chooseFormat('JSON');
 	await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+}
+
+const REQUEST_TIMEOUT_MS = 15_000;
+
+// Each AbortSignal.timeout() call gets its own controller, so a retry never inherits a spent deadline.
+function mockDeadlines() {
+	const deadlines: AbortController[] = [];
+	const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => {
+		const controller = new AbortController();
+		deadlines.push(controller);
+		return controller.signal;
+	});
+	return { deadlines, timeoutSpy };
+}
+
+function expireDeadline(controller: AbortController): void {
+	controller.abort(new DOMException('The operation timed out.', 'TimeoutError'));
+}
+
+// A GET that behaves like fetch: an already-aborted signal rejects instead of answering.
+function pageHonoringSignal(items: StoredRule[]) {
+	return (_path: string, init?: { signal?: AbortSignal }): Promise<unknown> => {
+		if (init?.signal?.aborted) return Promise.reject(init.signal.reason);
+		return Promise.resolve(pageResult(items));
+	};
 }
 
 function importButton(): HTMLElement {
@@ -349,7 +387,10 @@ describe('library processing rules import/export and bounded pagination', () => 
 			expect(select.value).toBe(storedRule.id);
 
 			expect(postSpy).toHaveBeenCalledTimes(1);
-			expect(postSpy).toHaveBeenCalledWith(RULES_PATH, { body: ruleInput });
+			expect(postSpy).toHaveBeenCalledWith(RULES_PATH, {
+				body: ruleInput,
+				signal: expect.anything()
+			});
 
 			expect(getSpy).toHaveBeenCalledTimes(2);
 			expect(getSpy.mock.calls[1]?.[0]).toBe(RULES_PAGE_PATH);
@@ -382,7 +423,10 @@ describe('library processing rules import/export and bounded pagination', () => 
 
 		await waitFor(() => expect(toastErrorSpy).toHaveBeenCalled());
 		expect(postSpy).toHaveBeenCalledTimes(1);
-		expect(postSpy).toHaveBeenCalledWith(RULES_PATH, { body: ruleInput });
+		expect(postSpy).toHaveBeenCalledWith(RULES_PATH, {
+			body: ruleInput,
+			signal: expect.anything()
+		});
 		expect(toastSuccessSpy).not.toHaveBeenCalled();
 		expect(getSpy).toHaveBeenCalledTimes(1);
 		expect(documentField().value).toBe(jsonDocument);
@@ -405,7 +449,10 @@ describe('library processing rules import/export and bounded pagination', () => 
 		await fireEvent.click(importButton());
 
 		await waitFor(() => expect(postSpy).toHaveBeenCalledTimes(1));
-		expect(postSpy).toHaveBeenCalledWith(RULES_PATH, { body: ruleInput });
+		expect(postSpy).toHaveBeenCalledWith(RULES_PATH, {
+			body: ruleInput,
+			signal: expect.anything()
+		});
 		await waitFor(() => expect(getSpy).toHaveBeenCalledTimes(2));
 		expect(putSpy).not.toHaveBeenCalled();
 	});
@@ -447,6 +494,7 @@ describe('library processing rules import/export and bounded pagination', () => 
 
 		expect(putSpy).toHaveBeenCalledTimes(1);
 		expect(putSpy).toHaveBeenCalledWith(RULE_PATH, {
+			signal: expect.anything(),
 			params: { path: { ruleId: storedRule.id } },
 			body: editedInput
 		});
@@ -501,6 +549,7 @@ describe('library processing rules import/export and bounded pagination', () => 
 		await fireEvent.click(saveButton());
 		await waitFor(() => expect(putSpy).toHaveBeenCalledTimes(2));
 		expect(putSpy).toHaveBeenLastCalledWith(RULE_PATH, {
+			signal: expect.anything(),
 			params: { path: { ruleId: storedRule.id } },
 			body: editedInput
 		});
@@ -643,7 +692,10 @@ describe('library processing rules import/export and bounded pagination', () => 
 
 		await fireEvent.click(importButton());
 		await waitFor(() => expect(postSpy).toHaveBeenCalledTimes(1));
-		expect(postSpy).toHaveBeenCalledWith(RULES_PATH, { body: ruleInput });
+		expect(postSpy).toHaveBeenCalledWith(RULES_PATH, {
+			body: ruleInput,
+			signal: expect.anything()
+		});
 	});
 
 	it('pages through multiple bounded pages, preserves selection, reaches later rules for export, and hides load-more on the final page', async () => {
@@ -809,52 +861,280 @@ describe('library processing rules import/export and bounded pagination', () => 
 		expect(getSpy).toHaveBeenCalledTimes(2);
 	});
 
-	it('clears an off-page selection when single-rule reconciliation reports 404 after refresh', async () => {
-		const frenchRule = userLanguageFixture(
+	it('reconciles a stale selection when Retry returns a partial page and the detail lookup reports 404', async () => {
+		const createdRule = userLanguageFixture(
 			'018f0000-0000-7000-8000-000000000004',
 			'fr',
 			'2026-10-25T00:00:30Z'
 		);
+		const createdLabel = `${createdRule.scope} · ${createdRule.id}`;
+		const createdInput = {
+			scope: 'user_language',
+			user_language: 'fr',
+			rule: { track: { languages: ['fr'] } }
+		};
 		const getSpy = vi
 			.spyOn(api, 'GET')
 			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
-			.mockResolvedValueOnce(pageResult([storedRule]) as never)
-			.mockResolvedValueOnce(pageResult([highPrecedenceRule, frenchRule], 'cursor-2') as never)
+			.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'import refresh down'))
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
 			.mockRejectedValueOnce(problemError(404, 'Not Found', 'rule deleted'));
-		vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
+		// A real 201 always carries the created rule.
+		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: createdRule } as never);
+		const toastSuccessSpy = vi.spyOn(toast, 'success');
+		const toastErrorSpy = vi.spyOn(toast, 'error');
 
 		render(LibraryProcessingRules);
-		const select = (await screen.findByLabelText(
-			m.modules_rules_select_label()
-		)) as HTMLSelectElement;
-
-		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
-		await waitFor(() => expect(screen.getByRole('option', { name: optionLabel })).toBeTruthy());
-		await fireEvent.change(select, { target: { value: storedRule.id } });
-		expect(select.value).toBe(storedRule.id);
+		await screen.findByLabelText(m.modules_rules_select_label());
 
 		await chooseFormat('JSON');
-		await typeDocument(
-			JSON.stringify({
-				scope: 'user_language',
-				user_language: 'fr',
-				rule: { track: { languages: ['fr'] } }
-			})
-		);
+		await typeDocument(JSON.stringify(createdInput));
 		await fireEvent.click(importButton());
 
+		// The page refresh failed: Retry is offered and the created rule stays selected.
+		expect(await screen.findByText(/import refresh down/)).toBeTruthy();
+		expect(postSpy).toHaveBeenCalledWith(RULES_PATH, {
+			body: createdInput,
+			signal: expect.anything()
+		});
+		expect(screen.getByRole('button', { name: m.modules_rules_retry() })).toBeTruthy();
+		expect(ruleSelect().value).toBe(createdRule.id);
+		expect(screen.getByRole('option', { name: createdLabel })).toBeTruthy();
+		expect(screen.getByRole('status').textContent).toBe(m.modules_rules_import_success());
+
+		// Retry returns a partial page without the selected rule; the detail lookup answers 404.
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
 		await waitFor(() =>
 			expect(getSpy).toHaveBeenCalledWith(
 				RULE_DETAIL_PATH,
-				expect.objectContaining({ params: { path: { ruleId: storedRule.id } } })
+				expect.objectContaining({ params: { path: { ruleId: createdRule.id } } })
 			)
 		);
-		const refreshed = (await screen.findByLabelText(
-			m.modules_rules_select_label()
-		)) as HTMLSelectElement;
-		expect(select.isConnected).toBe(false);
-		expect(refreshed.value).toBe('');
+		await waitFor(() => expect(ruleSelect().value).toBe(''));
+		expect(selectOptionValues()).toEqual(['', highPrecedenceRule.id]);
+		expect(screen.queryByRole('option', { name: createdLabel })).toBeNull();
+		expect(screen.queryByRole('button', { name: m.modules_rules_retry() })).toBeNull();
+		expect(screen.queryByRole('alert')).toBeNull();
+		expect(
+			(screen.getByRole('button', { name: m.modules_rules_export() }) as HTMLButtonElement).disabled
+		).toBe(true);
+		expect(toastSuccessSpy).toHaveBeenCalledWith(m.modules_rules_import_success());
+		expect(toastErrorSpy).not.toHaveBeenCalled();
+		expect(getSpy).toHaveBeenCalledTimes(4);
+	});
+
+	it('keeps an imported off-page rule selected and exportable when the refresh fails, and retains it after Retry', async () => {
+		const createdRule = userLanguageFixture(
+			'018f0000-0000-7000-8000-000000000005',
+			'fr',
+			'2026-10-25T00:00:40Z'
+		);
+		const createdInput = {
+			scope: 'user_language',
+			user_language: 'fr',
+			rule: { track: { languages: ['fr'] } }
+		};
+		const createdLabel = `${createdRule.scope} · ${createdRule.id}`;
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+			.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'import refresh down'))
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule], 'cursor-2') as never)
+			.mockResolvedValueOnce({ data: createdRule } as never);
+		vi.spyOn(api, 'POST').mockResolvedValue({ data: createdRule } as never);
+
+		render(LibraryProcessingRules);
+		await screen.findByLabelText(m.modules_rules_select_label());
+
+		await chooseFormat('JSON');
+		await typeDocument(JSON.stringify(createdInput));
+		await fireEvent.click(importButton());
+		expect(await screen.findByText(/import refresh down/)).toBeTruthy();
+
+		expect(ruleSelect().value).toBe(createdRule.id);
+		expect(screen.getByRole('option', { name: createdLabel })).toBeTruthy();
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+		expect(readRuleDocument(documentField().value, 'json')).toEqual(createdInput);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
+		await waitFor(() =>
+			expect(getSpy).toHaveBeenCalledWith(
+				RULE_DETAIL_PATH,
+				expect.objectContaining({ params: { path: { ruleId: createdRule.id } } })
+			)
+		);
+		await waitFor(() => expect(screen.queryByText(/import refresh down/)).toBeNull());
+		await waitFor(() => expect(ruleSelect().value).toBe(createdRule.id));
+		expect(screen.getByRole('option', { name: createdLabel })).toBeTruthy();
+		expect(screen.queryByRole('button', { name: m.modules_rules_retry() })).toBeNull();
+		expect(getSpy).toHaveBeenCalledTimes(4);
+	});
+
+	it('ends a hung list load at the 15s request deadline and Retry gets a fresh, unaborted signal', async () => {
+		const { deadlines, timeoutSpy } = mockDeadlines();
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockImplementationOnce(hangUntilAborted as never)
+			.mockImplementationOnce(pageHonoringSignal([storedRule]) as never);
+
+		render(LibraryProcessingRules);
+		expect(await screen.findByText(m.loading())).toBeTruthy();
+		expect(timeoutSpy).toHaveBeenNthCalledWith(1, REQUEST_TIMEOUT_MS);
+
+		expireDeadline(deadlines[0]!);
+
+		// The timeout is handled as a current request: loading clears and Retry appears.
+		const retry = await screen.findByRole('button', { name: m.modules_rules_retry() });
+		expect(screen.queryByText(m.loading())).toBeNull();
+
+		await fireEvent.click(retry);
+		await screen.findByRole('option', { name: optionLabel });
+		expect(screen.queryByRole('button', { name: m.modules_rules_retry() })).toBeNull();
+		expect(getSpy).toHaveBeenCalledTimes(2);
+		expect(timeoutSpy).toHaveBeenNthCalledWith(2, REQUEST_TIMEOUT_MS);
+		expect(deadlines[1]!.signal.aborted).toBe(false);
+		const retrySignal = (getSpy.mock.calls[1]?.[1] as unknown as { signal: AbortSignal }).signal;
+		expect(retrySignal.aborted).toBe(false);
+	});
+
+	it('treats an import timeout as an unknown outcome: keeps the draft, never re-POSTs, and checks state with a read-only refresh', async () => {
+		const { deadlines, timeoutSpy } = mockDeadlines();
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([]) as never)
+			// The server did commit the import although its response never arrived.
+			.mockImplementationOnce(pageHonoringSignal([storedRule]) as never);
+		const postSpy = vi.spyOn(api, 'POST').mockImplementation(hangUntilAborted as never);
+		const putSpy = vi.spyOn(api, 'PUT');
+		const toastErrorSpy = vi.spyOn(toast, 'error');
+		const toastSuccessSpy = vi.spyOn(toast, 'success');
+
+		render(LibraryProcessingRules);
+		await screen.findByText(m.modules_rules_empty());
+
+		await chooseFormat('JSON');
+		await typeDocument(jsonDocument);
+		await fireEvent.click(importButton());
+
+		// One deadline for the initial load, one for the write.
+		expect(timeoutSpy).toHaveBeenCalledTimes(2);
+		expect(timeoutSpy).toHaveBeenLastCalledWith(REQUEST_TIMEOUT_MS);
+		const writeDeadline = deadlines[1]!;
+		expect(postSpy).toHaveBeenCalledWith(RULES_PATH, {
+			body: ruleInput,
+			signal: writeDeadline.signal
+		});
+		const busyButton = screen.getByRole('button', { name: m.modules_rules_importing() });
+		expect(busyButton.getAttribute('aria-busy')).toBe('true');
+
+		expireDeadline(writeDeadline);
+
+		const alert = await screen.findByRole('alert');
+		expect(alert.textContent).toContain(m.modules_rules_write_timeout());
+		expect(toastErrorSpy).toHaveBeenCalledWith(m.modules_rules_write_timeout());
+		await waitFor(() => expect((importButton() as HTMLButtonElement).disabled).toBe(false));
+		expect(importButton().getAttribute('aria-busy')).toBe('false');
+		expect(toastSuccessSpy).not.toHaveBeenCalled();
+		expect(screen.getByRole('status').textContent).toBe('');
+		expect(documentField().value).toBe(jsonDocument);
+
+		// Nothing repeats the mutation or refreshes on its own.
+		await flush();
+		expect(postSpy).toHaveBeenCalledTimes(1);
+		expect(getSpy).toHaveBeenCalledTimes(1);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_check_state() }));
+		await screen.findByRole('option', { name: optionLabel });
+		expect(getSpy).toHaveBeenCalledTimes(2);
+		expect(getSpy.mock.calls[1]?.[0]).toBe(RULES_PAGE_PATH);
+		expect(timeoutSpy).toHaveBeenCalledTimes(3);
+		expect(timeoutSpy).toHaveBeenLastCalledWith(REQUEST_TIMEOUT_MS);
+		expect(deadlines[2]!.signal.aborted).toBe(false);
+		expect(postSpy).toHaveBeenCalledTimes(1);
+		expect(putSpy).not.toHaveBeenCalled();
+
+		// Reading the state confirms nothing: no success feedback and nothing pinned or selected.
+		expect(ruleSelect().value).toBe('');
+		expect(toastSuccessSpy).not.toHaveBeenCalled();
+		expect(screen.getByRole('status').textContent).toBe('');
+		await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+		expect(documentField().value).toBe(jsonDocument);
+	});
+
+	it('treats a save timeout as an unknown outcome: keeps the draft and target, never re-PUTs, and checks state with a read-only refresh', async () => {
+		const updatedInput = {
+			scope: 'media_type',
+			media_type: 'movie',
+			rule: { track: { languages: ['fr'] } }
+		};
+		const updatedDocument = JSON.stringify(updatedInput, null, 2);
+		const updatedRule = {
+			...updatedInput,
+			id: storedRule.id,
+			created_at: storedRule.created_at,
+			updated_at: '2026-10-25T00:12:00Z'
+		} as unknown as StoredRule;
+		const updatedLabel = `${updatedRule.scope} · ${updatedRule.id}`;
+
+		const { deadlines, timeoutSpy } = mockDeadlines();
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([storedRule]) as never)
+			// The server did commit the update although its response never arrived.
+			.mockImplementationOnce(pageHonoringSignal([updatedRule]) as never);
+		const putSpy = vi.spyOn(api, 'PUT').mockImplementation(hangUntilAborted as never);
+		const postSpy = vi.spyOn(api, 'POST');
+		const toastErrorSpy = vi.spyOn(toast, 'error');
+		const toastSuccessSpy = vi.spyOn(toast, 'success');
+
+		render(LibraryProcessingRules);
+		await openRuleAsJson(storedRule.id);
+		await typeDocument(updatedDocument);
+		const save = saveButton();
+		await fireEvent.click(save);
+
+		expect(timeoutSpy).toHaveBeenCalledTimes(2);
+		expect(timeoutSpy).toHaveBeenLastCalledWith(REQUEST_TIMEOUT_MS);
+		const writeDeadline = deadlines[1]!;
+		expect(putSpy).toHaveBeenCalledWith(RULE_PATH, {
+			signal: writeDeadline.signal,
+			params: { path: { ruleId: storedRule.id } },
+			body: updatedInput
+		});
+		expect(save.getAttribute('aria-busy')).toBe('true');
+
+		expireDeadline(writeDeadline);
+
+		const alert = await screen.findByRole('alert');
+		expect(alert.textContent).toContain(m.modules_rules_write_timeout());
+		expect(toastErrorSpy).toHaveBeenCalledWith(m.modules_rules_write_timeout());
+		await waitFor(() => expect((saveButton() as HTMLButtonElement).disabled).toBe(false));
+		expect(toastSuccessSpy).not.toHaveBeenCalled();
+		expect(screen.getByRole('status').textContent).toBe('');
+		expect(documentField().value).toBe(updatedDocument);
+		expect(screen.getByText(m.modules_rules_editing({ rule: optionLabel }))).toBeTruthy();
+
+		// Nothing repeats the mutation or refreshes on its own.
+		await flush();
+		expect(putSpy).toHaveBeenCalledTimes(1);
+		expect(getSpy).toHaveBeenCalledTimes(1);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_check_state() }));
+		await screen.findByRole('option', { name: updatedLabel });
 		expect(screen.queryByRole('option', { name: optionLabel })).toBeNull();
+		expect(getSpy).toHaveBeenCalledTimes(2);
+		expect(getSpy.mock.calls[1]?.[0]).toBe(RULES_PAGE_PATH);
+		expect(timeoutSpy).toHaveBeenCalledTimes(3);
+		expect(timeoutSpy).toHaveBeenLastCalledWith(REQUEST_TIMEOUT_MS);
+		expect(deadlines[2]!.signal.aborted).toBe(false);
+		expect(putSpy).toHaveBeenCalledTimes(1);
+		expect(postSpy).not.toHaveBeenCalled();
+
+		// Reading the state confirms nothing: no success feedback, and the draft stays editable.
+		expect(toastSuccessSpy).not.toHaveBeenCalled();
+		expect(screen.getByRole('status').textContent).toBe('');
+		await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+		expect(documentField().value).toBe(updatedDocument);
 	});
 
 	it('retains the authoritative PUT result and user feedback when the subsequent page refresh fails', async () => {

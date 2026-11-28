@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ogen-go/ogen/uri"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -58,7 +59,18 @@ func Mount(r chi.Router, p MountParams) error {
 }
 
 func isRulesGET(r *http.Request) bool {
-	return r.Method == http.MethodGet && r.URL.Path == PathPrefix+"/library-processing/rules"
+	if r.Method != http.MethodGet {
+		return false
+	}
+
+	// Match the generated router's path selection, including its fallback.
+	path := r.URL.Path
+	if rawPath := r.URL.RawPath; rawPath != "" {
+		if normalized, ok := uri.NormalizeEscapedPath(rawPath); ok {
+			path = normalized
+		}
+	}
+	return path == PathPrefix+"/library-processing/rules"
 }
 
 func dispatchStreamingRoutes(srv, rulesGET http.Handler) http.Handler {
