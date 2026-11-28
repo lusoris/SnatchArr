@@ -610,4 +610,131 @@ describe('library processing rules deadlines and saved state', () => {
 		expect(screen.getByText(/refresh failed 502/)).toBeTruthy();
 		expect(screen.getByRole('button', { name: m.modules_rules_retry() })).toBeTruthy();
 	});
+	it.each([
+		['POST', 'success'],
+		['POST', 'failure'],
+		['PUT', 'success'],
+		['PUT', 'failure']
+	] as const)(
+		'suppresses toasts and refresh when a late %s settles with %s after unmount',
+		async (method, outcome) => {
+			const { deadlines } = mockDeadlines();
+			const write = deferred<unknown>();
+			const getSpy = vi
+				.spyOn(api, 'GET')
+				.mockResolvedValue(pageResult(method === 'POST' ? [] : [storedRule]) as never);
+			const successToast = vi.spyOn(toast, 'success');
+			const errorToast = vi.spyOn(toast, 'error');
+			const { unmount } = render(LibraryProcessingRules);
+
+			if (method === 'POST') {
+				const postSpy = vi.spyOn(api, 'POST').mockReturnValueOnce(write.promise as never);
+				await screen.findByText(m.modules_rules_empty());
+				await chooseFormat('JSON');
+				await typeDocument(jsonDocument);
+				await fireEvent.click(importButton());
+				expect(postSpy).toHaveBeenCalledExactlyOnceWith(RULES_PATH, {
+					body: ruleInput,
+					signal: deadlines[1]!.signal
+				});
+			} else {
+				const putSpy = vi.spyOn(api, 'PUT').mockReturnValueOnce(write.promise as never);
+				await openRuleAsJson(storedRule.id);
+				await typeDocument(editedDocument);
+				await fireEvent.click(saveButton());
+				expect(putSpy).toHaveBeenCalledExactlyOnceWith(RULE_PATH, {
+					params: { path: { ruleId: storedRule.id } },
+					body: editedInput,
+					signal: deadlines[1]!.signal
+				});
+			}
+
+			unmount();
+			expect(deadlines[1]!.signal.aborted).toBe(false);
+			if (outcome === 'success') {
+				write.resolve({
+					data: method === 'POST' ? storedRule : savedGlobalFixture('2026-10-25T00:13:00Z')
+				});
+			} else {
+				write.reject(problemError(503, 'Service Unavailable', 'late write failure'));
+			}
+			await flush();
+
+			expect(successToast).not.toHaveBeenCalled();
+			expect(errorToast).not.toHaveBeenCalled();
+			expect(getSpy).toHaveBeenCalledTimes(1);
+		}
+	);
+
+	it('keeps the draft when the off-page detail check times out and shows stored languages read-only after Retry', async () => {
+		const { deadlines, timeoutSpy } = mockDeadlines();
+		const firstPage = pageResult([highPrecedenceRule], 'cursor-2');
+		const checkedRule = userLanguageFixture(storedRule.id, 'it', storedRule.created_at);
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(firstPage as never)
+			.mockResolvedValueOnce(pageResult([storedRule]) as never)
+			.mockResolvedValueOnce(firstPage as never)
+			.mockImplementationOnce(hangUntilAborted as never)
+			.mockResolvedValueOnce(firstPage as never)
+			.mockResolvedValueOnce({ data: checkedRule } as never);
+		const putSpy = vi.spyOn(api, 'PUT').mockImplementationOnce(hangUntilAborted as never);
+		const postSpy = vi.spyOn(api, 'POST');
+		const successToast = vi.spyOn(toast, 'success');
+		const checkedLabel = `${m.modules_rules_check_state()} · ${checkedRule.scope} · ${checkedRule.id} (JSON)`;
+		const detailParams = { path: { ruleId: storedRule.id } };
+
+		render(LibraryProcessingRules);
+		await fireEvent.click(await screen.findByRole('button', { name: m.modules_rules_load_more() }));
+		await screen.findByRole('option', { name: optionLabel });
+		await openRuleAsJson(storedRule.id);
+		await typeDocument(editedDocument);
+		await fireEvent.click(saveButton());
+		expireDeadline(deadlines[2]!);
+		expect((await screen.findByRole('alert')).textContent).toContain(
+			m.modules_rules_write_timeout()
+		);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_check_state() }));
+		await waitFor(() =>
+			expect(getSpy).toHaveBeenNthCalledWith(4, RULE_DETAIL_PATH, {
+				params: detailParams,
+				signal: expect.anything()
+			})
+		);
+		expect(timeoutSpy).toHaveBeenNthCalledWith(5, REQUEST_TIMEOUT_MS);
+		expireDeadline(deadlines[4]!);
+
+		const retry = await screen.findByRole('button', { name: m.modules_rules_retry() });
+		expect(screen.getAllByRole('alert')).toHaveLength(2);
+		expect(screen.queryByText(m.loading())).toBeNull();
+		expect(screen.getAllByRole('textbox')).toEqual([documentField()]);
+		expect(documentField().value).toBe(editedDocument);
+		expect(ruleSelect().value).toBe(storedRule.id);
+		expect(getSpy).toHaveBeenCalledTimes(4);
+
+		await fireEvent.click(retry);
+		const preview = (await screen.findByRole('textbox', {
+			name: checkedLabel
+		})) as HTMLTextAreaElement;
+		expect(getSpy).toHaveBeenCalledTimes(6);
+		expect(getSpy).toHaveBeenNthCalledWith(5, RULES_PAGE_PATH, {
+			params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT } },
+			signal: expect.anything()
+		});
+		expect(getSpy).toHaveBeenNthCalledWith(6, RULE_DETAIL_PATH, {
+			params: detailParams,
+			signal: expect.objectContaining({ aborted: false })
+		});
+		expect(preview.readOnly).toBe(true);
+		expect(readRuleDocument(preview.value, 'json').rule.track?.languages).toEqual(['it']);
+		expect(documentField().value).toBe(editedDocument);
+		expect(ruleSelect().value).toBe(storedRule.id);
+		expect(screen.queryByRole('button', { name: m.modules_rules_retry() })).toBeNull();
+		expect(screen.getByRole('alert').textContent).toContain(m.modules_rules_write_timeout());
+		expect(screen.getByRole('status').textContent).toBe('');
+		expect(successToast).not.toHaveBeenCalled();
+		expect(putSpy).toHaveBeenCalledTimes(1);
+		expect(postSpy).not.toHaveBeenCalled();
+	});
 });

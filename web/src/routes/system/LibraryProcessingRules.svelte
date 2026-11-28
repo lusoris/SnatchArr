@@ -50,7 +50,8 @@
 	let lastSavedRule = $state<StoredRule | null>(null);
 	let savedRule = $state<StoredRule | null>(null);
 	// Set only when a POST/PUT hit its own deadline: the server may or may not have committed it.
-	let writeTimeout = $state('');
+	let writeTimeout = $state.raw<{ message: string } | null>(null);
+	let storedPreview = $state<{ id: string; label: string; document: string } | null>(null);
 
 	type RuleInput = ReturnType<typeof readRuleDocument>;
 
@@ -99,12 +100,12 @@
 	}
 
 	function reportWriteFailure(err: unknown, deadline: AbortSignal): void {
+		if (unmountController.signal.aborted) return;
 		if (isUnknownWriteOutcome(err, deadline)) {
-			// Nothing was confirmed: no success, no pinning, no automatic retry. Only the explicit
-			// read-only refresh checks the stored state. Nothing is reported after unmount.
-			if (unmountController.signal.aborted) return;
-			writeTimeout = m.modules_rules_write_timeout();
-			toast.error(writeTimeout);
+			// Nothing was confirmed: only an explicit read checks the stored state.
+			const message = m.modules_rules_write_timeout();
+			writeTimeout = { message };
+			toast.error(message);
 			return;
 		}
 		submitError = err;
@@ -139,11 +140,7 @@
 		return { targetId: selectedId, preferred: null };
 	}
 
-	async function fetchRuleOrFallback(
-		targetId: string,
-		fallback: StoredRule | undefined,
-		signal: AbortSignal
-	): Promise<StoredRule | null> {
+	async function fetchRule(targetId: string, signal: AbortSignal): Promise<StoredRule | null> {
 		try {
 			const detail = await api.GET('/library-processing/rules/{ruleId}', {
 				params: { path: { ruleId: targetId } },
@@ -152,20 +149,8 @@
 			return detail.data ?? null;
 		} catch (err) {
 			if (problemStatus(err) === 404) return null;
-			if (fallback?.id === targetId) return fallback;
 			throw err;
 		}
-	}
-
-	async function resolveOffPageSelection(
-		targetId: string,
-		knownTarget: StoredRule | null,
-		previousSelected: StoredRule | undefined,
-		signal: AbortSignal
-	): Promise<StoredRule | null> {
-		if (knownTarget) return knownTarget;
-		const fallback = rules.find((rule) => rule.id === targetId) ?? previousSelected;
-		return fetchRuleOrFallback(targetId, fallback, signal);
 	}
 
 	async function reconcileSelection(
@@ -173,7 +158,6 @@
 		more: boolean,
 		prefer: StoredRule | string | undefined,
 		known: StoredRule | undefined,
-		previousSelected: StoredRule | undefined,
 		signal: AbortSignal
 	): Promise<{ nextSelectedId: string; nextPinned: StoredRule | null; missingId: string }> {
 		const { targetId, preferred } = extractPreference(prefer);
@@ -187,7 +171,7 @@
 			return { nextSelectedId: '', nextPinned: null, missingId: targetId };
 		}
 		const knownTarget = preferred ?? (known?.id === targetId ? known : null);
-		const resolved = await resolveOffPageSelection(targetId, knownTarget, previousSelected, signal);
+		const resolved = knownTarget ?? (await fetchRule(targetId, signal));
 		if (!resolved) {
 			return { nextSelectedId: '', nextPinned: null, missingId: targetId };
 		}
@@ -200,14 +184,20 @@
 
 	function syncSavedRule(items: StoredRule[], more: boolean, missingId = ''): void {
 		if (!savedRule) return;
-		if (!more || savedRule.id === missingId || hasRule(items, savedRule)) {
+		if (
+			!more ||
+			savedRule.id === missingId ||
+			hasRule(items, savedRule) ||
+			savedRule.id === pinnedRule?.id
+		) {
 			savedRule = null;
 		}
 	}
 
 	async function loadRules(prefer?: StoredRule | string, known?: StoredRule): Promise<void> {
-		const previousSelected = selectedRule;
+		const recovery = writeTimeout;
 		const { seq, signal } = startRequest();
+		storedPreview = null;
 		loading = true;
 		loadingMore = false;
 		loadError = null;
@@ -217,16 +207,20 @@
 				params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT } },
 				signal: withDeadline(signal)
 			});
-			const page = parsePageState(res.data);
-			const selection = await reconcileSelection(
-				page.items,
-				page.more,
-				prefer,
-				known,
-				previousSelected,
-				signal
-			);
 			if (!isCurrent(seq, signal)) return;
+			const page = parsePageState(res.data);
+			const selection = await reconcileSelection(page.items, page.more, prefer, known, signal);
+			if (!isCurrent(seq, signal)) return;
+			// Preview only the document returned by this recovery read, never a cached fallback.
+			const checkedRule =
+				selection.nextPinned ?? page.items.find((rule) => rule.id === selection.nextSelectedId);
+			if (recovery && recovery === writeTimeout && checkedRule) {
+				storedPreview = {
+					id: checkedRule.id,
+					label: `${ruleLabel(checkedRule)} (${format.toUpperCase()})`,
+					document: writeRuleDocument(checkedRule, format)
+				};
+			}
 			loadedRules = page.items;
 			hasMore = page.more;
 			nextCursor = page.cursor;
@@ -295,7 +289,9 @@
 	}
 
 	function startWrite(): AbortSignal {
-		writeTimeout = '';
+		writeTimeout = null;
+		storedPreview = null;
+		// Keep the transport deadline independent of navigation: unmount is not a rollback.
 		return AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 	}
 
@@ -332,6 +328,7 @@
 				body: input,
 				signal: deadline
 			});
+			if (unmountController.signal.aborted) return;
 			status = m.modules_rules_import_success();
 			toast.success(status);
 			// The editor now holds a new document, not the one that was opened for editing.
@@ -348,7 +345,7 @@
 		} catch (err) {
 			reportWriteFailure(err, deadline);
 		} finally {
-			importing = false;
+			if (!unmountController.signal.aborted) importing = false;
 		}
 	}
 
@@ -368,6 +365,7 @@
 				body: input,
 				signal: deadline
 			});
+			if (unmountController.signal.aborted) return;
 			if (res.data) {
 				applySavedRule(res.data);
 			}
@@ -377,7 +375,7 @@
 		} catch (err) {
 			reportWriteFailure(err, deadline);
 		} finally {
-			saving = false;
+			if (!unmountController.signal.aborted) saving = false;
 		}
 	}
 
@@ -516,7 +514,7 @@
 
 	{#if writeTimeout}
 		<div class="flex flex-col gap-2" role="alert">
-			<p class="text-sm text-danger">{writeTimeout}</p>
+			<p class="text-sm text-danger">{writeTimeout.message}</p>
 			<div>
 				<button
 					type="button"
@@ -527,6 +525,21 @@
 					{m.modules_rules_check_state()}
 				</button>
 			</div>
+		</div>
+	{/if}
+
+	{#if storedPreview && storedPreview.id === selectedId}
+		<div class="flex flex-col gap-2">
+			<label for="modules-rules-stored-document" class="text-sm font-medium">
+				{m.modules_rules_check_state()} · {storedPreview.label}
+			</label>
+			<textarea
+				id="modules-rules-stored-document"
+				class="input w-full font-mono text-sm"
+				rows="8"
+				spellcheck="false"
+				readonly
+				value={storedPreview.document}></textarea>
 		</div>
 	{/if}
 
