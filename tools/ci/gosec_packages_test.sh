@@ -41,12 +41,33 @@ git -C "$M" commit -q -m init
 printf 'package prowlarr\n\nfunc f() { var x int }\n' >"$M/.workingdir/evidence/plant.go"
 printf 'package untracked\n' >"$M/untracked/u.go"
 
-# run ARGS...: run gosec_packages.sh in the module; sets rc and out.
+# run ARGS...: run gosec_packages.sh in the module; sets rc, out (stdout) and err (stderr).
 run() {
   rc=0
-  out="$(cd "$M" && sh tools/ci/gosec_packages.sh "$@" 2>&1)" || rc=$?
+  out="$(cd "$M" && run_bounded 40 sh tools/ci/gosec_packages.sh "$@" 2>"$WORK/stderr")" || rc=$?
+  err="$(cat "$WORK/stderr")"
 }
+# Absolute private bin first on PATH (this process only): go there is a note wrapper for the first
+# run, then a symlink to the real go, so runs after cd never re-resolve a relative PATH entry.
+GOSEC_FIXTURE_REAL_GO="$(command -v go)"
+# dash returns a bare name for an empty PATH component: it is relative to the initial cwd.
+case "$GOSEC_FIXTURE_REAL_GO" in
+  /*) ;;
+  *) GOSEC_FIXTURE_REAL_GO="$PWD/$GOSEC_FIXTURE_REAL_GO" ;;
+esac
+export GOSEC_FIXTURE_REAL_GO
+mkdir "$WORK/bin"
+PATH="$WORK/bin:$PATH"
+cat >"$WORK/bin/go" <<'EOF'
+#!/bin/sh
+echo "gosec fixture: go wrapper note" >&2
+exec "$GOSEC_FIXTURE_REAL_GO" "$@"
+EOF
+chmod +x "$WORK/bin/go"
 run ./...
+# Wrapper served its one instrumented run; later runs get a plain symlink to the real go.
+ln -sf "$GOSEC_FIXTURE_REAL_GO" "$WORK/bin/go"
+check_case "wrapper stderr note present" 0 "$rc" "gosec fixture: go wrapper note" "$err"
 check_case "pattern lists tracked packages" 0 "$rc" "./a" "$out"
 check_case "pattern lists ./b/c" 0 "$rc" "./b/c" "$out"
 case "$(printf '%s\n' "$out" | sed -n '1p')" in
@@ -73,15 +94,15 @@ printf 'a/ignored.go\nm-ignored.go\n' >>"$M/.gitignore"
 printf 'package a\n' >"$M/a/ignored.go"
 printf 'package m\n' >"$M/m-ignored.go"
 run ./...
-check_case "ignored file inside listed package" 1 "$rc" "gosec would load git-ignored a/ignored.go; move or delete it" "$out"
-check_case "all ignored files named" 1 "$rc" "gosec would load git-ignored m-ignored.go; move or delete it" "$out"
+check_case "ignored file inside listed package" 1 "$rc" "gosec would load git-ignored a/ignored.go; move or delete it" "$err"
+check_case "all ignored files named" 1 "$rc" "gosec would load git-ignored m-ignored.go; move or delete it" "$err"
 rm "$M/a/ignored.go" "$M/m-ignored.go"
 # A missing package has an empty Dir: refused, never dropped beside a listed one or read as ./.
 run ./nonexistent
-check_case "missing package refused" 1 "$rc" "go list returned a package without a directory" "$out"
+check_case "missing package refused" 1 "$rc" "go list returned a package without a directory" "$err"
 run ./a/... ./nonexistent
-check_case "missing package beside a listed one refused" 1 "$rc" "go list returned a package without a directory" "$out"
+check_case "missing package beside a listed one refused" 1 "$rc" "go list returned a package without a directory" "$err"
 run
-check_case "no pattern" 2 "$rc" "usage" "$out"
+check_case "no pattern" 2 "$rc" "usage" "$err"
 
 echo "gosec_packages_test: all cases passed"
