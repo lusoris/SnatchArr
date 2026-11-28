@@ -186,12 +186,35 @@ func rulesBudgetEndToEndStreamer(t *testing.T, dw *rulesBudgetNativeWriter, cuto
 
 func assertRulesBudgetSnapshotDeadline(t *testing.T, caller, before, snapshotDeadline time.Time) {
 	t.Helper()
-	lo, hi := before.Add(rulesBudgetSnapshotContract), time.Now().Add(rulesBudgetSnapshotContract)
-	if !caller.IsZero() && caller.Before(lo) {
-		lo, hi = caller, caller
-	}
+	lo, hi := rulesBudgetSnapshotDeadlineBounds(caller, before, time.Now())
 	if snapshotDeadline.Before(lo) || snapshotDeadline.After(hi) {
 		t.Fatalf("snapshot deadline = %v, want in [%v, %v]", snapshotDeadline, lo, hi)
+	}
+}
+
+func rulesBudgetSnapshotDeadlineBounds(caller, before, after time.Time) (lo, hi time.Time) {
+	lo, hi = before.Add(rulesBudgetSnapshotContract), after.Add(rulesBudgetSnapshotContract)
+	if !caller.IsZero() {
+		if caller.Before(lo) {
+			return caller, caller
+		}
+		if caller.Before(hi) {
+			hi = caller
+		}
+	}
+	return lo, hi
+}
+
+func TestRulesBudgetSnapshotDeadlineBoundsCallerInsideWindow(t *testing.T) {
+	t.Parallel()
+	before := time.Unix(0, 0)
+	after := before.Add(2 * time.Second)
+	wantLo := before.Add(rulesBudgetSnapshotContract)
+	caller := wantLo.Add(time.Second)
+
+	lo, hi := rulesBudgetSnapshotDeadlineBounds(caller, before, after)
+	if !lo.Equal(wantLo) || !hi.Equal(caller) {
+		t.Fatalf("snapshot deadline bounds = [%v, %v], want [%v, %v]", lo, hi, wantLo, caller)
 	}
 }
 
@@ -418,7 +441,9 @@ func TestServeLibraryProcessingRulesServerWriteTimeoutResponseExpiry(t *testing.
 		return nil
 	}
 	req := withServerWriteTimeout(httptest.NewRequestWithContext(expResp, http.MethodGet, PathPrefix+"/library-processing/rules", nil), rulesBudgetDefaultServerWriteTimeout)
-	aborted := invokeCapturingAbort(rulesBudgetTransport(h.serveLibraryProcessingRulesWith(2, streamer), rulesBudgetOpaqueWriter{}), dw, req)
+	// Give the snapshot no timer of its own so the wait above can only
+	// succeed through inherited cancellation.
+	aborted := invokeCapturingAbort(rulesBudgetTransport(h.serveLibraryProcessingRulesAt(2, context.WithCancel, streamer), rulesBudgetOpaqueWriter{}), dw, req)
 	if !expiryPropagated {
 		t.Fatal("response expiry did not propagate to the snapshot context")
 	}
