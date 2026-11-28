@@ -1057,7 +1057,7 @@ describe('library processing rules import/export and bounded pagination', () => 
 		expect(ruleSelect().value).toBe('');
 		expect(toastSuccessSpy).not.toHaveBeenCalled();
 		expect(screen.getByRole('status').textContent).toBe('');
-		await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+		expect(screen.getByRole('alert').textContent).toContain(m.modules_rules_write_timeout());
 		expect(documentField().value).toBe(jsonDocument);
 	});
 
@@ -1130,11 +1130,78 @@ describe('library processing rules import/export and bounded pagination', () => 
 		expect(putSpy).toHaveBeenCalledTimes(1);
 		expect(postSpy).not.toHaveBeenCalled();
 
-		// Reading the state confirms nothing: no success feedback, and the draft stays editable.
+		// Even seeing the updated rule does not turn this refresh into a write confirmation.
 		expect(toastSuccessSpy).not.toHaveBeenCalled();
 		expect(screen.getByRole('status').textContent).toBe('');
-		await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+		expect(screen.getByRole('alert').textContent).toContain(m.modules_rules_write_timeout());
 		expect(documentField().value).toBe(updatedDocument);
+	});
+
+	it('keeps a timed-out save unconfirmed when the edited rule is beyond the refreshed first page', async () => {
+		const firstPage = Array.from({ length: LIBRARY_PROCESSING_RULE_PAGE_LIMIT }, (_, index) => {
+			const suffix = String(index + 100).padStart(12, '0');
+			return {
+				...highPrecedenceRule,
+				id: `018f0000-0000-7000-8000-${suffix}`,
+				item_id: `ep-${suffix}`
+			};
+		});
+		const cursor = 'next-page';
+		const { deadlines } = mockDeadlines();
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult(firstPage, cursor) as never)
+			.mockResolvedValueOnce(pageResult([storedRule]) as never)
+			// A global default sorts after these item overrides, whether or not the PUT committed.
+			.mockResolvedValueOnce(pageResult(firstPage, cursor) as never);
+		const putSpy = vi.spyOn(api, 'PUT').mockImplementation(hangUntilAborted as never);
+		const postSpy = vi.spyOn(api, 'POST');
+		const toastSuccessSpy = vi.spyOn(toast, 'success');
+
+		render(LibraryProcessingRules);
+		await fireEvent.click(await screen.findByRole('button', { name: m.modules_rules_load_more() }));
+		await screen.findByRole('option', { name: optionLabel });
+		expect(getSpy).toHaveBeenNthCalledWith(2, RULES_PAGE_PATH, {
+			params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT, cursor } },
+			signal: expect.anything()
+		});
+		await openRuleAsJson(storedRule.id);
+		await typeDocument(editedDocument);
+		// Leave the list selection on page one without changing the editor's save target.
+		await fireEvent.change(ruleSelect(), { target: { value: firstPage[0]!.id } });
+		await fireEvent.click(saveButton());
+
+		const writeDeadline = deadlines[2]!;
+		expect(putSpy).toHaveBeenCalledWith(RULE_PATH, {
+			params: { path: { ruleId: storedRule.id } },
+			body: editedInput,
+			signal: writeDeadline.signal
+		});
+		expireDeadline(writeDeadline);
+		await screen.findByRole('alert');
+		await flush();
+		expect(getSpy).toHaveBeenCalledTimes(2);
+		expect(putSpy).toHaveBeenCalledTimes(1);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_check_state() }));
+		await waitFor(() =>
+			expect(selectOptionValues()).toEqual(['', ...firstPage.map(({ id }) => id)])
+		);
+		expect(screen.queryByRole('option', { name: optionLabel })).toBeNull();
+		expect(screen.getByRole('button', { name: m.modules_rules_load_more() })).toBeTruthy();
+		expect(getSpy).toHaveBeenCalledTimes(3);
+		expect(getSpy).toHaveBeenNthCalledWith(3, RULES_PAGE_PATH, {
+			params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT } },
+			signal: expect.anything()
+		});
+		expect(putSpy).toHaveBeenCalledTimes(1);
+		expect(postSpy).not.toHaveBeenCalled();
+		expect(screen.getByRole('alert').textContent).toContain(m.modules_rules_write_timeout());
+		expect(screen.getByRole('status').textContent).toBe('');
+		expect(toastSuccessSpy).not.toHaveBeenCalled();
+		expect(documentField().value).toBe(editedDocument);
+		expect(screen.getByText(m.modules_rules_editing({ rule: optionLabel }))).toBeTruthy();
+		expect((saveButton() as HTMLButtonElement).disabled).toBe(false);
 	});
 
 	it('retains the authoritative PUT result and user feedback when the subsequent page refresh fails', async () => {

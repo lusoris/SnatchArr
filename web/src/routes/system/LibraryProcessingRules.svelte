@@ -378,12 +378,11 @@
 		}
 	}
 
-	// Read-only check after an unknown write outcome: one GET bounded by the request deadline. It never
-	// repeats the write and confirms nothing by itself; the stored list is the evidence.
+	// A read-only first-page refresh cannot establish whether a timed-out write committed.
+	// Keep the warning; starting a new import or save still clears it in parseDocument().
 	async function checkStoredState(): Promise<void> {
 		if (busy || loading) return;
 		await loadRules();
-		if (!loading && !loadError) writeTimeout = '';
 	}
 
 	function exportRule(): void {
