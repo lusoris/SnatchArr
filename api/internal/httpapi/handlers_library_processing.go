@@ -493,6 +493,9 @@ func (h *Handlers) ResolveLibraryProcessingRule(
 }
 
 func libraryProcessingInputFromOAS(req *oas.LibraryProcessingRuleInput) (libraryprocessing.RuleInput, error) {
+	if req == nil {
+		return libraryprocessing.RuleInput{}, fmt.Errorf("%w: rule input is required", domain.ErrBadRequest)
+	}
 	scope, err := libraryprocessing.ParseScope(string(req.Scope))
 	if err != nil {
 		return libraryprocessing.RuleInput{}, err

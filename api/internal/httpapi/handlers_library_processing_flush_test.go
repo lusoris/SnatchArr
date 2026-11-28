@@ -26,6 +26,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/libraryprocessing"
 	"github.com/lusoris/SnatchArr/api/internal/sso"
 )
@@ -577,6 +578,53 @@ func TestListLibraryProcessingRulesPageMalformedRawQueryUnit(t *testing.T) {
 			handler.ServeHTTP(rec, req)
 			assertProblemResponse(t, rec, http.StatusBadRequest)
 		})
+	}
+}
+
+func TestLibraryProcessingRuleNilAndNullInputUnit(t *testing.T) {
+	t.Parallel()
+	chk := &deadlineObservingChecker{enabled: true}
+	h := &Handlers{libraryProcessing: libraryprocessing.NewServiceWithChecker(nil, nil, nil, chk)}
+	adminCtx := WithUser(t.Context(), domain.User{ID: uuid.New(), Role: domain.RoleAdmin})
+	ruleID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
+
+	if _, err := libraryProcessingInputFromOAS(nil); !errors.Is(err, domain.ErrBadRequest) {
+		t.Fatalf("libraryProcessingInputFromOAS(nil) err = %v, want domain.ErrBadRequest", err)
+	}
+	if _, err := h.CreateLibraryProcessingRule(adminCtx, nil); !errors.Is(err, domain.ErrBadRequest) {
+		t.Fatalf("CreateLibraryProcessingRule(nil) err = %v, want domain.ErrBadRequest", err)
+	}
+	updateParams := oas.UpdateLibraryProcessingRuleParams{RuleId: ruleID}
+	if _, err := h.UpdateLibraryProcessingRule(adminCtx, nil, updateParams); !errors.Is(err, domain.ErrBadRequest) {
+		t.Fatalf("UpdateLibraryProcessingRule(nil) err = %v, want domain.ErrBadRequest", err)
+	}
+
+	srv, err := oas.NewServer(h, testNoopSecurity{},
+		oas.WithPathPrefix(PathPrefix),
+		oas.WithErrorHandler(ErrorHandler(slog.New(slog.DiscardHandler))),
+	)
+	if err != nil {
+		t.Fatalf("oas.NewServer: %v", err)
+	}
+	handler := withHTTP(srv)
+	bodies := []string{
+		"null",
+		`{"scope":"global_default","rule":null}`,
+		`{"scope":"global_default","rule":{"track":null}}`,
+	}
+	targets := []struct{ method, path string }{
+		{http.MethodPost, PathPrefix + "/library-processing/rules"},
+		{http.MethodPut, PathPrefix + "/library-processing/rules/" + ruleID.String()},
+	}
+	for _, body := range bodies {
+		for _, target := range targets {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(adminCtx, target.method, target.path, strings.NewReader(body))
+			req.Header.Set("Authorization", "Bearer test-token")
+			req.Header.Set("Content-Type", "application/json")
+			handler.ServeHTTP(rec, req)
+			assertProblemResponse(t, rec, http.StatusBadRequest)
+		}
 	}
 }
 

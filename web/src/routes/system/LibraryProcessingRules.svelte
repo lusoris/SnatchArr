@@ -46,10 +46,11 @@
 	// The stored rule whose document was opened in the editor; only an explicit save writes to it.
 	let editingId = $state('');
 	let lastSavedRule = $state<StoredRule | null>(null);
+	let savedRule = $state<StoredRule | null>(null);
 
 	type RuleInput = ReturnType<typeof readRuleDocument>;
 
-	const rules = $derived(mergePinnedRule(loadedRules, pinnedRule));
+	const rules = $derived(mergePinnedRule(mergePinnedRule(loadedRules, pinnedRule), savedRule));
 	const selectedRule = $derived(rules.find((rule) => rule.id === selectedId));
 	const editingRule = $derived(
 		rules.find((rule) => rule.id === editingId) ??
@@ -118,28 +119,52 @@
 		}
 	}
 
+	async function resolveOffPageSelection(
+		targetId: string,
+		knownTarget: StoredRule | null,
+		previousSelected: StoredRule | undefined,
+		signal: AbortSignal
+	): Promise<StoredRule | null> {
+		if (knownTarget) return knownTarget;
+		const fallback = rules.find((rule) => rule.id === targetId) ?? previousSelected;
+		return fetchRuleOrFallback(targetId, fallback, signal);
+	}
+
 	async function reconcileSelection(
 		items: StoredRule[],
 		more: boolean,
 		prefer: StoredRule | string | undefined,
+		known: StoredRule | undefined,
 		previousSelected: StoredRule | undefined,
 		signal: AbortSignal
-	): Promise<{ nextSelectedId: string; nextPinned: StoredRule | null }> {
+	): Promise<{ nextSelectedId: string; nextPinned: StoredRule | null; missingId: string }> {
 		const { targetId, preferred } = extractPreference(prefer);
 		if (!targetId) {
-			return { nextSelectedId: '', nextPinned: null };
+			return { nextSelectedId: '', nextPinned: null, missingId: '' };
 		}
 		if (items.some((rule) => rule.id === targetId)) {
-			return { nextSelectedId: targetId, nextPinned: null };
+			return { nextSelectedId: targetId, nextPinned: null, missingId: '' };
 		}
 		if (!more) {
-			return { nextSelectedId: '', nextPinned: null };
+			return { nextSelectedId: '', nextPinned: null, missingId: targetId };
 		}
-		const resolved = preferred ?? (await fetchRuleOrFallback(targetId, previousSelected, signal));
-		return { nextSelectedId: resolved?.id ?? '', nextPinned: resolved };
+		const knownTarget = preferred ?? (known?.id === targetId ? known : null);
+		const resolved = await resolveOffPageSelection(targetId, knownTarget, previousSelected, signal);
+		if (!resolved) {
+			return { nextSelectedId: '', nextPinned: null, missingId: targetId };
+		}
+		return { nextSelectedId: resolved.id, nextPinned: resolved, missingId: '' };
 	}
 
-	async function loadRules(prefer?: StoredRule | string): Promise<void> {
+	function syncSavedRule(items: StoredRule[], more: boolean, missingId = ''): void {
+		if (!savedRule) return;
+		const id = savedRule.id;
+		if (!more || id === missingId || items.some((rule) => rule.id === id)) {
+			savedRule = null;
+		}
+	}
+
+	async function loadRules(prefer?: StoredRule | string, known?: StoredRule): Promise<void> {
 		const previousSelected = selectedRule;
 		const { seq, signal } = startRequest();
 		loading = true;
@@ -156,6 +181,7 @@
 				page.items,
 				page.more,
 				prefer,
+				known,
 				previousSelected,
 				signal
 			);
@@ -165,6 +191,7 @@
 			nextCursor = page.cursor;
 			pinnedRule = selection.nextPinned;
 			selectedId = selection.nextSelectedId;
+			syncSavedRule(page.items, page.more, selection.missingId);
 		} catch (err) {
 			if (isCurrent(seq, signal)) loadError = err;
 		} finally {
@@ -177,11 +204,12 @@
 		return nextCursor;
 	}
 
-	function clearReachedPinned(combined: StoredRule[]): void {
+	function clearReachedPinned(combined: StoredRule[], more: boolean): void {
 		const pinnedId = pinnedRule?.id;
 		if (pinnedId && combined.some((rule) => rule.id === pinnedId)) {
 			pinnedRule = null;
 		}
+		syncSavedRule(combined, more);
 	}
 
 	async function loadMoreRules(): Promise<void> {
@@ -201,7 +229,7 @@
 			loadedRules = combined;
 			hasMore = page.more;
 			nextCursor = page.cursor;
-			clearReachedPinned(combined);
+			clearReachedPinned(combined, page.more);
 		} catch (err) {
 			if (isCurrent(seq, signal)) loadMoreError = err;
 		} finally {
@@ -230,20 +258,25 @@
 
 	function applySavedRule(saved: StoredRule): void {
 		lastSavedRule = saved;
-		if (loadedRules.some((rule) => rule.id === saved.id)) {
-			loadedRules = loadedRules
-				.map((rule) => (rule.id === saved.id ? saved : rule))
-				.sort(compareStoredRules);
-			if (pinnedRule?.id === saved.id) pinnedRule = null;
-			return;
-		}
-		if (!hasMore) {
-			loadedRules = [...loadedRules, saved].sort(compareStoredRules);
-			return;
-		}
-		if (pinnedRule?.id === saved.id || selectedId === saved.id || !pinnedRule) {
+		savedRule = saved;
+		if (pinnedRule?.id === saved.id) {
 			pinnedRule = saved;
 		}
+		if (!loadedRules.some((rule) => rule.id === saved.id)) {
+			if (!hasMore) {
+				loadedRules = [...loadedRules, saved].sort(compareStoredRules);
+				savedRule = null;
+			}
+			return;
+		}
+		const boundary = loadedRules[loadedRules.length - 1];
+		const withoutSaved = loadedRules.filter((rule) => rule.id !== saved.id);
+		if (hasMore && boundary && compareStoredRules(saved, boundary) > 0) {
+			loadedRules = withoutSaved;
+			return;
+		}
+		loadedRules = [...withoutSaved, saved].sort(compareStoredRules);
+		savedRule = null;
 	}
 
 	async function importRule(): Promise<void> {
@@ -259,6 +292,7 @@
 			// The editor now holds a new document, not the one that was opened for editing.
 			editingId = '';
 			lastSavedRule = null;
+			savedRule = null;
 			await loadRules(res.data);
 		} catch (err) {
 			submitError = err;
@@ -287,7 +321,7 @@
 			}
 			status = m.modules_rules_save_success();
 			toast.success(status);
-			await loadRules();
+			await loadRules(undefined, res.data);
 		} catch (err) {
 			submitError = err;
 			toast.error(describeError(err));

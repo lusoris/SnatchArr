@@ -271,4 +271,134 @@ func TestSnapshotReadTxCleanupAndContracts(t *testing.T) {
 		}
 		assertBoundedRollback(t, commitTx, before, after)
 	})
+
+	t.Run("preserves successful snapshot commit even if post-commit rollback errors", func(t *testing.T) {
+		t.Parallel()
+		tx := &fakeSnapshotTx{rollbackErr: errors.New("spurious post-commit rollback error")}
+		err := runSnapshotReadTx(t.Context(), newFakeBeginner(t, tx, nil), nil, func(*sqlcgen.Queries) error {
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("runSnapshotReadTx post-commit rollback err = %v, want nil", err)
+		}
+		if tx.commits != 1 {
+			t.Fatalf("commits = %d, want 1", tx.commits)
+		}
+	})
+}
+
+func newFakeRWBeginner(tx *fakeSnapshotTx, beginErr error, gotDeadline *time.Time) rwTxBeginner {
+	return func(ctx context.Context) (pgx.Tx, error) {
+		if gotDeadline != nil {
+			*gotDeadline, _ = ctx.Deadline()
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if beginErr != nil {
+			return nil, beginErr
+		}
+		return tx, nil
+	}
+}
+
+func TestStoreTxCleanupAndContracts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("preserves caller deadlines on begin and commit and keeps successful commit clean", func(t *testing.T) {
+		t.Parallel()
+		callerCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+		wantDeadline, _ := callerCtx.Deadline()
+		var beginDeadline time.Time
+		tx := &fakeSnapshotTx{rollbackErr: errors.New("spurious post-commit cleanup error")}
+		before := time.Now()
+		err := runTx(callerCtx, newFakeRWBeginner(tx, nil, &beginDeadline), nil, func(*sqlcgen.Queries) error {
+			return nil
+		})
+		after := time.Now()
+		if err != nil {
+			t.Fatalf("runTx committed err = %v, want nil", err)
+		}
+		if !beginDeadline.Equal(wantDeadline) || !tx.commitDeadline.Equal(wantDeadline) {
+			t.Fatalf("deadlines begin=%v commit=%v, want %v", beginDeadline, tx.commitDeadline, wantDeadline)
+		}
+		assertBoundedRollback(t, tx, before, after)
+	})
+
+	t.Run("rolls back with detached timeout on panic and Goexit", func(t *testing.T) {
+		t.Parallel()
+		panicTx := &fakeSnapshotTx{}
+		ctx, cancel := context.WithCancel(t.Context())
+		var recovered any
+		before := time.Now()
+		func() {
+			defer func() { recovered = recover() }()
+			_ = runTx(ctx, newFakeRWBeginner(panicTx, nil, nil), nil, func(*sqlcgen.Queries) error {
+				cancel()
+				panic("write tx panic")
+			})
+		}()
+		if recovered != "write tx panic" || panicTx.commits != 0 {
+			t.Fatalf("recovered=%v commits=%d, want panic and 0 commits", recovered, panicTx.commits)
+		}
+		assertBoundedRollback(t, panicTx, before, time.Now())
+
+		exitTx := &fakeSnapshotTx{}
+		done := make(chan struct{})
+		exitStart := time.Now()
+		go func() {
+			defer close(done)
+			_ = runTx(t.Context(), newFakeRWBeginner(exitTx, nil, nil), nil, func(*sqlcgen.Queries) error {
+				runtime.Goexit()
+				return nil
+			})
+		}()
+		<-done
+		assertBoundedRollback(t, exitTx, exitStart, time.Now())
+	})
+
+	t.Run("preserves primary callback, commit, and begin errors and joins rollback failure", func(t *testing.T) {
+		t.Parallel()
+		cbSentinel := errors.New("write callback failed")
+		ctx, cancel := context.WithCancel(t.Context())
+		cbTx := &fakeSnapshotTx{}
+		before := time.Now()
+		err := runTx(ctx, newFakeRWBeginner(cbTx, nil, nil), nil, func(*sqlcgen.Queries) error {
+			cancel()
+			return cbSentinel
+		})
+		if !errors.Is(err, cbSentinel) || errors.Is(err, context.Canceled) {
+			t.Fatalf("callback err = %v, want only %v", err, cbSentinel)
+		}
+		assertBoundedRollback(t, cbTx, before, time.Now())
+
+		commitSentinel := errors.New("commit serialization failure")
+		commitTx := &fakeSnapshotTx{commitErr: commitSentinel}
+		commitStart := time.Now()
+		commitErr := runTx(t.Context(), newFakeRWBeginner(commitTx, nil, nil), nil, func(*sqlcgen.Queries) error {
+			return nil
+		})
+		if !errors.Is(commitErr, commitSentinel) {
+			t.Fatalf("commit err = %v, want %v", commitErr, commitSentinel)
+		}
+		assertBoundedRollback(t, commitTx, commitStart, time.Now())
+
+		rbBoom := errors.New("rollback wire failure")
+		joinTx := &fakeSnapshotTx{rollbackErr: rbBoom}
+		joinErr := runTx(t.Context(), newFakeRWBeginner(joinTx, nil, nil), nil, func(*sqlcgen.Queries) error {
+			return cbSentinel
+		})
+		if !errors.Is(joinErr, cbSentinel) || !errors.Is(joinErr, rbBoom) {
+			t.Fatalf("joined err = %v, want (%v, %v)", joinErr, cbSentinel, rbBoom)
+		}
+
+		beginSentinel := errors.New("begin pool exhausted")
+		beginTx := &fakeSnapshotTx{}
+		if bErr := runTx(t.Context(), newFakeRWBeginner(beginTx, beginSentinel, nil), nil, func(*sqlcgen.Queries) error {
+			return nil
+		}); !errors.Is(bErr, beginSentinel) || beginTx.rollbacks != 0 {
+			t.Fatalf("begin err=%v rollbacks=%d, want %v and 0", bErr, beginTx.rollbacks, beginSentinel)
+		}
+	})
 }
