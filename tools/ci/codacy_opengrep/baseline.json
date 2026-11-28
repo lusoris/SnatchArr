@@ -36,28 +36,6 @@
     },
     {
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
-      "filePath": "tools/ci/clones_check.py",
-      "contentSha256": "b2d3d9b3aceb4f809f18ef838f762066c16136c3acca41fe39e0817708c431cf",
-      "count": "1",
-      "category": "A",
-      "entered": "2026-11-12",
-      "expires": "2026-11-30",
-      "issue": "1101",
-      "reason": "praetorctl is resolved through an environment-derived path; #1101 resolves it by fixed name before this entry expires."
-    },
-    {
-      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
-      "filePath": "tools/ci/clones_check.py",
-      "contentSha256": "527f93560da7db896060eff9931b448091492507534388e34ecbb8a9c7fde68d",
-      "count": "1",
-      "category": "A",
-      "entered": "2026-11-12",
-      "expires": "2026-11-30",
-      "issue": "1101",
-      "reason": "Same call as line 106: the argv carries an environment-derived executable path; #1101 resolves praetorctl by fixed name."
-    },
-    {
-      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
       "filePath": "tools/ci/codacy_opengrep_scan.py",
       "contentSha256": "757423069d2efc853091fe86de78c1d972fb981dcc3232f4f8d4597b210cd7d1",
       "count": "1",

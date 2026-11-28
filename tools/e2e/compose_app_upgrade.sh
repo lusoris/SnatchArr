@@ -29,6 +29,9 @@
 #   revert-fixable-blocklist revert migrated queue-policy blocklist to false ("api read-back differs")
 #   queue-policy-extra-change change a queue-policy field migration 55 does not touch ("unallowed change in table queue_policies")
 # Needs docker compose, curl, jq and openssl.
+#
+# compose_app_upgrade.sh --selftest-modules runs the native /system/modules read-back and psql_at
+# probe regressions (jq and timeout only, no Docker); the Makefile gate e2e-compose-app-upgrade runs it.
 set -euo pipefail
 
 label="compose-app-upgrade"
@@ -160,6 +163,16 @@ save_columns() {
     done <"$work/before.txt" >"$work/columns.txt"
 }
 
+# old_columns_fingerprint TABLE [WHERE] prints "count hash" of TABLE's rows (optionally filtered by
+# WHERE), read on the pre-upgrade columns saved by save_columns.
+old_columns_fingerprint() {
+    local tbl=$1 where=${2:-} cols
+    cols=$(grep -m 1 "^$tbl " "$work/columns.txt") || return 1
+    cols=${cols#"$tbl "}
+    psql_at "SELECT count(*) || ' ' || md5(coalesce(string_agg(t::text, '|' ORDER BY t::text), ''))
+        FROM (SELECT $cols FROM public.$tbl${where:+ WHERE $where}) t" </dev/null
+}
+
 # same_on_old_columns TABLE WANT succeeds when the upgrade added columns to TABLE and its rows,
 # read on the pre-upgrade columns only, still give the pre-upgrade count and hash WANT.
 same_on_old_columns() {
@@ -167,9 +180,52 @@ same_on_old_columns() {
     cols=$(grep "^$tbl " "$work/columns.txt") || return 1
     cols=${cols#"$tbl "}
     [ "$cols" != "$(columns_of "$tbl")" ] || return 1
-    got=$(psql_at "SELECT count(*) || ' ' || md5(coalesce(string_agg(t::text, '|' ORDER BY t::text), ''))
-        FROM (SELECT $cols FROM public.$tbl) t" </dev/null) || return 1
+    got=$(old_columns_fingerprint "$tbl") || return 1
     [ "$got" = "$want" ]
+}
+
+# modules_new_default_row_ok WANT succeeds only for the one newly seeded optional module row.
+# WANT is the pre-upgrade "count hash" of the modules table. library_processing must have been
+# absent before the upgrade; every other row, read on the saved old columns, must still give WANT;
+# and library_processing must now exist exactly once as the validated default: disabled, empty
+# config, updated_at between the candidate start and now. A library_processing row that already
+# existed before the upgrade makes this fail, it must be byte-identical like any table. The caller
+# runs this even when the table count and hash are unchanged, so a forgotten seed fails.
+modules_new_default_row_ok() {
+    local want=$1 got fresh
+    [ "${old_modules_library:-}" = "0" ] || return 1
+    [ -n "${pre_candidate_at:-}" ] || return 1
+    got=$(old_columns_fingerprint modules "id <> 'library_processing'") || return 1
+    [ "$got" = "$want" ] || return 1
+    fresh=$(psql_at "SELECT count(*) FROM public.modules WHERE id = 'library_processing'
+        AND enabled = false AND config = '{}'::jsonb
+        AND updated_at >= '$pre_candidate_at'::timestamptz AND updated_at <= clock_timestamp()" </dev/null) || return 1
+    [ "$fresh" = "1" ]
+}
+
+# modules_expected_jq turns the saved old /system/modules list into the expected new one: unchanged
+# when library_processing was already there, otherwise with the default seeded module added at its
+# sorted position. The API's ModuleState is exactly {id, enabled}.
+# shellcheck disable=SC2016
+modules_expected_jq='
+"library_processing" as $lp |
+if any(.[]; .id == $lp) then .
+else (map(select(.id < $lp)) | length) as $i | .[:$i] + [{id: $lp, enabled: false}] + .[$i:]
+end
+'
+
+# check_modules_readback compares /system/modules with the expected list derived from the saved
+# one (modules_expected_jq), with the strict comparison on every value.
+check_modules_readback() {
+    local file="modules.json"
+    local old_file="$work/readbacks-old/$file" new_file="$work/readbacks-new/$file"
+    local want_file="$work/readbacks-new/modules-expected.json"
+    if ! api_req GET "/system/modules" | jq -S . >"$new_file" 2>/dev/null; then
+        fail "api read-back differs for $file: endpoint request failed (missing or error)"
+    fi
+    jq -S "$modules_expected_jq" "$old_file" >"$want_file" ||
+        fail "api read-back differs for $file: comparison failed"
+    compare_json "$file" "$want_file" "$new_file"
 }
 
 api_req() {
@@ -461,12 +517,9 @@ migration_effect_matches() {
     done
     [ "$covered" -eq 1 ] || return 1
 
-    local exp cols got
+    local exp got
     exp=$(grep -m 1 "^$tbl " "$work/expected-effects.txt") || return 1
-    cols=$(grep -m 1 "^$tbl " "$work/columns.txt") || return 1
-    cols=${cols#"$tbl "}
-    got=$(psql_at "SELECT count(*) || ' ' || md5(coalesce(string_agg(t::text, '|' ORDER BY t::text), ''))
-        FROM (SELECT $cols FROM public.$tbl) t" </dev/null) || return 1
+    got=$(old_columns_fingerprint "$tbl") || return 1
     [ "$tbl $got" = "$exp" ]
 }
 
@@ -501,6 +554,7 @@ apply_migration_effects() {
     done
 }
 
+# verify_all_readbacks checks the listed API readbacks against their corresponding JSON files.
 verify_all_readbacks() {
     check_readback_item "/instances" "instances.json"
     check_readback_item "/instances/$instance_id" "instance.json"
@@ -520,7 +574,7 @@ verify_all_readbacks() {
     check_readback_item "/notifications/rules" "rules.json"
     check_readback_item "/notifications/rules/$rule_id" "rule.json"
     check_readback_item "/me/preferences" "me-preferences.json"
-    check_readback_item "/system/modules" "modules.json"
+    check_modules_readback
     check_readback_item "/watchaware/sources" "watchaware.json"
     check_readback_item "/adult/sources" "adult.json"
     check_readback_item "/adult/sources/$adult_id" "adult-source.json"
@@ -729,6 +783,12 @@ check_database_fingerprint() {
         if ! after_line=$(grep "^$tbl " "$work/after.txt"); then
             after_line=""
         fi
+        # A library_processing row absent before the upgrade must exist now, changed table or not.
+        if [ "$tbl" = modules ] && [ "${old_modules_library:-}" = "0" ]; then
+            modules_new_default_row_ok "$count $hash" ||
+                fail "data read-back differs: unallowed change in table modules, or the seeded library_processing default row is missing ($count $hash -> ${after_line#"$tbl" })"
+            continue
+        fi
         if [ "$tbl $count $hash" != "$after_line" ] && ! same_on_old_columns "$tbl" "$count $hash"; then
             case "$tbl" in
                 schema_migrations) ;;     # schema migration advanced to highest numbered version
@@ -768,6 +828,116 @@ final_restart_and_recheck() {
     echo "ok   final restart: /settings re-checked"
     echo "compose application $prev_ver -> $new_version upgrade passed"
 }
+
+# selftest_modules runs check_modules_readback natively on canned lists (jq only, no Docker).
+selftest_modules() {
+    local bad=0 a l le w
+    work=$(mktemp -d) || exit 1
+    mkdir -p "$work/readbacks-old" "$work/readbacks-new"
+    # api_req stubs an API request by printing the canned response in served.
+    api_req() { printf '%s\n' "$served"; }
+    a='{"id":"adult","enabled":true}'
+    w='{"id":"watchaware","enabled":true}'
+    l='{"id":"library_processing","enabled":false}'
+    le='{"id":"library_processing","enabled":true}'
+
+    # case WANT NAME OLD NEW: pass must be accepted, refuse must fail on the modules read-back.
+    selftest_case() {
+        local want=$1 name=$2 out rc=0
+        printf '%s\n' "$3" | jq -S . >"$work/readbacks-old/modules.json"
+        served=$4
+        out=$(check_modules_readback 2>&1) || rc=$?
+        if [ "$want" = pass ] && [ "$rc" -ne 0 ]; then
+            echo "FAIL $name: valid list refused: $out"
+            bad=1
+        elif [ "$want" = refuse ] && { [ "$rc" -eq 0 ] || ! grep -q 'api read-back differs for modules.json' <<<"$out"; }; then
+            echo "FAIL $name: invalid list accepted or refused for another reason: $out"
+            bad=1
+        fi
+    }
+
+    selftest_case pass "seeded default at sorted position" "[$a,$w]" "[$a,$l,$w]"
+    selftest_case refuse "library_processing not seeded, list identical" "[$a,$w]" "[$a,$w]"
+    selftest_case refuse "seeded default enabled" "[$a,$w]" "[$a,$le,$w]"
+    selftest_case refuse "seeded default at the wrong position" "[$a,$w]" "[$a,$w,$l]"
+    selftest_case refuse "extra entry next to the default" "[$a,$w]" "[$a,$l,$w,{\"id\":\"zz\",\"enabled\":false}]"
+    selftest_case refuse "original entry dropped" "[$a,$w]" "[$l,$w]"
+    selftest_case pass "existing row unchanged" "[$a,$le,$w]" "[$a,$le,$w]"
+    selftest_case refuse "existing row changed" "[$a,$le,$w]" "[$a,$l,$w]"
+
+    rm -rf "$work"
+    [ "$bad" -eq 0 ] || exit 1
+    echo "ok   modules read-back self-test passed"
+}
+
+# write_psql_stub DIR writes a fake docker binary at DIR/bin/docker for selftest_psql_at.
+write_psql_stub() {
+    local dir=$1
+    mkdir -p "$dir/bin"
+    cat >"$dir/bin/docker" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" >"$PSQL_STUB_ARGS"
+[ "$#" -gt 0 ] && shift "$(($# - 1))"
+case "${1:-}" in
+    "SELECT 'ordinary'") printf 'ordinary-row\n' ;;
+    "SELECT 'nonzero'") echo "psql: simulated failure" >&2; exit 17 ;;
+    "SELECT 'hang'") exec sleep 12 ;;
+    *) echo "unexpected query: ${1:-}" >&2; exit 99 ;;
+esac
+EOF
+    chmod +x "$dir/bin/docker"
+}
+
+# selftest_psql_at checks psql_at compose arguments, SQL output, exit propagation and timeout bound.
+selftest_psql_at() {
+    local bad=0 out="" err_out="" rc=0 start=0 want_args="" got_args="" orig_path=$PATH
+    work=$(mktemp -d) || exit 1
+    : >"$work/.env"
+    : >"$work/override-candidate.yaml"
+    files=(-f "$compose" -f "$work/override-candidate.yaml")
+    write_psql_stub "$work"
+    PATH="$work/bin:$orig_path"
+    export PSQL_STUB_ARGS="$work/args.txt"
+
+    want_args=$(printf '%s\n' compose -p "$project" --project-directory "$root/deploy/homelab" \
+        --env-file "$work/.env" -f "$compose" -f "$work/override-candidate.yaml" \
+        exec -T postgres psql -U snatcharr -d snatcharr -v ON_ERROR_STOP=1 -Atc "SELECT 'ordinary'")
+
+    rc=0
+    out=$(DC_SECONDS=5 psql_at "SELECT 'ordinary'") || rc=$?
+    [ -f "$work/args.txt" ] && got_args=$(<"$work/args.txt")
+    if [ "$rc" -ne 0 ] || [ "$out" != "ordinary-row" ] || [ "$got_args" != "$want_args" ]; then
+        echo "FAIL psql_at ordinary query: rc=$rc out='$out' args='$got_args'" >&2
+        bad=1
+    fi
+
+    rc=0
+    err_out=$(DC_SECONDS=5 psql_at "SELECT 'nonzero'" 2>&1) || rc=$?
+    if [ "$rc" -ne 17 ] || [[ "$err_out" != *"psql: simulated failure"* ]]; then
+        echo "FAIL psql_at nonzero propagation: rc=$rc (want 17) out='$err_out'" >&2
+        bad=1
+    fi
+
+    start=$SECONDS
+    rc=0
+    DC_SECONDS=1 psql_at "SELECT 'hang'" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -ne 124 ] || [ $((SECONDS - start)) -ge 10 ]; then
+        echo "FAIL psql_at sleeping stub: rc=$rc after $((SECONDS - start))s, want 124 within 10s" >&2
+        bad=1
+    fi
+
+    PATH=$orig_path
+    unset PSQL_STUB_ARGS
+    rm -rf "$work"
+    [ "$bad" -eq 0 ] || exit 1
+    echo "ok   psql_at probe self-test passed"
+}
+
+if [ "${1:-}" = "--selftest-modules" ]; then
+    selftest_modules
+    selftest_psql_at
+    exit 0
+fi
 
 # 1. Resolve images, initialize compose workdir, pull old images and write overrides.
 resolve_images
@@ -837,6 +1007,7 @@ old_schema_version=$(psql_at 'SELECT version FROM schema_migrations')
 old_schema_dirty=$(psql_at 'SELECT dirty FROM schema_migrations')
 [ "$old_schema_dirty" = "f" ] || fail "schema_migrations dirty before upgrade"
 save_migration_expectations
+old_modules_library=$(psql_at "SELECT count(*) FROM public.modules WHERE id = 'library_processing'")
 echo "ok   saved fingerprint and schema migration ($old_schema_version)"
 
 # Apply planted defect if requested.
@@ -849,6 +1020,7 @@ if [ -f "$work/postgres.yaml" ]; then
     files+=(-f "$work/postgres.yaml")
 fi
 dc config --quiet
+pre_candidate_at=$(psql_at "SELECT clock_timestamp()")
 dc up "${up_args[@]}" || fail "services did not turn healthy on candidate images"
 candidate_up_at=$(psql_at "SELECT now()")
 
