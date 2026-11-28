@@ -47,21 +47,26 @@ run() {
   out="$(cd "$M" && sh tools/ci/gosec_packages.sh "$@" 2>"$WORK/stderr")" || rc=$?
   err="$(cat "$WORK/stderr")"
 }
-# Temporary go wrapper on PATH for the first positive run only. The wrapper source is a literal;
-# the real go path travels through the exported environment, not through the script text.
+# Absolute private bin first on PATH (this process only): go there is a note wrapper for the first
+# run, then a symlink to the real go, so runs after cd never re-resolve a relative PATH entry.
 GOSEC_FIXTURE_REAL_GO="$(command -v go)"
+# dash returns a bare name for an empty PATH component: it is relative to the initial cwd.
+case "$GOSEC_FIXTURE_REAL_GO" in
+  /*) ;;
+  *) GOSEC_FIXTURE_REAL_GO="$PWD/$GOSEC_FIXTURE_REAL_GO" ;;
+esac
 export GOSEC_FIXTURE_REAL_GO
 mkdir "$WORK/bin"
+PATH="$WORK/bin:$PATH"
 cat >"$WORK/bin/go" <<'EOF'
 #!/bin/sh
 echo "gosec fixture: go wrapper note" >&2
 exec "$GOSEC_FIXTURE_REAL_GO" "$@"
 EOF
 chmod +x "$WORK/bin/go"
-ORIG_PATH="$PATH"
-PATH="$WORK/bin:$PATH"
 run ./...
-PATH="$ORIG_PATH"
+# Wrapper served its one instrumented run; later runs get a plain symlink to the real go.
+ln -sf "$GOSEC_FIXTURE_REAL_GO" "$WORK/bin/go"
 check_case "wrapper stderr note present" 0 "$rc" "gosec fixture: go wrapper note" "$err"
 check_case "pattern lists tracked packages" 0 "$rc" "./a" "$out"
 check_case "pattern lists ./b/c" 0 "$rc" "./b/c" "$out"
