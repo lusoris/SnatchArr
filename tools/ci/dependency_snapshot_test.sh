@@ -14,6 +14,7 @@
 #   10. negative directory named docker refused
 #   11. negative bare docker not on PATH refused
 #   12. bounded --docker lookup: injected blocked fake lookup, success, validation errors, cleanup
+# Native Windows Python skips only the POSIX execute-bit check and the two stub launches.
 #
 #   tools/ci/dependency_snapshot_test.sh
 #
@@ -28,6 +29,8 @@ if [ -z "$PYTHON" ]; then
   printf 'dependency_snapshot_test: python3 not on PATH\n' >&2
   exit 2
 fi
+# Check the Python host, not the shell: Git Bash can run native Windows Python.
+python_os="$("$PYTHON" -I -c 'import os, sys; sys.stdout.write(os.name)')"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPT="$HERE/dependency_snapshot.py"
 FIXTURES="$HERE/testdata/dependency_snapshot"
@@ -88,10 +91,17 @@ EOF
   chmod 755 "$stub_path"
 }
 
-make_stub "$fixture/bin/docker"
-make_stub "$fixture/bin/evil"
-make_stub "$fixture/noexec/docker"
-chmod 644 "$fixture/noexec/docker"
+if [ "$python_os" = nt ]; then
+  # Keep real files for the relative-path and wrong-basename checks; neither is launched.
+  mkdir -p "$fixture/bin"
+  : > "$fixture/bin/docker"
+  : > "$fixture/bin/evil"
+else
+  make_stub "$fixture/bin/docker"
+  make_stub "$fixture/bin/evil"
+  make_stub "$fixture/noexec/docker"
+  chmod 644 "$fixture/noexec/docker"
+fi
 
 DIGEST="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 IMAGE="example.invalid/snapshot-fixture:1@sha256:$DIGEST"
@@ -157,22 +167,31 @@ expect_scan "relative --docker refused" 1 "--docker" 0 --docker bin/docker
 expect_scan "non-docker basename refused" 1 "--docker" 0 --docker "$fixture/bin/evil"
 
 # 6. Negative: non-executable --docker
-expect_scan "non-executable --docker refused" 1 "--docker" 0 --docker "$fixture/noexec/docker"
+if [ "$python_os" = nt ]; then
+  printf 'skip %s: native Windows does not use POSIX execute bits\n' "non-executable --docker refused"
+else
+  expect_scan "non-executable --docker refused" 1 "--docker" 0 --docker "$fixture/noexec/docker"
+fi
 
 # 7. Boundary: empty --docker
 expect_scan "empty --docker refused" 1 "--docker" 0 --docker ""
 
-# 8. Positive: explicit executable --docker path runs planted + real scan and writes rewritten out.json
-post_scan_check="check_out_manifest"
-expect_scan "explicit executable --docker accepted" 0 "Dependency snapshot: 2 resolved packages, 2 direct dependencies checked" 2 \
-  --docker "$fixture/bin/docker"
+if [ "$python_os" = nt ]; then
+  printf 'skip %s: native Windows Python cannot launch the POSIX shebang Docker fixture\n' \
+    "explicit executable --docker accepted" "bare docker resolved on PATH"
+else
+  # 8. Positive: explicit executable --docker path runs planted + real scan and writes rewritten out.json
+  post_scan_check="check_out_manifest"
+  expect_scan "explicit executable --docker accepted" 0 "Dependency snapshot: 2 resolved packages, 2 direct dependencies checked" 2 \
+    --docker "$fixture/bin/docker"
 
-# 9. Positive: bare docker name resolved on PATH
-(
-  PATH="$fixture/bin:$PATH"
-  expect_scan "bare docker resolved on PATH" 0 "Dependency snapshot: 2 resolved packages, 2 direct dependencies checked" 2 \
-    --docker docker
-)
+  # 9. Positive: bare docker name resolved on PATH
+  (
+    PATH="$fixture/bin:$PATH"
+    expect_scan "bare docker resolved on PATH" 0 "Dependency snapshot: 2 resolved packages, 2 direct dependencies checked" 2 \
+      --docker docker
+  )
+fi
 
 # 10. Negative: directory named docker
 mkdir -p "$fixture/dir/docker"
