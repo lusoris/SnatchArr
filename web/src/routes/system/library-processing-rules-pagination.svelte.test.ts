@@ -28,6 +28,7 @@ import {
 	importButton,
 	problemError,
 	ruleSelect,
+	saveButton,
 	selectOptionValues,
 	userLanguageFixture
 } from './library-processing-rules-test-helpers.js';
@@ -136,6 +137,38 @@ describe('library processing rules pagination', () => {
 			storedRule.id
 		]);
 		expect(select.value).toBe(storedRule.id);
+	});
+
+	it('replaces a loaded rule with the later-page row for the same ID, reordered, and saves the fresh content', async () => {
+		const moved = userLanguageFixture(storedRule.id, 'fr', storedRule.created_at);
+		const movedLabel = `${moved.scope} · ${moved.id}`;
+		const movedInput = {
+			scope: 'user_language',
+			user_language: 'fr',
+			rule: { track: { languages: ['fr'] } }
+		};
+		vi.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule, storedRule], 'cursor-2') as never)
+			.mockResolvedValueOnce(pageResult([moved]) as never)
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule, moved]) as never);
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValueOnce({ data: moved } as never);
+
+		render(LibraryProcessingRules);
+		await screen.findByLabelText(m.modules_rules_select_label());
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_load_more() }));
+		await waitFor(() => expect(screen.getByRole('option', { name: movedLabel })).toBeTruthy());
+
+		expect(screen.queryByRole('option', { name: optionLabel })).toBeNull();
+		expect(selectOptionValues()).toEqual(['', highPrecedenceRule.id, storedRule.id]);
+		await fireEvent.change(ruleSelect(), { target: { value: storedRule.id } });
+		await chooseFormat('JSON');
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+		expect(readRuleDocument(documentField().value, 'json')).toEqual(movedInput);
+		expect(screen.getByText(m.modules_rules_editing({ rule: movedLabel }))).toBeTruthy();
+
+		await fireEvent.click(saveButton());
+		await waitFor(() => expect(putSpy).toHaveBeenCalledTimes(1));
+		expect(putSpy.mock.calls[0]?.[1]).toMatchObject({ body: movedInput });
 	});
 
 	it('keeps loaded rules and current selection intact when loading a subsequent page fails, and recovers on retry', async () => {

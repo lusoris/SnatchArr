@@ -163,11 +163,28 @@
 		}
 	}
 
+	// Authoritative detail reads of one list load, by ID (null = 404). Every lookup of an ID in that
+	// load shares the answer, so the selection, the timeout target and the editor never disagree and
+	// never read the same ID twice. Cached pins (prefer/known) are never recorded here.
+	type FreshReads = Map<string, StoredRule | null>;
+
+	async function readFresh(
+		id: string,
+		reads: FreshReads,
+		signal: AbortSignal
+	): Promise<StoredRule | null> {
+		if (reads.has(id)) return reads.get(id) ?? null;
+		const rule = await fetchRule(id, signal);
+		reads.set(id, rule);
+		return rule;
+	}
+
 	async function reconcileSelection(
 		items: StoredRule[],
 		more: boolean,
 		prefer: StoredRule | string | undefined,
 		known: StoredRule | undefined,
+		reads: FreshReads,
 		signal: AbortSignal
 	): Promise<{ nextSelectedId: string; nextPinned: StoredRule | null; missingId: string }> {
 		const { targetId, preferred } = extractPreference(prefer);
@@ -181,7 +198,7 @@
 			return { nextSelectedId: '', nextPinned: null, missingId: targetId };
 		}
 		const knownTarget = preferred ?? (known?.id === targetId ? known : null);
-		const resolved = knownTarget ?? (await fetchRule(targetId, signal));
+		const resolved = knownTarget ?? (await readFresh(targetId, reads, signal));
 		if (!resolved) {
 			return { nextSelectedId: '', nextPinned: null, missingId: targetId };
 		}
@@ -195,12 +212,13 @@
 	function syncRetainedRules(
 		page: ReturnType<typeof parsePageState>,
 		missingId: string,
-		checked: { id: string; rule: StoredRule | null } | null
+		checks: (CheckedRule | null)[]
 	): void {
 		function reconcile(cached: StoredRule | null): StoredRule | null {
 			if (!cached) return null;
 			const { id } = cached;
-			if (checked?.id === id) return checked.rule;
+			const checked = checks.find((check) => check?.id === id);
+			if (checked) return checked.rule;
 			const onPage = page.items.find((rule) => rule.id === id);
 			if (onPage) return onPage;
 			if (pinnedRule?.id === id) return pinnedRule;
@@ -215,53 +233,104 @@
 		}
 	}
 
-	async function lookupStoredPreview(
-		targetId: string,
-		page: ReturnType<typeof parsePageState>,
-		freshDetail: StoredRule | null,
-		missingId: string,
-		signal: AbortSignal
-	): Promise<StoredRule | null> {
-		const pageRule = page.items.find((rule) => rule.id === targetId);
-		if (pageRule) return pageRule;
-		if (freshDetail?.id === targetId) return freshDetail;
-		if (!page.more || missingId === targetId) return null;
-		return fetchRule(targetId, signal);
-	}
-
 	type CheckedRule = { id: string; rule: StoredRule | null };
 	type Selection = Awaited<ReturnType<typeof reconcileSelection>>;
+	type Checks = {
+		timeout: CheckedRule | null;
+		editor: CheckedRule | null;
+		preview: CheckedRule | null;
+	};
+	type ReadContext = { timeoutTarget: string; editorId: string; reverifyEditor: boolean };
 
-	// Checks the timed-out PUT target against the authoritative reads. POST has no target ID, so
-	// only a timed-out PUT is inspected. A throw (transport, empty body) is no answer at all.
-	async function inspectTimedOutTarget(
-		targetId: string,
+	// Synchronous evidence for one ID in this load: its page row, this load's detail read (null =
+	// 404), or absence from a complete list. undefined = no answer (partial list, nothing read).
+	function evidenceFor(
+		id: string,
 		page: ReturnType<typeof parsePageState>,
-		selection: Selection,
-		supplied: (StoredRule | string | undefined)[],
-		signal: AbortSignal
-	): Promise<CheckedRule | null> {
-		if (!targetId) return null;
-		let freshDetail = selection.nextPinned;
-		if (freshDetail && supplied.includes(freshDetail)) freshDetail = null;
-		const rule = await lookupStoredPreview(
-			targetId,
-			page,
-			freshDetail,
-			selection.missingId,
-			signal
-		);
-		return { id: targetId, rule };
+		reads: FreshReads
+	): StoredRule | null | undefined {
+		const pageRule = page.items.find((rule) => rule.id === id);
+		if (pageRule) return pageRule;
+		if (reads.has(id)) return reads.get(id);
+		return page.more ? undefined : null;
 	}
 
-	function nextMissingId(
-		current: string,
-		items: StoredRule[],
-		checked: CheckedRule | null
-	): string {
-		if (checked && !checked.rule) return checked.id;
-		const foundByCheck = checked?.id === current && checked.rule !== null;
-		return foundByCheck || items.some((rule) => rule.id === current) ? '' : current;
+	// A throw (transport, empty body) is no answer at all; an undefined lookup is no answer either.
+	async function checkTarget(
+		id: string,
+		page: ReturnType<typeof parsePageState>,
+		reads: FreshReads,
+		fetchIfNeeded: boolean,
+		signal: AbortSignal
+	): Promise<CheckedRule | null> {
+		if (!id) return null;
+		let rule = evidenceFor(id, page, reads);
+		if (rule === undefined && fetchIfNeeded) rule = await readFresh(id, reads, signal);
+		return rule === undefined ? null : { id, rule };
+	}
+
+	// The CURRENT editor ID and the timed-out PUT target (a POST has no target, so it stays
+	// list-only) are checked independently. The editor goes first, so what it learned survives a
+	// failing unrelated lookup (see keepEditorEvidence). It costs a detail read only when it is the
+	// timeout target or a confirmed-missing ID being re-verified; only that path may show a preview.
+	async function checkRead(
+		page: ReturnType<typeof parsePageState>,
+		reads: FreshReads,
+		ctx: ReadContext,
+		signal: AbortSignal
+	): Promise<Checks> {
+		const fetchEditor = ctx.editorId === ctx.timeoutTarget || ctx.reverifyEditor;
+		const editor = await checkTarget(ctx.editorId, page, reads, fetchEditor, signal);
+		const timeout = await checkTarget(ctx.timeoutTarget, page, reads, true, signal);
+		return { timeout, editor, preview: timeout ?? (ctx.reverifyEditor ? editor : null) };
+	}
+
+	// Confirmed-missing belongs to the edited ID only: absent confirms it, found clears it, and no
+	// answer keeps it. The outcome for any other ID (the timeout target) never reaches this state.
+	function nextMissingId(current: string, editor: CheckedRule | null): string {
+		if (!editor) return current;
+		return editor.rule ? '' : editor.id;
+	}
+
+	// The edited rule was definitively absent: no retained copy may stay selectable or exportable,
+	// or an export would clear the missing state without a positive read. Other rows stay.
+	function dropRetained(id: string): void {
+		loadedRules = loadedRules.filter((rule) => rule.id !== id);
+		if (pinnedRule?.id === id) pinnedRule = null;
+		if (savedRule?.id === id) savedRule = null;
+		if (lastSavedRule?.id === id) lastSavedRule = null;
+		if (selectedId === id) selectedId = '';
+	}
+
+	// The edited rule was positively read: every retained copy of it becomes that read.
+	function refreshRetained(rule: StoredRule): void {
+		const current = (cached: StoredRule | null) => (cached?.id === rule.id ? rule : cached);
+		if (loadedRules.some((loaded) => loaded.id === rule.id)) {
+			loadedRules = appendRulePage(loadedRules, [rule]);
+		}
+		pinnedRule = current(pinnedRule);
+		savedRule = current(savedRule);
+		lastSavedRule = current(lastSavedRule);
+	}
+
+	// A later request of a load failed: the rest of that load is not published, but a definitive
+	// answer already gathered for the current editor (page row, 404 read, complete-list absence)
+	// still counts. Inconclusive state (no answer) leaves every snapshot alone.
+	function keepEditorEvidence(
+		page: ReturnType<typeof parsePageState> | undefined,
+		reads: FreshReads,
+		editorId: string
+	): void {
+		if (!page || !editorId || editorId !== editingId) return;
+		const rule = evidenceFor(editorId, page, reads);
+		if (rule === undefined) return;
+		if (rule) {
+			refreshRetained(rule);
+			missingRuleId = '';
+			return;
+		}
+		dropRetained(editorId);
+		missingRuleId = editorId;
 	}
 
 	function previewOf(rule: StoredRule | null | undefined): typeof storedPreview {
@@ -277,23 +346,38 @@
 	function publishRules(
 		page: ReturnType<typeof parsePageState>,
 		selection: Selection,
-		checked: CheckedRule | null
+		checks: Checks
 	): void {
-		storedPreview = previewOf(checked?.rule);
-		missingRuleId = nextMissingId(missingRuleId, page.items, checked);
+		// An editor that moved on since the read started gets no verdict from it.
+		const editor = checks.editor?.id === editingId ? checks.editor : null;
+		storedPreview = previewOf(checks.preview?.rule);
+		missingRuleId = nextMissingId(missingRuleId, editor);
 		loadedRules = page.items;
 		hasMore = page.more;
 		nextCursor = page.cursor;
 		pinnedRule = selection.nextPinned;
 		selectedId = selection.nextSelectedId;
-		syncRetainedRules(page, selection.missingId, checked);
+		syncRetainedRules(page, selection.missingId, [checks.timeout, editor]);
 		hasListSnapshot = true;
 	}
 
+	// State at request start. A timed-out POST has no target, so it stays list-only: it also
+	// suppresses the detail re-verification of a confirmed-missing editor, which a timed-out PUT
+	// elsewhere does not.
+	function snapshotReadContext(): ReadContext {
+		const editorId = editingId;
+		const timeoutTarget = writeTimeout?.targetId ?? '';
+		return {
+			timeoutTarget,
+			editorId,
+			reverifyEditor: editorId !== '' && editorId === missingRuleId && writeTimeout?.targetId !== ''
+		};
+	}
+
 	async function loadRules(prefer?: StoredRule | string, known?: StoredRule): Promise<void> {
-		// An unknown write owns the check: a timed-out POST has no target, so it stays list-only.
-		// The confirmed-missing edited rule is checked only when no unknown write exists.
-		const targetId = writeTimeout ? writeTimeout.targetId : missingRuleId;
+		const ctx = snapshotReadContext();
+		const reads: FreshReads = new Map();
+		let page: ReturnType<typeof parsePageState> | undefined;
 		const { seq, signal } = startRequest();
 		storedPreview = null;
 		loading = true;
@@ -306,20 +390,24 @@
 				signal: withDeadline(signal)
 			});
 			if (!isCurrent(seq, signal)) return;
-			const page = parsePageState(res.data);
-			const selection = await reconcileSelection(page.items, page.more, prefer, known, signal);
-			if (!isCurrent(seq, signal)) return;
-			const checked = await inspectTimedOutTarget(
-				targetId,
-				page,
-				selection,
-				[prefer, known],
+			page = parsePageState(res.data);
+			const selection = await reconcileSelection(
+				page.items,
+				page.more,
+				prefer,
+				known,
+				reads,
 				signal
 			);
 			if (!isCurrent(seq, signal)) return;
-			publishRules(page, selection, checked);
+			const checks = await checkRead(page, reads, ctx, signal);
+			if (!isCurrent(seq, signal)) return;
+			publishRules(page, selection, checks);
 		} catch (err) {
-			if (isCurrent(seq, signal)) loadError = err;
+			if (isCurrent(seq, signal)) {
+				loadError = err;
+				keepEditorEvidence(page, reads, ctx.editorId);
+			}
 		} finally {
 			if (isCurrent(seq, signal)) loading = false;
 		}
@@ -332,9 +420,11 @@
 
 	// A Load more row for the saved rule is newer than the cached copy: adopt it before the overlays
 	// that stood in for it are dropped, so a later first-page retry falls back to the fresh record.
-	function adoptIncomingSaved(items: StoredRule[]): void {
-		const incoming = items.find((rule) => rule.id === lastSavedRule?.id);
-		if (incoming) lastSavedRule = incoming;
+	// The canonical combined list holds the last incoming row per ID, the one appendRulePage kept.
+	function adoptIncomingSaved(items: StoredRule[], combined: StoredRule[]): void {
+		const id = lastSavedRule?.id;
+		if (!items.some((rule) => rule.id === id)) return;
+		lastSavedRule = combined.find((rule) => rule.id === id) ?? lastSavedRule;
 	}
 
 	function clearReachedPinned(combined: StoredRule[]): void {
@@ -356,8 +446,8 @@
 			if (!isCurrent(seq, signal)) return;
 			const page = parsePageState(res.data);
 			const combined = appendRulePage(loadedRules, page.items);
-			adoptIncomingSaved(page.items);
-			missingRuleId = nextMissingId(missingRuleId, page.items, null);
+			adoptIncomingSaved(page.items, combined);
+			missingRuleId = page.items.some((rule) => rule.id === missingRuleId) ? '' : missingRuleId;
 			loadedRules = combined;
 			hasMore = page.more;
 			nextCursor = page.cursor;

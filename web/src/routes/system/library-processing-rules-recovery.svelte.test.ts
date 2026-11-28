@@ -308,12 +308,14 @@ it('adopts the Load more row for the saved rule so a first-page retry keeps its 
 	// Another writer moved the same rule to a different scope after the failed refresh.
 	const incoming = itemOverrideFixture('ep-9');
 	const incomingLabel = `${incoming.scope} · ${incoming.id}`;
+	const staleDuplicate = savedGlobalFixture('2026-10-25T00:01:00Z');
 	vi.spyOn(api, 'GET')
 		.mockResolvedValueOnce(pageResult(firstRows, 'cursor-2') as never)
 		.mockResolvedValueOnce(pageResult([storedRule], 'cursor-3') as never)
 		.mockResolvedValueOnce(pageResult(firstRows, 'cursor-2') as never)
 		.mockRejectedValueOnce(problemError(502, 'Bad Gateway', 'refresh down after scope move'))
-		.mockResolvedValueOnce(pageResult([incoming], 'cursor-4') as never)
+		// A repeated ID inside one page: the last row wins, so the earlier copy must never come back.
+		.mockResolvedValueOnce(pageResult([staleDuplicate, incoming], 'cursor-4') as never)
 		.mockResolvedValueOnce(pageResult(firstRows, 'cursor-2') as never);
 	vi.spyOn(api, 'PUT')
 		.mockResolvedValueOnce({ data: savedGlobalFixture('2026-10-25T00:11:00Z') } as never)
@@ -341,7 +343,142 @@ it('adopts the Load more row for the saved rule so a first-page retry keeps its 
 
 	await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
 	await waitFor(() => expect(screen.queryByText(/refresh down after scope move/)).toBeNull());
+	await screen.findByLabelText(m.modules_rules_select_label());
 	expect(selectOptionValues()).toEqual(['', highPrecedenceRule.id, secondPageRule.id]);
 	expect(ruleSelect().value).toBe(highPrecedenceRule.id);
 	expect(screen.getByText(m.modules_rules_editing({ rule: incomingLabel }))).toBeTruthy();
+});
+
+type DetailInit = { params?: { path?: { ruleId?: string } } };
+type EditorReads = { complete?: boolean; aFails?: boolean; highExists: () => boolean };
+
+// Page and detail answers by ID: A is the timed-out PUT target, B (high) is the edited rule.
+function mockEditorReads(getSpy: ReturnType<typeof queueGets>, reads: EditorReads): string[] {
+	const detailReads: string[] = [];
+	getSpy.mockReset();
+	getSpy.mockImplementation(((path: string, init?: DetailInit) => {
+		if (path === RULES_PAGE_PATH) {
+			const items = reads.highExists() && reads.complete ? [highPrecedenceRule] : [];
+			return Promise.resolve(
+				pageResult([...items, secondPageRule], reads.complete ? undefined : 'cursor-2')
+			);
+		}
+		const id = init?.params?.path?.ruleId ?? '';
+		detailReads.push(id);
+		if (id === saved.id) {
+			if (reads.aFails) return Promise.reject(new TypeError('detail connection lost'));
+			return Promise.resolve({ data: committed });
+		}
+		if (reads.highExists()) return Promise.resolve({ data: highPrecedenceRule });
+		return Promise.reject(problemError(404, 'Not Found', 'gone'));
+	}) as never);
+	return detailReads;
+}
+
+// Opens B (the high rule) as the editor while A's timed-out PUT stays unresolved.
+async function exportHighBesideTimeout() {
+	await fireEvent.change(ruleSelect(), { target: { value: highPrecedenceRule.id } });
+	await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+	return readRuleDocument(documentField().value, 'json');
+}
+
+const highMissing = m.modules_rules_write_missing({ id: highPrecedenceRule.id });
+
+it('confirms the current editor missing beside a timed-out PUT for another ID and restores Save when it returns', async () => {
+	const spies = await timeOutOffPagePut({ found: committed });
+	const exported = await exportHighBesideTimeout();
+	let highExists = false;
+	const detailReads = mockEditorReads(spies.getSpy, { highExists: () => highExists });
+
+	await checkStoredRules();
+
+	expect(screen.getByText(highMissing)).toBeTruthy();
+	expect(screen.getByText(m.modules_rules_write_timeout())).toBeTruthy();
+	expect(saveDisabled()).toBe(true);
+	// The timed-out target is still previewed; one detail read per ID despite two lookups each.
+	expect(screen.getByRole('textbox', { name: new RegExp(committedLabel) })).toBeTruthy();
+	expect([...detailReads].sort()).toEqual([saved.id, highPrecedenceRule.id].sort());
+	await fireEvent.click(saveButton());
+	expect(spies.putSpy).toHaveBeenCalledTimes(2);
+
+	// The selection is cleared, yet Check still re-verifies the editor ID off-page.
+	highExists = true;
+	detailReads.length = 0;
+	spies.putSpy.mockResolvedValueOnce({ data: highPrecedenceRule } as never);
+	await checkStoredRules();
+
+	await waitFor(() => expect(saveDisabled()).toBe(false));
+	expect(screen.queryByText(highMissing)).toBeNull();
+	expect([...detailReads].sort()).toEqual([saved.id, highPrecedenceRule.id].sort());
+	await fireEvent.click(saveButton());
+	expect(spies.putSpy).toHaveBeenNthCalledWith(3, RULE_PATH, {
+		params: { path: { ruleId: highPrecedenceRule.id } },
+		body: exported,
+		signal: expect.anything()
+	});
+});
+
+it('keeps the confirmed-missing editor when the unrelated timeout lookup then fails', async () => {
+	const spies = await timeOutOffPagePut({ found: committed });
+	await exportHighBesideTimeout();
+	mockEditorReads(spies.getSpy, { aFails: true, highExists: () => false });
+
+	await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_check_state() }));
+
+	expect(await screen.findByText(highMissing)).toBeTruthy();
+	expect(screen.getByRole('button', { name: m.modules_rules_retry() })).toBeTruthy();
+	expect(screen.getByText(m.modules_rules_write_timeout())).toBeTruthy();
+	expect(saveDisabled()).toBe(true);
+	// B is gone from every retained copy; the other known rows stay and Retry is available.
+	expect(selectOptionValues()).toEqual(['', saved.id]);
+	expect(
+		(screen.getByRole('button', { name: m.modules_rules_export() }) as HTMLButtonElement).disabled
+	).toBe(true);
+	await fireEvent.click(saveButton());
+	expect(spies.putSpy).toHaveBeenCalledTimes(2);
+
+	// Exporting another entry moves the editor and drops the alert; B is never restorable by export.
+	await fireEvent.change(ruleSelect(), { target: { value: saved.id } });
+	await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_export() }));
+	expect(screen.queryByText(highMissing)).toBeNull();
+	expect(selectOptionValues()).not.toContain(highPrecedenceRule.id);
+});
+
+it('confirms the editor missing from a complete list without a detail read, then restores it', async () => {
+	const spies = await timeOutOffPagePut({ found: committed });
+	await exportHighBesideTimeout();
+	let highExists = false;
+	const detailReads = mockEditorReads(spies.getSpy, {
+		complete: true,
+		highExists: () => highExists
+	});
+
+	await checkStoredRules();
+	expect(screen.getByText(highMissing)).toBeTruthy();
+	expect(saveDisabled()).toBe(true);
+
+	highExists = true;
+	await checkStoredRules();
+	await waitFor(() => expect(saveDisabled()).toBe(false));
+	expect(screen.queryByText(highMissing)).toBeNull();
+	expect(detailReads).toEqual([]);
+});
+
+it('missing: an unknown POST rechecked list-only restores Save when the page has the rule, without a preview', async () => {
+	const spies = await timeOutOffPagePut({ rejected: problemError(404, 'Not Found', 'gone') });
+	await checkStoredRules();
+	spies.postSpy.mockImplementationOnce(hangUntilAborted as never);
+	await fireEvent.click(importButton());
+	expireDeadline(spies.deadlines[spies.deadlines.length - 1]!);
+	await waitFor(() => expect(screen.getByText(m.modules_rules_write_timeout())).toBeTruthy());
+	expect(saveDisabled()).toBe(true);
+
+	spies.getSpy.mockResolvedValueOnce(pageResult([committed]) as never);
+	await checkStoredRules();
+
+	await waitFor(() => expect(saveDisabled()).toBe(false));
+	expect(screen.queryByText(m.modules_rules_write_missing({ id: saved.id }))).toBeNull();
+	expect(screen.getAllByRole('textbox')).toEqual([documentField()]);
+	expect(spies.getSpy).toHaveBeenCalledTimes(5);
+	expect(spies.putSpy).toHaveBeenCalledTimes(2);
 });

@@ -616,6 +616,47 @@ describe('pagination ordering and selection helpers', () => {
 		expect(appendRulePage([a, b], [b, c]).map((r) => r.id)).toEqual([a.id, b.id, c.id]);
 	});
 
+	it('replaces a loaded rule by ID with the incoming row and re-sorts by precedence', () => {
+		const first = makeStored(
+			'018f0000-0000-7000-8000-000000000001',
+			'item_override',
+			'2026-01-01T00:00:00Z'
+		);
+		const stale = makeStored(
+			'018f0000-0000-7000-8000-000000000002',
+			'global_default',
+			'2026-01-01T00:00:00Z'
+		);
+		const last = makeStored(
+			'018f0000-0000-7000-8000-000000000003',
+			'media_type',
+			'2026-01-01T00:00:00Z'
+		);
+		const fresh = makeStored(stale.id, 'library', '2026-01-01T00:00:00Z');
+
+		const merged = appendRulePage([first, stale, last], [fresh]);
+
+		expect(merged.map((r) => r.id)).toEqual([first.id, fresh.id, last.id]);
+		expect(merged[1]).toBe(fresh);
+		expect(merged[0]).toBe(first);
+		expect(merged[2]).toBe(last);
+	});
+
+	it('keeps IDs unique for repeated incoming rows and returns an untouched copy for an empty page', () => {
+		const a = makeStored(
+			'018f0000-0000-7000-8000-000000000001',
+			'item_override',
+			'2026-01-01T00:00:00Z'
+		);
+		const b = makeStored('018f0000-0000-7000-8000-000000000002', 'library', '2026-01-01T00:00:00Z');
+		const existing = [b, a];
+
+		expect(appendRulePage(existing, [a, a]).map((r) => r.id)).toEqual([a.id, b.id]);
+		const empty = appendRulePage(existing, []);
+		expect(empty).toEqual(existing);
+		expect(empty).not.toBe(existing);
+	});
+
 	it('merges an off-page pinned rule at its precedence slot without duplicating loaded rules', () => {
 		const first = makeStored(
 			'018f0000-0000-7000-8000-000000000001',

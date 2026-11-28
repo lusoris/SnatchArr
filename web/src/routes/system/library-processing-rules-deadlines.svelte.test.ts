@@ -355,6 +355,7 @@ describe('library processing rules deadlines and saved state', () => {
 
 		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
 		await waitFor(() => expect(screen.queryByText(/page refresh unavailable/)).toBeNull());
+		await screen.findByLabelText(m.modules_rules_select_label());
 		expect(getSpy).toHaveBeenCalledTimes(3);
 		expect(ruleSelect().value).toBe(updatedRule.id);
 	});
@@ -588,6 +589,7 @@ describe('library processing rules deadlines and saved state', () => {
 
 		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_retry() }));
 		await waitFor(() => expect(screen.queryByText(/refresh down after scope move/)).toBeNull());
+		await screen.findByLabelText(m.modules_rules_select_label());
 		expect(selectOptionValues()).toEqual([
 			'',
 			highPrecedenceRule.id,

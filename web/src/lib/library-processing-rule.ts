@@ -237,20 +237,19 @@ export function compareStoredRules(a: LibraryProcessingRule, b: LibraryProcessin
 	return a.id < b.id ? -1 : 1;
 }
 
-/** Appends incoming page items without duplicating already-loaded rule IDs. */
+/**
+ * Merges a later page into the loaded rules. An incoming row replaces a loaded row with the same ID
+ * (the fresh read wins, so a changed scope moves it), IDs stay unique, and the result follows
+ * compareStoredRules. An empty page leaves the loaded rules untouched.
+ */
 export function appendRulePage(
 	existing: readonly LibraryProcessingRule[],
 	incoming: readonly LibraryProcessingRule[]
 ): LibraryProcessingRule[] {
-	const seen = new Set(existing.map((rule) => rule.id));
-	const merged = [...existing];
-	for (const rule of incoming) {
-		if (!seen.has(rule.id)) {
-			seen.add(rule.id);
-			merged.push(rule);
-		}
-	}
-	return merged;
+	if (incoming.length === 0) return [...existing];
+	const fresh = new Map(incoming.map((rule) => [rule.id, rule]));
+	const kept = existing.filter((rule) => !fresh.has(rule.id));
+	return [...kept, ...fresh.values()].sort(compareStoredRules);
 }
 
 /** Inserts an off-page selected rule at its precedence position until its page is loaded. */
