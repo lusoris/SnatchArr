@@ -50,7 +50,7 @@
 	let lastSavedRule = $state<StoredRule | null>(null);
 	let savedRule = $state<StoredRule | null>(null);
 	// Set only when a POST/PUT hit its own deadline: the server may or may not have committed it.
-	let writeTimeout = $state.raw<{ message: string } | null>(null);
+	let writeTimeout = $state.raw<{ message: string; targetId: string } | null>(null);
 	let storedPreview = $state<{ id: string; label: string; document: string } | null>(null);
 
 	type RuleInput = ReturnType<typeof readRuleDocument>;
@@ -99,12 +99,12 @@
 		);
 	}
 
-	function reportWriteFailure(err: unknown, deadline: AbortSignal): void {
+	function reportWriteFailure(err: unknown, deadline: AbortSignal, targetId = ''): void {
 		if (unmountController.signal.aborted) return;
 		if (isUnknownWriteOutcome(err, deadline)) {
 			// Nothing was confirmed: only an explicit read checks the stored state.
 			const message = m.modules_rules_write_timeout();
-			writeTimeout = { message };
+			writeTimeout = { message, targetId };
 			toast.error(message);
 			return;
 		}
@@ -194,6 +194,20 @@
 		}
 	}
 
+	async function lookupStoredPreview(
+		targetId: string,
+		page: ReturnType<typeof parsePageState>,
+		freshDetail: StoredRule | null,
+		missingId: string,
+		signal: AbortSignal
+	): Promise<StoredRule | null> {
+		const pageRule = page.items.find((rule) => rule.id === targetId);
+		if (pageRule) return pageRule;
+		if (freshDetail?.id === targetId) return freshDetail;
+		if (!page.more || missingId === targetId) return null;
+		return fetchRule(targetId, signal);
+	}
+
 	async function loadRules(prefer?: StoredRule | string, known?: StoredRule): Promise<void> {
 		const recovery = writeTimeout;
 		const { seq, signal } = startRequest();
@@ -211,9 +225,20 @@
 			const page = parsePageState(res.data);
 			const selection = await reconcileSelection(page.items, page.more, prefer, known, signal);
 			if (!isCurrent(seq, signal)) return;
-			// Preview only the document returned by this recovery read, never a cached fallback.
-			const checkedRule =
-				selection.nextPinned ?? page.items.find((rule) => rule.id === selection.nextSelectedId);
+			let checkedRule: StoredRule | null = null;
+			// POST has no target ID; only a timed-out PUT can produce a preview.
+			if (recovery?.targetId && recovery === writeTimeout) {
+				let freshDetail = selection.nextPinned;
+				if (freshDetail === prefer || freshDetail === known) freshDetail = null;
+				checkedRule = await lookupStoredPreview(
+					recovery.targetId,
+					page,
+					freshDetail,
+					selection.missingId,
+					signal
+				);
+				if (!isCurrent(seq, signal)) return;
+			}
 			if (recovery && recovery === writeTimeout && checkedRule) {
 				storedPreview = {
 					id: checkedRule.id,
@@ -289,6 +314,11 @@
 	}
 
 	function startWrite(): AbortSignal {
+		requestSeq += 1;
+		activeLoadController?.abort();
+		activeLoadController = null;
+		loading = false;
+		loadingMore = false;
 		writeTimeout = null;
 		storedPreview = null;
 		// Keep the transport deadline independent of navigation: unmount is not a rollback.
@@ -373,13 +403,13 @@
 			toast.success(status);
 			await loadRules(undefined, res.data);
 		} catch (err) {
-			reportWriteFailure(err, deadline);
+			reportWriteFailure(err, deadline, ruleId);
 		} finally {
 			if (!unmountController.signal.aborted) saving = false;
 		}
 	}
 
-	// A read-only first-page refresh cannot establish whether a timed-out write committed.
+	// A read-only refresh cannot establish whether a timed-out write committed.
 	// Keep the warning until a validated import or save starts.
 	async function checkStoredState(): Promise<void> {
 		if (busy || loading) return;
@@ -528,7 +558,7 @@
 		</div>
 	{/if}
 
-	{#if storedPreview && storedPreview.id === selectedId}
+	{#if storedPreview}
 		<div class="flex flex-col gap-2">
 			<label for="modules-rules-stored-document" class="text-sm font-medium">
 				{m.modules_rules_check_state()} · {storedPreview.label}

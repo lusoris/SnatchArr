@@ -246,7 +246,8 @@ describe('library processing rules deadlines and saved state', () => {
 			.mockResolvedValueOnce(pageResult(firstPage, cursor) as never)
 			.mockResolvedValueOnce(pageResult([storedRule]) as never)
 			// A global default sorts after these item overrides, whether or not the PUT committed.
-			.mockResolvedValueOnce(pageResult(firstPage, cursor) as never);
+			.mockResolvedValueOnce(pageResult(firstPage, cursor) as never)
+			.mockResolvedValueOnce({ data: storedRule } as never);
 		const putSpy = vi.spyOn(api, 'PUT').mockImplementation(hangUntilAborted as never);
 		const postSpy = vi.spyOn(api, 'POST');
 		const toastSuccessSpy = vi.spyOn(toast, 'success');
@@ -282,7 +283,11 @@ describe('library processing rules deadlines and saved state', () => {
 		);
 		expect(screen.queryByRole('option', { name: optionLabel })).toBeNull();
 		expect(screen.getByRole('button', { name: m.modules_rules_load_more() })).toBeTruthy();
-		expect(getSpy).toHaveBeenCalledTimes(3);
+		expect(getSpy).toHaveBeenCalledTimes(4);
+		expect(getSpy).toHaveBeenNthCalledWith(4, RULE_DETAIL_PATH, {
+			params: { path: { ruleId: storedRule.id } },
+			signal: expect.anything()
+		});
 		expect(getSpy).toHaveBeenNthCalledWith(3, RULES_PAGE_PATH, {
 			params: { query: { limit: LIBRARY_PROCESSING_RULE_PAGE_LIMIT } },
 			signal: expect.anything()
@@ -736,5 +741,161 @@ describe('library processing rules deadlines and saved state', () => {
 		expect(successToast).not.toHaveBeenCalled();
 		expect(putSpy).toHaveBeenCalledTimes(1);
 		expect(postSpy).not.toHaveBeenCalled();
+	});
+	it.each(['on-page', 'off-page'] as const)(
+		'previews the dispatched PUT target (%s), not the current selection',
+		async (location) => {
+			const { deadlines, timeoutSpy } = mockDeadlines();
+			const checked = userLanguageFixture(storedRule.id, 'it', storedRule.created_at);
+			const getSpy = vi
+				.spyOn(api, 'GET')
+				.mockResolvedValueOnce(
+					pageResult([highPrecedenceRule, secondPageRule, storedRule]) as never
+				)
+				.mockResolvedValueOnce(
+					(location === 'on-page'
+						? pageResult([highPrecedenceRule, secondPageRule, checked])
+						: pageResult([highPrecedenceRule, secondPageRule], 'cursor-2')) as never
+				)
+				.mockResolvedValueOnce({ data: checked } as never);
+			const putSpy = vi
+				.spyOn(api, 'PUT')
+				.mockImplementationOnce(hangUntilAborted as never)
+				.mockRejectedValueOnce(problemError(503, 'Service Unavailable', 'second save rejected'));
+			const successToast = vi.spyOn(toast, 'success');
+
+			render(LibraryProcessingRules);
+			await openRuleAsJson(storedRule.id);
+			await typeDocument(editedDocument);
+			await fireEvent.click(saveButton());
+			expect(putSpy).toHaveBeenCalledExactlyOnceWith(RULE_PATH, {
+				params: { path: { ruleId: storedRule.id } },
+				body: editedInput,
+				signal: deadlines[1]!.signal
+			});
+			await fireEvent.change(ruleSelect(), { target: { value: highPrecedenceRule.id } });
+			expireDeadline(deadlines[1]!);
+			await screen.findByText(m.modules_rules_write_timeout());
+			expect(getSpy).toHaveBeenCalledTimes(1);
+
+			await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_check_state() }));
+			const previewName = `${m.modules_rules_check_state()} · ${checked.scope} · ${checked.id} (JSON)`;
+			const preview = (await screen.findByRole('textbox', {
+				name: previewName
+			})) as HTMLTextAreaElement;
+			expect(preview.readOnly).toBe(true);
+			expect(readRuleDocument(preview.value, 'json').rule.track?.languages).toEqual(['it']);
+			expect(screen.getAllByRole('textbox')).toHaveLength(2);
+			expect(getSpy.mock.calls[1]?.[0]).toBe(RULES_PAGE_PATH);
+			expect(getSpy).toHaveBeenCalledTimes(location === 'on-page' ? 2 : 3);
+			if (location === 'off-page') {
+				expect(getSpy).toHaveBeenNthCalledWith(3, RULE_DETAIL_PATH, {
+					params: { path: { ruleId: storedRule.id } },
+					signal: expect.objectContaining({ aborted: false })
+				});
+				expect(timeoutSpy).toHaveBeenNthCalledWith(4, REQUEST_TIMEOUT_MS);
+			}
+			expect(ruleSelect().value).toBe(highPrecedenceRule.id);
+			await fireEvent.change(ruleSelect(), { target: { value: secondPageRule.id } });
+			expect(screen.getByRole('textbox', { name: previewName })).toBe(preview);
+			expect(documentField().value).toBe(editedDocument);
+			expect(screen.getByText(m.modules_rules_write_timeout())).toBeTruthy();
+			expect(screen.getByRole('status').textContent).toBe('');
+			expect(successToast).not.toHaveBeenCalled();
+			expect(putSpy).toHaveBeenCalledTimes(1);
+
+			await fireEvent.click(saveButton());
+			await screen.findByText(/second save rejected/);
+			expect(putSpy).toHaveBeenCalledTimes(2);
+			expect(screen.getAllByRole('textbox')).toEqual([documentField()]);
+			expect(screen.queryByText(m.modules_rules_write_timeout())).toBeNull();
+			expect(documentField().value).toBe(editedDocument);
+			expect(ruleSelect().value).toBe(secondPageRule.id);
+		}
+	);
+
+	it('refreshes an unknown POST without previewing the selected existing rule or a matching document', async () => {
+		const { deadlines } = mockDeadlines();
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule]) as never)
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule, storedRule]) as never);
+		const postSpy = vi.spyOn(api, 'POST').mockImplementationOnce(hangUntilAborted as never);
+		const putSpy = vi.spyOn(api, 'PUT');
+		const successToast = vi.spyOn(toast, 'success');
+
+		render(LibraryProcessingRules);
+		await openRuleAsJson(highPrecedenceRule.id);
+		await typeDocument(jsonDocument);
+		await fireEvent.click(importButton());
+		expireDeadline(deadlines[1]!);
+		await screen.findByText(m.modules_rules_write_timeout());
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_check_state() }));
+		await screen.findByRole('option', { name: optionLabel });
+
+		expect(getSpy).toHaveBeenCalledTimes(2);
+		expect(getSpy).toHaveBeenNthCalledWith(1, RULES_PAGE_PATH, expect.anything());
+		expect(getSpy).toHaveBeenNthCalledWith(2, RULES_PAGE_PATH, expect.anything());
+		expect(ruleSelect().value).toBe(highPrecedenceRule.id);
+		expect(screen.getAllByRole('textbox')).toEqual([documentField()]);
+		await fireEvent.change(ruleSelect(), { target: { value: storedRule.id } });
+		expect(screen.getAllByRole('textbox')).toEqual([documentField()]);
+		expect(documentField().value).toBe(jsonDocument);
+		expect(screen.getByRole('alert').textContent).toContain(m.modules_rules_write_timeout());
+		expect(screen.getByRole('status').textContent).toBe('');
+		expect(successToast).not.toHaveBeenCalled();
+		expect(postSpy).toHaveBeenCalledTimes(1);
+		expect(putSpy).not.toHaveBeenCalled();
+	});
+
+	it('discards an old recovery detail even if it resolves after a new valid save starts', async () => {
+		const { deadlines } = mockDeadlines();
+		const oldDetail = deferred<unknown>();
+		const nextWrite = deferred<unknown>();
+		const getSpy = vi
+			.spyOn(api, 'GET')
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule, storedRule], 'before') as never)
+			.mockResolvedValueOnce(pageResult([highPrecedenceRule, secondPageRule], 'stale') as never)
+			.mockReturnValueOnce(oldDetail.promise as never); // Deliberately ignores abort.
+		const putSpy = vi
+			.spyOn(api, 'PUT')
+			.mockImplementationOnce(hangUntilAborted as never)
+			.mockReturnValueOnce(nextWrite.promise as never);
+
+		render(LibraryProcessingRules);
+		await openRuleAsJson(storedRule.id);
+		await typeDocument(editedDocument);
+		await fireEvent.click(saveButton());
+		expireDeadline(deadlines[1]!);
+		await screen.findByText(m.modules_rules_write_timeout());
+		await fireEvent.click(screen.getByRole('button', { name: m.modules_rules_check_state() }));
+		await waitFor(() =>
+			expect(getSpy).toHaveBeenNthCalledWith(3, RULE_DETAIL_PATH, {
+				params: { path: { ruleId: storedRule.id } },
+				signal: expect.objectContaining({ aborted: false })
+			})
+		);
+		expect(screen.getByText(m.loading())).toBeTruthy();
+
+		await fireEvent.click(saveButton());
+		expect(putSpy).toHaveBeenCalledTimes(2);
+		expect(screen.queryByText(m.loading())).toBeNull();
+		expect(screen.queryByText(m.modules_rules_write_timeout())).toBeNull();
+		oldDetail.resolve({ data: userLanguageFixture(storedRule.id, 'it', storedRule.created_at) });
+		await flush();
+		expect(selectOptionValues()).toEqual(['', highPrecedenceRule.id, storedRule.id]);
+		expect(ruleSelect().value).toBe(storedRule.id);
+		expect(screen.getAllByRole('textbox')).toEqual([documentField()]);
+
+		// No successful-write refresh can mask a stale update or a stuck loading flag.
+		nextWrite.reject(problemError(503, 'Service Unavailable', 'new save rejected'));
+		await screen.findByText(/new save rejected/);
+		expect(getSpy).toHaveBeenCalledTimes(3);
+		expect(screen.queryByText(m.loading())).toBeNull();
+		expect(
+			(screen.getByRole('button', { name: m.modules_rules_load_more() }) as HTMLButtonElement)
+				.disabled
+		).toBe(false);
+		expect(documentField().value).toBe(editedDocument);
 	});
 });
