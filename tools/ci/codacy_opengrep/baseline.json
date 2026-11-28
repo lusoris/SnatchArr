@@ -47,28 +47,6 @@
     },
     {
       "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
-      "filePath": "tools/ci/dependency_snapshot.py",
-      "contentSha256": "e74f36029448ca6aa54e0a84cf962d82541583af3bbc17fe66777fb74a363977",
-      "count": "1",
-      "category": "A",
-      "entered": "2026-11-12",
-      "expires": "2026-11-30",
-      "issue": "1099",
-      "reason": "docker arguments include environment-derived values that are not validated; #1099 validates them before this entry expires."
-    },
-    {
-      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
-      "filePath": "tools/ci/dependency_snapshot.py",
-      "contentSha256": "29d33a7faf7d2ca89f440c1c668420e5232a21a6324a2a0f0016fbaf2b43054a",
-      "count": "1",
-      "category": "A",
-      "entered": "2026-11-12",
-      "expires": "2026-11-30",
-      "issue": "1099",
-      "reason": "Same docker run as the audit entry: environment-derived values reach the argv unvalidated; #1099 validates them before this entry expires."
-    },
-    {
-      "patternId": "Semgrep_python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit",
       "filePath": "tools/ci/image_release_age_check.py",
       "contentSha256": "7311b6115dca4aea9340babc2f6a38d25aff859edc26dd8c826740c12848e35c",
       "count": "1",
