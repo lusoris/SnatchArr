@@ -700,7 +700,7 @@ roadmap-check: ## docs/roadmap.md milestone table shape (offline) and the schedu
 	python3 -I tools/ci/roadmap_render.py --check-shape
 	sh tools/ci/roadmap_test.sh
 
-workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons, the devcontainer engine pin, lane judge edits, one digest per image tag, Renovate release-age and preset-closure coverage, and the release pull request body, against their cases
+workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons, the devcontainer engine pin, lane judge edits, one digest per image tag, Renovate release-age and preset-closure coverage, the release pull request body, and release version consistency, against their cases
 	python3 -I tools/ci/deploy_filter_check.py --self-test && python3 -I tools/ci/deploy_filter_check.py
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
@@ -733,6 +733,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	bash tools/ci/workflow_refs_test.sh
 	bash tools/ci/guard_definition_check_test.sh
 	bash tools/ci/release_body_check_test.sh
+	$(MAKE) check-release-version
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test
 	python3 -I tools/release/dogfood_pass.py --self-test
@@ -761,3 +762,9 @@ dev: ## Local stack: postgres (compose) + api (air) + worker (cargo watch) + web
 	echo "  cd api    && air -c ../tools/air.toml"
 	echo "  cargo watch -x 'run -p snatch-worker'"
 	echo "  cd web    && pnpm dev"
+
+.PHONY: check-release-version
+check-release-version:
+	python3 -I -m unittest discover -s tools/ci -p test_release_version_check.py
+	python3 -I tools/ci/release_version_check.py --self-test
+	python3 -I tools/ci/release_version_check.py
