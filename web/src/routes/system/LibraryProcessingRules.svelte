@@ -127,7 +127,7 @@
 		more: boolean;
 		cursor: string | null;
 	} {
-		if (!page) return { items: [], more: false, cursor: null };
+		if (!page) throw new Error('Rules page response did not include a body');
 		const cursor = extractNextCursor(page);
 		return { items: page.items, more: cursor !== null, cursor };
 	}
@@ -151,7 +151,8 @@
 				params: { path: { ruleId: targetId } },
 				signal: withDeadline(signal)
 			});
-			return detail.data ?? null;
+			if (!detail.data) throw new Error('Rule detail response did not include a body');
+			return detail.data;
 		} catch (err) {
 			if (problemStatus(err) === 404) return null;
 			throw err;
@@ -187,14 +188,25 @@
 		return target !== null && items.some((rule) => rule.id === target.id);
 	}
 
-	function syncSavedRule(items: StoredRule[], more: boolean, missingId = ''): void {
-		if (!savedRule) return;
-		if (
-			!more ||
-			savedRule.id === missingId ||
-			hasRule(items, savedRule) ||
-			savedRule.id === pinnedRule?.id
-		) {
+	function syncRetainedRules(
+		page: ReturnType<typeof parsePageState>,
+		missingId: string,
+		checked: { id: string; rule: StoredRule | null } | null
+	): void {
+		function reconcile(cached: StoredRule | null): StoredRule | null {
+			if (!cached) return null;
+			const { id } = cached;
+			if (checked?.id === id) return checked.rule;
+			const onPage = page.items.find((rule) => rule.id === id);
+			if (onPage) return onPage;
+			if (pinnedRule?.id === id) return pinnedRule;
+			return page.more && id !== missingId ? cached : null;
+		}
+
+		lastSavedRule = reconcile(lastSavedRule);
+		savedRule = reconcile(savedRule);
+		// Only the list overlay is redundant when the page or selection pin represents it.
+		if (savedRule && (hasRule(page.items, savedRule) || savedRule.id === pinnedRule?.id)) {
 			savedRule = null;
 		}
 	}
@@ -230,12 +242,13 @@
 			const page = parsePageState(res.data);
 			const selection = await reconcileSelection(page.items, page.more, prefer, known, signal);
 			if (!isCurrent(seq, signal)) return;
-			let checkedRule: StoredRule | null = null;
+			// No inspection and a confirmed absent target are different outcomes.
+			let checked: { id: string; rule: StoredRule | null } | null = null;
 			// POST has no target ID; only a timed-out PUT can produce a preview.
 			if (recovery?.targetId && recovery === writeTimeout) {
 				let freshDetail = selection.nextPinned;
 				if (freshDetail === prefer || freshDetail === known) freshDetail = null;
-				checkedRule = await lookupStoredPreview(
+				const rule = await lookupStoredPreview(
 					recovery.targetId,
 					page,
 					freshDetail,
@@ -243,15 +256,13 @@
 					signal
 				);
 				if (!isCurrent(seq, signal)) return;
-			}
-			if (recovery && recovery === writeTimeout && checkedRule) {
-				storedPreview = {
-					id: checkedRule.id,
-					label: `${ruleLabel(checkedRule)} (${format.toUpperCase()})`,
-					document: writeRuleDocument(checkedRule, format)
-				};
-				if (savedRule?.id === checkedRule.id) {
-					savedRule = checkedRule;
+				checked = { id: recovery.targetId, rule };
+				if (rule) {
+					storedPreview = {
+						id: rule.id,
+						label: `${ruleLabel(rule)} (${format.toUpperCase()})`,
+						document: writeRuleDocument(rule, format)
+					};
 				}
 			}
 			loadedRules = page.items;
@@ -259,7 +270,7 @@
 			nextCursor = page.cursor;
 			pinnedRule = selection.nextPinned;
 			selectedId = selection.nextSelectedId;
-			syncSavedRule(page.items, page.more, selection.missingId);
+			syncRetainedRules(page, selection.missingId, checked);
 			hasListSnapshot = true;
 		} catch (err) {
 			if (isCurrent(seq, signal)) loadError = err;
