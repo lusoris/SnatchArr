@@ -41,12 +41,28 @@ git -C "$M" commit -q -m init
 printf 'package prowlarr\n\nfunc f() { var x int }\n' >"$M/.workingdir/evidence/plant.go"
 printf 'package untracked\n' >"$M/untracked/u.go"
 
-# run ARGS...: run gosec_packages.sh in the module; sets rc and out.
+# run ARGS...: run gosec_packages.sh in the module; sets rc, out (stdout) and err (stderr).
 run() {
   rc=0
-  out="$(cd "$M" && sh tools/ci/gosec_packages.sh "$@" 2>&1)" || rc=$?
+  out="$(cd "$M" && sh tools/ci/gosec_packages.sh "$@" 2>"$WORK/stderr")" || rc=$?
+  err="$(cat "$WORK/stderr")"
 }
+# Temporary go wrapper on PATH for the first positive run only. The wrapper source is a literal;
+# the real go path travels through the exported environment, not through the script text.
+GOSEC_FIXTURE_REAL_GO="$(command -v go)"
+export GOSEC_FIXTURE_REAL_GO
+mkdir "$WORK/bin"
+cat >"$WORK/bin/go" <<'EOF'
+#!/bin/sh
+echo "gosec fixture: go wrapper note" >&2
+exec "$GOSEC_FIXTURE_REAL_GO" "$@"
+EOF
+chmod +x "$WORK/bin/go"
+ORIG_PATH="$PATH"
+PATH="$WORK/bin:$PATH"
 run ./...
+PATH="$ORIG_PATH"
+check_case "wrapper stderr note present" 0 "$rc" "gosec fixture: go wrapper note" "$err"
 check_case "pattern lists tracked packages" 0 "$rc" "./a" "$out"
 check_case "pattern lists ./b/c" 0 "$rc" "./b/c" "$out"
 case "$(printf '%s\n' "$out" | sed -n '1p')" in
@@ -73,15 +89,15 @@ printf 'a/ignored.go\nm-ignored.go\n' >>"$M/.gitignore"
 printf 'package a\n' >"$M/a/ignored.go"
 printf 'package m\n' >"$M/m-ignored.go"
 run ./...
-check_case "ignored file inside listed package" 1 "$rc" "gosec would load git-ignored a/ignored.go; move or delete it" "$out"
-check_case "all ignored files named" 1 "$rc" "gosec would load git-ignored m-ignored.go; move or delete it" "$out"
+check_case "ignored file inside listed package" 1 "$rc" "gosec would load git-ignored a/ignored.go; move or delete it" "$err"
+check_case "all ignored files named" 1 "$rc" "gosec would load git-ignored m-ignored.go; move or delete it" "$err"
 rm "$M/a/ignored.go" "$M/m-ignored.go"
 # A missing package has an empty Dir: refused, never dropped beside a listed one or read as ./.
 run ./nonexistent
-check_case "missing package refused" 1 "$rc" "go list returned a package without a directory" "$out"
+check_case "missing package refused" 1 "$rc" "go list returned a package without a directory" "$err"
 run ./a/... ./nonexistent
-check_case "missing package beside a listed one refused" 1 "$rc" "go list returned a package without a directory" "$out"
+check_case "missing package beside a listed one refused" 1 "$rc" "go list returned a package without a directory" "$err"
 run
-check_case "no pattern" 2 "$rc" "usage" "$out"
+check_case "no pattern" 2 "$rc" "usage" "$err"
 
 echo "gosec_packages_test: all cases passed"
